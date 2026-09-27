@@ -568,7 +568,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     // unless one is already stored (a provider moved families), which stays
     // visible like any other stored pick, and resolves to off.
     : STRUCTURED_OUTPUT_MODES.filter((m) => form.structuredOutput === m || (
-      (!curWire || structuredOutputModesFor(curWire.standard).includes(m)) && (m !== "json_schema" || !soStrictNo)
+      (!curWire || structuredOutputModesFor(curWire).includes(m)) && (m !== "json_schema" || !soStrictNo)
     ));
   // 与 jsonMode.ts 的自动档同一条规则：线路**实测**收严格档（格子是 yes，不是 unknown）
   // 且 id 在名单上才抬升。
@@ -985,7 +985,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
           refused: t(SO_LABEL_KEY[soCeiling === "off" ? "json_object" : "json_schema"]),
           // The tier actually sent: a json_object cap is the cue alone where
           // the family has no such tier.
-          mode: t(SO_LABEL_KEY[structuredOutputModesFor(provider!.apiStandard).includes(soCeiling) ? soCeiling : "off"]),
+          mode: t(SO_LABEL_KEY[structuredOutputModesFor(curWire!).includes(soCeiling) ? soCeiling : "off"]),
         }),
         noteTone: "faint" as const,
       }

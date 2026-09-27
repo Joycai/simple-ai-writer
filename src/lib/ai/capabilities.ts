@@ -62,7 +62,7 @@ export { familyVerdict, hasCapability, upstreamApplies } from "./capability/reso
 export function capabilityVerdict(id: CapabilityId, wire: Wire, model: CapabilityModel = {}, baseUrl?: string): CapabilityVerdict {
   const v = tableVerdict(id, wire, model);
   if (baseUrl === undefined || v.status === "no") return v;
-  return learnedRefuses(id, { standard: wire.standard, baseUrl, modelId: model.modelId })
+  return learnedRefuses(id, wire, { standard: wire.standard, baseUrl, modelId: model.modelId })
     ? { status: "no", reason: "learned" }
     : v;
 }

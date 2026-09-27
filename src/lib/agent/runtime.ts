@@ -21,6 +21,9 @@ import { nonWebServerTools } from "../ai/serverTools";
 import { addReportedCost } from "../ai/reportedCost";
 import { ImagePayloadError } from "../ai/types";
 import { isOnOffCategory, resolveThinkingCategory, type NativeReasoning } from "../ai/reasoning";
+import { effortMenuOnWire } from "../ai/capabilities";
+import { wireOf } from "../ai/platforms";
+import { capabilityModelOf } from "../ai/relayUpstream";
 import type {
   AccumulatedToolCall, ContentPart, ResponseItemCarry, StreamMessage, ThinkingBlockCarry,
 } from "../ai/types";
@@ -1318,14 +1321,18 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     //
     // Checked whether or not the adapter threw — one that ends its stream
     // quietly on abort must not fall through into "a text round with no text".
-    // Thinking off is sent only where the model's own dial offers it (a level
-    // menu with "off", or an on/off switch), so the run never sends a value the
-    // author could not have picked; elsewhere each request carries a notice.
+    // Thinking off is sent only where the model's own dial offers it on this
+    // wire (a level menu with "off" the model takes, or an on/off switch), so
+    // the run never sends a value the author could not have picked; elsewhere
+    // each request carries a notice. "On this wire" is the dial's own reading
+    // (`effortMenuOnWire`): a model measured without an off level has its off
+    // rewritten to low (`effortOnWire`), which would keep it thinking.
     if (thinkingCut && !opts.signal.aborted) {
       thinkingCutUsed = true;
       retryingAfterCut = true;
       const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
-      thinkingFallback = category.menu.includes("off") || isOnOffCategory(category) ? "off" : "nudge";
+      const offOnWire = effortMenuOnWire(category.menu, wireOf(opts), capabilityModelOf(opts)).includes("off");
+      thinkingFallback = offOnWire || isOnOffCategory(category) ? "off" : "nudge";
       opts.onEvent({
         kind: "output-truncated",
         round,

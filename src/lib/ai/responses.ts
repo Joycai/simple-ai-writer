@@ -66,6 +66,7 @@ import { wireOf, type PlatformId } from "./platforms";
 import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
 import { effortOnWire, hasCapability, platformResponsesInclude } from "./capabilities";
 import { catalogFact } from "./capability/cells/catalog";
+import { wireThinks } from "./capability/conditions";
 import { capabilityModelOf } from "./relayUpstream";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
@@ -238,7 +239,8 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
   const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
   // The nearest level the model takes where it refuses the row's (capabilities.ts
   // `reasoningOff` / `effortMax` / `effortMinimal`).
-  const reasoning = reasoningBody(category, effortOnWire(opts.reasoningEffort, wire, capModel, !!opts.tools?.length));
+  const effort = effortOnWire(opts.reasoningEffort, wire, capModel, !!opts.tools?.length);
+  const reasoning = reasoningBody(category, effort);
   const sendsTemperature = opts.temperature !== undefined
     && hasCapability("temperature", wire, { ...capModel, thinkingCategory: category.id });
   const verbosity = opts.textVerbosity && hasCapability("textVerbosity", wire, capModel) ? opts.textVerbosity : undefined;
@@ -248,7 +250,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
   // the whole route.
   const include = catalogFact("reasons", opts.modelId) === false ? [] : platformResponsesInclude(wire.platform);
   const serverTools = responsesServerTools(wire, opts.serverTools, opts.modelId, {
-    thinkingOff: (reasoning?.reasoning as { effort?: unknown } | undefined)?.effort === "none",
+    thinking: wireThinks(category, effort),
   }, opts.relayUpstream);
   // `text` has two writers — this model's verbosity and a structured task's
   // `text.format` (jsonMode, arriving through extraBody) — merged below so

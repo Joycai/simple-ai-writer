@@ -14,9 +14,12 @@
  *
  * Every answer must still be given. A deliberate change updates the snapshot,
  * and the diff names the category and the effort.
+ *
+ * Above it, the definition itself, against the table it was written from.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { hasCapability } from "../capabilities";
+import { conditionFires, wireThinks, type ThinkingState } from "../capability/conditions";
 import { __resetLearned } from "../capability/learned";
 import { streamCompletion } from "../index";
 import { forcesToolChoiceAuto, THINKING_CATEGORIES, type ReasoningEffort, type ThinkingCategoryId } from "../reasoning";
@@ -88,6 +91,64 @@ async function behaviour(): Promise<string> {
 afterEach(() => {
   vi.unstubAllGlobals();
   __resetLearned();
+});
+
+/**
+ * LLD §3.5's table, row by row: what `off` and an unset effort mean on the
+ * wire for each category. Any other level thinks.
+ */
+const SPEC: Record<ThinkingCategoryId, { off: ThinkingState; unset: ThinkingState }> = {
+  // Sends nothing either way; 火山方舟's Anthropic route thinks with nothing sent.
+  off: { off: "unknown", unset: "unknown" },
+  "openai-generic": { off: "off", unset: "unknown" },
+  deepseek: { off: "off", unset: "unknown" },
+  "glm-effort": { off: "off", unset: "unknown" },
+  doubao: { off: "off", unset: "on" },
+  "qwen-budget": { off: "off", unset: "unknown" },
+  "qwen-effort": { off: "off", unset: "unknown" },
+  glm: { off: "on", unset: "on" },
+  "glm-switch": { off: "off", unset: "on" },
+  "responses-effort": { off: "off", unset: "unknown" },
+  gemini3: { off: "on", unset: "unknown" },
+  "claude-adaptive": { off: "on", unset: "on" },
+  "claude-budget": { off: "on", unset: "on" },
+  minimax: { off: "off", unset: "on" },
+  "doubao-switch": { off: "off", unset: "on" },
+};
+
+describe("wireThinks", () => {
+  it("gives every category's off and unset the state its wire has", () => {
+    for (const c of CATEGORIES) {
+      const cat = THINKING_CATEGORIES[c];
+      expect({ off: wireThinks(cat, "off"), unset: wireThinks(cat, undefined) }, c).toEqual(SPEC[c]);
+      expect(wireThinks(cat, "default"), c).toBe(SPEC[c].unset);
+      for (const e of ["minimal", "low", "medium", "high", "xhigh", "max"] as const) {
+        expect(wireThinks(cat, e), `${c} ${e}`).toBe(cat.shape === "none" ? "unknown" : "on");
+      }
+    }
+  });
+
+  it("is told by every category with a dial what its off does", () => {
+    for (const c of CATEGORIES) {
+      const cat = THINKING_CATEGORIES[c];
+      if (cat.shape !== "none") expect(cat.offSpelling, c).toBeDefined();
+    }
+  });
+});
+
+describe("request conditions", () => {
+  it("answer per their `absent` when the request did not say", () => {
+    expect(conditionFires({ when: "functionTools", absent: "defer" }, {})).toBe(false);
+    expect(conditionFires({ when: "categoryThinks", absent: "fire" }, {})).toBe(true);
+    expect(conditionFires({ when: "thinking", is: "off", unknownAs: "on", absent: "defer" }, {})).toBe(false);
+  });
+
+  it("read unknown thinking the way each condition says", () => {
+    const offRule = { when: "thinking", is: "off", unknownAs: "on", absent: "defer" } as const;
+    expect(conditionFires(offRule, { thinking: "unknown" })).toBe(false);
+    expect(conditionFires(offRule, { thinking: "off" })).toBe(true);
+    expect(conditionFires({ ...offRule, unknownAs: "off" }, { thinking: "unknown" })).toBe(true);
+  });
 });
 
 describe("what depends on whether a request thinks", () => {

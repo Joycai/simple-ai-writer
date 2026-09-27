@@ -169,6 +169,16 @@ describe("the drawer's verdict", () => {
     }
   });
 
+  it("takes JSON output away altogether on a wire with no tier below strict", () => {
+    const anth: Wire = { platform: "anthropic", standard: "anthropic" };
+    const url = "https://api.anthropic.com";
+    const claude = { modelId: "claude-sonnet-5" };
+    noteLearned({ standard: anth.standard, baseUrl: url, modelId: claude.modelId }, "structuredOutput", "json_object");
+    // The cue alone is what is left there, so the drawer says so for both rows.
+    expect(capabilityVerdict("jsonSchema", anth, claude, url)).toEqual({ status: "no", reason: "learned" });
+    expect(capabilityVerdict("structuredOutput", anth, claude, url)).toEqual({ status: "no", reason: "learned" });
+  });
+
   it("keeps a table no under its own reason", () => {
     const zhipu: Wire = { platform: "zhipu", standard: "openai_compat" };
     const glm = { standard: zhipu.standard, baseUrl: "https://open.bigmodel.cn/api/paas/v4", modelId: "glm-5.3" };

@@ -30,7 +30,9 @@
 
 import type { StructuredOutputMode } from "../jsonMode";
 import type { ApiStandard } from "../types";
+import type { Wire } from "../platforms";
 import type { CapabilityId } from "./facts";
+import { hasCapability } from "./resolve";
 
 /**
  * One endpoint+model. The standard is in the key because one host can serve
@@ -157,23 +159,28 @@ export function noteLearned<F extends LearnedFact>(k: EndpointKey, fact: F, ceil
 }
 
 /**
- * The capabilities a ceiling takes away, and the weakest tier that still keeps
- * each. A strict-tier refusal takes `jsonSchema`; a JSON-mode refusal takes
- * `structuredOutput` as well.
+ * The capabilities a ceiling takes away, and the weakest tier on this wire
+ * that still keeps each. A strict-tier refusal takes `jsonSchema`; it takes
+ * `structuredOutput` too where the wire has no JSON-object tier to fall to
+ * (Anthropic: the cue alone is what is left), and a JSON-mode refusal takes
+ * it everywhere.
  */
-const TAKES_AWAY: Partial<Record<CapabilityId, { fact: LearnedFact; keeps?: StructuredOutputMode }>> = {
+const TAKES_AWAY: Partial<Record<CapabilityId, { fact: LearnedFact; keeps?: (wire: Wire) => StructuredOutputMode }>> = {
   forcedToolChoice: { fact: "forcedToolChoice" },
-  structuredOutput: { fact: "structuredOutput", keeps: "json_object" },
-  jsonSchema: { fact: "structuredOutput", keeps: "json_schema" },
+  structuredOutput: {
+    fact: "structuredOutput",
+    keeps: (wire) => (hasCapability("jsonObjectTier", wire) ? "json_object" : "json_schema"),
+  },
+  jsonSchema: { fact: "structuredOutput", keeps: () => "json_schema" },
 };
 
 /** Whether this endpoint+model has refused the capability this session. */
-export function learnedRefuses(id: CapabilityId, k: EndpointKey): boolean {
+export function learnedRefuses(id: CapabilityId, wire: Wire, k: EndpointKey): boolean {
   const takes = TAKES_AWAY[id];
   if (!takes) return false;
   const ceiling = learnedCeiling(k, takes.fact);
   if (ceiling === undefined) return false;
-  return ceiling === false || (takes.keeps !== undefined && STRUCTURED_RANK[ceiling] < STRUCTURED_RANK[takes.keeps]);
+  return ceiling === false || (takes.keeps !== undefined && STRUCTURED_RANK[ceiling] < STRUCTURED_RANK[takes.keeps(wire)]);
 }
 
 /** Tests only — the store outlives a single request by design. */

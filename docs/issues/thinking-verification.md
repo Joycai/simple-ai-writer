@@ -184,14 +184,14 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 
 ④ 族的 prompt caching 是**显式**的（[`api/landscape.md`](../api/landscape.md) §5）：
 不打断点就一定不缓存。1.22 起官方端点会在 `tools` 最后一项和 `system` 上各打一个
-断点（`lib/ai/anthropic.ts` → `cachesPrompt`），把 agent 循环每一轮重发的那几千
+断点（能力表的 `promptCache` 事实，`lib/ai/capability/rules.ts`；2026-09-27 前是 `anthropic.ts` 里的 `cachesPrompt`），把 agent 循环每一轮重发的那几千
 token 固定头部变成缓存读。**第三方 ④ 族端点一律不打**——这一节就是解开它的条件。
 
 | # | 验什么 | 怎么验 | 影响 |
 | --- | --- | --- | --- |
 | 2.8.1 | 官方端点真的命中了吗 | 配官方模型，在对话助手里连问两句。看第二次请求响应的 usage：`cache_read_input_tokens` 应≈第一次的 `cache_creation_input_tokens` | 不命中说明断点位置或 TTL 判断错了；表现是**无症状地照付全价** |
 | 2.8.2 | 断点是否被工具集变化打断 | 同上，但中途批准一次知识库方案（PR5a 之后工具集会在运行中变长） | 命中率骤降说明常驻工具的顺序没稳住，缓存前缀每轮都在变 |
-| 2.8.3 | MiniMax-M3：`system` 数组带 `cache_control` 是否被接受 | 手工发一个最小请求（或临时放开 `cachesPrompt`），看是否 400 | 文档写了接受但从未验过。通过则可以只对 compat 开 system 断点 |
+| 2.8.3 | MiniMax-M3：`system` 数组带 `cache_control` 是否被接受 | 手工发一个最小请求（或临时给 minimax 平台格写 `promptCache: true`），看是否 400 | 文档写了接受但从未验过。通过则可以只对 compat 开 system 断点——那要把 `promptCache` 拆成 system / tools 两个事实 |
 | 2.8.4 | MiniMax-M3：`tools` 上的 `cache_control` 是否被接受 | 同上，断点改打在最后一个工具上 | 文档**没写**。这是本项目最常用的中转端点，通过了才是收益最大的一格 |
 | 2.8.5 | 其它 ④ 族中继（New API 一类）对未知字段的态度 | 同 2.8.3 | 若静默忽略而非 400，可以按"打了不亏"放开；若 400 则必须按 standard 分档 |
 

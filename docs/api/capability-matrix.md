@@ -5,6 +5,7 @@
 >
 > `✓` 会发送 · `?` 未实测、照发并在抽屉里注明 · `·` 不发送。符号后面是原因码；「按模型」= 该格还要过模型 id 这一轴；
 > 「按上游」= 中转站上还要看模型背后的上游（本文末节）。表里是没有上游时的答案。
+> 每格按该平台自己的那条线路问：官方标准还是兼容标准（规则的 `official`）。
 > 空格 = 这个平台没有这一族的线路。模型类型（看图的能力只对多模态 / 视觉模型成立）不在此表内——那是模型行上的事，不是线路上的。
 
 ## pdfInput
@@ -351,6 +352,52 @@
 | ollama | ? unmeasured |  |  |  |
 | comfyui | ? unmeasured |  |  |  |
 | custom | ? 按上游 unmeasured | ? 按上游 unmeasured | ? unmeasured | ? unmeasured |
+
+## jsonObjectTier
+
+`native` · 规则缺省适用的协议族：Chat / Resp / Gemini
+
+| 平台 | Chat | Resp | Gemini | Anth |
+| --- | --- | --- | --- | --- |
+| openai | ✓ protocol | ✓ protocol |  |  |
+| anthropic |  |  |  | · |
+| google |  |  | ✓ protocol |  |
+| deepseek | ✓ protocol | ✓ protocol |  | · |
+| dashscope | ✓ protocol | ✓ protocol |  | · |
+| dashscope-intl | ✓ protocol | ✓ protocol |  |  |
+| xai | ✓ protocol | ✓ protocol |  |  |
+| minimax | ✓ protocol |  |  | · |
+| volcengine | ✓ protocol | ✓ protocol |  |  |
+| volcengine-plan | ✓ protocol | ✓ protocol |  | · |
+| zhipu | ✓ protocol |  |  |  |
+| orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | · |
+| newapi | ✓ protocol | ✓ protocol | ✓ protocol | · |
+| ollama | ✓ protocol |  |  |  |
+| comfyui | ✓ protocol |  |  |  |
+| custom | ✓ protocol | ✓ protocol | ✓ protocol | · |
+
+## promptCache
+
+`private` · 规则缺省适用的协议族：Anth
+
+| 平台 | Chat | Resp | Gemini | Anth |
+| --- | --- | --- | --- | --- |
+| openai | · | · |  |  |
+| anthropic |  |  |  | ✓ protocol |
+| google |  |  | · |  |
+| deepseek | · | · |  | · |
+| dashscope | · | · |  | · |
+| dashscope-intl | · | · |  |  |
+| xai | · | · |  |  |
+| minimax | · |  |  | · |
+| volcengine | · | · |  |  |
+| volcengine-plan | · | · |  | · |
+| zhipu | · |  |  |  |
+| orcarouter | · | · | · | · |
+| newapi | · | · | · | · |
+| ollama | · |  |  |  |
+| comfyui | · |  |  |  |
+| custom | · | · | · | · |
 
 ## web_search
 

@@ -513,32 +513,23 @@ type Attempt =
   | { resume: "transcript"; text: string; transcript: string };
 
 
-/**
- * Whether to mark a cache breakpoint on this request's static prefix.
- *
- * This family's prompt caching is **explicit** — no `cache_control`, no cache,
- * ever (`docs/api/landscape.md` §5). The other two families cache long prefixes
- * on their own, so ④ was the one place where an agent loop re-paid full price
- * for the same several-thousand-token toolset on all forty rounds.
- *
- * Officially-standard endpoints only. MiniMax's ④-family endpoint documents a
- * `system` array with `cache_control` but says nothing about `tools`, and this
- * project's standing rule for third-party ④ endpoints is that documented is not
- * verified (docs/issues/thinking-verification.md). A rejected field here costs the
- * author a whole failed round at the very start of a stream — not a trade worth
- * making blind. See docs/feature/agent/agent-tool-context-lld.md §2.3 for what to measure
- * before turning the compat half on.
+/*
+ * Whether to mark a cache breakpoint on this request's static prefix is the
+ * capability table's `promptCache` (capability/rules.ts): this family's prompt
+ * caching is **explicit** — no `cache_control`, no cache, ever
+ * (`docs/api/landscape.md` §5) — and the other two families cache long
+ * prefixes on their own, so ④ was the one place where an agent loop re-paid
+ * full price for the same several-thousand-token toolset on all forty rounds.
+ * The official standard takes it; a compatible endpoint waits for a
+ * measurement (the rule's comment says why).
  */
-function cachesPrompt(standard: StreamOptions["standard"]): boolean {
-  return standard === "anthropic";
-}
 
 /** The marker itself. 5-minute TTL, which an agent loop's rounds sit well inside. */
 const CACHE_BREAKPOINT = { type: "ephemeral" } as const;
 
 export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   const url = anthropicUrl(opts.baseUrl, "/messages");
-  const caching = cachesPrompt(opts.standard);
+  const caching = hasCapability("promptCache", wireOf(opts), capabilityModelOf(opts));
 
   const system = extractSystem(opts.messages);
   const maxTokens = resolveMaxTokens(opts);

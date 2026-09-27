@@ -26,6 +26,8 @@ export type CapabilityId =
   | "translateFormat"
   | "structuredOutput"
   | "jsonSchema"
+  | "jsonObjectTier"
+  | "promptCache"
   | ServerToolId;
 
 /**
@@ -62,12 +64,14 @@ export type CapabilityStatus = "yes" | "unknown" | "no";
  *   - `thinking`: this family refuses it while the model thinks (Anthropic's temperature).
  *   - `upstream`: the relay's upstream behind this model was measured this way — either way,
  *     working or not (UPSTREAM_CELLS).
+ *   - `condition`: this request's own condition rules it out — function tools beside it, or thinking
+ *     off where it needs thinking (`rules.ts` `unless`). Only an adapter asks with the request.
  *   - `learned`: the tables allow it, but this endpoint+model answered it with a 400 earlier this
  *     session (`capability/learned.ts`); it is no longer sent until the app restarts.
  */
 export const CAPABILITY_REASONS = [
   "measured", "protocol", "unmeasured", "relay", "platform-absent", "platform-unlisted",
-  "family", "model", "model-unlisted", "model-type", "requires", "thinking", "upstream", "learned",
+  "family", "model", "model-unlisted", "model-type", "requires", "thinking", "upstream", "condition", "learned",
 ] as const;
 export type CapabilityReason = (typeof CAPABILITY_REASONS)[number];
 
@@ -84,7 +88,8 @@ export interface CapabilityVerdict {
  */
 export const CAPABILITY_IDS: readonly CapabilityId[] = [
   "pdfInput", "vlHighResolution", "videoInput", "videoFps", "forcedToolChoice", "effortWithTools", "reasoningOff", "effortMax", "effortMinimal",
-  "temperature", "textVerbosity", "instructionsField", "translateFormat", "structuredOutput", "jsonSchema",
+  "temperature", "textVerbosity", "instructionsField", "translateFormat", "structuredOutput", "jsonSchema", "jsonObjectTier",
+  "promptCache",
   "web_search", "web_extractor", "web_search_image", "image_search", "code_interpreter",
 ];
 

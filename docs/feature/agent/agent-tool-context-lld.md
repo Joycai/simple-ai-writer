@@ -159,6 +159,8 @@ PR 收益的唯一手段**，先有它再动别的。
 
 现状：`system` 是字符串（`extractSystem`，line 489），`tools` 是纯数组（line 517）。
 
+> 2026-09-27 起，「打不打」不再是下面的 `cachesPrompt`，而是能力表的 `promptCache` 事实（官方标准缺省 yes，兼容标准等平台格实测）；见 [`capability-resolution-lld.md`](../../api/capability-resolution-lld.md) §9.5。下面的代码保留为当时的设计记录。
+
 ```ts
 /**
  * 缓存断点。只在官方 anthropic 上打。
