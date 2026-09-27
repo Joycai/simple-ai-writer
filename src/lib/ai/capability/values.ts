@@ -41,6 +41,8 @@ interface ValueSubject {
   /** Absent = no platform's rows are consulted (a hand-built bag, a caller with no channel). */
   platform?: PlatformId;
   modelId?: string;
+  /** What the catalog is asked about (`ConnOptions.canonicalModelId`); absent = `modelId`. */
+  canonicalModelId?: string;
 }
 
 /**
@@ -59,9 +61,10 @@ function tableValue<F extends ValueFactId>(
     const v = platformValue<F>(at.platform, family, fact, at.modelId, accepts);
     if (v !== undefined) return { value: v, source: "platform" };
   }
-  if (spec.scope === "intrinsic" && at.modelId) {
+  const catalogId = at.canonicalModelId ?? at.modelId;
+  if (spec.scope === "intrinsic" && catalogId) {
     // Only an intrinsic fact reaches here, and the catalog holds every one of them.
-    const v = catalogFact(fact as IntrinsicValueFact, at.modelId) as ValueFactMap[F] | undefined;
+    const v = catalogFact(fact as IntrinsicValueFact, catalogId) as ValueFactMap[F] | undefined;
     if (v !== undefined && accepts(v)) return { value: v, source: "catalog" };
   }
   const v = spec.familyDefault?.[family];

@@ -28,7 +28,8 @@ import type { GeminiSafetySettings } from "./safety";
 import { providerWire, resolvePlatform, type PlatformId } from "./platforms";
 import { activeFamily, channelEndpoints, providerFor, ROUTE_LONG, routeProvider } from "./routes";
 import type { ServerToolId } from "./serverTools";
-import { relayUpstreamFor, type RelayUpstreamChoice } from "./relayUpstream";
+import { isRelayPlatform, relayUpstreamFor, type RelayUpstreamChoice } from "./relayUpstream";
+import { canonicalModelId } from "./capability/modelId";
 import type { StructuredOutputMode } from "./jsonMode";
 import type { ApiStandard, AuthMode, TextVerbosity } from "./types";
 
@@ -71,6 +72,14 @@ export interface ConnOptions {
   platform?: PlatformId;
   /** L3 — the model. */
   modelId: string;
+  /**
+   * The id the model catalog is asked about: less a `vendor/` namespace and,
+   * on a relay, less the owner's prefix — the channel's own prefix-table row
+   * (`特价kiro | `), else a leading `[…]` (`capability/modelId.ts`
+   * `canonicalModelId`). `connOptions()` fills it; absent in a hand-built bag,
+   * where the catalog strips the namespace alone.
+   */
+  canonicalModelId?: string;
   /** Optional model-scoped prefix prompt, prepended as a leading system message. */
   prefix?: string;
   /**
@@ -129,13 +138,22 @@ export interface ConnOptions {
 }
 
 /**
+ * {@link ConnOptions.canonicalModelId}: the channel's prefix table counts only
+ * on a relay, the one kind of platform it means anything on (`relayUpstream.ts`).
+ */
+function catalogIdOf(model: { modelId: string }, provider: Provider, platform: PlatformId): string {
+  return canonicalModelId(model.modelId, isRelayPlatform(platform) ? { prefixes: provider.upstreamPrefixes } : undefined);
+}
+
+/**
  * A model's window and per-reply cap on the route it takes, each with its
  * source (`capability/values.ts`): the author's value, else the platform's
  * row, the catalog, the app default.
  */
 function sourcedLimits(pair: ConnPair): { contextSize?: Sourced<number>; maxOutput?: Sourced<number> } {
   const { model, provider } = pair;
-  const at = { standard: provider.apiStandard, platform: providerWire(provider).platform };
+  const platform = providerWire(provider).platform;
+  const at = { standard: provider.apiStandard, platform, canonicalModelId: catalogIdOf(model, provider, platform) };
   return { contextSize: modelValue("contextSize", model, at), maxOutput: modelValue("maxOutput", model, at) };
 }
 
@@ -193,6 +211,7 @@ export function connOptions(conn: AiConn): ConnOptions {
     authMode: provider.authMode,
     platform,
     modelId: model.modelId,
+    canonicalModelId: catalogIdOf(model, provider, platform),
     prefix: model.prefix,
     contextSize: contextSize?.value,
     maxOutput: maxOutput?.value,
@@ -234,6 +253,7 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     authMode: o.authMode,
     platform: o.platform,
     modelId: o.modelId,
+    canonicalModelId: o.canonicalModelId,
     prefix: o.prefix,
     contextSize: o.contextSize,
     maxOutput: o.maxOutput,

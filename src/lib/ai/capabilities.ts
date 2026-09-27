@@ -52,6 +52,7 @@ export { UPSTREAM_CELLS } from "./capability/cells/upstream";
 export { familyVerdict, hasCapability, upstreamApplies } from "./capability/resolve";
 export { carried, TRUST, trusted, type Source, type Sourced } from "./capability/intent";
 export { modelValue, resolveThinkingCategory, thinkingCategoryOf } from "./capability/values";
+export { canonicalModelId } from "./capability/modelId";
 
 /**
  * The one answer, from the tables (`capability/resolve.ts`) — and, given the

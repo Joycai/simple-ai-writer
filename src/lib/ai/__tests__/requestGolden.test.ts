@@ -157,7 +157,7 @@ async function platformGolden(platform: PlatformId): Promise<string> {
       for (const [preset, extra] of Object.entries(PRESETS)) {
         const model = modelOf(modelId, extra, relayUpstream);
         const conn = connOptions({ provider: route, model, apiKey: "k" });
-        const summary = wireSummary(model, conn.standard, conn.baseUrl, conn.platform, conn.relayUpstream)
+        const summary = wireSummary(model, conn.standard, conn.baseUrl, conn.platform, conn.relayUpstream, conn.canonicalModelId)
           .map((i) => `${i.scope ? `${i.scope}:` : ""}${i.key}=${i.value}`).join(" ");
         out.push("", `### ${label} · ${preset}`, `summary: ${summary || "—"}`);
         for (const req of REQUESTS.filter((r) => r.preset === preset)) {

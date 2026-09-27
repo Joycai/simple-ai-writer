@@ -46,8 +46,8 @@ import {
 } from "../../../lib/ai/serverTools";
 import { providerWire } from "../../../lib/ai/platforms";
 import {
-  capabilityVerdict, effortMenuOnWire, hasAnyServerTool, hasCapability, platformModelCalibration, resolveThinkingCategory,
-  type CapabilityId,
+  canonicalModelId, capabilityVerdict, effortMenuOnWire, hasAnyServerTool, hasCapability, platformModelCalibration,
+  resolveThinkingCategory, type CapabilityId,
 } from "../../../lib/ai/capabilities";
 import {
   capabilityModelOf, isRelayPlatform, resolveRelayUpstream, type RelayUpstreamChoice,
@@ -344,6 +344,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // What every capability question below carries, and 「将发送」 with it.
   const upstreamChoice: RelayUpstreamChoice = resolvedUpstream.upstream ?? "none";
   const capModel = capabilityModelOf({ modelId: form.modelId.trim(), relayUpstream: upstreamChoice });
+  // What the model catalog is asked about — the id less this relay's own prefix (connOptions does the same).
+  const catalogId = canonicalModelId(form.modelId, onRelay ? { prefixes: channel?.upstreamPrefixes } : undefined);
   // With the upstream, as the adapters ask: behind some relay upstreams a
   // temperature is rewritten or refused, and the field would edit nothing.
   const temperatureReaches = !curWire || hasCapability("temperature", curWire, { ...capModel, thinkingCategory: formCategory?.id });
@@ -576,7 +578,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // 与 jsonMode.ts 的自动档同一条规则：线路**实测**收严格档（格子是 yes，不是 unknown）
   // 且 id 在名单上才抬升。
   const soAutoLifted = !!curWire && capabilityVerdict("jsonSchema", curWire, capModel).status === "yes"
-    && knownJsonSchemaModel(form.modelId);
+    && knownJsonSchemaModel(catalogId);
 
   const sizes = form.capsSizes.split(",").map((x) => x.trim()).filter(Boolean);
 
@@ -957,7 +959,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               ...(sizes.length ? { sizes } : {}),
             }
           : undefined,
-      }, provider.apiStandard, provider.baseUrl, provider.platform, upstreamChoice)
+      }, provider.apiStandard, provider.baseUrl, provider.platform, upstreamChoice, catalogId)
     : [];
 
   // ── Measured badges (实测 vs 手填) ─────────────────────────────────────────

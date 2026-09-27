@@ -1,6 +1,6 @@
 # 能力解析层重构：LLD
 
-> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P5 已落成（§9.1–§9.6），P6 的逻辑部分已落成（§9.7），P6 的界面（等设计稿）、P6b、P7 未开工。**
+> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P5 已落成（§9.1–§9.6），P6 的逻辑部分与 P6b 已落成（§9.7、§9.8），P6 的界面（等设计稿）、P7 未开工。**
 > HLD：[`capability-resolution-hld.md`](capability-resolution-hld.md)。本文回答：分几个 PR、每个 PR 动哪些文件哪些函数、
 > 类型长什么样、算法怎样逐格复现今天的行为、怎么测、怎么回滚。对照的是 2026-09-27 的 `main`（`d31ab9fc`，#717 之后）；引用一律写文件 + 符号，不写行号（`docSourceRefs.test.ts`）。
 
@@ -1039,6 +1039,48 @@ B3、B9、B11 在网格里零差异：
    - 窗口标签、上下文条与预估改读 `plannedLimits`。
 
    这些不涉及新的界面，所以不等设计稿。
+
+### 9.8 P6b：规范化 id 生效（2026-09-27）
+
+`canonicalModelId(raw, relay?)` 启用 §3.1 的前两步：在中转站上，先去掉作者的前缀，再去掉 `vendor/` 命名空间。
+去前缀时，渠道前缀表里最长的一行命中就按它去；没有命中就去掉开头的 `[…]`。
+中转站上同一个模型因此不再因前缀而失去目录里的已知事实，也就是严格 schema 名单、上限和 `reasons`。
+
+- 前缀表按最长前缀匹配，这段逻辑现在只有一份：`modelId.ts` 的 `longestPrefix`，`relayUpstream.ts` 的 `matchUpstreamPrefix` 改为调用它。
+- `ConnOptions` 新增 `canonicalModelId`（`StreamOptions` 同名），由 `connOptions()` 用渠道的前缀表算好（`conn.ts` 的 `catalogIdOf`），只在中转平台上带前缀表。
+- 读目录的地方都改读它，缺省时退回 `modelId`：
+  - 请求计划的 `reasons`；
+  - `jsonMode.ts` 自动档的严格名单（`JsonModeTarget.canonicalModelId`）；
+  - `values.ts` 取上限的目录那一步（`ValueSubject.canonicalModelId`）。
+- 「将发送」摘要 `wireSummary` 多了第六个参数 `canonicalModelId`；抽屉用同样的规则自己算，自动档提档的判断也读它。
+
+**金标差异恰好是 B7**，共 20 行，全是摘要，请求体一行没变：
+`newapi` 与 `custom` 上 Azure 上游的 `[x]gpt-5.6-sol`，① 与 ③ 各 5 组声明，自动档从 `json_object` 提到 `json_schema`。
+- 该上游的 `jsonSchema` 格是 `true`；前缀去掉后 id 命中目录的 `gpt-5` 严格行。
+- 金标里结构化那一组声明的是 `json_schema`，所以请求体不动；自动档只在摘要行里现形。
+
+B7 的另外两项不在金标里，由 `values.test.ts` 钉住：
+- 规划用的上限会变：`特价kiro | gpt-5.6-sol` 在中转站上取到目录的 128000；
+- ④ 的 `max_tokens` 不变：`[x]kimi-k3` 规划得 1,000,000，发出去仍是 32768。这就是 P6b 必须排在 P6 之后的原因（§3.1）。
+
+**测试**：`values.test.ts` 新增一组 4 条：
+- 去前缀的顺序，以及「只在中转站上去」；
+- 前缀表经 `connOptions()` 生效，非中转平台上前缀表不起作用；
+- Azure 上游自动提档，`jsonModeShaping` 与计划的答案一致；
+- 目录上限只进规划，不进 `max_tokens`。
+
+变异检查三处，都报红：
+- 忽略前缀表；
+- 在所有平台上都去前缀：金标 8 个非中转平台报红；
+- `connOptions()` 不带规范化 id。
+
+**与 §3.1、§6 P6b 原文的出入**：
+
+1. **平台格仍按原始 id 匹配，没有改写成规范化模式**，例如 OrcaRouter 的 `openai/gpt-6-astra` 保持原样。
+   - 平台格描述的是这个平台自己供应的 id，而作者前缀只出现在中转站上，中转站没有模型行，改写得不到任何命中。
+   - 反过来，对规范化 id 匹配会让平台不供应的写法命中它的行，出现 B7 以外的差异。例如 api.openai.com 上的 `openai/gpt-5.6-sol`，以及 OrcaRouter 上不带命名空间的 `gpt-5.6-sol`。
+2. **非中转平台上不去 `[…]`。** 那样的 id 不是平台供应的 id。第一版在所有平台上都去掉，结果官方平台上的 `[特价kiro量]claude-opus-5` 也开始提档，与账本「中转站上」不符，已收回。
+3. 上游格照旧按原始 id 做子串匹配，与 §3.1 原文一致。
 
 ## 10. 待决
 
