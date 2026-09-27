@@ -1,0 +1,995 @@
+# volcengine
+
+## openai · openai_compat
+
+### qwen3.5-plus · bare
+summary: structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.5-plus","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.5-plus","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### qwen3.5-plus · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.5-plus","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### qwen3.5-plus · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.5-plus","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### qwen3.5-plus · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.5-plus","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.5-plus","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### qwen3.5-plus · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.5-plus","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.5-plus","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### qwen3.5-plus · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.5-plus","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### qwen3.8-flash · bare
+summary: structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.8-flash","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.8-flash","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### qwen3.8-flash · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.8-flash","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### qwen3.8-flash · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.8-flash","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### qwen3.8-flash · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### qwen3.8-flash · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.8-flash","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.8-flash","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### qwen3.8-flash · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"qwen3.8-flash","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### no-such-model · bare
+summary: structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"no-such-model","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"no-such-model","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### no-such-model · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"no-such-model","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### no-such-model · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"no-such-model","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### no-such-model · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"no-such-model","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"no-such-model","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### no-such-model · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"no-such-model","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"no-such-model","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### no-such-model · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"no-such-model","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### [特价kiro量]claude-opus-5 · bare
+summary: structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"[特价kiro量]claude-opus-5","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"[特价kiro量]claude-opus-5","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### [特价kiro量]claude-opus-5 · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"[特价kiro量]claude-opus-5","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### [特价kiro量]claude-opus-5 · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"[特价kiro量]claude-opus-5","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### [特价kiro量]claude-opus-5 · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"[特价kiro量]claude-opus-5","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"[特价kiro量]claude-opus-5","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### [特价kiro量]claude-opus-5 · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"[特价kiro量]claude-opus-5","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"[特价kiro量]claude-opus-5","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### [特价kiro量]claude-opus-5 · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"[特价kiro量]claude-opus-5","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### gpt-5.6-sol · bare
+summary: structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### gpt-5.6-sol · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### gpt-5.6-sol · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gpt-5.6-sol","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### gpt-5.6-sol · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gpt-5.6-sol","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gpt-5.6-sol","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### gpt-5.6-sol · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gpt-5.6-sol","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gpt-5.6-sol","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### gpt-5.6-sol · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gpt-5.6-sol","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### openai/gpt-5.6-sol · bare
+summary: structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### openai/gpt-5.6-sol · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### openai/gpt-5.6-sol · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-5.6-sol","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### openai/gpt-5.6-sol · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-5.6-sol","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-5.6-sol","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### openai/gpt-5.6-sol · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-5.6-sol","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-5.6-sol","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### openai/gpt-5.6-sol · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-5.6-sol","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### openai/gpt-6-astra · bare
+summary: structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-6-astra","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-6-astra","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### openai/gpt-6-astra · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-6-astra","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### openai/gpt-6-astra · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-6-astra","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### openai/gpt-6-astra · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-6-astra","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-6-astra","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### openai/gpt-6-astra · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-6-astra","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-6-astra","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### openai/gpt-6-astra · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"openai/gpt-6-astra","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### claude-sonnet-5 · bare
+summary: structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"claude-sonnet-5","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"claude-sonnet-5","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### claude-sonnet-5 · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"claude-sonnet-5","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### claude-sonnet-5 · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"claude-sonnet-5","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### claude-sonnet-5 · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"claude-sonnet-5","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"claude-sonnet-5","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### claude-sonnet-5 · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"claude-sonnet-5","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"claude-sonnet-5","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### claude-sonnet-5 · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"claude-sonnet-5","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### gemini-3.8-flash · bare
+summary: structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gemini-3.8-flash","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gemini-3.8-flash","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### gemini-3.8-flash · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gemini-3.8-flash","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### gemini-3.8-flash · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gemini-3.8-flash","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### gemini-3.8-flash · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gemini-3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gemini-3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### gemini-3.8-flash · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gemini-3.8-flash","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gemini-3.8-flash","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### gemini-3.8-flash · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"gemini-3.8-flash","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### glm-5.3 · bare
+summary: structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"glm-5.3","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"glm-5.3","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### glm-5.3 · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"glm-5.3","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### glm-5.3 · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"glm-5.3","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### glm-5.3 · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"glm-5.3","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"glm-5.3","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### glm-5.3 · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"glm-5.3","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"glm-5.3","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### glm-5.3 · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"glm-5.3","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### deepseek-v4-pro · bare
+summary: structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"deepseek-v4-pro","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"deepseek-v4-pro","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### deepseek-v4-pro · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"deepseek-v4-pro","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### deepseek-v4-pro · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"deepseek-v4-pro","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### deepseek-v4-pro · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"deepseek-v4-pro","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"deepseek-v4-pro","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### deepseek-v4-pro · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"deepseek-v4-pro","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"deepseek-v4-pro","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### deepseek-v4-pro · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+{"model":"deepseek-v4-pro","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+## responses · openai_responses_compat
+
+### qwen3.5-plus · bare
+summary: structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.5-plus","store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.5-plus","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### qwen3.5-plus · declared
+summary: temperature=0.4 tools=web_search structured:text.format=json_object text.verbosity=low
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.5-plus","store":false,"stream":true,"temperature":0.4,"text":{"verbosity":"low"},"tools":[{"type":"web_search"}]}
+
+### qwen3.5-plus · structured
+summary: structured:text.format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.5-plus","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
+
+### qwen3.5-plus · effortHigh
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.5-plus","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.5-plus","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### qwen3.5-plus · effortOff
+summary: reasoning.effort=none structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.5-plus","reasoning":{"effort":"none"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.5-plus","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### qwen3.5-plus · effortMax
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.5-plus","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
+
+### qwen3.8-flash · bare
+summary: structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.8-flash","store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.8-flash","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### qwen3.8-flash · declared
+summary: temperature=0.4 tools=web_search structured:text.format=json_object text.verbosity=low
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.8-flash","store":false,"stream":true,"temperature":0.4,"text":{"verbosity":"low"},"tools":[{"type":"web_search"}]}
+
+### qwen3.8-flash · structured
+summary: structured:text.format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.8-flash","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
+
+### qwen3.8-flash · effortHigh
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.8-flash","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.8-flash","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### qwen3.8-flash · effortOff
+summary: reasoning.effort=none structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.8-flash","reasoning":{"effort":"none"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.8-flash","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### qwen3.8-flash · effortMax
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"qwen3.8-flash","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
+
+### no-such-model · bare
+summary: structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"no-such-model","store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"no-such-model","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### no-such-model · declared
+summary: temperature=0.4 tools=web_search structured:text.format=json_object text.verbosity=low
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"no-such-model","store":false,"stream":true,"temperature":0.4,"text":{"verbosity":"low"},"tools":[{"type":"web_search"}]}
+
+### no-such-model · structured
+summary: structured:text.format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"no-such-model","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
+
+### no-such-model · effortHigh
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"no-such-model","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"no-such-model","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### no-such-model · effortOff
+summary: reasoning.effort=none structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"no-such-model","reasoning":{"effort":"none"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"no-such-model","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### no-such-model · effortMax
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"no-such-model","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
+
+### [特价kiro量]claude-opus-5 · bare
+summary: structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"[特价kiro量]claude-opus-5","store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"[特价kiro量]claude-opus-5","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### [特价kiro量]claude-opus-5 · declared
+summary: temperature=0.4 tools=web_search structured:text.format=json_object text.verbosity=low
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"[特价kiro量]claude-opus-5","store":false,"stream":true,"temperature":0.4,"text":{"verbosity":"low"},"tools":[{"type":"web_search"}]}
+
+### [特价kiro量]claude-opus-5 · structured
+summary: structured:text.format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"[特价kiro量]claude-opus-5","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
+
+### [特价kiro量]claude-opus-5 · effortHigh
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"[特价kiro量]claude-opus-5","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"[特价kiro量]claude-opus-5","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### [特价kiro量]claude-opus-5 · effortOff
+summary: reasoning.effort=none structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"[特价kiro量]claude-opus-5","reasoning":{"effort":"none"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"[特价kiro量]claude-opus-5","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### [特价kiro量]claude-opus-5 · effortMax
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"[特价kiro量]claude-opus-5","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
+
+### gpt-5.6-sol · bare
+summary: structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gpt-5.6-sol","store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gpt-5.6-sol","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### gpt-5.6-sol · declared
+summary: temperature=0.4 tools=web_search structured:text.format=json_object text.verbosity=low
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gpt-5.6-sol","store":false,"stream":true,"temperature":0.4,"text":{"verbosity":"low"},"tools":[{"type":"web_search"}]}
+
+### gpt-5.6-sol · structured
+summary: structured:text.format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gpt-5.6-sol","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
+
+### gpt-5.6-sol · effortHigh
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gpt-5.6-sol","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gpt-5.6-sol","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### gpt-5.6-sol · effortOff
+summary: reasoning.effort=none structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gpt-5.6-sol","reasoning":{"effort":"none"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gpt-5.6-sol","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### gpt-5.6-sol · effortMax
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gpt-5.6-sol","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
+
+### openai/gpt-5.6-sol · bare
+summary: structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-5.6-sol","store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-5.6-sol","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### openai/gpt-5.6-sol · declared
+summary: temperature=0.4 tools=web_search structured:text.format=json_object text.verbosity=low
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-5.6-sol","store":false,"stream":true,"temperature":0.4,"text":{"verbosity":"low"},"tools":[{"type":"web_search"}]}
+
+### openai/gpt-5.6-sol · structured
+summary: structured:text.format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-5.6-sol","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
+
+### openai/gpt-5.6-sol · effortHigh
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-5.6-sol","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-5.6-sol","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### openai/gpt-5.6-sol · effortOff
+summary: reasoning.effort=none structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-5.6-sol","reasoning":{"effort":"none"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-5.6-sol","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### openai/gpt-5.6-sol · effortMax
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-5.6-sol","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
+
+### openai/gpt-6-astra · bare
+summary: structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### openai/gpt-6-astra · declared
+summary: temperature=0.4 tools=web_search structured:text.format=json_object text.verbosity=low
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","store":false,"stream":true,"temperature":0.4,"text":{"verbosity":"low"},"tools":[{"type":"web_search"}]}
+
+### openai/gpt-6-astra · structured
+summary: structured:text.format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
+
+### openai/gpt-6-astra · effortHigh
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### openai/gpt-6-astra · effortOff
+summary: reasoning.effort=none structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","reasoning":{"effort":"none"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### openai/gpt-6-astra · effortMax
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
+
+### claude-sonnet-5 · bare
+summary: structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"claude-sonnet-5","store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"claude-sonnet-5","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### claude-sonnet-5 · declared
+summary: temperature=0.4 tools=web_search structured:text.format=json_object text.verbosity=low
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"claude-sonnet-5","store":false,"stream":true,"temperature":0.4,"text":{"verbosity":"low"},"tools":[{"type":"web_search"}]}
+
+### claude-sonnet-5 · structured
+summary: structured:text.format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"claude-sonnet-5","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
+
+### claude-sonnet-5 · effortHigh
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"claude-sonnet-5","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"claude-sonnet-5","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### claude-sonnet-5 · effortOff
+summary: reasoning.effort=none structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"claude-sonnet-5","reasoning":{"effort":"none"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"claude-sonnet-5","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### claude-sonnet-5 · effortMax
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"claude-sonnet-5","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
+
+### gemini-3.8-flash · bare
+summary: structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gemini-3.8-flash","store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gemini-3.8-flash","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### gemini-3.8-flash · declared
+summary: temperature=0.4 tools=web_search structured:text.format=json_object text.verbosity=low
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gemini-3.8-flash","store":false,"stream":true,"temperature":0.4,"text":{"verbosity":"low"},"tools":[{"type":"web_search"}]}
+
+### gemini-3.8-flash · structured
+summary: structured:text.format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gemini-3.8-flash","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
+
+### gemini-3.8-flash · effortHigh
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gemini-3.8-flash","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gemini-3.8-flash","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### gemini-3.8-flash · effortOff
+summary: reasoning.effort=none structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gemini-3.8-flash","reasoning":{"effort":"none"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gemini-3.8-flash","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### gemini-3.8-flash · effortMax
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"gemini-3.8-flash","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
+
+### glm-5.3 · bare
+summary: structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"glm-5.3","store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"glm-5.3","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### glm-5.3 · declared
+summary: temperature=0.4 tools=web_search structured:text.format=json_object text.verbosity=low
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"glm-5.3","store":false,"stream":true,"temperature":0.4,"text":{"verbosity":"low"},"tools":[{"type":"web_search"}]}
+
+### glm-5.3 · structured
+summary: structured:text.format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"glm-5.3","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
+
+### glm-5.3 · effortHigh
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"glm-5.3","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"glm-5.3","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### glm-5.3 · effortOff
+summary: reasoning.effort=none structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"glm-5.3","reasoning":{"effort":"none"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"glm-5.3","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### glm-5.3 · effortMax
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"glm-5.3","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
+
+### deepseek-v4-pro · bare
+summary: structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"deepseek-v4-pro","store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"deepseek-v4-pro","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### deepseek-v4-pro · declared
+summary: temperature=0.4 tools=web_search structured:text.format=json_object text.verbosity=low
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"deepseek-v4-pro","store":false,"stream":true,"temperature":0.4,"text":{"verbosity":"low"},"tools":[{"type":"web_search"}]}
+
+### deepseek-v4-pro · structured
+summary: structured:text.format=json_schema
+- plain (json json_schema)
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"deepseek-v4-pro","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
+
+### deepseek-v4-pro · effortHigh
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"deepseek-v4-pro","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"deepseek-v4-pro","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### deepseek-v4-pro · effortOff
+summary: reasoning.effort=none structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"deepseek-v4-pro","reasoning":{"effort":"none"},"store":false,"stream":true}
+- tools+required
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"deepseek-v4-pro","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### deepseek-v4-pro · effortMax
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://ark.cn-beijing.volces.com/api/v3/responses
+{"instructions":"Be brief. Answer in JSON.","model":"deepseek-v4-pro","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}

@@ -18,6 +18,11 @@
  * **被它拦下时。** 你写的多半是「这条线有没有 X」——去 `capabilities.ts` 加一行规则或一个平台格，
  * 调用点问 `hasCapability`。如果真是在选拼法或措辞（同一项能力，三族的说明文字不同），
  * 把上限加一，并在 `CEILING` 那一行的注释里说清楚是哪一处。
+ *
+ * **同一道闸的三个邻居**（docs/api/capability-resolution-lld.md §6 P0，HLD D6）：族之外，判断也会
+ * 借道别的字面量长回来——`standard === "anthropic"` 决定提示缓存、`platform === "custom"` 决定
+ * 线路、`/non-reasoning/i.test(modelId)` 决定 `include`。这三种写法各数一遍，规则与上面相同：
+ * 白名单里的文件不数，其余文件不超过 `NEIGHBOUR_CEILING` 里的数，数少了就把上限降下来。
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -150,6 +155,94 @@ describe("能力有无不在调用点按协议族判断", () => {
     for (const [rel, max] of Object.entries(CEILING)) {
       const n = counts.get(rel) ?? 0;
       if (n < max) slack.push(`${rel}: 现在 ${n} 处，把 CEILING 改成 ${n}`);
+    }
+    expect(slack).toEqual([]);
+  });
+});
+
+/**
+ * 三个邻居：拿 ApiStandard、平台 id 比字面量，以及在变量名为 `modelId` 的 id 上跑正则或字符串匹配。
+ * 最后一种按变量名数，是启发式：`mid.includes(…)` 数不到——那几处在能力表与上游解析里，本来就在白名单。
+ * 搜索框里 `${m.modelId}` 拼进模板再 `.includes(q)` 的写法不会被数到（模板文字被清空了）。
+ */
+const NEIGHBOURS: Readonly<Record<string, RegExp>> = {
+  standard: /\b(?:standard|apiStandard)\s*[!=]==\s*["']/g,
+  platform: /\bplatform\w*\s*[!=]==\s*["']/g,
+  modelId: /\.test\(\s*[\w.]*modelId\b|\bmodelId(?:\??\.\w+\(\))*\??\.(?:includes|startsWith|endsWith)\(/g,
+};
+
+/** 在这里用这些字面量是对的：表本身、拼法、地址，以及不在本方案范围内的子系统。 */
+const NEIGHBOUR_WHITELIST: Readonly<Record<string, string>> = {
+  ...WIRE_SHAPE,
+  "lib/ai/relayUpstream.ts": "读作者数据里的产品词（kiro / bedrock），不猜中转站主自创的缩写",
+  "lib/asr/formats.ts": "转写格式按模型 id 选，不在能力解析的范围（capability-resolution-hld.md §2）",
+};
+
+/**
+ * 起点 = P0 合并时的实际计数。每一条都写明是哪一处；P1 起逐期往下降（LLD §4）。
+ */
+const NEIGHBOUR_CEILING: Readonly<Record<string, Partial<Record<keyof typeof NEIGHBOURS, number>>>> = {
+  // `cachesPrompt`：只有官方标准带缓存断点——P4 改成 `promptCache` 事实。
+  "lib/ai/anthropic.ts": { standard: 1 },
+  // `authModesFor`：哪两个兼容标准可选鉴权头——拼法（鉴权），留着。
+  "lib/ai/types.ts": { standard: 2 },
+  // `pickPlatform` 的 newapi / custom（2，P1 改问 `isRelayPlatform`）；ComfyUI 的保存分支与预览（2）。
+  "components/settings/panes/ProviderDrawer.tsx": { platform: 4 },
+  // `streamResponses` 的 `/non-reasoning/i`——P2 进模型目录（`reasons` 事实）。
+  "lib/ai/responses.ts": { modelId: 1 },
+  // `reportsCostFor` 的未报价 id 表——计费的信任边界，不在本方案范围。
+  "lib/ai/reportedCost.ts": { modelId: 1 },
+};
+
+const neighbourCounts = new Map<string, Partial<Record<keyof typeof NEIGHBOURS, number>>>();
+for (const file of sources(SRC)) {
+  const rel = relative(SRC, file).split("\\").join("/");
+  if (rel in NEIGHBOUR_WHITELIST) continue;
+  const src = code(readFileSync(file, "utf8"));
+  const hit: Partial<Record<keyof typeof NEIGHBOURS, number>> = {};
+  for (const [kind, re] of Object.entries(NEIGHBOURS) as [keyof typeof NEIGHBOURS, RegExp][]) {
+    const n = src.match(re)?.length ?? 0;
+    if (n > 0) hit[kind] = n;
+  }
+  if (Object.keys(hit).length) neighbourCounts.set(rel, hit);
+}
+
+describe("能力判断也不借道标准、平台、模型 id 的字面量", () => {
+  it("三种写法数得准", () => {
+    const count = (kind: keyof typeof NEIGHBOURS, src: string) => code(src).match(NEIGHBOURS[kind])?.length ?? 0;
+    expect(count("standard", 'return standard === "anthropic";')).toBe(1);
+    expect(count("standard", 'if (p.apiStandard !== "openai") x(); // standard === "gemini"')).toBe(1);
+    expect(count("platform", 'setPinned(platform === "newapi" || platform === "custom");')).toBe(2);
+    expect(count("platform", 'const comfy = form.platform === "comfyui";')).toBe(1);
+    expect(count("modelId", "const include = /non-reasoning/i.test(opts.modelId) ? [] : x;")).toBe(1);
+    expect(count("modelId", 'if (modelId.trim().startsWith("gpt")) y();')).toBe(1);
+    expect(count("modelId", "return `${m.name} ${m.modelId}`.toLowerCase().includes(q);")).toBe(0);
+  });
+
+  it("白名单与上限里的文件都还在", () => {
+    for (const rel of [...Object.keys(NEIGHBOUR_WHITELIST), ...Object.keys(NEIGHBOUR_CEILING)]) {
+      expect(() => statSync(join(SRC, rel)), rel).not.toThrow();
+    }
+  });
+
+  it("次数不超过上限", () => {
+    const over: string[] = [];
+    for (const [rel, hit] of neighbourCounts) {
+      for (const [kind, n] of Object.entries(hit) as [keyof typeof NEIGHBOURS, number][]) {
+        const max = NEIGHBOUR_CEILING[rel]?.[kind] ?? 0;
+        if (n > max) over.push(`${rel} [${kind}]: ${n} 处，上限 ${max}——判断去问能力表（capabilities.ts）；确实是拼法，才把上限加一并写明哪一处`);
+      }
+    }
+    expect(over).toEqual([]);
+  });
+
+  it("上限跟着降：数少了就把上限改成新的数", () => {
+    const slack: string[] = [];
+    for (const [rel, kinds] of Object.entries(NEIGHBOUR_CEILING)) {
+      for (const [kind, max] of Object.entries(kinds) as [keyof typeof NEIGHBOURS, number][]) {
+        const n = neighbourCounts.get(rel)?.[kind] ?? 0;
+        if (n < max) slack.push(`${rel} [${kind}]: 现在 ${n} 处，把 NEIGHBOUR_CEILING 改成 ${n}`);
+      }
     }
     expect(slack).toEqual([]);
   });

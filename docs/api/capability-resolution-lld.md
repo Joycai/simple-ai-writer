@@ -1,6 +1,6 @@
 # 能力解析层重构：LLD
 
-> **状态：`planned`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0 起按 §6 分期实施，尚未开工。**
+> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0 已落成（§9.1），P1 起未开工。**
 > HLD：[`capability-resolution-hld.md`](capability-resolution-hld.md)。本文回答：分几个 PR、每个 PR 动哪些文件哪些函数、
 > 类型长什么样、算法怎样逐格复现今天的行为、怎么测、怎么回滚。对照的是 2026-09-27 的 `main`（`d31ab9fc`，#717 之后）；引用一律写文件 + 符号，不写行号（`docSourceRefs.test.ts`）。
 
@@ -634,7 +634,47 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
 
 ## 9. 实施记录
 
-（空——各期落地时回填。）
+### 9.1 P0：护栏先行（2026-09-27）
+
+两样东西入库，生产代码一行未动。
+
+**请求体金标**：`src/lib/ai/__tests__/requestGolden.test.ts`，快照在 `__snapshots__/requestGolden/<平台>.txt`，
+每个平台一个文件，共 16 个，合计约 1.5 MB，生成一次不到一秒。与 §6 P0 的写法相比，有四处出入：
+
+1. **走真实的接缝，而不是手搭参数袋。** 模型行与渠道行经 `connOptions()` 变成请求：
+   思考类目的解析、`effectiveMaxOutput`、中转上游都在这里发生，P6 的 B1 / B2 才能在金标里现形。
+   请求再经 `streamCompletion()` 发出，只打桩 `fetch`：记下 URL 与 body，然后让请求失败。
+   渠道按 `platformEndpoints` 建出全部线路，用 `routeProvider` 取每条线路的视图，与新建渠道时的路径相同。
+2. **网格**：
+   - 每个平台 × 它的每条线路 × 11 个模型 id。一致性测试的 7 个 id 之外，加了 `claude-sonnet-5`、`gemini-3.8-flash`、`glm-5.3`、`deepseek-v4-pro`，
+     让平台的模型校准与两张模型 id 前缀表各有一个 id 被触到。
+   - 上游用例（7 个上游 × 2 个 id）只在中转平台上跑：别的平台上 `relayUpstream` 不起作用，跑了只会得到重复的 body。
+   - 6 组声明：空；全开关都声明；`structuredOutput: json_schema` 加类目 off；effort high 加 budget；effort off；effort max。
+   - 结构化那一组经 `jsonModeShaping()` 取 `extraBody`，行上记下实际档位与有没有加 cue。
+   - 带「函数工具 + 强制 `required`」的请求只配给空、effort high、effort off 三组：effort 与强制调用在这三组里相互作用，其余三组加上它不会多测出东西。
+3. **「将发送」摘要**：每个（模型, 声明）一行 `wireSummary()` 的输出，写在对应 body 的上方。
+   它今天与适配器不一致的两处（B10）因此已经白纸黑字在快照里，P5 让它们一致时，diff 就是证据。
+4. **可复核**：连跑两次结果相同。把 xAI Responses 的 `web_search` 格改成 `false` 时，恰好只有 `xai.txt` 一个文件失败，证明它确实在看线上的变化。
+
+**棘轮扩面**：`capabilityFamilyRatchet.test.ts` 新增一段，数三种写法：`standard` / `apiStandard` 比字面量、
+`platform…` 比字面量、在名为 `modelId` 的变量上跑 `.test(` / `.includes(` / `.startsWith(` / `.endsWith(`。
+
+- 白名单是 `WIRE_SHAPE` 加 `relayUpstream.ts` 和 `lib/asr/formats.ts`。
+- 上限等于入库时的实际计数，「超过」与「数少了」两个方向都已验证：
+
+| 文件 | standard | platform | modelId |
+| --- | --- | --- | --- |
+| `lib/ai/anthropic.ts` | 1 | | |
+| `lib/ai/types.ts` | 2 | | |
+| `components/settings/panes/ProviderDrawer.tsx` | | 4 | |
+| `lib/ai/responses.ts` | | | 1 |
+| `lib/ai/reportedCost.ts` | | | 1 |
+
+与 §6 P0 原文的差别有两处。一是 `types.ts` 的 `authModesFor` 被认定为鉴权的拼法，上限不再下降。
+二是 `reportedCost.ts` 属于计费范围（HLD §2 的非目标），上限也不再下降。
+其余三处按 §4 在 P1、P2、P4 降到 0。
+
+模型 id 的写法按变量名数，是启发式的，`mid.includes(…)` 数不到。那几处在能力表与上游解析里，本来就在白名单内。
 
 ## 10. 待决
 
