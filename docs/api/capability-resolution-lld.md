@@ -505,7 +505,7 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
 | B3 | Gemini 与 Responses 读 `forcedToolChoice` 格 | P5 | 平台自己列出的线路上零差异；作者在智谱主机下手建的 ② / ③ 渠道上强制变 `auto`（§3.6） | 一张表对所有族说话 |
 | B4 | `forcedToolIsWasted` 读格 | P5 | 中转站 Kiro / anti 的 Claude 在 ④ 上声明了 json_schema，以及 Azure 上游 GPT 在 ① 上：结构化任务不再白跑强制调用那一轮（§3.6） | 「强制会不会被执行」只有一个答案 |
 | B5 | `ProviderDrawer` 的中转站判定走 `isRelayPlatform` | P1 | 零（集合相同） | 一个判据 |
-| B6 | Anthropic 族的温度按 `wireThinks` | **不排期** | minimax / doubao-switch 关思考时开始带温度 | 需要一条 ④ 关思考加温度的实测，先记进 `issues/` |
+| B6 | Anthropic 族的温度按 `wireThinks` | **不排期** | minimax / doubao-switch 关思考时开始带温度 | 需要一条 ④ 关思考加温度的实测：[`issues/anthropic-temperature-thinking-off.md`](../issues/anthropic-temperature-thinking-off.md) |
 | B7 | 规范化 id 去掉作者前缀与 `[…]` | P6b | 中转站上 `[x]gpt-5…`、`[x]claude-…` 开始命中目录。自动档里，Azure 上游 GPT 的 JSON 会提到 json_schema（该上游 `jsonSchema: true`）；规划用的上限会变。排在 P6 之后，所以不会再改 Anthropic 的 `max_tokens`（§3.1） | 同一个模型不因前缀失去已知事实 |
 | B10 | 「将发送」摘要读计划 | P5 | 摘要写线上真实的 effort（gpt-6-astra 设 off 显示 `low`）；④ 行总显示 `max_tokens`（§3.8） | 摘要与适配器逐字一致，不再靠测试钉 |
 | B11 | Chat 与 Gemini 适配器的温度开始问格 | P5 | 零：这两族今天没有温度的 `false` 格 | 同 B3 |
@@ -1195,5 +1195,6 @@ P6 的逻辑部分让留空的类目、窗口、上限跟随平台行、目录�
 
 1. **agent 思考回退要不要看 `offSpelling`。** 如果看，gemini3 与 claude-adaptive 在预算耗尽时也会从「关思考」改成「提示作答」。
    反方理由：作者可以在菜单里选 off，作者选了它，它就该是 off。要先量一次，看 LOW 或 low 档是否仍会把预算耗尽。
-2. **B6（Anthropic 族关思考时带温度）** 需要一条 ④ 上 minimax / doubao-switch「disabled + temperature 0.3」的实测。记进 `issues/` 后再排期。
+2. **B6（Anthropic 族关思考时带温度）** 需要一条 ④ 上 minimax / doubao-switch「disabled + temperature 0.3」的实测。
+   已记进 [`issues/anthropic-temperature-thinking-off.md`](../issues/anthropic-temperature-thinking-off.md)（样本清单与三种结论各自的做法），样本回来后再排期。
 3. **学到的存储持久化**（D3）随 provider-layering §7 一起决定。
