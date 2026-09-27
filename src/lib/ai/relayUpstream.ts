@@ -20,6 +20,7 @@
  */
 
 import { PLATFORM_CELLS, capabilityVerdict, type CapabilityId } from "./capabilities";
+import { longestPrefix } from "./capability/modelId";
 import { providerWire, type PlatformId } from "./platforms";
 import type { ApiStandard } from "./types";
 
@@ -80,14 +81,7 @@ export function matchUpstreamPrefix(
   modelId: string | undefined,
   prefixes: readonly UpstreamPrefix[] | undefined,
 ): UpstreamPrefix | undefined {
-  const mid = modelId?.trim().toLowerCase();
-  if (!mid || !prefixes) return undefined;
-  let best: UpstreamPrefix | undefined;
-  for (const row of prefixes) {
-    const p = row.prefix.trim().toLowerCase();
-    if (p && mid.startsWith(p) && (!best || p.length > best.prefix.trim().length)) best = row;
-  }
-  return best;
+  return longestPrefix(modelId ?? "", prefixes);
 }
 
 export function resolveRelayUpstream(

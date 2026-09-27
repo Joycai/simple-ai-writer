@@ -25,8 +25,9 @@ vi.mock("../../prefs", async (importOriginal) => {
   };
 });
 
-import { modelValue, PLATFORM_CELLS, platformModelCalibration, thinkingCategoryOf } from "../capabilities";
+import { canonicalModelId, modelValue, PLATFORM_CELLS, platformModelCalibration, thinkingCategoryOf } from "../capabilities";
 import { planRequest } from "../capability/plan";
+import { jsonModeShaping } from "../jsonMode";
 import type { Model, Provider } from "../configDb";
 import { connOptions, plannedLimits } from "../conn";
 import { streamCompletion } from "../index";
@@ -192,5 +193,53 @@ describe("who trusts what", () => {
     const base = { standard: "anthropic" as const, baseUrl: "", modelId: "claude-sonnet-5" };
     expect(planRequest({ ...base, maxOutput: 9000 }).maxTokensOnWire).toBe(9000);
     expect(planRequest({ ...base, maxOutput: 9000, provenance: { maxOutput: "catalog" } }).maxTokensOnWire).toBe(32_768);
+  });
+});
+
+/**
+ * P6b (LLD §3.1, B7): on a relay the catalog is asked about the model's own
+ * name — the owner's prefix off, by the channel's table or the bracket form —
+ * so the same model keeps its known facts behind any relay. After P6 on
+ * purpose: a catalog cap found this way plans, and never reaches a Messages
+ * `max_tokens`.
+ */
+describe("the catalog's key on a relay", () => {
+  const relay = (prefixes: Provider["upstreamPrefixes"] = []): Provider =>
+    ({ ...routeOf("newapi", "openai"), upstreamPrefixes: prefixes });
+
+  it("sheds the channel's own prefix, else a bracket, and then the namespace — on a relay only", () => {
+    const table = { prefixes: [{ prefix: "特价", upstream: "kiro" as const }, { prefix: "特价kiro | ", upstream: "kiro" as const }] };
+    expect(canonicalModelId("特价kiro | Claude-Opus-4-6", table)).toBe("claude-opus-4-6");
+    expect(canonicalModelId("[CC量]claude-opus-5", table)).toBe("claude-opus-5");
+    expect(canonicalModelId("[x]openai/gpt-5.6-sol", {})).toBe("gpt-5.6-sol");
+    // Not a relay: an owner's prefix is not something the platform's ids have.
+    expect(canonicalModelId("[x]gpt-5.6-sol")).toBe("[x]gpt-5.6-sol");
+    expect(canonicalModelId("openai/gpt-4o")).toBe("gpt-4o");
+  });
+
+  it("carries the name the catalog knows, by the channel's table", () => {
+    const provider = relay([{ prefix: "特价kiro | ", upstream: "kiro" }]);
+    const conn = connOptions({ provider, apiKey: "k", model: modelOf("特价kiro | gpt-5.6-sol") });
+    expect(conn.canonicalModelId).toBe("gpt-5.6-sol");
+    expect(conn.maxOutput).toBe(128_000);
+    expect(conn.provenance?.maxOutput).toBe("catalog");
+    // The table means nothing off a relay (`relayUpstream.ts`), and nor does it here.
+    const dashscope = { ...routeOf("dashscope", "openai"), upstreamPrefixes: [{ prefix: "特价kiro | ", upstream: "kiro" as const }] };
+    expect(connOptions({ provider: dashscope, apiKey: "k", model: modelOf("特价kiro | gpt-5.6-sol") }).canonicalModelId)
+      .toBe("特价kiro | gpt-5.6-sol");
+  });
+
+  it("lifts the auto JSON tier where the upstream honours a strict schema (B7)", () => {
+    const conn = connOptions({ provider: relay(), apiKey: "k", model: modelOf("[x]gpt-5.6-sol", { relayUpstream: "azure" }) });
+    const schema = { name: "answer", parameters: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"] } };
+    expect(jsonModeShaping(conn, "Answer in JSON.", schema).mode).toBe("json_schema");
+    expect(planRequest(conn).structured).toBe("json_schema");
+  });
+
+  it("plans with a catalog cap it finds, and still sends none as max_tokens", async () => {
+    const messages = routeOf("newapi", "anthropic");
+    const req = request({ ...messages, upstreamPrefixes: [] }, modelOf("[x]kimi-k3"));
+    expect(req.maxOutput).toBe(1_000_000);
+    expect((await bodyOf(req)).max_tokens).toBe(32_768);
   });
 });

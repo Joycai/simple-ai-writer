@@ -478,6 +478,8 @@ export interface StreamOptions {
    * consistency test, a live probe — plans for itself from the same options.
    */
   _plan?: RequestPlan;
+  /** The id the model catalog is asked about — `ConnOptions.canonicalModelId`. */
+  canonicalModelId?: string;
   /**
    * Optional model context window (tokens). When it is the author's own
    * (`provenance`), a request whose estimated prompt size exceeds it is

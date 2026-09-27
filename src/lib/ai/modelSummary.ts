@@ -152,6 +152,8 @@ export function wireSummary(
   platform?: PlatformId,
   /** The resolved relay upstream (`resolveRelayUpstream`); absent = a product name in the id. */
   relayUpstream?: RelayUpstreamChoice,
+  /** What the model catalog is asked about (`ConnOptions.canonicalModelId`); absent = the id as typed. */
+  canonicalModelId?: string,
 ): WireItem[] {
   if (m.type === "image") {
     // An image model's declarations steer the client, not a chat body.
@@ -165,9 +167,11 @@ export function wireSummary(
     return out;
   }
 
-  const maxOutput = modelValue("maxOutput", m, { standard, platform: wireOf({ standard, baseUrl: baseUrl ?? "", platform }).platform });
+  const maxOutput = modelValue("maxOutput", m, {
+    standard, platform: wireOf({ standard, baseUrl: baseUrl ?? "", platform }).platform, canonicalModelId,
+  });
   const plan = planRequest({
-    standard, baseUrl: baseUrl ?? "", platform, modelId: m.modelId, relayUpstream,
+    standard, baseUrl: baseUrl ?? "", platform, modelId: m.modelId, canonicalModelId, relayUpstream,
     thinkingCategory: m.thinkingCategory, reasoningEffort: m.reasoningEffort, thinkingBudget: m.thinkingBudget,
     temperature: m.temperature, maxOutput: maxOutput?.value, provenance: maxOutput && { maxOutput: maxOutput.source },
     serverTools: m.serverTools, structuredOutput: m.structuredOutput,

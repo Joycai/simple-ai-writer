@@ -58,6 +58,7 @@ describe("connOptions", () => {
       // No stored platform: inferred from the address — a host nothing names.
       platform: "custom",
       modelId: "some-model",
+      canonicalModelId: "some-model",
       prefix: "always answer in Chinese",
       contextSize: 128_000,
       maxOutput: 8_192,
@@ -116,7 +117,7 @@ describe("connOptions", () => {
   it("narrows an extended argument bag down to the transport fields", () => {
     const wide = { ...connOptions(conn), systemPrompt: "…", onText: () => {} };
     expect(Object.keys(pickConnOptions(wide)).sort()).toEqual([
-      "apiKey", "authMode", "baseUrl", "contextSize", "maxOutput",
+      "apiKey", "authMode", "baseUrl", "canonicalModelId", "contextSize", "maxOutput",
       "modelId", "platform", "prefix", "provenance", "reasoningEffort", "relayUpstream", "safetySettings", "serverTools",
       "standard", "structuredOutput", "temperature", "textVerbosity", "thinkingBudget", "thinkingCategory", "vlHighResolution",
     ]);

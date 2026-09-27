@@ -1128,7 +1128,7 @@ POST https://relay.example.invalid/v1/chat/completions
 {"model":"[x]claude-opus-4-6","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
 
 ### [x]gpt-5.6-sol @azure · bare
-summary: structured:response_format=json_object
+summary: structured:response_format=json_schema
 - plain
 POST https://relay.example.invalid/v1/chat/completions
 {"model":"[x]gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true}}
@@ -1137,7 +1137,7 @@ POST https://relay.example.invalid/v1/chat/completions
 {"model":"[x]gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
 
 ### [x]gpt-5.6-sol @azure · declared
-summary: temperature=0.4 structured:response_format=json_object vl_high_resolution_images=true video:video_url.fps=1
+summary: temperature=0.4 structured:response_format=json_schema vl_high_resolution_images=true video:video_url.fps=1
 - plain
 POST https://relay.example.invalid/v1/chat/completions
 {"model":"[x]gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true},"temperature":0.4,"vl_high_resolution_images":true}
@@ -1149,7 +1149,7 @@ POST https://relay.example.invalid/v1/chat/completions
 {"model":"[x]gpt-5.6-sol","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
 
 ### [x]gpt-5.6-sol @azure · effortHigh
-summary: reasoning_effort=high structured:response_format=json_object
+summary: reasoning_effort=high structured:response_format=json_schema
 - plain
 POST https://relay.example.invalid/v1/chat/completions
 {"model":"[x]gpt-5.6-sol","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
@@ -1158,7 +1158,7 @@ POST https://relay.example.invalid/v1/chat/completions
 {"model":"[x]gpt-5.6-sol","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
 
 ### [x]gpt-5.6-sol @azure · effortOff
-summary: reasoning_effort=none structured:response_format=json_object
+summary: reasoning_effort=none structured:response_format=json_schema
 - plain
 POST https://relay.example.invalid/v1/chat/completions
 {"model":"[x]gpt-5.6-sol","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
@@ -1167,7 +1167,7 @@ POST https://relay.example.invalid/v1/chat/completions
 {"model":"[x]gpt-5.6-sol","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
 
 ### [x]gpt-5.6-sol @azure · effortMax
-summary: reasoning_effort=max structured:response_format=json_object
+summary: reasoning_effort=max structured:response_format=json_schema
 - plain
 POST https://relay.example.invalid/v1/chat/completions
 {"model":"[x]gpt-5.6-sol","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
@@ -2300,7 +2300,7 @@ POST https://relay.example.invalid/v1/responses
 {"instructions":"Be brief. Answer in JSON.","model":"[x]claude-opus-4-6","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
 
 ### [x]gpt-5.6-sol @azure · bare
-summary: structured:text.format=json_object
+summary: structured:text.format=json_schema
 - plain
 POST https://relay.example.invalid/v1/responses
 {"model":"[x]gpt-5.6-sol","store":false,"stream":true}
@@ -2309,7 +2309,7 @@ POST https://relay.example.invalid/v1/responses
 {"model":"[x]gpt-5.6-sol","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
 
 ### [x]gpt-5.6-sol @azure · declared
-summary: structured:text.format=json_object text.verbosity=low
+summary: structured:text.format=json_schema text.verbosity=low
 - plain
 POST https://relay.example.invalid/v1/responses
 {"model":"[x]gpt-5.6-sol","store":false,"stream":true,"text":{"verbosity":"low"}}
@@ -2321,7 +2321,7 @@ POST https://relay.example.invalid/v1/responses
 {"model":"[x]gpt-5.6-sol","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
 
 ### [x]gpt-5.6-sol @azure · effortHigh
-summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_schema
 - plain
 POST https://relay.example.invalid/v1/responses
 {"model":"[x]gpt-5.6-sol","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
@@ -2330,7 +2330,7 @@ POST https://relay.example.invalid/v1/responses
 {"model":"[x]gpt-5.6-sol","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
 
 ### [x]gpt-5.6-sol @azure · effortOff
-summary: reasoning.effort=none structured:text.format=json_object
+summary: reasoning.effort=none structured:text.format=json_schema
 - plain
 POST https://relay.example.invalid/v1/responses
 {"model":"[x]gpt-5.6-sol","reasoning":{"effort":"none"},"store":false,"stream":true}
@@ -2339,7 +2339,7 @@ POST https://relay.example.invalid/v1/responses
 {"model":"[x]gpt-5.6-sol","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
 
 ### [x]gpt-5.6-sol @azure · effortMax
-summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_schema
 - plain
 POST https://relay.example.invalid/v1/responses
 {"model":"[x]gpt-5.6-sol","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}

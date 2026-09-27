@@ -36,7 +36,7 @@ type ToolChoice = NonNullable<StreamOptions["toolChoice"]>;
 /** What a plan is made from: the transport fields and the request's own tools. */
 export type PlanInput = Pick<
   StreamOptions,
-  | "standard" | "baseUrl" | "platform" | "modelId" | "relayUpstream"
+  | "standard" | "baseUrl" | "platform" | "modelId" | "canonicalModelId" | "relayUpstream"
   | "thinkingCategory" | "reasoningEffort" | "thinkingBudget" | "temperature" | "maxOutput" | "provenance"
   | "tools" | "toolChoice" | "serverTools" | "structuredOutput" | "textVerbosity" | "vlHighResolution"
 >;
@@ -148,6 +148,7 @@ export function planRequest(opts: PlanInput): RequestPlan {
     serverTools: effectiveServerTools(wire, opts.serverTools, opts.modelId, opts.relayUpstream, request) ?? [],
     structured: effectiveStructuredOutput({
       standard: opts.standard, baseUrl: opts.baseUrl, platform: wire.platform, modelId: opts.modelId,
+      canonicalModelId: opts.canonicalModelId,
       structuredOutput: opts.structuredOutput, relayUpstream: opts.relayUpstream,
     }),
     ...(opts.textVerbosity && hasCapability("textVerbosity", wire, model) ? { textVerbosity: opts.textVerbosity } : {}),
@@ -156,7 +157,7 @@ export function planRequest(opts: PlanInput): RequestPlan {
     // No `include` for a model with no reasoning to encrypt (the catalog's
     // `reasons` rows): OpenAI answers that combination with a 400, and xAI's
     // non-reasoning ids were never measured with it.
-    responsesInclude: catalogFact("reasons", opts.modelId) === false ? [] : platformResponsesInclude(wire.platform),
+    responsesInclude: catalogFact("reasons", opts.canonicalModelId ?? opts.modelId) === false ? [] : platformResponsesInclude(wire.platform),
     promptCache: hasCapability("promptCache", wire, model),
   };
 }

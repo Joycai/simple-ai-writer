@@ -93,6 +93,8 @@ export function knownJsonSchemaModel(modelId: string): boolean {
 interface JsonModeTarget {
   standard: ApiStandard;
   modelId?: string;
+  /** What the catalog is asked about (`ConnOptions.canonicalModelId`); absent = `modelId`. */
+  canonicalModelId?: string;
   /** The endpoint, for the session memo below; absent means "unknown endpoint". */
   baseUrl?: string;
   /** The author's declaration on the model row; absent = auto. */
@@ -144,7 +146,8 @@ export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutpu
   // list: a relay serving `gpt-4o` over `openai_compat` is a different
   // endpoint with its own idea of what it accepts, and earns the strict tier by
   // declaration or not at all. This used to be keyed on the family, which lifted exactly those.
-  return strict === "yes" && target.modelId && knownJsonSchemaModel(target.modelId) ? "json_schema" : below;
+  const catalogId = target.canonicalModelId ?? target.modelId;
+  return strict === "yes" && catalogId && knownJsonSchemaModel(catalogId) ? "json_schema" : below;
 }
 
 // ─── Shaping ──────────────────────────────────────────────────────────────────
