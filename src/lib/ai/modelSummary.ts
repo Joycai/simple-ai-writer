@@ -26,7 +26,7 @@ import { hasCapability, modelValue, thinkingCategoryOf, trusted, type Sourced } 
 import { planRequest, type RequestPlan } from "./capability/plan";
 import type { StructuredOutputMode } from "./jsonMode";
 import { wireOf, type PlatformId } from "./platforms";
-import { reasoningBody, thinkingBody, THINKING_CATEGORIES, type ThinkingCategory } from "./reasoning";
+import { reasoningBody, thinkingBody, type ThinkingCategory } from "./reasoning";
 import type { RelayUpstreamChoice } from "./relayUpstream";
 import { geminiServerTools, openaiServerToolsBody, type ServerToolId } from "./serverTools";
 import { familyOf, type ApiStandard, type ProtocolFamily } from "./types";
@@ -218,8 +218,9 @@ export interface ValueFacts {
  * under a field and the request cannot disagree.
  */
 export function valueFacts(
-  m: Pick<Model, "modelId" | "thinkingCategory" | "contextSize" | "maxOutput">,
+  m: Pick<Model, "modelId" | "thinkingCategory" | "thinkingDialect" | "contextSize" | "maxOutput">,
   standard: ApiStandard,
+  /** The wire's resolved platform (`providerWire`), as `connOptions()` has it; absent = no platform's rows. */
   platform?: PlatformId,
   /** What the model catalog is asked about (`ConnOptions.canonicalModelId`); absent = the id as typed. */
   canonicalModelId?: string,
@@ -232,15 +233,20 @@ export function valueFacts(
   };
   const ctx = number("contextSize");
   const out = number("maxOutput");
+  // The author's category is the one in force when the chain says so: a
+  // declared one that fits the family, or a legacy dialect migrated (a row
+  // never resaved since categories came in). One the family cannot spell is
+  // not what the request sends, so it is not reported as the author's.
+  const category = thinkingCategoryOf({ ...blank, thinkingCategory: m.thinkingCategory, thinkingDialect: m.thinkingDialect }, at);
   const plan = planRequest({
     standard, baseUrl: "", platform, modelId: m.modelId, canonicalModelId,
     maxOutput: out.inForce?.value, provenance: out.inForce && { maxOutput: out.inForce.source },
   });
   return {
     thinkingCategory: {
-      own: m.thinkingCategory ? THINKING_CATEGORIES[m.thinkingCategory] : undefined,
+      own: category.source === "author" ? category.value : undefined,
       table: thinkingCategoryOf(blank, at),
-      inForce: thinkingCategoryOf({ ...blank, thinkingCategory: m.thinkingCategory }, at),
+      inForce: category,
     },
     contextSize: { ...ctx, gates: trusted(ctx.inForce, "contextGate") !== undefined },
     maxOutput: { ...out, ...(SPELLING[familyOf(standard)].maxTokens ? { onWire: plan.maxTokensOnWire } : {}) },

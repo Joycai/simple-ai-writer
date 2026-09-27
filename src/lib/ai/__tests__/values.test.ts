@@ -265,10 +265,14 @@ describe("what the editor says about a value", () => {
     const differ: string[] = [];
     for (const platform of PLATFORM_IDS) for (const endpoint of platformEndpoints(platform)) {
       const provider = routeOf(platform, endpoint.family);
-      for (const id of ids(platform)) for (const model of [modelOf(id), modelOf(id, { contextSize: 64_000, maxOutput: 9_000 })]) {
+      for (const id of ids(platform)) for (const model of [
+        modelOf(id), modelOf(id, { contextSize: 64_000, maxOutput: 9_000 }),
+        // A row saved before categories: only the legacy dialect.
+        modelOf(id, { thinkingDialect: "switch" }),
+      ]) {
         const req = request(provider, model);
         const v = valueFacts(model, provider.apiStandard, providerWire(provider).platform, req.canonicalModelId);
-        const at = `${platform}/${endpoint.family}/${id}${model.maxOutput ? " (set)" : ""}`;
+        const at = `${platform}/${endpoint.family}/${id}${model.maxOutput ? " (set)" : model.thinkingDialect ? " (dialect)" : ""}`;
         const got = {
           category: v.thinkingCategory.inForce.value.id, ctx: v.contextSize.inForce?.value, out: v.maxOutput.inForce?.value,
           ctxSource: v.contextSize.inForce?.source, outSource: v.maxOutput.inForce?.source, gates: v.contextSize.gates,

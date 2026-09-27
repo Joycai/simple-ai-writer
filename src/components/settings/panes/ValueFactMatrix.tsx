@@ -22,7 +22,7 @@ import { sourceName } from "./valueNotes";
 import r from "./Routes.module.css";
 
 /** A route's own fields — the form's on the current route, the parked profile's on the others. */
-type RouteValues = Pick<Model, "thinkingCategory" | "maxOutput">;
+type RouteValues = Pick<Model, "thinkingCategory" | "thinkingDialect" | "maxOutput">;
 
 export function ValueFactMatrix({
   label, routes, current, wireFor, modelId, contextSize, valuesFor, catalogId,

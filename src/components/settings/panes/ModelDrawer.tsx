@@ -1396,7 +1396,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 wireFor={routeWire} modelId={form.modelId.trim()} contextSize={parsedCtx || undefined} catalogId={catalogId}
                 valuesFor={(f) => (f === route
                   ? { thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory, maxOutput: parsedOut || undefined }
-                  : { thinkingCategory: parked[f]?.thinkingCategory, maxOutput: parked[f]?.maxOutput })} />
+                  : { thinkingCategory: parked[f]?.thinkingCategory, thinkingDialect: parked[f]?.thinkingDialect, maxOutput: parked[f]?.maxOutput })} />
             )}
           </Section>
 
