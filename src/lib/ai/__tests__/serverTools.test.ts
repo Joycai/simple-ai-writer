@@ -9,12 +9,13 @@ import {
   geminiServerTools,
 } from "../serverTools";
 import { wireOf } from "../platforms";
-import { hasCapability, type CapabilityWire } from "../capabilities";
+import { hasCapability } from "../capabilities";
+import type { Wire } from "../platforms";
 
 const DS = { platform: "dashscope", standard: "openai_compat" } as const;
 
 /** The question the drawer and the adapters ask of the capability table, per model. */
-const offered = (wire: CapabilityWire, id: Parameters<typeof hasCapability>[0], modelId: string) => hasCapability(id, wire, { modelId });
+const offered = (wire: Wire, id: Parameters<typeof hasCapability>[0], modelId: string) => hasCapability(id, wire, { modelId });
 
 describe("which server tool a wire offers a model", () => {
   it("is a DashScope tool only, whatever the standard", () => {

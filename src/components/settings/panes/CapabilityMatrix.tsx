@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next";
 import { capabilityVerdict, type CapabilityId } from "../../../lib/ai/capabilities";
 import { capabilityModelOf, type RelayUpstreamChoice } from "../../../lib/ai/relayUpstream";
 import { ROUTE_SHORT } from "../../../lib/ai/routes";
-import type { ServerToolWire } from "../../../lib/ai/platforms";
+import type { Wire } from "../../../lib/ai/platforms";
 import type { ModelType } from "../../../lib/ai/configDb";
 import type { ProtocolFamily } from "../../../lib/ai/types";
 import r from "./Routes.module.css";
@@ -34,7 +34,7 @@ export function CapabilityMatrix({
   routes: readonly ProtocolFamily[];
   /** The model's current route — the column the switches' hints speak for. */
   current: ProtocolFamily;
-  wireFor: (f: ProtocolFamily) => ServerToolWire | undefined;
+  wireFor: (f: ProtocolFamily) => Wire | undefined;
   /** Blank = the model-id axis is not consulted (nothing typed yet). */
   modelId: string;
   type: ModelType;

@@ -529,8 +529,13 @@ function addressOf(url: string): string {
   }
 }
 
-/** The one wire question server tools depend on. */
-export interface ServerToolWire {
+/**
+ * The wire a request or a capability question is about: which server, speaking
+ * which standard. The one pair every capability verdict and every server-tool
+ * spelling is asked of (it used to be two identical interfaces, `Wire`
+ * here and `CapabilityWire` in the capability table).
+ */
+export interface Wire {
   platform: PlatformId;
   standard: ApiStandard;
 }
@@ -541,12 +546,12 @@ export interface ServerToolWire {
  * inferred exactly as `listProviders` would, so no path sends differently for
  * having skipped `connOptions()`.
  */
-export function wireOf(o: { platform?: PlatformId; baseUrl: string; standard: ApiStandard }): ServerToolWire {
+export function wireOf(o: { platform?: PlatformId; baseUrl: string; standard: ApiStandard }): Wire {
   return { platform: resolvePlatform(o.platform, o.baseUrl, o.standard), standard: o.standard };
 }
 
 /** {@link wireOf} for a provider row (`apiStandard` rather than `standard`). */
-export function providerWire(p: { platform?: PlatformId; baseUrl: string; apiStandard: ApiStandard }): ServerToolWire {
+export function providerWire(p: { platform?: PlatformId; baseUrl: string; apiStandard: ApiStandard }): Wire {
   return wireOf({ platform: p.platform, baseUrl: p.baseUrl, standard: p.apiStandard });
 }
 
