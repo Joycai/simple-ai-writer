@@ -186,8 +186,9 @@ const NEIGHBOUR_CEILING: Readonly<Record<string, Partial<Record<keyof typeof NEI
   "lib/ai/anthropic.ts": { standard: 1 },
   // `authModesFor`：哪两个兼容标准可选鉴权头——拼法（鉴权），留着。
   "lib/ai/types.ts": { standard: 2 },
-  // `pickPlatform` 的 newapi / custom（2，P1 改问 `isRelayPlatform`）；ComfyUI 的保存分支与预览（2）。
-  "components/settings/panes/ProviderDrawer.tsx": { platform: 4 },
+  // ComfyUI 的保存分支与预览（2）：选的是界面形态，不是能力。`pickPlatform` 的 newapi / custom 已在 P1 改问
+  // `platformHasHosts`。
+  "components/settings/panes/ProviderDrawer.tsx": { platform: 2 },
   // `streamResponses` 的 `/non-reasoning/i`——P2 进模型目录（`reasons` 事实）。
   "lib/ai/responses.ts": { modelId: 1 },
   // `reportsCostFor` 的未报价 id 表——计费的信任边界，不在本方案范围。

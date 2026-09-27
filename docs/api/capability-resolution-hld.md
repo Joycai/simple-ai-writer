@@ -1,6 +1,6 @@
 # 能力解析层重构：HLD
 
-> **状态：`partial`——作者 2026-09-27 定下 §6 的七个决定，全部按推荐；按 LLD 的 P0–P7 分期实施，P0（请求体金标与棘轮扩面）已落成，记录在 LLD §9.1。** 执行方案（文件、类型、算法、分 PR、测试）在
+> **状态：`partial`——作者 2026-09-27 定下 §6 的七个决定，全部按推荐；按 LLD 的 P0–P7 分期实施，P0（请求体金标与棘轮扩面）、P1（拆出 `capability/` 目录）已落成，记录在 LLD §9.1、§9.2。** 执行方案（文件、类型、算法、分 PR、测试）在
 > [`capability-resolution-lld.md`](capability-resolution-lld.md)。
 > 前置阅读：[`capability-gating-plan.md`](capability-gating-plan.md)（C0–C3 已落成的能力表，本文在它上面扩，不推翻）、
 > [`provider-layering.md`](provider-layering.md)（字段归哪一层）。起因是 2026-09-27 对「渠道 × 模型 × 上游 × 能力」

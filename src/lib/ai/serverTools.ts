@@ -113,13 +113,11 @@
  */
 
 import { familyOf } from "./types";
-import { providerWire, type ServerToolWire } from "./platforms";
+import { providerWire, type Wire } from "./platforms";
 import { hasCapability } from "./capabilities";
 import { capabilityModelOf, relayUpstreamFor, type RelayUpstreamChoice } from "./relayUpstream";
 import type { Model, Provider } from "./configDb";
 import { providerFor } from "./routes";
-
-export type { ServerToolWire } from "./platforms";
 
 /** This app's own name for a server-side tool. Never a wire type — see below. */
 export type ServerToolId = "web_search" | "web_extractor" | "web_search_image" | "image_search" | "code_interpreter";
@@ -198,7 +196,7 @@ function safeParse(s: string): unknown {
  * *not sent*, never *sent anyway* (plan §7 invariant 4).
  */
 export function effectiveServerTools(
-  wire: ServerToolWire,
+  wire: Wire,
   ids: readonly ServerToolId[] | undefined,
   modelId: string,
   relayUpstream?: RelayUpstreamChoice,
@@ -258,7 +256,7 @@ const MAX_SEARCHES_PER_REQUEST = 10;
 
 /** The `tools[]` entries these ids become on the Anthropic wire. */
 export function anthropicServerTools(
-  wire: ServerToolWire,
+  wire: Wire,
   ids: readonly ServerToolId[] | undefined,
   modelId?: string,
   relayUpstream?: RelayUpstreamChoice,
@@ -292,7 +290,7 @@ export function anthropicServerTools(
  * missing brake is not the same hazard.
  */
 export function openaiServerToolsBody(
-  wire: ServerToolWire,
+  wire: Wire,
   ids: readonly ServerToolId[] | undefined,
   modelId: string,
   request: { functionTools: boolean },
@@ -345,7 +343,7 @@ export function openaiServerToolsBody(
  * ignoring it.
  */
 export function responsesServerTools(
-  wire: ServerToolWire,
+  wire: Wire,
   ids: readonly ServerToolId[] | undefined,
   modelId: string,
   request: { thinkingOff: boolean },
@@ -375,7 +373,7 @@ const GEMINI_WIRE_TOOL: Partial<Record<ServerToolId, string>> = {
  * other wires: only what the platform's cell grants reaches the request.
  */
 export function geminiServerTools(
-  wire: ServerToolWire,
+  wire: Wire,
   ids: readonly ServerToolId[] | undefined,
   modelId: string,
   relayUpstream?: RelayUpstreamChoice,

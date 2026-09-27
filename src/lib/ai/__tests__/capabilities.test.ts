@@ -15,10 +15,10 @@ import { describe, expect, it } from "vitest";
 import {
   CAPABILITY_IDS, CAPABILITY_REASONS, CAPABILITY_RULES, PLATFORM_CAPABILITIES, SERVER_TOOL_CAPABILITIES, UPSTREAM_CAPABILITIES,
   capabilityVerdict, effortMenuOnWire, effortOnWire, familyVerdict, hasCapability,
-  type CapabilityId, type CapabilityWire,
+  type CapabilityId,
 } from "../capabilities";
 import { RELAY_UPSTREAMS, capabilityModelOf } from "../relayUpstream";
-import { PLATFORM_IDS, platformEndpoints } from "../platforms";
+import { PLATFORM_IDS, platformEndpoints, type Wire } from "../platforms";
 import { SERVER_TOOL_IDS } from "../serverTools";
 import type { ProtocolFamily } from "../types";
 
@@ -395,7 +395,7 @@ describe("relay upstreams", () => {
 });
 
 // The old per-question readers, gone in C1; the cells they pinned stay pinned.
-const status = (wire: CapabilityWire, id: CapabilityId, modelId?: string) => capabilityVerdict(id, wire, { modelId }).status;
+const status = (wire: Wire, id: CapabilityId, modelId?: string) => capabilityVerdict(id, wire, { modelId }).status;
 const codeInterpreter = (family: ProtocolFamily, modelId: string) =>
   familyVerdict("code_interpreter", "dashscope", family, { modelId }).status;
 const runsCodeInterpreter = (family: ProtocolFamily, modelId: string) => codeInterpreter(family, modelId) === "yes";
@@ -530,9 +530,9 @@ describe("pdfInput", () => {
 // gpt-5.6-luna's is rerouted and echoed (第十八个样本「GPT 全家补测」).
 describe("temperature on GPT-5.6", () => {
   it("is refused on Responses for gpt-5.6-sol only", () => {
-    const orcaResp: CapabilityWire = { platform: "orcarouter", standard: "openai_responses_compat" };
-    const orcaChat: CapabilityWire = { platform: "orcarouter", standard: "openai_compat" };
-    const official: CapabilityWire = { platform: "openai", standard: "openai_responses" };
+    const orcaResp: Wire = { platform: "orcarouter", standard: "openai_responses_compat" };
+    const orcaChat: Wire = { platform: "orcarouter", standard: "openai_compat" };
+    const official: Wire = { platform: "openai", standard: "openai_responses" };
     expect(capabilityVerdict("temperature", orcaResp, { modelId: "openai/gpt-5.6-sol" })).toEqual({ status: "no", reason: "model" });
     expect(hasCapability("temperature", orcaResp, { modelId: "openai/gpt-5.6-luna" })).toBe(true);
     expect(hasCapability("temperature", orcaChat, { modelId: "openai/gpt-5.6-sol" })).toBe(true);
@@ -542,9 +542,9 @@ describe("temperature on GPT-5.6", () => {
 });
 
 describe("effort cells", () => {
-  const orcaChat: CapabilityWire = { platform: "orcarouter", standard: "openai_compat" };
-  const orcaResp: CapabilityWire = { platform: "orcarouter", standard: "openai_responses_compat" };
-  const anthropic: CapabilityWire = { platform: "anthropic", standard: "anthropic" };
+  const orcaChat: Wire = { platform: "orcarouter", standard: "openai_compat" };
+  const orcaResp: Wire = { platform: "orcarouter", standard: "openai_responses_compat" };
+  const anthropic: Wire = { platform: "anthropic", standard: "anthropic" };
 
   it("effortOnWire: off beside tools where the wire refuses the pair, the lowest level where there is no off", () => {
     const sol = { modelId: "openai/gpt-5.6-sol" };
@@ -601,7 +601,7 @@ describe("zhipu", () => {
 // plus the host-less relays that may front it — never a hosted vendor that
 // merely speaks the same family (智谱 ignores both, landscape.md §7 第十四个样本).
 describe.each(["vlHighResolution", "videoFps"] as const)("%s", (id) => {
-  const on = (platform: CapabilityWire["platform"], standard: CapabilityWire["standard"] = "openai_compat") =>
+  const on = (platform: Wire["platform"], standard: Wire["standard"] = "openai_compat") =>
     hasCapability(id, { platform, standard });
   it("is DashScope's, and a relay's that may front it", () => {
     for (const p of ["dashscope", "dashscope-intl", "newapi", "custom"] as const) expect(on(p), p).toBe(true);

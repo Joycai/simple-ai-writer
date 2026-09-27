@@ -17,8 +17,8 @@ import {
 } from "../../../lib/ai/safety";
 import { testComfyUiConnection, testProviderConnection } from "../../../lib/ai/providerProbe";
 import {
-  PLATFORM_IDS, platformDefaultPath, platformEndpoints, platformForAddress, platformModelCalibration, platformOrigin,
-  type PlatformId,
+  PLATFORM_IDS, platformDefaultPath, platformEndpoints, platformForAddress, platformHasHosts, platformModelCalibration,
+  platformOrigin, type PlatformId,
 } from "../../../lib/ai/platforms";
 import { capabilityVerdict, hasCapability } from "../../../lib/ai/capabilities";
 import {
@@ -307,7 +307,9 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
   const [testResult, setTestResult] = useState<{ route: ProtocolFamily | "comfy"; ok: boolean; message: string } | null>(null);
 
   const pickPlatform = (platform: PlatformId) => {
-    setPlatformPinned(platform === "newapi" || platform === "custom");
+    // A platform no host names (New API, custom) keeps the author's pick when the
+    // address is edited — the same rule `platformForAddress` applies.
+    setPlatformPinned(!platformHasHosts(platform));
     setStarterModels(STARTER_MODELS[platform] ?? []);
     setTestResult(null);
     setForm((f) => ({

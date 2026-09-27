@@ -1,6 +1,6 @@
 # 能力解析层重构：LLD
 
-> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0 已落成（§9.1），P1 起未开工。**
+> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0、P1 已落成（§9.1、§9.2），P2 起未开工。**
 > HLD：[`capability-resolution-hld.md`](capability-resolution-hld.md)。本文回答：分几个 PR、每个 PR 动哪些文件哪些函数、
 > 类型长什么样、算法怎样逐格复现今天的行为、怎么测、怎么回滚。对照的是 2026-09-27 的 `main`（`d31ab9fc`，#717 之后）；引用一律写文件 + 符号，不写行号（`docSourceRefs.test.ts`）。
 
@@ -675,6 +675,40 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
 其余三处按 §4 在 P1、P2、P4 降到 0。
 
 模型 id 的写法按变量名数，是启发式的，`mid.includes(…)` 数不到。那几处在能力表与上游解析里，本来就在白名单内。
+
+### 9.2 P1：拆目录（2026-09-27）
+
+`capabilities.ts` 从 843 行缩成 122 行的门面，实现按 §1 搬进 `src/lib/ai/capability/`：
+
+| 文件 | 行数 | 内容 |
+| --- | --- | --- |
+| `facts.ts` | 97 | 能力 id、状态与原因码、`CAPABILITY_IDS`、`SERVER_TOOL_CAPABILITIES` |
+| `rules.ts` | 146 | `CAPABILITY_RULES` |
+| `cells/platform.ts` | 244 | `PLATFORM_CAPABILITIES` 与 DashScope 的代码解释器表 |
+| `cells/upstream.ts` | 184 | `UPSTREAM_CAPABILITIES` |
+| `resolve.ts` | 110 | `familyVerdict` / `capabilityVerdict` / `hasCapability` / `upstreamApplies` |
+
+门面里留下的是建立在裁决之上的东西：effort 阶梯的三个函数、`hasAnyServerTool`。
+
+**搬迁是逐行的。** 把旧文件自第 37 行起的每一行与新文件逐行比对：旧代码里只有被删掉的 `CapabilityWire` 那四行找不到对应，其余全部原样落在新文件里。
+改动只有三种：
+
+- 给跨文件用到的类型加上 `export`；
+- `CapabilityWire` 改名为 `Wire`；
+- 新文件各有一段头注。
+
+**验收**：矩阵文档、16 个金标文件零差异；`pnpm test` 全绿，`tsc` 通过。
+`exportReach.test.ts` 拦下了两个多加的 `export`（`ModelMatcher`、`CapabilityRule` 只在自己文件里用），已经去掉。
+
+**与 §6 P1 原文的三处出入**：
+
+1. **表的名字这一期不改。** §4 把 `CAPABILITY_RULES` 改名为 `PROTOCOL_RULES`、`PLATFORM_CAPABILITIES` 改名为 `PLATFORM_CELLS`，这两次改名推迟到它们的**形状**真正改变的那一期（P2 引入模型行）。
+   这一期只挪位置，改名会让同一样东西在门面与新文件里有两个名字。
+2. **两个相同的接口合成一个 `Wire`，定义在 `platforms.ts`。** 原来是 `platforms.ts` 的 `ServerToolWire` 与能力表的 `CapabilityWire`。
+   `serverTools.ts` 对 `ServerToolWire` 的转出没有人用，一并删掉。受影响的是两个源文件和两个测试，只改了类型名。
+3. **`ProviderDrawer.tsx` 的 `pickPlatform` 改问 `platformHasHosts`，而不是 §6 写的 `isRelayPlatform`。** 这一处的语义是「没有主机名能认出的平台，改地址时保留作者的选择」。
+   `platformForAddress` 用的正是 `platformHasHosts` 这个判据。中转站标记今天恰好圈出同一组平台（newapi、custom），但语义不同。
+   B5 零差异；棘轮里 `ProviderDrawer.tsx` 的 platform 上限从 4 降到 2，剩下的两处是 ComfyUI 的界面分支。
 
 ## 10. 待决
 
