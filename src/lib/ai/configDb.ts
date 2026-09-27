@@ -965,7 +965,8 @@ export async function migrateThinkingDialects(db: Awaited<ReturnType<typeof Data
     const channel = channels.get(r.provider_id as string);
     let routes: unknown;
     try { routes = typeof r.routes === "string" ? JSON.parse(r.routes) : undefined; } catch { routes = undefined; }
-    const family = channel ? activeFamily({ activeRoute: parseRouteFamily(r.active_route) }, channel) : undefined;
+    const pinned = parseRouteFamily(r.active_route);
+    const family = pinned ?? (channel ? activeFamily({}, channel) : undefined);
     const out = migrateLegacyThinking({ thinkingCategory: r.thinking_category, thinkingDialect: r.thinking_dialect, routes }, family);
     if (!out) continue;
     const kept = out.routes && typeof out.routes === "object" && Object.keys(out.routes).length ? JSON.stringify(out.routes) : null;

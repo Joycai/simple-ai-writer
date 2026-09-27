@@ -1,8 +1,8 @@
 /**
  * The one-time migration of the legacy `thinkingDialect` (LLD §9.10). What is
- * held: a migrated row sends exactly what the request used to resolve from the
- * dialect — the declared category when it fits, else the dialect's category
- * for that family, else 自动 — on the row and on every parked route; a row
+ * held: a migrated row keeps a declared category that fits, else takes the
+ * dialect's category for that family when it fits, else 自动 — on the row (by
+ * its pinned route's family) and on every parked route (by its own); a row
  * without a dialect is left alone; the database migration and the backup
  * parser both apply it.
  */
@@ -20,7 +20,7 @@ vi.mock("../../keyStore", () => ({ saveApiKey: async () => {}, loadApiKey: async
 const { migrateThinkingDialects, providerUpsert } = await import("../configDb");
 const { parseConfigBundle, CONFIG_BACKUP_KIND } = await import("../configTransfer");
 const { migrateLegacyThinking } = await import("../legacyThinking");
-const { resolveThinkingCategory } = await import("../capabilities");
+const { fitsFamily, THINKING_CATEGORIES } = await import("../reasoning");
 type Provider = import("../configDb").Provider;
 
 const legacy = (thinkingDialect: string, thinkingCategory?: string, routes?: unknown) =>
@@ -71,17 +71,25 @@ describe("migrateLegacyThinking", () => {
       .toBeUndefined();
   });
 
-  it("sends what the request resolved from the dialect", () => {
-    // The request never read a dialect on a family it cannot spell: the tables answered.
-    for (const [dialect, standard, family] of [
-      ["adaptive", "anthropic", "anthropic"], ["extended", "anthropic_compat", "anthropic"], ["switch", "openai_compat", "openai"],
-      ["switch", "anthropic", "anthropic"], ["none", "gemini", "gemini"], ["adaptive", "openai_compat", "openai"],
-    ] as const) {
-      const out = migrateLegacyThinking(legacy(dialect), family);
-      const after = resolveThinkingCategory({ thinkingCategory: out?.thinkingCategory }, standard);
-      const tables = resolveThinkingCategory({}, standard);
-      expect(after.id).toBe(out?.thinkingCategory ?? tables.id);
+  it("only ever writes a category the family can spell, and never overrides one that fits", () => {
+    const families = ["openai", "responses", "gemini", "anthropic"] as const;
+    for (const dialect of ["adaptive", "extended", "switch", "none"]) {
+      for (const family of families) {
+        for (const declared of [undefined, ...Object.keys(THINKING_CATEGORIES)]) {
+          const out = migrateLegacyThinking(legacy(dialect, declared), family);
+          const at = `${dialect}/${family}/${declared}`;
+          expect(out, at).toBeDefined();
+          const cat = out!.thinkingCategory;
+          if (cat) expect(fitsFamily(THINKING_CATEGORIES[cat], family), at).toBe(true);
+          if (declared && fitsFamily(THINKING_CATEGORIES[declared as keyof typeof THINKING_CATEGORIES], family)) {
+            expect(cat, at).toBe(declared);
+          }
+        }
+      }
     }
+    // The case that motivated the guard: switch named the Chat family's category on every non-Messages route.
+    expect(migrateLegacyThinking(legacy("switch"), "responses")?.thinkingCategory).toBeUndefined();
+    expect(migrateLegacyThinking(legacy("switch"), "gemini")?.thinkingCategory).toBeUndefined();
   });
 });
 
@@ -111,13 +119,17 @@ describe("migrateThinkingDialects (config.db)", () => {
             routes: JSON.stringify({ openai: { thinkingDialect: "switch", temperature: 0.3 } }) },
           // No active route: the channel's primary, Chat.
           { id: "m2", provider_id: "p1", thinking_category: null, thinking_dialect: "adaptive", active_route: null, routes: null },
+          // Pinned to a route the channel no longer has: its fields are that route's.
+          // (The channel serves Chat and Messages; on Chat, switch would be qwen-budget.)
+          { id: "m3", provider_id: "p1", thinking_category: null, thinking_dialect: "switch", active_route: "gemini", routes: null },
         ]),
       execute: async (sql: string, args: unknown[]) => { executed.push({ sql, args }); },
     } as never;
-    expect(await migrateThinkingDialects(db)).toBe(2);
+    expect(await migrateThinkingDialects(db)).toBe(3);
     expect(executed.map((e) => e.args)).toEqual([
       ["minimax", JSON.stringify({ openai: { temperature: 0.3, thinkingCategory: "qwen-budget" } }), "m1"],
       [null, null, "m2"],
+      [null, null, "m3"],
     ]);
     expect(executed.every((e) => /thinking_dialect = NULL/.test(e.sql))).toBe(true);
   });

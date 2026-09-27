@@ -11,7 +11,10 @@
  * them, so nothing downstream knows dialects exist:
  *
  *   - a declared category that fits the family stays;
- *   - otherwise the dialect's category for that family (`migrateDialect`);
+ *   - otherwise the dialect's category for that family (`migrateDialect`),
+ *     when it fits the family — `switch` names the OpenAI family's on/off
+ *     category on the Responses and Gemini routes too, and a category a route
+ *     cannot spell was never what it sent;
  *   - otherwise nothing — 自动, which is what the request already sent: the
  *     tables' category for the id.
  *
@@ -36,7 +39,8 @@ function migrated(category: unknown, dialect: unknown, family: ProtocolFamily | 
   const declared = parseThinkingCategory(category);
   if (!family) return declared;
   if (declared && fitsFamily(THINKING_CATEGORIES[declared], family)) return declared;
-  return migrateDialect(parseThinkingDialect(dialect), family)?.id;
+  const cat = migrateDialect(parseThinkingDialect(dialect), family);
+  return cat && fitsFamily(cat, family) ? cat.id : undefined;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -52,8 +56,9 @@ interface LegacyThinking {
 
 /**
  * The row with its dialects migrated, or undefined when it carries none.
- * `family` is the family of the route the row's own fields belong to
- * (`activeFamily`).
+ * `family` is the family of the route the row's own fields belong to: its
+ * pinned route even when the channel no longer has it (the request refuses
+ * such a row rather than moving its fields), else the channel's primary.
  */
 export function migrateLegacyThinking(
   row: LegacyThinking,
