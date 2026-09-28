@@ -326,6 +326,8 @@ export const PLATFORM_CELLS: Record<PlatformId, PlatformCells> = {
   // error naming it as no accepted variant (第十九个样本).
   deepseek: { families: { all: { models: DEEPSEEK_MODELS }, openai: { web_search: false, videoInput: false } } },
   dashscope: DASHSCOPE,
+  // Unmeasured: the protocol's own answers until a plan key has been through it.
+  "dashscope-plan": {},
   "dashscope-intl": DASHSCOPE,
   // json_schema with `strict:true`: 200, output matches (第十一个样本).
   // web_search measured on grok-4.3; web_extractor and the image searches are

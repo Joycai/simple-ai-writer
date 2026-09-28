@@ -19,6 +19,7 @@
 | google |  |  | · |  |
 | deepseek | ✓ protocol | ✓ protocol |  | · |
 | dashscope | ✓ protocol | ✓ protocol |  | · |
+| dashscope-plan | ✓ protocol |  |  | · |
 | dashscope-intl | ✓ protocol | ✓ protocol |  |  |
 | xai | ✓ protocol | ✓ protocol |  |  |
 | minimax | ✓ protocol |  |  | · |
@@ -42,6 +43,7 @@
 | google |  |  | · |  |
 | deepseek | · | · |  | · |
 | dashscope | ✓ measured | · |  | · |
+| dashscope-plan | · |  |  | · |
 | dashscope-intl | ✓ measured | · |  |  |
 | xai | · | · |  |  |
 | minimax | · |  |  | · |
@@ -65,6 +67,7 @@
 | google |  |  | · |  |
 | deepseek | · | · |  | · |
 | dashscope | ✓ measured | · |  | · |
+| dashscope-plan | · |  |  | · |
 | dashscope-intl | ✓ measured | · |  |  |
 | xai | · | · |  |  |
 | minimax | · |  |  | · |
@@ -88,6 +91,7 @@
 | google |  |  | · |  |
 | deepseek | · | · |  | · |
 | dashscope | ✓ measured | · |  | · |
+| dashscope-plan | · |  |  | · |
 | dashscope-intl | ✓ measured | · |  |  |
 | xai | · | · |  |  |
 | minimax | · |  |  | · |
@@ -111,6 +115,7 @@
 | google |  |  | ✓ protocol |  |
 | deepseek | ✓ protocol | ✓ protocol |  | ✓ protocol |
 | dashscope | ✓ protocol | ✓ protocol |  | ✓ protocol |
+| dashscope-plan | ✓ protocol |  |  | ✓ protocol |
 | dashscope-intl | ✓ protocol | ✓ protocol |  |  |
 | xai | ✓ protocol | ✓ protocol |  |  |
 | minimax | ✓ protocol |  |  | ✓ protocol |
@@ -134,6 +139,7 @@
 | google |  |  | · |  |
 | deepseek | ✓ protocol | ✓ protocol |  | · |
 | dashscope | ✓ protocol | ✓ protocol |  | · |
+| dashscope-plan | ✓ protocol |  |  | · |
 | dashscope-intl | ✓ protocol | ✓ protocol |  |  |
 | xai | ✓ protocol | ✓ protocol |  |  |
 | minimax | ✓ protocol |  |  | · |
@@ -157,6 +163,7 @@
 | google |  |  | · |  |
 | deepseek | ✓ protocol | ✓ protocol |  | · |
 | dashscope | ✓ protocol | ✓ protocol |  | · |
+| dashscope-plan | ✓ protocol |  |  | · |
 | dashscope-intl | ✓ protocol | ✓ protocol |  |  |
 | xai | ✓ protocol | ✓ protocol |  |  |
 | minimax | ✓ protocol |  |  | · |
@@ -180,6 +187,7 @@
 | google |  |  | · |  |
 | deepseek | ✓ protocol | ✓ protocol |  | · |
 | dashscope | ✓ protocol | ✓ protocol |  | · |
+| dashscope-plan | ✓ protocol |  |  | · |
 | dashscope-intl | ✓ protocol | ✓ protocol |  |  |
 | xai | ✓ protocol | ✓ protocol |  |  |
 | minimax | ✓ protocol |  |  | · |
@@ -203,6 +211,7 @@
 | google |  |  | · |  |
 | deepseek | ✓ protocol | ✓ protocol |  | · |
 | dashscope | ✓ protocol | ✓ protocol |  | · |
+| dashscope-plan | ✓ protocol |  |  | · |
 | dashscope-intl | ✓ protocol | ✓ protocol |  |  |
 | xai | ✓ protocol | ✓ protocol |  |  |
 | minimax | ✓ protocol |  |  | · |
@@ -226,6 +235,7 @@
 | google |  |  | ✓ protocol |  |
 | deepseek | ✓ protocol | ✓ protocol |  | · |
 | dashscope | ✓ protocol | ✓ protocol |  | · |
+| dashscope-plan | ✓ protocol |  |  | · |
 | dashscope-intl | ✓ protocol | ✓ protocol |  |  |
 | xai | ✓ protocol | ✓ protocol |  |  |
 | minimax | ✓ protocol |  |  | · |
@@ -249,6 +259,7 @@
 | google |  |  | · |  |
 | deepseek | · | ✓ protocol |  | · |
 | dashscope | · | ✓ protocol |  | · |
+| dashscope-plan | · |  |  | · |
 | dashscope-intl | · | ✓ protocol |  |  |
 | xai | · | ✓ protocol |  |  |
 | minimax | · |  |  | · |
@@ -272,6 +283,7 @@
 | google |  |  | · |  |
 | deepseek | · | ✓ protocol |  | · |
 | dashscope | · | ✓ protocol |  | · |
+| dashscope-plan | · |  |  | · |
 | dashscope-intl | · | ✓ protocol |  |  |
 | xai | · | ✓ protocol |  |  |
 | minimax | · |  |  | · |
@@ -295,6 +307,7 @@
 | google |  |  | · |  |
 | deepseek | ✓ protocol | · |  | · |
 | dashscope | ✓ protocol | · |  | · |
+| dashscope-plan | ✓ protocol |  |  | · |
 | dashscope-intl | ✓ protocol | · |  |  |
 | xai | ✓ protocol | · |  |  |
 | minimax | ✓ protocol |  |  | · |
@@ -318,6 +331,7 @@
 | google |  |  | ✓ protocol |  |
 | deepseek | ✓ protocol | ✓ protocol |  | ✓ protocol |
 | dashscope | ✓ protocol | ✓ protocol |  | ✓ protocol |
+| dashscope-plan | ✓ protocol |  |  | ✓ protocol |
 | dashscope-intl | ✓ protocol | ✓ protocol |  |  |
 | xai | ✓ protocol | ✓ protocol |  |  |
 | minimax | ✓ protocol |  |  | ✓ protocol |
@@ -341,6 +355,7 @@
 | google |  |  | ✓ measured |  |
 | deepseek | ? unmeasured | ? unmeasured |  | ? unmeasured |
 | dashscope | ✓ measured | ? unmeasured |  | ? unmeasured |
+| dashscope-plan | ? unmeasured |  |  | ? unmeasured |
 | dashscope-intl | ✓ measured | ? unmeasured |  |  |
 | xai | ? unmeasured | ✓ measured |  |  |
 | minimax | ? unmeasured |  |  | ? unmeasured |
@@ -364,6 +379,7 @@
 | google |  |  | ✓ protocol |  |
 | deepseek | ✓ protocol | ✓ protocol |  | · |
 | dashscope | ✓ protocol | ✓ protocol |  | · |
+| dashscope-plan | ✓ protocol |  |  | · |
 | dashscope-intl | ✓ protocol | ✓ protocol |  |  |
 | xai | ✓ protocol | ✓ protocol |  |  |
 | minimax | ✓ protocol |  |  | · |
@@ -387,6 +403,7 @@
 | google |  |  | · |  |
 | deepseek | · | · |  | · |
 | dashscope | · | · |  | · |
+| dashscope-plan | · |  |  | · |
 | dashscope-intl | · | · |  |  |
 | xai | · | · |  |  |
 | minimax | · |  |  | · |
@@ -410,6 +427,7 @@
 | google |  |  | ? unmeasured |  |
 | deepseek | · | ? unmeasured |  | ? unmeasured |
 | dashscope | ✓ measured | ✓ measured |  | ? unmeasured |
+| dashscope-plan | · |  |  | ? unmeasured |
 | dashscope-intl | ✓ measured | ✓ measured |  |  |
 | xai | · | ✓ measured |  |  |
 | minimax | · |  |  | ✓ measured |
@@ -433,6 +451,7 @@
 | google |  |  | · |  |
 | deepseek | · | · |  | · |
 | dashscope | ✓ measured | ✓ measured |  | · |
+| dashscope-plan | · |  |  | · |
 | dashscope-intl | ✓ measured | ✓ measured |  |  |
 | xai | · | · |  |  |
 | minimax | · |  |  | · |
@@ -456,6 +475,7 @@
 | google |  |  | · |  |
 | deepseek | · | · |  | · |
 | dashscope | · | ✓ measured |  | · |
+| dashscope-plan | · |  |  | · |
 | dashscope-intl | · | ✓ measured |  |  |
 | xai | · | · |  |  |
 | minimax | · |  |  | · |
@@ -479,6 +499,7 @@
 | google |  |  | · |  |
 | deepseek | · | · |  | · |
 | dashscope | · | ✓ measured |  | · |
+| dashscope-plan | · |  |  | · |
 | dashscope-intl | · | ✓ measured |  |  |
 | xai | · | · |  |  |
 | minimax | · |  |  | · |
@@ -502,6 +523,7 @@
 | google |  |  | · |  |
 | deepseek | · | · |  | · |
 | dashscope | ✓ 按模型 measured | ✓ 按模型 measured |  | · |
+| dashscope-plan | · |  |  | · |
 | dashscope-intl | ✓ 按模型 measured | ✓ 按模型 measured |  |  |
 | xai | · | · |  |  |
 | minimax | · |  |  | · |

@@ -42,6 +42,7 @@ export type PlatformId =
   | "google"
   | "deepseek"
   | "dashscope"
+  | "dashscope-plan"
   | "dashscope-intl"
   | "xai"
   | "minimax"
@@ -56,8 +57,8 @@ export type PlatformId =
 
 /** Selectable values, in the order the provider drawer lists them. */
 export const PLATFORM_IDS: readonly PlatformId[] = [
-  "openai", "anthropic", "google", "deepseek", "dashscope", "dashscope-intl", "xai",
-  "minimax", "volcengine", "volcengine-plan", "zhipu", "orcarouter", "newapi", "ollama", "comfyui", "custom",
+  "openai", "anthropic", "google", "deepseek", "dashscope", "dashscope-plan", "dashscope-intl",
+  "xai", "minimax", "volcengine", "volcengine-plan", "zhipu", "orcarouter", "newapi", "ollama", "comfyui", "custom",
 ];
 
 /**
@@ -156,8 +157,12 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     hosts: ["api.deepseek.com"],
     source: "landscape.md §2.1 — no server tools on Chat Completions; the Anthropic-shaped path is unmeasured",
   },
+  // 百炼 moved its documented host to maas.qianwenaiapi.com (2026-09); the old
+  // one still answers the same key on every path (probed 2026-09-28), so a
+  // stored channel on it keeps resolving here and sends what it always sent.
+  // New channels get the new host.
   dashscope: {
-    origin: "https://dashscope.aliyuncs.com",
+    origin: "https://maas.qianwenaiapi.com",
     endpoints: [
       { family: "openai", path: "/compatible-mode/v1" },
       // Same path; the adapter appends /responses below it.
@@ -165,8 +170,22 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       // The root — the platform's FAQ warns against a trailing /v1.
       { family: "anthropic", path: "/apps/anthropic" },
     ],
-    hosts: ["dashscope.aliyuncs.com"],
+    hosts: ["maas.qianwenaiapi.com", "dashscope.aliyuncs.com"],
     source: "landscape.md §7 第六个样本 (联网搜索与网页抓取 2026-09-14 · 代码解释器 2026-09-17)",
+  },
+  // 百炼 Token Plan: a subscription key (`sk-sp-…`) on its own host, a 401 for
+  // a pay-as-you-go key and the other way round — the same reason 火山方舟's
+  // plan is its own platform. The two routes its quickstart documents; the
+  // native /api/v1 it names serves image / video / speech generation only.
+  // Nothing measured: no plan key has been through it.
+  "dashscope-plan": {
+    origin: "https://token-plan.maas.qianwenaiapi.com",
+    endpoints: [
+      { family: "openai", path: "/compatible-mode/v1" },
+      { family: "anthropic", path: "/apps/anthropic" },
+    ],
+    hosts: ["token-plan.maas.qianwenaiapi.com"],
+    source: "百炼 Token Plan 快速开始 (2026-09-28); unmeasured",
   },
   "dashscope-intl": {
     origin: "https://dashscope-intl.aliyuncs.com",
