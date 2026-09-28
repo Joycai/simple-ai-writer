@@ -5,9 +5,10 @@
  *
  * Three kinds of media ride in a `role: "user"` message's parts array —
  * pictures (`image_url`), video clips (`video_url`) and documents (`file`,
- * only ever a PDF). Every place that removes them — the agent runtime trimming
- * a run that is outgrowing its window, chat persistence before a SQLite row —
- * goes through `withoutParts`, so they all follow the same rule.
+ * only ever a PDF). Every place that removes them — the request's own
+ * projection (`admitMedia`), the agent runtime trimming a run that is
+ * outgrowing its window, chat persistence before a SQLite row — goes through
+ * `withoutParts`, so they all follow the same rule.
  *
  * **The words stay.** An earlier version replaced the whole `content` with a
  * note, which was harmless for a tool follow-up ("Visual reference for
@@ -16,7 +17,8 @@
  * away what was asked while keeping the answer. Only the payload goes.
  */
 
-import type { ContentPart, MessageContent } from "./types";
+import type { MediaAdmission } from "./capability/media";
+import type { ContentPart, MessageContent, StreamMessage } from "./types";
 
 /** The kinds of media a content part can carry. */
 export type MediaKind = "image" | "video" | "pdf";
@@ -80,4 +82,46 @@ export function unsendablePart(label: string, part: unknown): Error {
   return new Error(
     `${label} adapter: no spelling for a "${type}" content part — the request should have held it back`,
   );
+}
+
+/**
+ * What the model reads where a part of each kind was not sent. Written to the
+ * model, in English like the other elision notes, so it can tell the author
+ * why it cannot see what the history says was attached.
+ */
+const NOT_SENT: Readonly<Record<MediaKind, string>> = {
+  image: "[picture not sent: the model now answering does not read pictures — the author can switch back to one that does]",
+  video: "[video clip not sent: the model now answering does not take video on this route — the author can switch back to one that does]",
+  pdf: "[PDF not sent: the model now answering does not take PDF files on this route — the author can switch back to one that does]",
+};
+
+/**
+ * The messages as this request may carry them: every part of a kind the plan
+ * does not admit (`RequestPlan.media`) replaced by a note, the words kept.
+ *
+ * A projection, not an edit. The history is the record of what the author
+ * attached, and it outlives the model: switch to one that cannot take a clip
+ * and the clip goes out as a note; switch back and it goes out again. So this
+ * returns a new array and never writes into the one it was given — messages
+ * it leaves alone are the same objects, the ones it changes are copies.
+ *
+ * `streamCompletion` calls it before anything else reads the messages, so the
+ * token estimate, the picture-payload gate, the API log and the adapter all
+ * see the request that is actually sent.
+ */
+export function admitMedia(messages: readonly StreamMessage[], admission: MediaAdmission): StreamMessage[] {
+  const refused = MEDIA_KINDS.filter((k) => !admission[k]);
+  if (!refused.length) return [...messages];
+  return messages.map((m) => {
+    // Only the plain variant carries parts; a tool-call turn's content is null.
+    if (!Array.isArray(m.content)) return m;
+    const kinds = new Set<MediaKind>();
+    for (const p of m.content) {
+      const kind = partKind(p);
+      if (kind && refused.includes(kind)) kinds.add(kind);
+    }
+    if (!kinds.size) return m;
+    const note = MEDIA_KINDS.filter((k) => kinds.has(k)).map((k) => NOT_SENT[k]).join("\n");
+    return { ...m, content: withoutParts(m.content, kinds, note) } as StreamMessage;
+  });
 }
