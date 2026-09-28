@@ -23,7 +23,9 @@ import { convertToGeminiContents } from "./gemini";
 import { toSafetySettingsArray } from "./safety";
 import type { GeminiSafetySettings } from "./safety";
 import { geminiAuthHeaders } from "./gemini";
-import { familyOf, type ApiStandard, type AuthMode, type ImageRoute } from "./types";
+import type { Model, Provider } from "./configDb";
+import { effectiveAsyncTask, effectiveImageRoute } from "./imageRoute";
+import type { ApiStandard, AuthMode, ImageRoute } from "./types";
 import { geminiUrl, openaiUrl, trimBase } from "./urls";
 
 /** The provider coordinates every image call needs. */
@@ -35,22 +37,40 @@ export interface ImageConn {
   authMode?: AuthMode;
   modelId: string;
   safetySettings?: GeminiSafetySettings;
-  /** Overrides the endpoint choice derived from `standard`. See ImageRoute. */
+  /**
+   * The model's declared route (`ImageCaps.route`), as stored. Never read
+   * directly — `effectiveImageRoute` turns it and `standard` into the endpoint.
+   */
   route?: ImageRoute;
-  /** dashscope route only: submit-and-poll instead of one synchronous call. */
+  /** dashscope route only: submit-and-poll. Read through `effectiveAsyncTask`. */
   asyncTask?: boolean;
   /** comfyui route only: the model's imported workflow (ImageCaps.comfy). */
   comfy?: ComfyWorkflowConfig;
 }
 
 /**
- * Which endpoint to call. The protocol picks the default, but a relay can
- * serve a model the protocol's usual endpoint rejects, so an explicit route
- * always wins.
+ * The conn an image model's calls take: its current route's provider
+ * (`providerFor`) and its declarations exactly as stored — which endpoint they
+ * resolve to is `generateImage`'s question, asked of `effectiveImageRoute`.
+ * One builder for every caller, so none of them can pass a pre-resolved or
+ * half-copied route.
  */
-export function resolveImageRoute(standard: ApiStandard, declared?: ImageRoute): ImageRoute {
-  if (declared) return declared;
-  return familyOf(standard) === "gemini" ? "gemini" : "images-api";
+export function imageConnOf(
+  model: Pick<Model, "modelId" | "caps">,
+  provider: Pick<Provider, "baseUrl" | "apiStandard" | "authMode" | "safetySettings">,
+  apiKey: string,
+): ImageConn {
+  return {
+    baseUrl: provider.baseUrl,
+    apiKey,
+    standard: provider.apiStandard,
+    authMode: provider.authMode,
+    modelId: model.modelId,
+    safetySettings: provider.safetySettings,
+    route: model.caps?.route,
+    asyncTask: model.caps?.asyncTask,
+    comfy: model.caps?.comfy,
+  };
 }
 
 /**
@@ -275,7 +295,7 @@ function withDeadline(signal: AbortSignal | undefined, ms: number): { signal: Ab
  * `streamCompletion` makes.
  */
 export async function generateImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
-  const route = resolveImageRoute(conn.standard, conn.route);
+  const route = effectiveImageRoute(conn.standard, conn);
   // Logged like `streamCompletion` is. These calls bill per attempt and their
   // failures are the least reproducible in the app, so leaving them out of the
   // debug log was the wrong way round.
@@ -296,7 +316,7 @@ export async function generateImage(conn: ImageConn, req: ImageRequest): Promise
   });
 
   try {
-    const result = await dispatchImage(route, conn, req, log);
+    const result = await dispatchImage(route, effectiveAsyncTask(conn.standard, conn), conn, req, log);
     log.success({ images: result.images.length, usage: result.usage, text: result.text });
     return result;
   } catch (e) {
@@ -305,7 +325,13 @@ export async function generateImage(conn: ImageConn, req: ImageRequest): Promise
   }
 }
 
-function dispatchImage(route: ImageRoute, conn: ImageConn, req: ImageRequest, log: ImageCallLogger): Promise<ImageResult> {
+function dispatchImage(
+  route: ImageRoute,
+  asyncTask: boolean,
+  conn: ImageConn,
+  req: ImageRequest,
+  log: ImageCallLogger,
+): Promise<ImageResult> {
   switch (route) {
     case "gemini":
       // One endpoint for both: the input images simply become extra parts.
@@ -317,7 +343,7 @@ function dispatchImage(route: ImageRoute, conn: ImageConn, req: ImageRequest, lo
       // One route, two transports: wan text-to-image only exists as an async
       // task, everything else answers in the request. The split is a declared
       // capability (caps.asyncTask), not a model-id guess.
-      return conn.asyncTask ? dashscopeAsyncImage(conn, req, log) : dashscopeImage(conn, req);
+      return asyncTask ? dashscopeAsyncImage(conn, req, log) : dashscopeImage(conn, req);
     case "comfyui":
       // A local instance running the model's imported workflow — submit the
       // injected graph, poll history, fetch the files. Never a derived route.

@@ -316,7 +316,7 @@ authMode?: "default" | "bearer" | "both";
 | `lib/ai/configTransfer.ts` | 白名单扩容 + 复用映射 |
 | `lib/ai/providerProbe.ts` | 用 `urls.ts`；compat 降级探测；传 `authMode` |
 | `lib/ai/endpointProbe.ts` | 同上；错误探测（Step 1）的跳过条件改为按协议族判断 |
-| `lib/ai/image.ts` | `resolveImageRoute` 改为 `族 === "gemini" ? "gemini" : "images-api"` |
+| `lib/ai/image.ts` | `resolveImageRoute` 改为 `族 === "gemini" ? "gemini" : "images-api"`（后来整个换成 `lib/ai/imageRoute.ts` 的 `effectiveImageRoute`，按族查表，见 [`image-route.md`](../feature/image-route.md)） |
 | `stores/aiTaskStore.ts` | `defaultBaseUrl` 改为按族返回空串 |
 | `components/settings/panes/ProviderDrawer.tsx` | 下拉 6 项；official 的 URL 输入框**只读展示**（不隐藏，用户要看得见地址才知道该不该换 compat）；compat 显示鉴权下拉；预设整理 |
 | `components/onboarding/Onboarding.tsx` | 预设沿用 official |

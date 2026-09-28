@@ -18,7 +18,7 @@ import { X, Sparkles, Image as ImageIcon, Wand2, UserRound } from "lucide-react"
 import { ModalShell } from "../common/ModalShell";
 import { Combobox } from "../common/Combobox";
 import { canSeeImages, chatModels, imageCostFor } from "../../lib/ai/configDb";
-import { resolveImageRoute } from "../../lib/ai/image";
+import { effectiveImageRoute } from "../../lib/ai/imageRoute";
 import { imageDialect } from "../../lib/ai/imageDialects";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { imageForModel } from "../../lib/image/normalize";
@@ -83,7 +83,7 @@ export function ImageGenModal({ target, onClose }: Props) {
    * for one picture and explain nothing.
    */
   const chatRoute = !!imageModel && !!imageProvider
-    && resolveImageRoute(imageProvider.apiStandard, imageModel.caps?.route) === "chat";
+    && effectiveImageRoute(imageProvider.apiStandard, imageModel.caps) === "chat";
   /**
    * ComfyUI is the one route with a real negative-prompt field, and the one
    * where folding the negative into the prompt would *hurt*: SD attracts what

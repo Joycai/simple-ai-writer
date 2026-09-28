@@ -24,6 +24,7 @@
 import type { Model } from "./configDb";
 import { hasCapability, modelValue, thinkingCategoryOf, trusted, type Sourced } from "./capabilities";
 import { planRequest, type RequestPlan } from "./capability/plan";
+import { effectiveImageRoute } from "./imageRoute";
 import type { StructuredOutputMode } from "./jsonMode";
 import { wireOf, type PlatformId } from "./platforms";
 import { reasoningBody, thinkingBody, type ThinkingCategory } from "./reasoning";
@@ -168,9 +169,10 @@ export function wireSummary(
   canonicalModelId?: string,
 ): WireItem[] {
   if (m.type === "image") {
-    // An image model's declarations steer the client, not a chat body.
-    const out: WireItem[] = [];
-    if (m.caps?.route) out.push({ key: "route", value: m.caps.route });
+    // An image model's declarations steer the client, not a chat body. The
+    // route is the effective one, always listed: what 自动 resolves to on this
+    // route is exactly what the author cannot see anywhere else.
+    const out: WireItem[] = [{ key: "route", value: effectiveImageRoute(standard, m.caps) }];
     if (m.caps?.dialect) out.push({ key: "dialect", value: m.caps.dialect });
     if (m.caps?.sizes?.length) {
       const [first, ...rest] = m.caps.sizes;

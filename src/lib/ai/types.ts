@@ -163,21 +163,25 @@ export function authModesFor(standard: ApiStandard): AuthMode[] {
  *   - "dashscope"  — DashScope native (Qwen/Wan image models):
  *                    POST {api/v1}/services/aigc/multimodal-generation/generation,
  *                    or the async task flow when `ImageCaps.asyncTask` is set.
- *                    Never a default — the DashScope provider preset is
- *                    `openai_compat`, whose derived route must stay "images-api".
- *                    Not `ProtocolFamily` "dashscope" (the native *chat*
- *                    route): an image model declares this one explicitly
- *                    (docs/api/dashscope-native-plan.md §3).
+ *                    The derived route only for a model whose current route
+ *                    is `ProtocolFamily` "dashscope" (the native chat route
+ *                    — a different type: a protocol, not an image endpoint).
+ *                    On 百炼's Chat route (`openai_compat`) the derived one
+ *                    stays "images-api", so a model there declares this.
  *   - "comfyui"    — a local ComfyUI instance: POST {base}/prompt with the
  *                    model's imported workflow graph (`ImageCaps.comfy`), then
  *                    poll {base}/history/{id} and fetch via {base}/view. Never
- *                    a default either — only an explicit declaration selects it.
+ *                    derived — only an explicit declaration selects it.
  *                    See docs/feature/comfyui-plan.md.
  *   - "ark"        — 火山方舟 Seedream: POST {base}/images/generations, the
  *                    same path as "images-api" but a different body (no `n`,
  *                    references as a JSON `image` field, `watermark` on by
- *                    default upstream). Never a default either — the 火山方舟
+ *                    default upstream). Never derived either — the 火山方舟
  *                    starter rows declare it. See docs/api/landscape.md §7.
+ *
+ * The declaration is optional; which endpoint a call actually takes is
+ * `effectiveImageRoute` (lib/ai/imageRoute.ts), the only derivation in the app
+ * (docs/feature/image-route.md).
  */
 export type ImageRoute = "images-api" | "chat" | "gemini" | "dashscope" | "comfyui" | "ark";
 
