@@ -86,6 +86,15 @@ export function openaiUrl(baseUrl: string, path: string): string {
 }
 
 /**
+ * DashScope's native protocol: the base is `…/api/v1` (the platform's path),
+ * and the service path goes below it as-is. No default — the route exists only
+ * on a channel that names its host.
+ */
+export function nativeUrl(baseUrl: string, path: string): string {
+  return `${trimBase(baseUrl)}${path}`;
+}
+
+/**
  * Gemini bases keep their own version segment (`/v1beta`), so nothing is added.
  * A trailing `/models` is dropped because every path here starts with it, and
  * pasting the model-list URL as the base is an easy mistake to make.

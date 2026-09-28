@@ -28,6 +28,7 @@ import { canReadVideo, sentVideoFps } from "../videoInput";
 import { standardOf } from "../routes";
 import { streamAnthropic } from "../anthropic";
 import { streamGemini } from "../gemini";
+import { streamDashscope } from "../dashscope";
 import { streamOpenAI } from "../openai";
 import { streamResponses } from "../responses";
 import { familyOf, type ApiStandard, type ProtocolFamily, type StreamOptions } from "../types";
@@ -67,6 +68,7 @@ const TYPE = "multimodal" as const;
 
 const ADAPTERS: Record<ProtocolFamily, (o: StreamOptions) => Promise<void>> = {
   openai: streamOpenAI, responses: streamResponses, anthropic: streamAnthropic, gemini: streamGemini,
+  dashscope: streamDashscope,
 };
 
 interface Ctx {

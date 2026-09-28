@@ -142,6 +142,9 @@ export const VALUE_FACTS: { [F in ValueFactId]: ValueFactSpec<ValueFactMap[F]> }
     scope: "transport",
     familyDefault: {
       openai: "openai-generic", responses: "responses-effort", gemini: "gemini3", anthropic: "claude-adaptive",
+      // Only 百炼 speaks it, and its general answer is the Qwen switch + budget;
+      // a model the catalog lists gets its own category.
+      dashscope: "qwen-budget",
     },
   },
   maxOutput: { scope: "intrinsic" },

@@ -76,6 +76,21 @@ anthropic claude-adaptive unset:- default:- off:- minimal:- low:- medium:- high:
 anthropic claude-budget unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 anthropic minimax unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 anthropic doubao-switch unset:- default:- off:yes minimal:- low:- medium:- high:- xhigh:- max:-
+dashscope off unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope openai-generic unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope deepseek unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope qwen-budget unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope qwen-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope glm unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope glm-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope glm-switch unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope doubao unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope responses-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope gemini3 unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope claude-adaptive unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope claude-budget unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope minimax unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope doubao-switch unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 
 # DashScope openai_compat, server tools declared
 off unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true

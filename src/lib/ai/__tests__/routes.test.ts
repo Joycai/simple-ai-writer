@@ -82,7 +82,7 @@ describe("a channel's other routes", () => {
   });
 
   it("gets every route the platform serves, primary first", () => {
-    expect(channelEndpoints(dashscope).map((e) => e.family)).toEqual(["openai", "responses", "anthropic"]);
+    expect(channelEndpoints(dashscope).map((e) => e.family)).toEqual(["openai", "responses", "anthropic", "dashscope"]);
     expect(dashscope.baseUrl).toBe("https://dashscope.aliyuncs.com/compatible-mode/v1");
   });
 
@@ -94,6 +94,16 @@ describe("a channel's other routes", () => {
     expect(anth.platform).toBe("dashscope");
     expect(routeProvider(dashscope, "responses")!.apiStandard).toBe("openai_responses_compat");
     expect(routeProvider(dashscope, "gemini")).toBeUndefined();
+    const native = routeProvider(dashscope, "dashscope")!;
+    expect(native.baseUrl).toBe("https://dashscope.aliyuncs.com/api/v1");
+    expect(native.apiStandard).toBe("dashscope_compat");
+  });
+
+  it("speaks the compat standard on DashScope's native route, which has no official one", () => {
+    expect(standardOf({ family: "dashscope", official: false })).toBe("dashscope_compat");
+    // No platform can declare it; read defensively rather than inventing a value.
+    expect(standardOf({ family: "dashscope", official: true })).toBe("dashscope_compat");
+    expect(standardOf({ family: "anthropic", official: false })).toBe("anthropic_compat");
   });
 
   it("an absolute path replaces the host too", () => {

@@ -29,7 +29,7 @@ import type { StreamMessage, StreamOptions } from "./types";
  * payload beside it goes back only to the model that produced it: another
  * model cannot decrypt it, and 火山方舟 says a payload it cannot restore fails.
  */
-function toWireMessages(messages: StreamMessage[], modelId: string): Record<string, unknown>[] {
+export function toWireMessages(messages: StreamMessage[], modelId: string): Record<string, unknown>[] {
   return messages.map((m) => {
     const bag = m as Record<string, unknown>;
     // Drop by prefix rather than by name: every protocol that needs carry-back
@@ -57,7 +57,7 @@ function toWireMessages(messages: StreamMessage[], modelId: string): Record<stri
  * same names inside its `parameters` object — which is why this is its own
  * function rather than part of `streamOpenAI`'s body literal.
  */
-function chatParams(opts: StreamOptions, plan: RequestPlan): Record<string, unknown> {
+export function chatParams(opts: StreamOptions, plan: RequestPlan): Record<string, unknown> {
   return {
     // Absent unless the author set one on this model, for the same reason as
     // the reasoning fields below: an unset model must keep sending exactly

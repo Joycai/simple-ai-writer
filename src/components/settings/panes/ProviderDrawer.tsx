@@ -7,7 +7,8 @@ import { feeGroupOptions } from "../../../lib/ai/feeGroupList";
 import { useFeeLabelWords } from "./feeWords";
 import type { Model, Provider } from "../../../lib/ai/configDb";
 import { authModesFor, type AuthMode, type ProtocolFamily } from "../../../lib/ai/types";
-import { anthropicUrl, defaultBaseFor, geminiUrl, openaiUrl } from "../../../lib/ai/urls";
+import { anthropicUrl, defaultBaseFor, geminiUrl, nativeUrl, openaiUrl } from "../../../lib/ai/urls";
+import { NATIVE_CHAT_PATH } from "../../../lib/ai/dashscope";
 import {
   GEMINI_HARM_CATEGORIES,
   GEMINI_THRESHOLD_LEVELS,
@@ -228,6 +229,7 @@ function requestUrl(ep: Endpoint, base: string): string {
     case "anthropic": return anthropicUrl(b, "/messages");
     case "gemini": return geminiUrl(b, "/models/{model}:streamGenerateContent");
     case "responses": return openaiUrl(b, "/responses");
+    case "dashscope": return nativeUrl(b, NATIVE_CHAT_PATH);
     default: return openaiUrl(b, "/chat/completions");
   }
 }

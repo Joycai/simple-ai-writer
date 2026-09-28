@@ -415,7 +415,19 @@ export function parseThinkingCategory(v: unknown): ThinkingCategoryId | undefine
  * wire that spells it `reasoning.effort`.
  */
 export function fitsFamily(category: ThinkingCategory, family: ProtocolFamily): boolean {
-  return category.shape === "none" || category.family === family;
+  return category.shape === "none" || category.family === thinkingVocabularyOf(family);
+}
+
+/**
+ * The family whose thinking categories a family speaks. Its own, except
+ * DashScope's native protocol: its `parameters` take Chat Completions' thinking
+ * fields under the same names (`enable_thinking` / `thinking_budget` /
+ * `reasoning_effort`), so it borrows those categories rather than holding a
+ * copy of each — `reasoningBody` spells them, the native adapter moves them
+ * into `parameters` with the rest.
+ */
+function thinkingVocabularyOf(family: ProtocolFamily): ProtocolFamily {
+  return family === "dashscope" ? "openai" : family;
 }
 
 /**
@@ -450,7 +462,7 @@ export function migrateDialect(dialect: ThinkingDialect | undefined, family: Pro
 /** Category ids offered in the model editor for a family, plus the always-present `off`. */
 export function categoriesForFamily(family: ProtocolFamily): ThinkingCategoryId[] {
   const own = THINKING_CATEGORY_IDS.filter(
-    (id) => id !== "off" && THINKING_CATEGORIES[id].family === family,
+    (id) => id !== "off" && THINKING_CATEGORIES[id].family === thinkingVocabularyOf(family),
   );
   return [...own, "off"];
 }

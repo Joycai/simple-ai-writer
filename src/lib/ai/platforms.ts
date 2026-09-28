@@ -169,6 +169,9 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       { family: "responses", path: "/compatible-mode/v1" },
       // The root — the platform's FAQ warns against a trailing /v1.
       { family: "anthropic", path: "/apps/anthropic" },
+      // DashScope's own protocol; the adapter appends the multimodal
+      // generation service below it (dashscope.ts).
+      { family: "dashscope", path: "/api/v1" },
     ],
     hosts: ["maas.qianwenaiapi.com", "dashscope.aliyuncs.com"],
     source: "landscape.md §7 第六个样本 (联网搜索与网页抓取 2026-09-14 · 代码解释器 2026-09-17)",

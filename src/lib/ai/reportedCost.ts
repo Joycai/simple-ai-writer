@@ -48,6 +48,9 @@ function rawCost(family: ProtocolFamily, u: Record<string, unknown>): unknown {
       return u.cost_usd ?? u.cost;
     case "responses":
       return u.cost;
+    case "dashscope":
+      // 百炼不报价。
+      return undefined;
   }
 }
 

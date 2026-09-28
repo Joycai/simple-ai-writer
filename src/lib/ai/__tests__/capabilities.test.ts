@@ -32,8 +32,10 @@ declare const process: { cwd(): string; env: Record<string, string | undefined> 
 const fs = require("node:fs");
 const MATRIX = `${process.cwd()}/docs/api/capability-matrix.md`;
 
-const FAMILIES: readonly ProtocolFamily[] = ["openai", "responses", "gemini", "anthropic"];
-const FAMILY_LABEL: Record<ProtocolFamily, string> = { openai: "Chat", responses: "Resp", gemini: "Gemini", anthropic: "Anth" };
+const FAMILIES: readonly ProtocolFamily[] = ["openai", "responses", "gemini", "anthropic", "dashscope"];
+const FAMILY_LABEL: Record<ProtocolFamily, string> = {
+  openai: "Chat", responses: "Resp", gemini: "Gemini", anthropic: "Anth", dashscope: "DashScope",
+};
 /** An id no matcher names — tells a per-model cell from a whole-wire one. */
 const NO_SUCH_MODEL = "no-such-model";
 
@@ -97,8 +99,10 @@ function platformIds(platform: (typeof PLATFORM_IDS)[number]): string[] {
  */
 function renderValues(): string[] {
   const at = (p: (typeof PLATFORM_IDS)[number], family: ProtocolFamily) => {
-    const route = platformEndpoints(p).find((e) => e.family === family)!;
-    return { standard: standardOf({ family, official: route.official === true }), platform: p };
+    // A family the platform does not list (DashScope's native one on `custom`)
+    // is asked as its compat half, which is what the family default is for.
+    const route = platformEndpoints(p).find((e) => e.family === family);
+    return { standard: standardOf({ family, official: route?.official === true }), platform: p };
   };
   const defaults = FAMILIES.map((f) => `${FAMILY_LABEL[f]} \`${thinkingCategoryOf({}, at("custom", f)).value.id}\``);
   const out = [

@@ -213,6 +213,7 @@ const API_STANDARDS: ApiStandard[] = [
   "gemini_compat",
   "anthropic",
   "anthropic_compat",
+  "dashscope_compat",
 ];
 
 function str(v: unknown): string | null {

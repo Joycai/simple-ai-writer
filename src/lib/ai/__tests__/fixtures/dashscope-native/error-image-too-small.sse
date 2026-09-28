@@ -1,0 +1,5 @@
+id:1
+event:error
+:HTTP_STATUS/400
+data:{"code":"InvalidParameter","message":"<400> InternalError.Algo.InvalidParameter: The image length and width do not meet the model restrictions. [height:1 or width:1 must be larger than 10]","request_id":"c269c642-174f-9d28-abe7-b3e3757c0eb6"}
+

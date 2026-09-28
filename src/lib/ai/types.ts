@@ -69,10 +69,18 @@ export type ApiStandard =
   | "gemini"
   | "gemini_compat"
   | "anthropic"
-  | "anthropic_compat";
+  | "anthropic_compat"
+  /**
+   * DashScope's native protocol (百炼 `/api/v1/services/aigc/…`). Only a
+   * `_compat` half: no vendor address is locked to it — 百炼 serves it on two
+   * hosts, and the author's channel holds which — so an official value would be
+   * a standard nothing could ever store. The suffix keeps the invariant every
+   * reader of `isCompatStandard` relies on: the address is the author's.
+   */
+  | "dashscope_compat";
 
 /** The wire protocol itself — official and compat of a family speak the same one. */
-export type ProtocolFamily = "openai" | "responses" | "gemini" | "anthropic";
+export type ProtocolFamily = "openai" | "responses" | "gemini" | "anthropic" | "dashscope";
 
 const PROTOCOL_FAMILY: Record<ApiStandard, ProtocolFamily> = {
   openai: "openai",
@@ -83,6 +91,7 @@ const PROTOCOL_FAMILY: Record<ApiStandard, ProtocolFamily> = {
   gemini_compat: "gemini",
   anthropic: "anthropic",
   anthropic_compat: "anthropic",
+  dashscope_compat: "dashscope",
 };
 
 /** Whether a stored value is a standard this build knows — for values read back from disk. */

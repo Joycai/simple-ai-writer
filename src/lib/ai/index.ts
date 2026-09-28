@@ -1,11 +1,12 @@
 /**
  * Streaming AI client supporting OpenAI Chat Completions (and compatible),
- * OpenAI Responses (and compatible), Gemini, and Anthropic APIs. Entry point:
- * `streamCompletion` dispatches to the provider adapters in ./openai,
- * ./responses, ./gemini and ./anthropic. Shared protocol types live in ./types.
+ * OpenAI Responses (and compatible), Gemini, Anthropic and DashScope's native
+ * protocol. Entry point: `streamCompletion` dispatches to the provider adapters
+ * in ./openai, ./responses, ./gemini, ./anthropic and ./dashscope. Shared protocol types live in ./types.
  */
 
 import { streamAnthropic } from "./anthropic";
+import { streamDashscope } from "./dashscope";
 import { beginApiLog } from "./apiLog";
 import { streamGemini } from "./gemini";
 import { streamOpenAI } from "./openai";
@@ -221,6 +222,9 @@ async function sendOnce(req: StreamOptions, plan: RequestPlan): Promise<boolean>
         break;
       case "responses":
         await streamResponses(wrapped);
+        break;
+      case "dashscope":
+        await streamDashscope(wrapped);
         break;
       default:
         await streamOpenAI(wrapped);

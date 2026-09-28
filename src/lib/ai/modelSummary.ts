@@ -81,7 +81,7 @@ interface SummarySpelling {
 
 const toolsItem = (names: readonly string[]): WireItem[] => (names.length ? [{ key: "tools", value: names.join(",") }] : []);
 
-/** 四条线四种拼法。A `Record` so a new family does not compile until it says how. */
+/** 五条线五种拼法。A `Record` so a new family does not compile until it says how. */
 const SPELLING: Record<ProtocolFamily, SummarySpelling> = {
   openai: {
     serverTools: (ids) => flatten(openaiServerToolsBody(ids)),
@@ -102,6 +102,11 @@ const SPELLING: Record<ProtocolFamily, SummarySpelling> = {
     structured: (mode) => (mode === "json_schema"
       ? { key: "generationConfig.responseJsonSchema", value: "strict", scope: "structured" }
       : { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" }),
+  },
+  // The native parameters carry Chat Completions' names (dashscope.ts).
+  dashscope: {
+    serverTools: (ids) => flatten(openaiServerToolsBody(ids)),
+    structured: (mode) => ({ key: "parameters.response_format", value: mode, scope: "structured" }),
   },
   anthropic: {
     // The adapter sends `thinking` on every request for a dialect that has

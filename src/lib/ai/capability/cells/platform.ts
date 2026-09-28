@@ -184,6 +184,12 @@ const DASHSCOPE: PlatformCells = {
       code_interpreter: "per-model",
       models: DASHSCOPE_CODE_INTERPRETER.responses,
     },
+    // The native `/api/v1` route (dashscope.ts): `parameters.enable_search`,
+    // the same private field ① sends at the top level. Only the domestic host
+    // lists the route, so the international deployment never reaches this.
+    dashscope: {
+      web_search: true,
+    },
   },
 };
 

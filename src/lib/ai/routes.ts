@@ -38,7 +38,7 @@ import { parseStructuredOutputMode } from "./jsonMode";
 import { isPrivateNetworkUrl } from "../http";
 
 /** Every family, in the order route strips and tables list them. */
-export const ROUTE_FAMILIES: readonly ProtocolFamily[] = ["openai", "responses", "gemini", "anthropic"];
+export const ROUTE_FAMILIES: readonly ProtocolFamily[] = ["openai", "responses", "gemini", "anthropic", "dashscope"];
 
 /** One route of a channel: a protocol family at an address. */
 export interface Endpoint {
@@ -85,26 +85,43 @@ export const ROUTE_PROFILE_KEYS = [
 
 // ─── Standards ⇄ families ────────────────────────────────────────────────────
 
-const OFFICIAL_STANDARD: Record<ProtocolFamily, ApiStandard> = {
+/** The author-addressed standard of every family — a new family does not compile without one. */
+const COMPAT_STANDARD: Record<ProtocolFamily, ApiStandard> = {
+  openai: "openai_compat",
+  responses: "openai_responses_compat",
+  gemini: "gemini_compat",
+  anthropic: "anthropic_compat",
+  dashscope: "dashscope_compat",
+};
+
+/**
+ * The vendor-locked standard, where the family has one. DashScope's native
+ * protocol has none (types.ts `dashscope_compat`).
+ */
+const OFFICIAL_STANDARD: Partial<Record<ProtocolFamily, ApiStandard>> = {
   openai: "openai",
   responses: "openai_responses",
   gemini: "gemini",
   anthropic: "anthropic",
 };
 
-/** The `ApiStandard` a route speaks — still what the four adapters dispatch on. */
+/**
+ * The `ApiStandard` a route speaks — still what the adapters dispatch on. An
+ * `official` route of a family with no official half cannot be declared by any
+ * platform; read defensively, it speaks the compat one.
+ */
 export function standardOf(ep: Pick<Endpoint, "family" | "official">): ApiStandard {
-  const official = OFFICIAL_STANDARD[ep.family];
-  return ep.official ? official : (`${official}_compat` as ApiStandard);
+  return (ep.official ? OFFICIAL_STANDARD[ep.family] : undefined) ?? COMPAT_STANDARD[ep.family];
 }
 
 /** Short badge text per family (§6.1: names, not numbers). */
 export const ROUTE_SHORT: Record<ProtocolFamily, string> = {
-  openai: "Chat", responses: "Resp", gemini: "Gemini", anthropic: "Anth",
+  openai: "Chat", responses: "Resp", gemini: "Gemini", anthropic: "Anth", dashscope: "DashScope",
 };
 /** Full badge text per family, for the wide places. */
 export const ROUTE_LONG: Record<ProtocolFamily, string> = {
   openai: "Chat Completions", responses: "Responses", gemini: "Gemini", anthropic: "Anthropic",
+  dashscope: "DashScope native",
 };
 
 // ─── Addresses ───────────────────────────────────────────────────────────────
