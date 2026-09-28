@@ -1,6 +1,6 @@
 # 能力解析层重构：LLD
 
-> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P5 已落成（§9.1–§9.6），P6（逻辑与界面）与 P6b 已落成（§9.7–§9.9），旧思考方言一次性迁移（§9.10），P7 未开工。**
+> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P5 已落成（§9.1–§9.6），P6（逻辑与界面）与 P6b 已落成（§9.7–§9.9），旧思考方言一次性迁移（§9.10），B6 按实测只落在 `doubao-switch` 上（§9.11），P7 未开工。**
 > HLD：[`capability-resolution-hld.md`](capability-resolution-hld.md)。本文回答：分几个 PR、每个 PR 动哪些文件哪些函数、
 > 类型长什么样、算法怎样逐格复现今天的行为、怎么测、怎么回滚。对照的是 2026-09-27 的 `main`（`d31ab9fc`，#717 之后）；引用一律写文件 + 符号，不写行号（`docSourceRefs.test.ts`）。
 
@@ -148,6 +148,7 @@ export type Condition =
   // 带函数工具时不可用。缺输入 → 不求值，留在 Resolution.conditions 里给抽屉写说明。
   | { when: "functionTools"; absent: "defer" }
   // 类目不是 off 就不可用——今天 thinkingOff 的原样语义。缺输入 → 触发（今天「缺类目算在想」）。
+  // （B6 之后换成 temperatureIgnored，读 temperatureHeard，§9.11。）
   | { when: "categoryThinks"; absent: "fire" }
   // 按线上思考状态。unknown 按 unknownAs 算；缺输入 → 不求值。
   | { when: "thinking"; is: "on" | "off"; unknownAs: "on" | "off"; absent: "defer" };
@@ -505,7 +506,7 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
 | B3 | Gemini 与 Responses 读 `forcedToolChoice` 格 | P5 | 平台自己列出的线路上零差异；作者在智谱主机下手建的 ② / ③ 渠道上强制变 `auto`（§3.6） | 一张表对所有族说话 |
 | B4 | `forcedToolIsWasted` 读格 | P5 | 中转站 Kiro / anti 的 Claude 在 ④ 上声明了 json_schema，以及 Azure 上游 GPT 在 ① 上：结构化任务不再白跑强制调用那一轮（§3.6） | 「强制会不会被执行」只有一个答案 |
 | B5 | `ProviderDrawer` 的中转站判定走 `isRelayPlatform` | P1 | 零（集合相同） | 一个判据 |
-| B6 | Anthropic 族的温度按 `wireThinks` | **不排期** | minimax / doubao-switch 关思考时开始带温度 | 需要一条 ④ 关思考加温度的实测：[`issues/anthropic-temperature-thinking-off.md`](../issues/anthropic-temperature-thinking-off.md) |
+| B6 | Anthropic 族的温度：类目声明「关思考时听温度」、且线上真关时才发 | B6（§9.11） | 只有 `doubao-switch` 设为关闭时开始带温度；minimax 不变（实测收下但不理会） | 两家实测：[`issues/anthropic-temperature-thinking-off.md`](../issues/anthropic-temperature-thinking-off.md)。原写法「整条按 `wireThinks`」对 minimax 是错的 |
 | B7 | 规范化 id 去掉作者前缀与 `[…]` | P6b | 中转站上 `[x]gpt-5…`、`[x]claude-…` 开始命中目录。自动档里，Azure 上游 GPT 的 JSON 会提到 json_schema（该上游 `jsonSchema: true`）；规划用的上限会变。排在 P6 之后，所以不会再改 Anthropic 的 `max_tokens`（§3.1） | 同一个模型不因前缀失去已知事实 |
 | B10 | 「将发送」摘要读计划 | P5 | 摘要写线上真实的 effort（gpt-6-astra 设 off 显示 `low`）；④ 行总显示 `max_tokens`（§3.8） | 摘要与适配器逐字一致，不再靠测试钉 |
 | B11 | Chat 与 Gemini 适配器的温度开始问格 | P5 | 零：这两族今天没有温度的 `false` 格 | 同 B3 |
@@ -1191,12 +1192,45 @@ P6 的逻辑部分让留空的类目、窗口、上限跟随平台行、目录�
 
 金标零差异。
 
+### 9.11 B6：Anthropic 族关思考时的温度（2026-09-28）
+
+**实测**（[`issues/anthropic-temperature-thinking-off.md`](../issues/anthropic-temperature-thinking-off.md)，数据在 landscape.md 第四、第十二个样本的「B6 补测」）：
+两家的 ④ 面关思考都发 `thinking:{type:"disabled"}`，结论相反。
+火山方舟关思考时温度生效（0.01 让 20 次挑选收敛到 19–20 次同一个答案），但 `0` 等于没发；
+MiniMax 收下、200、不理会（0.01 与 1、与不发分不开，① 面也一样）。
+两家开思考时都 200（不是官方的 400）而不收敛——今天「在想就不发」仍然对，理由从「会 400」换成「发了没人听」。
+
+所以账本原来的写法——条件整条换成 `{when:"thinking", is:"on"}`——对 minimax 是错的：它会让 MiniMax 关思考时发一个没人听的字段，
+抽屉还要画一个改了没用的框。
+
+**作者拍板**：落在类目上，不落在平台格上。
+- 这是厂商的事实，与 `forcing: "always"`（MiniMax 把强制工具降成 auto）同一种：拼法相同的两个类目，差在对面听不听。
+  事实跟着类目走，中转站上作者手选了 `doubao-switch` 的行也得到它。
+- 平台格做不到：解析顺序里请求条件先于平台格（`capability/resolve.ts` 的 `familyVerdict`），条件触发就返回，
+  要让格子盖过 `unless` 是给求值顺序加特例。
+
+**改动**：
+- `ThinkingCategory.temperatureWhenOff?: { zeroIsUnset?: true }`，只在 `doubao-switch` 上。
+- `capability/conditions.ts`：条件 `categoryThinks` 换成 `temperatureIgnored`，读上下文的 `temperatureHeard`（缺 = 没听，照旧触发）。
+  `temperatureHeard(category, effort)` 是唯一定义：`off` 类目听（今天就发）；否则只有声明了 `temperatureWhenOff`、且 `wireThinks` 为 `off` 时听。
+  上下文不再带 `thinkingCategory`——它只为这一个条件存在。原因码仍是 `thinking`，抽屉与矩阵文档不变。
+- `capability/resolve.ts` 的 `temperatureReaches(wire, model, category, effort)`：规划器发不发、抽屉显不显示问的是这一个函数，两边不会分叉。
+  抽屉传表单的强度，不经 `effortOnWire`——它只动 OpenAI 两族的档位，那两族没有温度条件。
+- 抽屉：`doubao-switch` 选「关闭」时温度栏出现，开或跟随默认时收起（值留着）。
+  这一类目上，温度栏下的一行说明换成「这条线路把 0 也当作没填，要最稳的输出，填 0.01」，填 0 时不再挂「确定性」标签。
+  只换说明、不改作者的值：适配器把 0 改发一个极小正数是改写作者写下的东西，没有做。
+
+**测试**：`temperatureSupport.test.ts` 改成按「标准 × 类目 × 强度」逐格比对抽屉的问法与 `planRequest` 的决定，另钉 doubao-switch 只在关闭时发、
+minimax 任何强度都不发、声明了 `temperatureWhenOff` 的类目关闭必须是真关（`offSpelling: "disable"`）。
+`wireThinks.test.ts` 的温度段先在单独一个提交里改成问规划器、逐强度列出（540 格与旧表逐格相同），本期的快照差异因此只有一格：
+Anthropic 族 `doubao-switch` 的 `off` 从 `-` 变 `yes`。
+变异检查四处，都报红：去掉 doubao-switch 的字段；`temperatureHeard` 不看强度；规划器不再问 `temperatureReaches`；给 minimax 也加上字段。
+请求体金标零差异（金标没有关思考又带温度的 doubao-switch 行）。
+抽屉在浏览器里挂真实组件核过：火山关闭 + 0 显示新说明、将发送带 `temperature 0`；切到开启温度栏收起、将发送不带；MiniMax 关闭 + 0.3 温度栏收起、不发。
+
 ## 10. 待决
 
 1. **agent 思考回退要不要看 `offSpelling`。** 如果看，gemini3 与 claude-adaptive 在预算耗尽时也会从「关思考」改成「提示作答」。
    反方理由：作者可以在菜单里选 off，作者选了它，它就该是 off。要先量一次，看 LOW 或 low 档是否仍会把预算耗尽。
-2. **B6（Anthropic 族关思考时带温度）** 需要一条 ④ 上 minimax / doubao-switch「disabled + temperature 0.3」的实测。
-   已记进 [`issues/anthropic-temperature-thinking-off.md`](../issues/anthropic-temperature-thinking-off.md)（样本清单与三种结论各自的做法）。
-   2026-09-28 两家都已量，结论相反：火山方舟关思考时温度生效（`0` 除外，等于没发）；MiniMax 收下但不理会；两家开思考时都 200 而不收敛。
-   所以账本里 B6 的写法（整条换成按线上思考状态）对 `minimax` 是错的；只改 `doubao-switch`、落在类目上还是平台格上，见该文「待决」。
+2. ~~**B6（Anthropic 族关思考时带温度）**~~ 已量、已落（§9.11）。
 3. **学到的存储持久化**（D3）随 provider-layering §7 一起决定。
