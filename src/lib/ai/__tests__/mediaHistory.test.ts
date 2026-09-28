@@ -107,7 +107,7 @@ function draw(seed: number) {
     ...(r() < 0.6 ? { pdfInput: true } : {}),
   };
   // Mostly as the app builds a request; now and then a hand-built bag that
-  // declares nothing, which only the route binds.
+  // declares nothing, which only the protocol's spelling binds.
   const conn = connOptions({ model, provider, apiKey: "k" });
   const handBuilt = r() < 0.2;
   const { modelType: _t, videoInput: _v, pdfInput: _p, ...bare } = conn;
