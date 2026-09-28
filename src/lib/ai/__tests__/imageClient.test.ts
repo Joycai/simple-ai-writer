@@ -7,6 +7,8 @@
  * whole providers when wrong: `size` must be absent unless asked for, since
  * xAI rejects the field outright.
  */
+import { newChannelEndpoints, normalizeChannel, routeProvider } from "../routes";
+import { platformOrigin } from "../platforms";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   dashscopeNativeBase, generateImage, ImageHttpError, isEditUnsupportedError, NoImageError,
@@ -597,6 +599,18 @@ describe("generateImage · dashscope route", () => {
     // Already native, or a bare host: pass through rather than doubling up.
     expect(dashscopeNativeBase(NATIVE)).toBe(NATIVE);
     expect(dashscopeNativeBase("https://dashscope.aliyuncs.com")).toBe(NATIVE);
+  });
+
+  // 百炼's new host, from each route a channel on it can hand over: the Chat
+  // route's base and the native route's own (dashscope-native-plan.md §2).
+  it("derives it on the new host too, from the Chat route or the native one", () => {
+    const channel = normalizeChannel({
+      id: "p", name: "百炼", baseUrl: "", apiStandard: "openai_compat", createdAt: 0,
+      platform: "dashscope", host: platformOrigin("dashscope"), endpoints: newChannelEndpoints("dashscope"),
+    });
+    for (const family of ["openai", "dashscope"] as const) {
+      expect(dashscopeNativeBase(routeProvider(channel, family)!.baseUrl)).toBe("https://maas.qianwenaiapi.com/api/v1");
+    }
   });
 
   it("posts the native body to multimodal-generation with Bearer auth", async () => {

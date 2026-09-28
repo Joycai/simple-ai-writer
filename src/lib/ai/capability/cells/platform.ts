@@ -185,9 +185,12 @@ const DASHSCOPE: PlatformCells = {
       models: DASHSCOPE_CODE_INTERPRETER.responses,
     },
     // The native `/api/v1` route (dashscope.ts): `parameters.enable_search`,
-    // the same private field ① sends at the top level. Only the domestic host
-    // lists the route, so the international deployment never reaches this.
+    // the same private field ① sends at the top level; json_schema held
+    // against a prompt it contradicts on qwen3.7-flash and qwen3.8-flash
+    // (landscape.md §7 第二十一个样本). Only the domestic host lists the route,
+    // so the international deployment never reaches this.
     dashscope: {
+      jsonSchema: true,
       web_search: true,
     },
   },

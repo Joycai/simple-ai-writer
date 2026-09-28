@@ -1674,7 +1674,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"qwen3.5-plus","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message"}}
 
 ### qwen3.8-flash · bare
-summary: structured:parameters.response_format=json_object
+summary: structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"qwen3.8-flash","parameters":{"incremental_output":true,"result_format":"message"}}
@@ -1683,7 +1683,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"qwen3.8-flash","parameters":{"incremental_output":true,"result_format":"message","tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### qwen3.8-flash · declared
-summary: temperature=0.4 enable_search=true structured:parameters.response_format=json_object
+summary: temperature=0.4 enable_search=true structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"qwen3.8-flash","parameters":{"enable_search":true,"incremental_output":true,"result_format":"message","temperature":0.4}}
@@ -1695,7 +1695,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"qwen3.8-flash","parameters":{"incremental_output":true,"response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"result_format":"message"}}
 
 ### qwen3.8-flash · effortHigh
-summary: enable_thinking=true thinking_budget=8000 structured:parameters.response_format=json_object
+summary: enable_thinking=true thinking_budget=8000 structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"qwen3.8-flash","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000}}
@@ -1704,7 +1704,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"qwen3.8-flash","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000,"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### qwen3.8-flash · effortOff
-summary: enable_thinking=false structured:parameters.response_format=json_object
+summary: enable_thinking=false structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"qwen3.8-flash","parameters":{"enable_thinking":false,"incremental_output":true,"result_format":"message"}}
@@ -1713,7 +1713,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"qwen3.8-flash","parameters":{"enable_thinking":false,"incremental_output":true,"result_format":"message","tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### qwen3.8-flash · effortMax
-summary: enable_thinking=true structured:parameters.response_format=json_object
+summary: enable_thinking=true structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"qwen3.8-flash","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message"}}
@@ -1809,7 +1809,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"[特价kiro量]claude-opus-5","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message"}}
 
 ### gpt-5.6-sol · bare
-summary: structured:parameters.response_format=json_object
+summary: structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"gpt-5.6-sol","parameters":{"incremental_output":true,"result_format":"message"}}
@@ -1818,7 +1818,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"gpt-5.6-sol","parameters":{"incremental_output":true,"result_format":"message","tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### gpt-5.6-sol · declared
-summary: temperature=0.4 enable_search=true structured:parameters.response_format=json_object
+summary: temperature=0.4 enable_search=true structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"gpt-5.6-sol","parameters":{"enable_search":true,"incremental_output":true,"result_format":"message","temperature":0.4}}
@@ -1830,7 +1830,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"gpt-5.6-sol","parameters":{"incremental_output":true,"response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"result_format":"message"}}
 
 ### gpt-5.6-sol · effortHigh
-summary: enable_thinking=true thinking_budget=8000 structured:parameters.response_format=json_object
+summary: enable_thinking=true thinking_budget=8000 structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"gpt-5.6-sol","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000}}
@@ -1839,7 +1839,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"gpt-5.6-sol","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000,"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### gpt-5.6-sol · effortOff
-summary: enable_thinking=false structured:parameters.response_format=json_object
+summary: enable_thinking=false structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"gpt-5.6-sol","parameters":{"enable_thinking":false,"incremental_output":true,"result_format":"message"}}
@@ -1848,13 +1848,13 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"gpt-5.6-sol","parameters":{"enable_thinking":false,"incremental_output":true,"result_format":"message","tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### gpt-5.6-sol · effortMax
-summary: enable_thinking=true structured:parameters.response_format=json_object
+summary: enable_thinking=true structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"gpt-5.6-sol","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message"}}
 
 ### openai/gpt-5.6-sol · bare
-summary: structured:parameters.response_format=json_object
+summary: structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"openai/gpt-5.6-sol","parameters":{"incremental_output":true,"result_format":"message"}}
@@ -1863,7 +1863,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"openai/gpt-5.6-sol","parameters":{"incremental_output":true,"result_format":"message","tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### openai/gpt-5.6-sol · declared
-summary: temperature=0.4 enable_search=true structured:parameters.response_format=json_object
+summary: temperature=0.4 enable_search=true structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"openai/gpt-5.6-sol","parameters":{"enable_search":true,"incremental_output":true,"result_format":"message","temperature":0.4}}
@@ -1875,7 +1875,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"openai/gpt-5.6-sol","parameters":{"incremental_output":true,"response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"result_format":"message"}}
 
 ### openai/gpt-5.6-sol · effortHigh
-summary: enable_thinking=true thinking_budget=8000 structured:parameters.response_format=json_object
+summary: enable_thinking=true thinking_budget=8000 structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"openai/gpt-5.6-sol","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000}}
@@ -1884,7 +1884,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"openai/gpt-5.6-sol","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000,"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### openai/gpt-5.6-sol · effortOff
-summary: enable_thinking=false structured:parameters.response_format=json_object
+summary: enable_thinking=false structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"openai/gpt-5.6-sol","parameters":{"enable_thinking":false,"incremental_output":true,"result_format":"message"}}
@@ -1893,13 +1893,13 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"openai/gpt-5.6-sol","parameters":{"enable_thinking":false,"incremental_output":true,"result_format":"message","tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### openai/gpt-5.6-sol · effortMax
-summary: enable_thinking=true structured:parameters.response_format=json_object
+summary: enable_thinking=true structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"openai/gpt-5.6-sol","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message"}}
 
 ### openai/gpt-6-astra · bare
-summary: structured:parameters.response_format=json_object
+summary: structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"openai/gpt-6-astra","parameters":{"incremental_output":true,"result_format":"message"}}
@@ -1908,7 +1908,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"openai/gpt-6-astra","parameters":{"incremental_output":true,"result_format":"message","tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### openai/gpt-6-astra · declared
-summary: temperature=0.4 enable_search=true structured:parameters.response_format=json_object
+summary: temperature=0.4 enable_search=true structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"openai/gpt-6-astra","parameters":{"enable_search":true,"incremental_output":true,"result_format":"message","temperature":0.4}}
@@ -1920,7 +1920,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"openai/gpt-6-astra","parameters":{"incremental_output":true,"response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"result_format":"message"}}
 
 ### openai/gpt-6-astra · effortHigh
-summary: enable_thinking=true thinking_budget=8000 structured:parameters.response_format=json_object
+summary: enable_thinking=true thinking_budget=8000 structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"openai/gpt-6-astra","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000}}
@@ -1929,7 +1929,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"openai/gpt-6-astra","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000,"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### openai/gpt-6-astra · effortOff
-summary: enable_thinking=false structured:parameters.response_format=json_object
+summary: enable_thinking=false structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"openai/gpt-6-astra","parameters":{"enable_thinking":false,"incremental_output":true,"result_format":"message"}}
@@ -1938,13 +1938,13 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"openai/gpt-6-astra","parameters":{"enable_thinking":false,"incremental_output":true,"result_format":"message","tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### openai/gpt-6-astra · effortMax
-summary: enable_thinking=true structured:parameters.response_format=json_object
+summary: enable_thinking=true structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"openai/gpt-6-astra","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message"}}
 
 ### claude-sonnet-5 · bare
-summary: structured:parameters.response_format=json_object
+summary: structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"claude-sonnet-5","parameters":{"incremental_output":true,"result_format":"message"}}
@@ -1953,7 +1953,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"claude-sonnet-5","parameters":{"incremental_output":true,"result_format":"message","tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### claude-sonnet-5 · declared
-summary: temperature=0.4 enable_search=true structured:parameters.response_format=json_object
+summary: temperature=0.4 enable_search=true structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"claude-sonnet-5","parameters":{"enable_search":true,"incremental_output":true,"result_format":"message","temperature":0.4}}
@@ -1965,7 +1965,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"claude-sonnet-5","parameters":{"incremental_output":true,"response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"result_format":"message"}}
 
 ### claude-sonnet-5 · effortHigh
-summary: enable_thinking=true thinking_budget=8000 structured:parameters.response_format=json_object
+summary: enable_thinking=true thinking_budget=8000 structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"claude-sonnet-5","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000}}
@@ -1974,7 +1974,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"claude-sonnet-5","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000,"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### claude-sonnet-5 · effortOff
-summary: enable_thinking=false structured:parameters.response_format=json_object
+summary: enable_thinking=false structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"claude-sonnet-5","parameters":{"enable_thinking":false,"incremental_output":true,"result_format":"message"}}
@@ -1983,13 +1983,13 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"claude-sonnet-5","parameters":{"enable_thinking":false,"incremental_output":true,"result_format":"message","tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### claude-sonnet-5 · effortMax
-summary: enable_thinking=true structured:parameters.response_format=json_object
+summary: enable_thinking=true structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"claude-sonnet-5","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message"}}
 
 ### gemini-3.8-flash · bare
-summary: structured:parameters.response_format=json_object
+summary: structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"gemini-3.8-flash","parameters":{"incremental_output":true,"result_format":"message"}}
@@ -1998,7 +1998,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"gemini-3.8-flash","parameters":{"incremental_output":true,"result_format":"message","tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### gemini-3.8-flash · declared
-summary: temperature=0.4 enable_search=true structured:parameters.response_format=json_object
+summary: temperature=0.4 enable_search=true structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"gemini-3.8-flash","parameters":{"enable_search":true,"incremental_output":true,"result_format":"message","temperature":0.4}}
@@ -2010,7 +2010,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"gemini-3.8-flash","parameters":{"incremental_output":true,"response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"result_format":"message"}}
 
 ### gemini-3.8-flash · effortHigh
-summary: enable_thinking=true thinking_budget=8000 structured:parameters.response_format=json_object
+summary: enable_thinking=true thinking_budget=8000 structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"gemini-3.8-flash","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000}}
@@ -2019,7 +2019,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"gemini-3.8-flash","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000,"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### gemini-3.8-flash · effortOff
-summary: enable_thinking=false structured:parameters.response_format=json_object
+summary: enable_thinking=false structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"gemini-3.8-flash","parameters":{"enable_thinking":false,"incremental_output":true,"result_format":"message"}}
@@ -2028,7 +2028,7 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"gemini-3.8-flash","parameters":{"enable_thinking":false,"incremental_output":true,"result_format":"message","tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### gemini-3.8-flash · effortMax
-summary: enable_thinking=true structured:parameters.response_format=json_object
+summary: enable_thinking=true structured:parameters.response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
 {"model":"gemini-3.8-flash","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message"}}

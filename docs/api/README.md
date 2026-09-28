@@ -67,6 +67,7 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 | [`responses.md`](responses.md) | ② 族的骨架、字段、流式事件序列、回传与错误——GPT-5.4 / 5.5 / 5.6 经中转站实测，可搬去别的项目；§10 是 5.6 的新字段与内置 `web_search` | ✅ |
 | [`tool-search.md`](tool-search.md) | 工具按需加载（tool search / `defer_loading`）的各族对照：形状、缓存、回传、限制，与本项目运行状态装载的关系（文档调研，未实测） | ✅ |
 | [`gpt56-plan.md`](gpt56-plan.md) | GPT-5.6 支持度盘点：已通的、缺口、逐条方案（本项目的取舍，不是协议事实） | 计划 |
+| [`dashscope-native-plan.md`](dashscope-native-plan.md) | 百炼新地址、Token Plan 平台，与 DashScope 原生协议作为本项目的第五个协议族（本项目的取舍）；事实在 `landscape.md` §7 第二十一个样本 | 已做 |
 | [`zhipu-plan.md`](zhipu-plan.md) | 智谱 BigModel 与本项目现状的对照：原样可用的、十个缺口、P1（按量平台 + 对话模型，已做）与 P2–P5 方案；事实在 `landscape.md` §7 第十四个样本 | P1 已做 |
 
 ## 接一个新协议族时，先看这三条
@@ -119,6 +120,7 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 - [`../gemini-plan.md`](gemini-plan.md) — ③ 族的盘点与接入（已实现）
 - [`../thinking-verification.md`](../issues/thinking-verification.md) — 三族思考支持的**实测清单**（① 族的 DashScope 各条已于 2026-09 验掉大半）
 - [`../qianwen-compat-plan.md`](qianwen-compat-plan.md) — 千问AI平台的逐模型实测、修复切片，以及 ② 族（Responses）的接入评估（含与 GPT-5.4/5.5/5.6 官方的对照）
+- [`dashscope-native-plan.md`](dashscope-native-plan.md) — DashScope 原生协议（`input` + `parameters` 两段式，一家厂商独有的一族）为什么作为第五族接进来、为什么不复制 ① 的适配器
 
 ## 写作约定
 

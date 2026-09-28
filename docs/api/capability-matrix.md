@@ -354,7 +354,7 @@
 | anthropic |  |  |  | ✓ measured |  |
 | google |  |  | ✓ measured |  |  |
 | deepseek | ? unmeasured | ? unmeasured |  | ? unmeasured |  |
-| dashscope | ✓ measured | ? unmeasured |  | ? unmeasured | ? unmeasured |
+| dashscope | ✓ measured | ? unmeasured |  | ? unmeasured | ✓ measured |
 | dashscope-plan | ? unmeasured |  |  | ? unmeasured |  |
 | dashscope-intl | ✓ measured | ? unmeasured |  |  |  |
 | xai | ? unmeasured | ✓ measured |  |  |  |

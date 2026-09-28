@@ -74,6 +74,12 @@ describe("dashscopeCompatBase", () => {
     expect(dashscopeCompatBase("https://dashscope.aliyuncs.com/api/v1/")).toBe("https://dashscope.aliyuncs.com/compatible-mode/v1");
     expect(dashscopeCompatBase("https://dashscope.aliyuncs.com/compatible-mode/v1")).toBe("https://dashscope.aliyuncs.com/compatible-mode/v1");
   });
+
+  it("新地址上一样：Chat 线路与原生线路的 base 都归一到它的 compatible-mode/v1", () => {
+    for (const base of ["https://maas.qianwenaiapi.com/compatible-mode/v1", "https://maas.qianwenaiapi.com/api/v1"]) {
+      expect(dashscopeCompatBase(base)).toBe("https://maas.qianwenaiapi.com/compatible-mode/v1");
+    }
+  });
 });
 
 describe("parseSyncTranscript（真机响应）", () => {
