@@ -45,7 +45,7 @@ import type { CapabilityVerdict } from "./capability/facts";
 import { learnedRefuses } from "./capability/learned";
 import { capabilityVerdict as tableVerdict, hasCapability, type CapabilityModel } from "./capability/resolve";
 
-export { CAPABILITY_IDS, CAPABILITY_REASONS, SERVER_TOOL_CAPABILITIES, type CapabilityId } from "./capability/facts";
+export { CAPABILITY_IDS, CAPABILITY_REASONS, SERVER_TOOL_CAPABILITIES, type CapabilityId, type CapabilityReason } from "./capability/facts";
 export { CAPABILITY_RULES } from "./capability/rules";
 export { PLATFORM_CELLS, platformModelCalibration, platformResponsesInclude } from "./capability/cells/platform";
 export { UPSTREAM_CELLS } from "./capability/cells/upstream";

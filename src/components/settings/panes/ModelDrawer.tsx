@@ -62,6 +62,7 @@ import {
 } from "../../../lib/ai/jsonMode";
 import { isMeasured, valueFacts, wireSummary, type WireItem } from "../../../lib/ai/modelSummary";
 import { categoryNote, contextNote, effortForNewId, maxOutputNote, sourceName } from "./valueNotes";
+import { declNotSentNote } from "./declNotes";
 import {
   canSeeImages, defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, MAX_TEMPERATURE, MODEL_TYPES,
   TRANSLATE_FORMATS, ASR_FORMATS,
@@ -375,6 +376,14 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     w && resolvedUpstream.upstream && capabilityVerdict(id, w, capModel).reason === "upstream"
       ? t("aiConfig.upstream.notSent", { upstream: t(`aiConfig.upstream.name.${resolvedUpstream.upstream}`) })
       : undefined;
+  // The hint under a declaration this route won't send, by the verdict's
+  // reason (panes/declNotes): no spelling on the route, the relay's upstream,
+  // a platform measured refusing it, one nobody measured… each in its words.
+  const notSentHint = (id: CapabilityId, m: Parameters<typeof hasCapability>[2]) => curWire
+    ? declNotSentNote(t, capabilityVerdict(id, curWire, m).reason, {
+      route: route ? ROUTE_LONG[route] : "", platform: curWire.platform, modelId: form.modelId.trim(), upstream: resolvedUpstream.upstream,
+    })
+    : t("aiConfig.models.declNotOnRoute", { route: "" });
   // Whether this model takes whole PDFs as message content (lib/ai/configDb).
   const [pdfInput, setPdfInput] = useState(existing?.pdfInput ?? false);
   // DashScope high-resolution image reading (Model.vlHighResolution).
@@ -1627,7 +1636,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 title={t("aiConfig.models.pdfInputLabel")}
                 hint={pdfWire
                   ? t("aiConfig.models.briefPdf")
-                  : upstreamRefuses(curWire, "pdfInput") ?? t("aiConfig.models.declNotOnRoute", { route: route ? ROUTE_LONG[route] : "" })}
+                  : notSentHint("pdfInput", capModel)}
                 on={pdfInput}
                 onChange={setPdfInput}
                 {...whyProps("pdf", t("aiConfig.models.pdfInputHint"))}
@@ -1652,7 +1661,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             <Fold open={videoWire || (videoInput && canSeeImages(form))}>
               <ToggleField
                 title={t("aiConfig.models.videoInputLabel")}
-                hint={videoWire ? t("aiConfig.models.briefVideo") : t("aiConfig.models.declNotOnRoute", { route: route ? ROUTE_LONG[route] : "" })}
+                hint={videoWire ? t("aiConfig.models.briefVideo") : notSentHint("videoInput", { type: form.type })}
                 on={videoInput}
                 onChange={setVideoInput}
                 {...whyProps("video", t("aiConfig.models.videoInputHint"))}
