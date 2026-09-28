@@ -198,8 +198,9 @@ export function wireSummary(
   // Not a body field — `fps` sits on the clip's content part. Listed anyway: it
   // changes the request, and the bill (4× between fps 0.5 and the default).
   // Only where the plan admits a clip at all (`plan.media`, the same answer
-  // the composer's attach gate and the request's projection read).
-  if (plan.media.video && m.videoFps !== undefined && hasCapability("videoFps", plan.wire, plan.model)) {
+  // the composer's attach gate and the request's projection read), and then
+  // the same question `sentVideoFps` asks before writing it onto the clip.
+  if (plan.media.video && m.videoFps !== undefined && hasCapability("videoFps", plan.wire)) {
     out.push({ key: "video_url.fps", value: String(m.videoFps), scope: "video" });
   }
   if (m.prefix?.trim()) out.push({ key: "system", value: "", scope: "prefix" });
