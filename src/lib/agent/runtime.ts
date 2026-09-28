@@ -1136,7 +1136,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         // choice to "auto" without saying so (the request plan's tool choice,
         // lib/ai/capability/plan.ts — the `switch` thinking dialect, a table
         // cell), and some reject it outright with a 400, after which
-        // lib/ai/toolChoice.ts resends this same round with "auto". The handoff
+        // streamCompletion (lib/ai/index.ts) resends this same round with "auto". The handoff
         // below therefore runs whether or not the call arrives; see
         // handoff.fallbackBrief.
         ...(forceHandoff

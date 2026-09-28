@@ -520,7 +520,8 @@ export function categoryHasControl(category: ThinkingCategory): boolean {
  * while `enable_thinking` is true). Both callers that force treat a declined
  * call as their JSON-mode / handoff fallback cue, so downgrading only trades a
  * guaranteed 400 for that fallback firing one turn earlier. Learned-from-400
- * endpoints (DeepSeek V4) are handled separately in `lib/ai/toolChoice.ts`.
+ * endpoints (DeepSeek V4) are handled separately, by `streamCompletion`'s
+ * fallback executor and the learned store (`capability/learned.ts`).
  */
 export function forcesToolChoiceAuto(
   category: ThinkingCategory,

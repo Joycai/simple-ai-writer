@@ -30,6 +30,7 @@ describe("agentRuntime scratchpad checkpoint notice", () => {
       );
       opts.onChunk({ text: "I have recorded my findings." });
       opts.onChunk({ done: true, inputTokens: 500, outputTokens: 100 });
+      return {};
     });
 
     const messages: StreamMessage[] = [
@@ -86,6 +87,7 @@ describe("agentRuntime scratchpad checkpoint notice", () => {
         opts.onChunk({ text: "done" });
       }
       opts.onChunk({ done: true, inputTokens: 500, outputTokens: 100 });
+      return {};
     });
 
     const events: AgentEvent[] = [];
@@ -132,6 +134,7 @@ describe("agentRuntime scratchpad checkpoint notice", () => {
       );
       opts.onChunk({ text: "Done without scratchpad." });
       opts.onChunk({ done: true, inputTokens: 500, outputTokens: 100 });
+      return {};
     });
 
     const presetOff: TaskPreset = {

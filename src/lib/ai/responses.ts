@@ -56,7 +56,7 @@
  *     those items into `input` *in place of* the bare `function_call` mapping,
  *     never beside it. No forced-choice downgrade here: forcing while thinking
  *     is legal on this family (§2.3); an endpoint that nonetheless refuses is
- *     learned from its 400 by `lib/ai/toolChoice.ts` like any other.
+ *     learned from its 400 by `streamCompletion` like any other.
  */
 
 import { fetch } from "../http";

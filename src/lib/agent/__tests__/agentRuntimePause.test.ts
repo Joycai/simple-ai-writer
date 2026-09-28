@@ -29,6 +29,7 @@ describe("agentRuntime pause on round-limit", () => {
       const chunks = roundQueue.shift();
       if (!chunks) throw new Error("mockStream: no more queued rounds");
       for (const c of chunks) opts.onChunk(c);
+      return {};
     });
   });
 

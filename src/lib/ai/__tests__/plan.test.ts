@@ -130,3 +130,28 @@ describe("a forced tool choice sent as auto", () => {
     expect(forced({ standard: "openai", modelId: "gpt-5", toolChoice: "none" })).toEqual({ requested: "none", sent: "none" });
   });
 });
+
+describe("the JSON shaping", () => {
+  afterEach(() => __resetLearned());
+  const SCHEMA = { name: "pick", parameters: { type: "object", properties: {} } };
+  const qwen = { standard: "openai_compat" as const, platform: "dashscope" as const, baseUrl: "https://relay/v1", modelId: "qwen3.8-max" };
+
+  it("is planned only when the request asks for JSON", () => {
+    expect(planRequest(qwen).json).toBeUndefined();
+    expect(planRequest({ ...qwen, structured: { schema: SCHEMA } }).json?.mode).toBe("json_schema");
+  });
+
+  it("sits below the tier without a schema to enforce, and under what the endpoint refused", () => {
+    const noSchema = planRequest({ ...qwen, structured: {} });
+    expect(noSchema.structured).toBe("json_schema");
+    expect(noSchema.json?.mode).toBe("json_object");
+    noteLearned(qwen, "structuredOutput", "off");
+    expect(planRequest({ ...qwen, structured: { schema: SCHEMA } }).json?.mode).toBe("off");
+  });
+
+  it("reads the messages for the json precondition", () => {
+    const unknown = { ...qwen, modelId: "some-unknown-model", structured: {} };
+    expect(planRequest({ ...unknown, messages: [{ role: "user", content: "Answer in JSON." }] }).json?.cue).toBeUndefined();
+    expect(planRequest({ ...unknown, messages: [{ role: "user", content: "Answer." }] }).json?.cue).toBeDefined();
+  });
+});

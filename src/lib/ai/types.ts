@@ -5,7 +5,7 @@
  */
 
 import type { NativeReasoning, ReasoningEffort, ThinkingCategoryId } from "./reasoning";
-import type { StructuredOutputMode } from "./jsonMode";
+import type { JsonSchemaSource, StructuredOutputMode } from "./jsonMode";
 
 /** Anthropic thinking blocks, tagged with the model that produced them. */
 export interface ThinkingBlockCarry {
@@ -458,6 +458,14 @@ export interface StreamOptions {
   toolChoice?: "auto" | "none" | "required" | { type: "function"; function: { name: string } };
   /** Extra top-level fields merged into the OpenAI request body (e.g. response_format). */
   extraBody?: Record<string, unknown>;
+  /**
+   * This request wants JSON back (`lib/ai/jsonMode.ts`). The plan picks the
+   * tier — the row's declaration, capped by what the endpoint has refused —
+   * and `streamCompletion` shapes it into the body and the last user turn,
+   * stepping it down on a 400 that names the field. `schema` is what a strict
+   * request enforces; without one the strict tier degrades to JSON mode.
+   */
+  structured?: { schema?: JsonSchemaSource };
   /** Gemini-only: per-request safety filter thresholds. Ignored for OpenAI. */
   safetySettings?: GeminiSafetySettings;
   /** Optional model-scoped prefix prompt, prepended as the leading system instruction. */
@@ -562,9 +570,8 @@ export interface StreamOptions {
   thinkingBudget?: number;
   /**
    * How this model is asked for JSON on a structured task (`lib/ai/jsonMode.ts`).
-   * Carried so `ConnOptions` stays a structural subset of this type; no adapter
-   * reads it — the shaping happens where the request is built and arrives here
-   * as `extraBody`.
+   * Read by the plan when the request carries `structured`; no adapter reads
+   * it — the shaping arrives at the adapter as `extraBody`.
    */
   structuredOutput?: StructuredOutputMode;
   /** Responses family: `text.verbosity`, merged beside any `text.format`. */

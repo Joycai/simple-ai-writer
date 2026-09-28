@@ -5,8 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamOptions, ToolDefinition } from "../../ai/types";
 import { runStructuredTask, type StructuredTaskArgs } from "../structured";
-import { __resetLearned } from "../../ai/capability/learned";
-import { noteForcedToolChoiceRefused } from "../../ai/toolChoice";
+import { __resetLearned, noteLearned } from "../../ai/capability/learned";
 
 vi.mock("../../ai", () => ({ streamCompletion: vi.fn() }));
 import { streamCompletion } from "../../ai";
@@ -46,6 +45,7 @@ describe("runStructuredTask", () => {
     mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
       opts.onChunk({ toolCalls: [{ index: 0, id: "c1", name: "emit_result", arguments: '{"name":"Ava"}' }] });
       opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      return {};
     });
 
     const result = await runStructuredTask(makeArgs());
@@ -67,6 +67,7 @@ describe("runStructuredTask", () => {
     mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
       opts.onChunk({ text: 'Sure: {"name":"Ava"} there you go' });
       opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      return {};
     });
 
     const result = await runStructuredTask(makeArgs());
@@ -82,10 +83,12 @@ describe("runStructuredTask", () => {
     mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
       opts.onChunk({ text: "I refuse to call tools" });
       opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      return {};
     });
     mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
       opts.onChunk({ text: '{"name":"Kael"}' });
       opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      return {};
     });
 
     expect(JSON.parse(await runStructuredTask(makeArgs()))).toEqual({ name: "Kael" });
@@ -115,6 +118,7 @@ describe("runStructuredTask", () => {
       mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
         opts.onChunk({ text: '{"name":"Ava"}' });
         opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+        return {};
       });
 
       const result = await runStructuredTask(makeArgs());
@@ -147,6 +151,7 @@ describe("runStructuredTask", () => {
     mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
       opts.onChunk({ text: '{"name":"Ava","note":null}' });
       opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      return {};
     });
 
     const tool: ToolDefinition = {
@@ -196,6 +201,7 @@ describe("runStructuredTask", () => {
     mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
       opts.onChunk({ text: '{"name":"Ava"}' });
       opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      return {};
     });
 
     const args = makeArgs({ modelId: "qwen3.8-max", baseUrl: "https://relay/v1" });
@@ -212,6 +218,7 @@ describe("runStructuredTask", () => {
     mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
       opts.onChunk({ text: '{"name":"Kael"}' });
       opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      return {};
     });
     await runStructuredTask(args);
     expect(mockStream).toHaveBeenCalledTimes(2);
@@ -225,6 +232,7 @@ describe("runStructuredTask", () => {
     mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
       opts.onChunk({ text: '{"name":"Ava"}' });
       opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      return {};
     });
 
     await runStructuredTask(makeArgs({ modelId: "qwen3.8-max", structuredOutput: "off" }));
@@ -258,6 +266,7 @@ describe("runStructuredTask", () => {
       mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
         opts.onChunk({ text: '{"name":"Ava"}' });
         opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+        return {};
       });
 
       expect(JSON.parse(await runStructuredTask(makeArgs(qwenThinking)))).toEqual({ name: "Ava" });
@@ -273,6 +282,7 @@ describe("runStructuredTask", () => {
       mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
         opts.onChunk({ toolCalls: [{ index: 0, id: "c1", name: "emit_result", arguments: '{"name":"Ava"}' }] });
         opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+        return {};
       });
       await runStructuredTask(makeArgs({ ...qwenThinking, modelId: "qwen-plus" }));
       expect(mockStream).toHaveBeenCalledTimes(1);
@@ -283,6 +293,7 @@ describe("runStructuredTask", () => {
       mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
         opts.onChunk({ toolCalls: [{ index: 0, id: "c1", name: "emit_result", arguments: '{"name":"Ava"}' }] });
         opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+        return {};
       });
       await runStructuredTask(makeArgs({ ...qwenThinking, reasoningEffort: "off" }));
       expect(mockStream.mock.calls[0][0].tools).toHaveLength(1);
@@ -291,10 +302,11 @@ describe("runStructuredTask", () => {
     it("also skips once this endpoint has said with a 400 that forcing is illegal", async () => {
       // DeepSeek V4's shape: nothing in the config predicts it, the memo does.
       const ds = { modelId: "gpt-5", baseUrl: "https://relay/v1", standard: "openai_compat" as const, platform: "openai" as const };
-      noteForcedToolChoiceRefused(ds);
+      noteLearned(ds, "forcedToolChoice", false);
       mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
         opts.onChunk({ text: '{"name":"Ava"}' });
         opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+        return {};
       });
       await runStructuredTask(makeArgs(ds));
       expect(mockStream).toHaveBeenCalledTimes(1);
@@ -321,6 +333,7 @@ describe("runStructuredTask", () => {
       mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
         opts.onChunk({ text: '{"name":"Ava"}' });
         opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+        return {};
       });
       await runStructuredTask(makeArgs({ ...conn, baseUrl: "https://relay.example/v1" }));
       expect(mockStream).toHaveBeenCalledTimes(1);
@@ -339,6 +352,7 @@ describe("runStructuredTask", () => {
       mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
         opts.onChunk({ text: '{"name":"Ava"}' });
         opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+        return {};
       });
       // A category that does not predict the downgrade, so the first run tries the tool.
       const generic = { ...qwenThinking, thinkingCategory: "openai-generic" as const };
@@ -348,6 +362,7 @@ describe("runStructuredTask", () => {
       mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
         opts.onChunk({ toolCalls: [{ index: 0, id: "c1", name: "emit_result", arguments: '{"name":"Ava"}' }] });
         opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+        return {};
       });
       await runStructuredTask(makeArgs(generic));
       expect(mockStream.mock.calls[0][0].tools).toHaveLength(1);

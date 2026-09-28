@@ -31,7 +31,7 @@ import { forAnthropic, strictify } from "./jsonSchemaStrict";
 import { catalogFact } from "./capability/cells/catalog";
 import { classify, downgradeJsonMode, learnedCeiling, noteLearned, STRUCTURED_RANK } from "./capability/learned";
 import { resolvePlatform, type PlatformId, type Wire } from "./platforms";
-import { familyOf, type ApiStandard } from "./types";
+import { familyOf, type ApiStandard, type StreamMessage } from "./types";
 
 // ─── The author's declaration ─────────────────────────────────────────────────
 
@@ -153,8 +153,8 @@ export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutpu
 // ─── Shaping ──────────────────────────────────────────────────────────────────
 
 /** How to ask this endpoint for JSON. Both halves may be absent. */
-interface JsonModeShaping {
-  /** The mode the request ended up in — for logs and tests, not for branching. */
+export interface JsonModeShaping {
+  /** The mode the request ended up in: what a refusal steps down from, and what the caller's parse depends on. */
   mode: StructuredOutputMode;
   /** Top-level request fields, or undefined when the protocol has no knob. */
   extraBody?: Record<string, unknown>;
@@ -193,6 +193,15 @@ export interface JsonSchemaSource {
  */
 function mentionsJson(promptText: string): boolean {
   return /json/i.test(promptText);
+}
+
+/** Every word a request's messages carry, for the precondition above. */
+export function messagesText(messages: readonly StreamMessage[]): string {
+  return messages
+    .map((m) => (typeof m.content === "string"
+      ? m.content
+      : Array.isArray(m.content) ? m.content.map((p) => (p.type === "text" ? p.text : "")).join("\n") : ""))
+    .join("\n");
 }
 
 /**

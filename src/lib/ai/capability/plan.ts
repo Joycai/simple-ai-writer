@@ -17,7 +17,7 @@
  */
 
 import { effortOnWire, hasCapability, platformResponsesInclude, temperatureReaches } from "../capabilities";
-import { effectiveStructuredOutput, type StructuredOutputMode } from "../jsonMode";
+import { effectiveStructuredOutput, jsonModeShaping, messagesText, type JsonModeShaping, type StructuredOutputMode } from "../jsonMode";
 import { requiredMaxTokens } from "../modelLimits";
 import { wireOf, type Wire } from "../platforms";
 import { forcesToolChoiceAuto, type ReasoningEffort, type ThinkingCategory } from "../reasoning";
@@ -33,13 +33,17 @@ import { resolveThinkingCategory } from "./values";
 
 type ToolChoice = NonNullable<StreamOptions["toolChoice"]>;
 
-/** What a plan is made from: the transport fields and the request's own tools. */
+/**
+ * What a plan is made from: the transport fields, the request's own tools and,
+ * when it wants JSON back, its intent and the messages the JSON precondition
+ * reads.
+ */
 export type PlanInput = Pick<
   StreamOptions,
   | "standard" | "baseUrl" | "platform" | "modelId" | "canonicalModelId" | "relayUpstream"
   | "thinkingCategory" | "reasoningEffort" | "thinkingBudget" | "temperature" | "maxOutput" | "provenance"
   | "tools" | "toolChoice" | "serverTools" | "structuredOutput" | "textVerbosity" | "vlHighResolution"
->;
+> & Partial<Pick<StreamOptions, "messages" | "structured">>;
 
 export interface RequestPlan {
   wire: Wire;
@@ -73,6 +77,13 @@ export interface RequestPlan {
   serverTools: readonly ServerToolId[];
   /** The JSON tier a structured task on this request gets (`effectiveStructuredOutput`). */
   structured: StructuredOutputMode;
+  /**
+   * Only when the request asks for JSON (`StreamOptions.structured`): how it
+   * goes out — the tier actually shaped (below `structured` when there is no
+   * schema to enforce), the body fields and the cue. `streamCompletion` puts it
+   * on the request; a refusal steps down from its `mode`.
+   */
+  json?: JsonModeShaping;
   textVerbosity?: TextVerbosity;
   vlHighResolution: boolean;
   /** The system prompt as Responses' top-level `instructions` (else a leading developer message). */
@@ -83,7 +94,8 @@ export interface RequestPlan {
   promptCache: boolean;
 }
 
-function isForced(tc: StreamOptions["toolChoice"]): boolean {
+/** Whether this choice tells the model to call a tool rather than offering. */
+export function isForcedToolChoice(tc: StreamOptions["toolChoice"]): boolean {
   return tc === "required" || (typeof tc === "object" && tc !== null);
 }
 
@@ -101,7 +113,8 @@ function isForced(tc: StreamOptions["toolChoice"]): boolean {
  *     parameter, and relay upstreams that take it with a 200 and ignore it
  *     (Kiro, anti). A silent ignore teaches the learned store nothing.
  *   - `learned`: the endpoint answered a forced choice with a 400 earlier this
- *     session (DeepSeek V4, which thinks unconditionally — `toolChoice.ts`).
+ *     session (DeepSeek V4, which thinks unconditionally; the store is
+ *     `learned.ts`, the retry `streamCompletion`'s).
  *
  * Downgrading is safe because no caller relies on forcing: `agent/structured.ts`
  * treats "the model declined to call the tool" as its cue to re-run in JSON
@@ -114,7 +127,7 @@ function toolChoiceOf(
 ): RequestPlan["toolChoice"] {
   if (!opts.tools) return undefined;
   const requested = opts.toolChoice;
-  if (!isForced(requested)) return { requested, sent: requested };
+  if (!isForcedToolChoice(requested)) return { requested, sent: requested };
   const downgradedBy = forcesToolChoiceAuto(category, effort)
     ? "category"
     : !hasCapability("forcedToolChoice", wire, model)
@@ -138,6 +151,11 @@ export function planRequest(opts: PlanInput): RequestPlan {
   const state = wireThinks(category, effort);
   // What the request's conditions read (`capability/conditions.ts`).
   const request: CapabilityModel = { ...model, thinking: state, functionTools };
+  const json = {
+    standard: opts.standard, baseUrl: opts.baseUrl, platform: wire.platform, modelId: opts.modelId,
+    canonicalModelId: opts.canonicalModelId,
+    structuredOutput: opts.structuredOutput, relayUpstream: opts.relayUpstream,
+  };
   return {
     wire,
     model,
@@ -146,11 +164,8 @@ export function planRequest(opts: PlanInput): RequestPlan {
     maxTokensOnWire: requiredMaxTokens(trusted(carried(opts.maxOutput, opts.provenance?.maxOutput), "anthropicMaxTokens")),
     toolChoice: toolChoiceOf(opts, category, effort, wire, model),
     serverTools: effectiveServerTools(wire, opts.serverTools, opts.modelId, opts.relayUpstream, request) ?? [],
-    structured: effectiveStructuredOutput({
-      standard: opts.standard, baseUrl: opts.baseUrl, platform: wire.platform, modelId: opts.modelId,
-      canonicalModelId: opts.canonicalModelId,
-      structuredOutput: opts.structuredOutput, relayUpstream: opts.relayUpstream,
-    }),
+    structured: effectiveStructuredOutput(json),
+    ...(opts.structured ? { json: jsonModeShaping(json, messagesText(opts.messages ?? []), opts.structured.schema) } : {}),
     ...(opts.textVerbosity && hasCapability("textVerbosity", wire, model) ? { textVerbosity: opts.textVerbosity } : {}),
     vlHighResolution: !!opts.vlHighResolution && hasCapability("vlHighResolution", wire, model),
     instructionsField: hasCapability("instructionsField", wire, model),

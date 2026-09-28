@@ -10,7 +10,7 @@
  * costs nothing to act on. So it is remembered, per endpoint+model, as a
  * **ceiling** on the fact it names, and every later request is sent under it.
  *
- * Two memos used to do this, one in `toolChoice.ts` (a Set) and one in
+ * Two memos used to do this, one in the retired `toolChoice.ts` (a Set) and one in
  * `jsonMode.ts` (a Map), each with its own key, its own classifier and its own
  * reset. They are one store now, and adding a third learnable fact is a row in
  * {@link LEARN_RULES} plus its ceiling type in `Ceilings`.
@@ -39,7 +39,7 @@ import { hasCapability } from "./resolve";
  * several protocol families and they don't have to agree. A `ConnOptions` or
  * `StreamOptions` bag qualifies as it is.
  */
-export interface EndpointKey {
+interface EndpointKey {
   standard: ApiStandard;
   baseUrl?: string;
   modelId?: string;
@@ -55,14 +55,11 @@ type Ceiling = Ceilings[LearnedFact];
 /** A fact and a ceiling of that fact's own type. */
 type Learned = { [F in LearnedFact]: { fact: F; ceiling: Ceilings[F] } }[LearnedFact];
 
-/**
- * What one request put on the wire that an endpoint may refuse. The request
- * plan (P5) will carry it; until then each retry site says what it sent.
- */
+/** What one request put on the wire that an endpoint may refuse — read off its plan. */
 export interface Attempt {
-  /** A forced `tool_choice` was *requested* — even if an adapter sent `auto` (today's retry condition). */
+  /** A forced `tool_choice` went out (`RequestPlan.toolChoice.sent`), not merely was asked for. */
   forcedToolChoice?: boolean;
-  /** The JSON tier actually shaped into the body (`jsonModeShaping(…).mode`), which can sit below the plan's. */
+  /** The JSON tier actually shaped into the body (`RequestPlan.json.mode`), which can sit below the plan's tier. */
   structuredOutput?: StructuredOutputMode;
 }
 
