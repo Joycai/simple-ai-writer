@@ -48,6 +48,25 @@
 所以"省略 `thinking` 字段"在前一派是"用默认（开）"，在后一派是"关着"。
 **同一段代码在两代模型上得到相反的行为，且都不报错。**
 
+**第三方的 ④ 面还要再按平台分一次**（实测 2026-09-28，各家官方直连，每格一次请求）：
+
+| 平台 · ④ 面 · 模型 | 不发 `thinking` | `{type:"disabled"}` | 细节 |
+| --- | --- | --- | --- |
+| DeepSeek `/anthropic`：deepseek-v4-pro、deepseek-flash | **想** | 收，真关 | [`landscape.md`](landscape.md) §7 第二十个样本 |
+| 百炼 `/apps/anthropic`：qwen3.8-flash、3.7-flash、3.5-plus | **想** | 收，真关 | 第六个样本 |
+| 百炼上的 qwen-turbo | 不想 | — | 第六个样本 |
+| 百炼上的 MiniMax-M2.5 | 想 | **400**，关不掉 | 第六个样本 |
+| 百炼上的 glm-5.3 | — | **400**，关不掉 | 第六个样本 |
+| 百炼上的 kimi-k2-thinking | — | 收下，**照想** | 第六个样本 |
+| 智谱 `/api/anthropic`：glm-5.3、5.3-flash | **想** | **400**（1210），关不掉 | 第十四个样本 |
+| 智谱 glm-4.6 | — | 收，真关 | 第十四个样本 |
+| 智谱 glm-4.7 | 不想（2026-09-19） | — | 第十四个样本 |
+| MiniMax `/anthropic`：M3 | **不想** | 收 | 第四个样本 |
+| MiniMax M2.7 | 想 | 收下，**照想** | 第四个样本 |
+
+官方 Claude 的两派之外，"省略 = 用默认"在兼容层上要按**平台 × 模型**问：同一个百炼 ④ 面，
+千问默认想、qwen-turbo 从不想；同一家智谱，4.7 默认不想、5.3 关不掉。
+
 ### 1.3 关闭的三种拒绝方式
 
 - **Fable 5 / Mythos 5 / Mythos Preview**：无条件拒绝 `thinking:{type:"disabled"}`
@@ -63,7 +82,7 @@
 | Gemini 3.1 Pro | `low/medium/high` —— **没有 `minimal`** | `high` |
 | Gemini 3 Flash / 3.6 Flash | `minimal/low/medium/high` | `high` / `medium` |
 | Gemini 3.1 Flash-Lite | `minimal/low/medium/high` | `minimal` |
-| Gemini 3.8 Flash（实测，Vertex，2026-09-26） | `low/medium/high` —— **`MINIMAL` 回 400** `Thinking level MINIMAL is not supported for this model.` | 未定（不发时 685 思考 token，介于 `medium` 641 与 `high` 1,348 之间，单次） |
+| Gemini 3.8 Flash（实测，Vertex，2026-09-26） | `low/medium/high` —— **`MINIMAL` 回 400** `Thinking level MINIMAL is not supported for this model.` | 未定（不发时 685 思考 token，介于 `medium` 641 与 `high` 1,348 之间，单次）；AI Studio 上 `low` 答一个词时 usage **不带 `thoughtsTokenCount`**（2026-09-28） |
 
 两条要点：
 
@@ -102,6 +121,12 @@
   Gemini 3 or later models. Use with earlier models results in an error.**"*
   枚举值是 `THINKING_LEVEL_UNSPECIFIED` / `MINIMAL` / `LOW` / `MEDIUM` / `HIGH`
   —— **全大写**，不是指南页里那个小写的 `thinking_level`。
+  **实测（2026-09-28，AI Studio `generateContent`，gemini-3-flash-preview / gemini-3.8-flash，同一道一词题）：
+  值小写也收**——`"low"` 与 `"LOW"` 都 200。gemini-3-flash-preview 上思考 token 落在同一范围（小写几次 19–41，
+  大写三次 21–72，随机波动）；gemini-3.8-flash 两种写法各一次，都不报 `thoughtsTokenCount`。
+  参考页只列大写，运行时不分大小写；会 400 的是枚举外的值：`"lowest"` →
+  `Invalid value at 'generation_config.thinking_config.thinking_level' (type.googleapis.com/google.ai.generativelanguage.v1beta.ThinkingConfig.ThinkingLevel), "lowest"`，
+  `details[].fieldViolations[].field` 同名。发小写不算错，别据此判错；照参考页发大写仍是稳妥写法。
 - **`includeThoughts`** —— *"Indicates whether to include thoughts in the
   response. If true, thoughts are returned only when available."*
   **默认不返回**，与 ④ 族 `display: "omitted"` 是同一类陷阱。
@@ -130,6 +155,10 @@
   返回 400。
 - ④ 的手动 thinking（`type:"enabled"`）与**强制 `tool_choice` 冲突**：需要强制
   单个工具的结构化输出场景，必须显式关掉思考。
+- **兼容层上的 `disabled` 有三种结局**（实测 2026-09-28，见 §1.2 的第三方表）：收下且真关；
+  拒绝并说明关不掉——智谱 `1210 该模型始终思考，不支持关闭思考`，百炼则借自家 ① 方言的字段名
+  `The value of the enable_thinking parameter is restricted to True.`；**收下但照想**——MiniMax M2.7、
+  百炼上的 kimi-k2-thinking。第三种请求侧没有任何信号（200，没有警告字段），只能看回复里还有没有思考内容。
 
 ### 1.8 ④ 的新旧代互斥，且代次不可从模型名判断
 
@@ -216,6 +245,18 @@ output_config.effort`）——「少想」只能靠低 `effort`，关不掉。
 模型生成的摘要，且计费按原始思考 token 而非摘要 token —— 账单上的输出 token
 数与你看到的文本对不上是正常的。Fable 5 / Mythos 5 更进一步：原始思维链永不返回。
 
+**判「这一轮想没想」看文本或签名，至少一个非空。** 空的 `thinking` 字段本身什么也说明不了
+（实测 2026-09-28，各家 ④ 面）：
+
+| 来源 | `thinking` 文本 | `signature` | 想了没有 |
+| --- | --- | --- | --- |
+| Claude 当前代，默认 `omitted` | 空 | 有 | 想了（照计费） |
+| 百炼上的千问 | 有 | 恒为空串 | 想了 |
+| 百炼上的 kimi-k2.6（不发 `thinking`，或 `disabled`） | 空 | 空 | 没想 |
+
+只认文本，会把 Claude 的 `omitted` 读成「没想」；只认块在不在，会把 kimi-k2.6 读成「关不掉」
+（它显式 `enabled` 时块里才有文本）。
+
 ### 2.3 token 计数
 
 四族都把思考 token 计入**输出**侧，但报的地方不同：
@@ -238,6 +279,7 @@ output_config.effort`）——「少想」只能靠低 `effort`，关不掉。
 | **① 官方** | 无（本来就没有内容） | — |
 | **① DeepSeek** | 两个 user 消息之间**如果模型进行了工具调用**，中间 assistant 的 `reasoning_content` 必须参与拼接，且"在后续所有 user 交互轮次中必须回传"；**没有**工具调用时无需回传（传了会被忽略） | 文档原文：**"若您的代码中未正确回传 `reasoning_content`，API 会返回 400 报错"** |
 | **① 火山方舟** | 工具轮把 `reasoning_content`（摘要）与 `encrypted_content`（原文密文）一起回传；密文优先，只绑产出它的模型 | **不报错**：只回传摘要时模型在摘要上推理（厂商原话「推理效果下降」） |
+| **① MiniMax** | 思考以 `<think>…</think>` 内联在 `content`；文档要工具轮带回完整 assistant 消息：「务必完整保留模型思考内容……才能保证 Interleaved Thinking 生效」 | **不报错**：实测（2026-09-28，M3）保留、去掉 `<think>`、`content: null`、改放 `reasoning_content` 四种都 200；保留时思考照计 prompt token（多 26），服务端不剥 |
 | **②** | 无状态模式（`store:false`）下回传 reasoning item 的 `encrypted_content`（原样带回整个条目即可） | 丢失推理上下文；**不报错**（2026-09 实测去掉条目、去掉 `encrypted_content` 都 200），5.5 / 5.6 默认 `context:"all_turns"` 时往轮推理就渲染不回去了 |
 | **③** | 无状态模式下**必须**原样回传带签名的思考块；有状态模式（Interactions 的 `store`/`previous_interaction_id`）由服务端管 | 多轮推理连续性断裂 |
 | **④** | 工具轮必须原样带回该轮的 thinking block（含 `signature`）与 `redacted_thinking` block | **分两种，见 §3.3**：缺失 → 静默降级；改动 → 400 |

@@ -124,7 +124,7 @@ usage 只在开了 `stream_options.include_usage` 时随最后一个 chunk 到�
   `https://api.deepseek.com/anthropic`（适配器补 `/v1/messages`）；② 族的 base 填
   `https://api.deepseek.com`，`/responses` 与 `/v1/responses` 实测都通。文档还说
   ② 族的 `input_image` 可以放进 `function_call_output` 的 `output`——本项目工具返回
-  的图走另起一条 user 消息，用不到。
+  的图走另起一条 user 消息，用不到。④ 面的思考默认开、`disabled` 真关，见 §7 第二十个样本。
 - **不收 PDF，三族都不收**（文档里平铺的 `{type:"file", file_data, filename}`
   是**传图片**的另一种写法，不是文档输入）。实测：
   - ① 族：本项目的嵌套形状 `{type:"file", file:{…}}` 根本不被解析
@@ -322,6 +322,7 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
 | **HTTP 200 + SSE 内错误** | 余额不足、上游故障、内容审核以 `data: {"error":…}` 事件送达，而非错误状态码 |
 | **静默截断 prompt** | 本地栈（ollama 等）超出上下文时从头部丢弃，system 指令先没 |
 | **`<think>` 内联** | 部分中继把思维链混进正文，用 `<think>…</think>` 包裹 |
+| **未知字段 / 非法思考值（④ 面）** | 四家四种：MiniMax 一律 200 静默吞下，`thinking.type:"bogus"` 反而**开启**思考；DeepSeek 422 反序列化报错并点名枚举；智谱借用「关不掉」的 1210；百炼 400 `Request body format invalid`，不点名字段。顶层未知字段四家都放过（第四、六、十四、二十个样本，2026-09-28 实测） |
 
 **结论：对 ① 的适配必须按"最小公倍数发送、最大宽容接收"写。** 官方端点可以
 乐观假设可选部分存在，兼容端点不行。
@@ -366,6 +367,11 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
   同形），**没有 `reasoning_effort`**。M2.x 系列的思考无法关闭。
 - `max_tokens` 已弃用，改用 `max_completion_tokens`。
 - 多模态多一个 `video_url` 内容块类型。
+- **交错思考的回传不强制**（实测 2026-09-28，MiniMax-M3，`api.minimaxi.com/v1`）：工具轮的 assistant
+  消息保留 `<think>…</think>`、去掉、`content: null`、改放 `reasoning_content` 四种写法都 200、答案正常。
+  文档说「必须将完整的模型返回添加到对话历史」，指的是效果（Interleaved Thinking），不是校验；保留时
+  思考照计 prompt token（多 26），服务端不剥。M3 默认内联思考，不出 `reasoning_content`，
+  `completion_tokens_details.reasoning_tokens` 有值。
 
 **这两条合起来说明一件事**：兼容层的差异往往不在请求体，而在**响应的解释方式**
 ——同一段 JSON，官方端点和兼容端点想让你读出不同的东西。
@@ -497,6 +503,17 @@ MiniMax 在 ④ 族端点上实现了 Anthropic 的**服务端工具**约定（b
 > - 本机旧 key 两个站点都 401（国内站「token is unusable (1004)」、国际站「invalid api key (2049)」），充值后没有恢复，换新 key 才通；
 >   国内站的按量 key（`sk-api-`）在国际站一律 401。
 
+> **补测：④ 面的关闭档与未知值（2026-09-28，国内站 `api.minimaxi.com/anthropic`，MiniMax-M3 / M2.7，每条一次）**：
+>
+> - **`{type:"disabled"}` 收下且真关**（M3：200，只回 text 块）——[`issues/thinking-verification.md`](../issues/thinking-verification.md)
+>   2.6.3 就此验掉。不发 `thinking` 同样不想，上文「默认 `disabled`」成立。
+> - **M2.7 收下 `disabled`，照想**：200，回 thinking 块，没有报错。与文档「M2.x 思考无法关闭」一致，但它不拒，是静默的。
+> - **什么都收**：`enabled` + `budget_tokens`、`adaptive` + `display:"summarized"`、顶层未知字段、① 族的 `reasoning_effort`、
+>   `top_k:99999`、`temperature:2.5`（文档说 [0, 2] 外报错）都 200。**`thinking.type:"bogus"` 也是 200，而且开始想**——非法值被当成了「开」。
+> - **未知模型名静默改映射**：`MiniMax-M3.1-Flash-Preview`（文档列着、该 key 的 `/v1/models` 里没有）200，响应的 `model` 是 `MiniMax-M3`。
+>   只有拿响应里的 `model` 核对才看得出。
+> - **唯一撞出来的 400**：`top_p:1.5` → `{"type":"invalid_request_error","message":"invalid params, param 'top_p' should be in (0,1] (2013)"}`。
+
 ### 第五个样本：New API 的 ③ 族端点（截至 2026-08）
 
 路径与官方一致（`/v1beta/models/{m}:generateContent`、
@@ -598,7 +615,8 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
   `max_completion_tokens [N] must be greater than thinking_budget [M]`），与官方规则同向。
 - **thinking block 的 `signature` 恒为空串**；工具轮把上一轮 `content` 原样带回（含空签名
   的 thinking block）或删掉 thinking block，两种都 200。关掉思考时响应里仍有一个
-  `{type:"thinking",thinking:"",signature:""}` 空块，adapter 已能容忍。
+  `{type:"thinking",thinking:"",signature:""}` 空块，adapter 已能容忍。——**2026-09-28 按模型分**：
+  qwen3.8-flash 关时只回 text 块；kimi-k2.6 不发 `thinking` 与 `disabled` 时都回这个空块（见下方补测）。
 - **事件序列**：`ping` 先于 `message_start`；`message_start.usage` 只有两个字段，完整
   usage（含 `cache_*`，另塞了一个非标准的 `prompt_tokens_details`）在 `message_delta`。
 - **强制 `tool_choice`**：`{type:"tool"}` 在 qwen3.8-flash 与 MiniMax-M2.5 思考中 400，
@@ -607,6 +625,27 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
 - **`output_config.format`（json_schema）**：Qwen / DeepSeek / Kimi 出 JSON，
   MiniMax 出散文。本项目 ④ 族的结构化输出仍走强制工具，不用它。
 - **温度范围是 [0, 2)**，与 Anthropic 官方的 [0, 1] 不同；本项目 clamp 到 1，只是少了半段。
+
+> **补测（2026-09-28，`/apps/anthropic`，普通 `sk-` key 走 `x-api-key`，每条一次）**：
+>
+> - **新旧 host 等价**：文档现在给的是 `https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/apps/anthropic`，
+>   旧的 `https://dashscope.aliyuncs.com/apps/anthropic` 用同一把 key 照样 200。
+> - **千问默认想**：qwen3.8-flash / qwen3.7-flash / qwen3.5-plus 不发 `thinking` 都回 thinking 块；`{type:"disabled"}` 真关
+>   （同时带 `temperature` / `top_p` / `top_k` 也收）。qwen-turbo 从不想。
+> - **翻译层把上游的拒绝原样传回**：上文「MiniMax-M2.5 除外，400」和 ① 面那句 `The value of the enable_thinking parameter is restricted to True`
+>   是**同一个校验**——④ 面的 `thinking` 被翻成百炼自家 ① 方言 `enable_thinking` 再下发，拒绝时连 ① 的字段名一起回来：
+>   `<400> InternalError.Algo.InvalidParameter: The value of the enable_thinking parameter is restricted to True.`。glm-5.3 同样。
+>   一个 ④ 客户端收到的拒绝里**点名的是别家协议的字段**，按 `thinking` 找原因会找不到。
+> - **其余第三方模型**：kimi-k2-thinking 收下 `disabled`，**照想**（200，thinking 块有文本）；kimi-k2.6 无论开关都回一个
+>   **文本与签名都空**的 thinking 块（不发 `thinking` 与 `disabled` 都这样，内容上没想；显式 `enabled` 才有文本）；
+>   deepseek-v4-pro 收 `disabled`，真关。
+> - **错误原文**：`thinking.type:"bogus"` → 400 `Request body format invalid`（不点名字段）；未知模型 → 400
+>   ``The model `qwen-nonexistent` does not exist or you do not have access to it.``；`temperature:2.5` → 400
+>   `Temperature should be in [0.0, 2.0)`；`budget_tokens:1024` 配 `max_tokens:512` → 400
+>   `max_completion_tokens [512] must be greater than thinking_budget [1024]`（2048 时 200，与上文一致）。顶层未知字段与
+>   ① 族的 `reasoning_effort` 都 200 放过。
+> - 文档（2026-09）的默认表：qwen3.8-max / 3.8-flash、deepseek-v4 系、glm 系默认开；kimi-k2.6 / 2.5 默认关；kimi-k2.7-code、
+>   kimi-k2-thinking、MiniMax-M2.5 / 2.1 只有思考模式；`thinking.type` 只列 `enabled` | `disabled`（实测 `adaptive` 也收）。
 
 #### ② 面：Responses（只探了一次，未接）
 
@@ -1444,6 +1483,12 @@ Responses adapter：
 来源（2026-09-18）：方舟控制台文档「文本生成」「图片理解」「文档理解」「联网搜索工具」「Function Calling」「Agent Plan 套餐概览」
 （`console.volcengine.com/ark/region:cn-beijing/docs/ark/…`），与上面的实测。
 
+> **另一条前缀（文档 + 无 key 探测，2026-09-28；带 key 未测）**：方舟的 Coding Plan 接入文章（`volcengine.com/article/38136`）给的 ④ 面 base 是
+> `https://ark.cn-beijing.volces.com/api/coding`、① 面 `/api/coding/v3`，并提醒别用 `/api/v3`（那是按量扣费）。上面实测的套餐前缀是
+> `/api/plan`（「Agent Plan 套餐概览」）。两者是两个套餐，还是同一套餐改过名，没有核实——**不要把 `/api/plan` 的实测结论套到
+> `/api/coding` 上**。按量付费的 `/api/v3` 没有 ④ 面文档。无 key 探测四条候选路径（`/api/v3/messages`、`/api/v3/v1/messages`、
+> `/api/coding/v1/messages`、`/api/anthropic/v1/messages`）全回 401：鉴权先于路由，没有 key 探不出路径在不在。
+
 ### 第十三个样本：火山方舟 Seedream 出图（`ark` 出图接口，2026-09-18 实测 5.0 lite / 5.0 pro）
 
 > **实测结论**（`live.volcengine-image.test.ts`，`SEEDREAM_IMAGE_KEY` 设为套餐 key，4 条全过，计费 2 张）：
@@ -1570,6 +1615,16 @@ Responses adapter：
 >   `reasoning_tokens` 却报 0）。
 > - **④ 面**（`/api/anthropic`，只探两次）：glm-4.7 在这里**默认不思考**（只回 text 块），与 ① 面相反；
 >   5.3-flash 回 `thinking` 块（无 `signature`）。`usage` 带 `server_tool_use.web_search_requests`。
+> - **④ 面补测（2026-09-28，glm-5.3 / 5.3-flash / 4.6，每条一次）**：思考默认值**按模型分**，与上一条的 4.7 不矛盾——
+>
+>   | 模型 | 不发 `thinking` | `{type:"disabled"}` | 其它 |
+>   | --- | --- | --- | --- |
+>   | glm-4.7（2026-09-19） | 不想 | — | |
+>   | glm-4.6 | — | 200，不想 | |
+>   | glm-5.3 / 5.3-flash | **想** | **400** `{"type":"invalid_request_error","code":"1210","message":"[1210][该模型始终思考，不支持关闭思考；请使用 low、high 或 max。][<request id>]"}` | `output_config:{effort:"low"}` → 200，**无 thinking 块**；`adaptive`、`enabled` 都 200、都想 |
+>
+>   ① 面那句 1210 在 ④ 面原样出现，外面多包一层 `[1210][…][id]`。`thinking.type:"bogus"` 回的也是这句 1210，不是「非法值」。
+>   顶层未知字段 200 放过，与 ① 面一致。
 > - **上限**（文档「核心参数」表，4.5-air 已实测）：5.x 与 4.6 / 4.7 默认 65,536、最大 131,072；4.5 系列最大 98,304；
 >   4.6v 32,768；4.5v 16,384。上下文：5.3 / 5.3-flash / 5.2 1M，4.6–5.1 200K，4.5 系列 128K。
 > - **耗时**：多数 0.3–10 s；4.7 偶有长尾（一次关思考的工具轮 136 s）。
@@ -2263,6 +2318,23 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 - **百炼对片段本身挑剔**：同样两种纯色，320×240 / 10 fps 的版本回 400 `Invalid video file`，加一层噪点、或改成 640×480 就收。
   所以这台机器上最先做的那段 320×240 片段不能当对照，换成了 640×480。
 - **没量到的**：OpenAI 官方（本机无 key）、火山方舟按量付费（本机只有 Coding Plan 的 key）。
+
+### 第二十个样本：DeepSeek 的 ④ 族端点（2026-09-28 实测 deepseek-v4-pro / deepseek-flash）
+
+> **实测结论**（官方直连 `https://api.deepseek.com/anthropic/v1/messages`，`x-api-key` + `anthropic-version`，每条一次）：
+>
+> - **思考默认开**：不发 `thinking` 就回 thinking 块（输入 token 也从 11 涨到 90，思考模式带了自己的前缀）。
+>   与 MiniMax 的 ④ 面（默认不想，第四个样本）正相反。
+> - **`{type:"disabled"}` 真关**：200，只回 text 块；同时带 `temperature` / `top_p` / `top_k` 也收。
+> - `{type:"adaptive"}` 与 `{type:"enabled", budget_tokens}` 都 200、都想（文档说 `budget_tokens` 被忽略）。
+> - **非法值是 422，并点名枚举**：`thinking.type:"bogus"` →
+>   ``Failed to deserialize the JSON body into the target type: thinking.type: unknown variant `bogus`, expected one of `adaptive`, `enabled`, `disabled` at line 1 column 142``
+>   ——四家 ④ 兼容层里唯一在请求形状上严格的一家。顶层未知字段照样 200 放过。
+> - 文档（2026-09）：`top_k` 忽略；`top_p` 只在思考模式生效（下限 0.95），非思考模式固定 1.0；`temperature` [0, 2]；
+>   `claude-opus*` 映射到 deepseek-v4-pro，`claude-haiku*` / `claude-sonnet*` 映射到 deepseek-flash，**不认识的模型名也映射到
+>   deepseek-flash**，不报错。
+
+同一 host 的图片面见 §2.1。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
 
