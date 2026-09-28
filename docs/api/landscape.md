@@ -2237,6 +2237,32 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
   高 + 提示 2 次）。Claude 那几次都答对；Gemini 高 + 提示那两次都答错（480、600）。其余几次照常思考，只是短一些——提示的效果是两极的。
 - **关闭 + 提示两家都最省**（Claude 1,396、Gemini 1,300），正确率 4/5、5/5；Claude 答错的那次（506）是想过的，不是跳过思考的那两次。
 - 花费：Claude $0.94、Gemini $0.23（OrcaRouter 报价）。一道题、每格 5 次，只看方向。
+### 第十九个样本：视频输入补测——① 族的 `video_url` 片段，六个端点（2026-09-28 实测）
+
+`video_url` 不在 Chat Completions 规范里，是千问一族兼容端的扩展；能力表今天按族放行，① 族平台都会被发它
+（[`../issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)）。这里各发一次。
+
+**做法**（`live.video-input.test.ts`，走应用自己的 `videoPart` 与真实 openai 适配器）：一段猜不出来的 4 秒片段——前 2 秒纯红、后 2 秒纯蓝，
+640×480、25 fps、5 KB（`fs/__tests__/fixtures/v4s_640_red_blue.mp4`）。问「先后出现了哪两种颜色」，看三件事：HTTP 状态；
+答没答出「红、蓝」（200 而答不出 = 静默丢弃，按不收记）；输入 token 比同一问题不带片段时多了多少。读进去的，再带 `fps: 1` 发一次，看账单变不变。
+
+| 端点 | 模型 | 结果 | 输入 token（不带 → 带片段 → 带 `fps: 1`） | 判定 |
+| --- | --- | --- | --- | --- |
+| 百炼（对照） | `qwen3-vl-plus` | 200，「红、蓝」 | 34 → 1241 → 641 | 收；`fps` 生效 |
+| 火山方舟 Coding Plan（`/api/plan/v3`） | `doubao-seed-2.0-mini` | 200，「红、蓝」 | 59 → 2795 → 2795 | 收；`fps` 不改账单 |
+| DeepSeek | `deepseek-flash` | 422 `unknown variant video_url, expected one of text, image_url, file` | 55 → — | 不收（明确拒绝） |
+| xAI | `grok-4.3` | 400 `Empty content block` | 214 → — | 不收（片段被当成空块） |
+| OrcaRouter ① | `google/gemini-3.8-flash` | 200，答错（三次分别是「绿、黄」「绿、蓝」「紫、黄」） | 25 → 25 | **静默丢弃** |
+| OrcaRouter ① | `openai/gpt-5-mini` | 400 `The upstream provider rejected this request` | 33 → — | 不收 |
+
+- **火山方舟的 `fps`**：另用原始请求比了两种拼法——片段旁边（应用今天的写法，同百炼）与 `video_url.fps`（方舟文档的写法），
+  `fps` 取 1 与 0.2，输入 token 都是 2779，与不带时相同。4 秒的片段可能落在最少帧数之下，所以只能说「这段片段上不改账单」，不能说方舟不认 `fps`。
+- **OrcaRouter 的 Gemini**：Gemini 本身读视频，丢在 OrcaRouter 的 ① 层（OpenRouter 式的一层，见第七、十八个样本）。输入 token 与不带片段完全相同，
+  回答是照着提示里的示例格式瞎编的。这是最坏的一种：不报错，作者看不出视频没到。
+- **百炼对片段本身挑剔**：同样两种纯色，320×240 / 10 fps 的版本回 400 `Invalid video file`，加一层噪点、或改成 640×480 就收。
+  所以这台机器上最先做的那段 320×240 片段不能当对照，换成了 640×480。
+- **没量到的**：OpenAI 官方（本机无 key）、火山方舟按量付费（本机只有 Coding Plan 的 key）。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
