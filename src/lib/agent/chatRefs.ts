@@ -215,9 +215,10 @@ export async function buildChatMessage(
     allowVideo?: boolean;
     /**
      * The fps this model's requests send a clip at (`sentVideoFps`), written
-     * onto the part so the runtime's estimates of the history count the right
-     * frames. Not what goes out: each request's plan writes its own fps onto
-     * the clip (`RequestPlan.clipFps`), so a switched model sends its own.
+     * onto the part for the readers that still weigh the raw history
+     * (compaction planning, the context bar). Not what goes out: each
+     * request's plan writes its own fps onto the clip (`RequestPlan.clipFps`),
+     * so a switched model sends its own.
      */
     videoFps?: number;
     /** Lets the 【附图】 list name pictures by project-relative path; absent keeps them absolute. */

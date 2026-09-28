@@ -16,6 +16,7 @@ import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate";
+import { mediaProjection } from "../ai/capability/plan";
 import { imagePart, imagePayload, MAX_REQUEST_IMAGE_CHARS } from "../ai/imagePart";
 import { nonWebServerTools } from "../ai/serverTools";
 import { addReportedCost } from "../ai/reportedCost";
@@ -462,9 +463,18 @@ function roundInProgressStart(history: StreamMessage[]): number {
  * Anthropic's signed thinking): shrinking ours would lower the estimate without
  * changing the wire — or, for a signed block, break it.
  *
+ * `measure` is how the history is weighed against the ceiling: the run passes
+ * the estimate of the history *as its requests carry it* (`mediaProjection`),
+ * so a clip counts at the fps it goes out with and a medium the route refuses
+ * counts as its note.
+ *
  * Returns how many messages it changed so the caller can log it.
  */
-export function trimHistory(history: StreamMessage[], ceilingTokens?: number): number {
+export function trimHistory(
+  history: StreamMessage[],
+  ceilingTokens?: number,
+  measure: (history: StreamMessage[]) => number = estimateMessagesTokens,
+): number {
   // Images first, and unconditionally. The token estimate charges a flat rate
   // per picture (see ai/tokenEstimate) because that is what a provider bills —
   // but the *payload* is base64, megabytes of it, and a chat history persists
@@ -473,7 +483,7 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
   // reads as comfortably under the ceiling.
   let dropped = elideOldImageResults(history) + elideImagesOverBudget(history) + elideOldVideos(history);
   if (!ceilingTokens || ceilingTokens <= 0) return dropped;
-  if (estimateMessagesTokens(history) <= ceilingTokens) return dropped;
+  if (measure(history) <= ceilingTokens) return dropped;
   const protectedFrom = roundInProgressStart(history);
 
   for (let i = 0; i < protectedFrom; i++) {
@@ -496,7 +506,7 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
     } else {
       continue;
     }
-    if (estimateMessagesTokens(history) <= ceilingTokens) return dropped;
+    if (measure(history) <= ceilingTokens) return dropped;
   }
 
   for (let i = 0; i < protectedFrom; i++) {
@@ -513,7 +523,7 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
     if (!changed) continue;
     m.tool_calls = calls;
     dropped++;
-    if (estimateMessagesTokens(history) <= ceilingTokens) return dropped;
+    if (measure(history) <= ceilingTokens) return dropped;
   }
   return dropped;
 }
@@ -716,6 +726,12 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
    * runs that write lore on a small window.
    */
   let messageCeiling = opts.inputCeilingTokens;
+  // The history as every request of this run carries it: media the route or
+  // model refuses as its note, each clip at this model's fps. The run's model
+  // is fixed, so the projection is too; weighing the raw history would count a
+  // clip at the fps it was attached with (docs/feature/video-input.md §4).
+  const project = mediaProjection(opts);
+  const measure = (h: StreamMessage[]) => estimateMessagesTokens(project(h));
 
   // The run's own lore snapshot. The write tools patch it and resync it in
   // place (see writeTools.syncLore) — but the object callers hand in is the
@@ -1021,7 +1037,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // conclusions into notes *before* trimming starts, and trimming follows
       // the ceiling as group loads shrink it.
       messageCeiling &&
-      estimateMessagesTokens(history) > messageCeiling * CHECKPOINT_RATIO &&
+      measure(history) > messageCeiling * CHECKPOINT_RATIO &&
       (lastCheckpointRound === 0 ||
         (trimmedSinceCheckpoint && round - lastCheckpointRound >= CHECKPOINT_MIN_GAP_ROUNDS))
     ) {
@@ -1070,7 +1086,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       }
     }
 
-    const dropped = trimHistory(history, messageCeiling);
+    const dropped = trimHistory(history, messageCeiling, measure);
     if (dropped > 0) {
       opts.onEvent({ kind: "context-trimmed", count: dropped, at: Date.now() });
       // Re-arms the checkpoint notice, but only past CHECKPOINT_MIN_GAP_ROUNDS.
@@ -1093,7 +1109,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       history.push(answerNowNotice);
     }
 
-    const estInputTokens = estimateMessagesTokens(history);
+    const estInputTokens = measure(history);
     // The handoff round carries one hand-written definition rather than the
     // preset's toolset, so the run's usual figure would overstate it wildly.
     const roundToolTokens = forceHandoff

@@ -23,7 +23,8 @@ import { wireOf, type Wire } from "../platforms";
 import { forcesToolChoiceAuto, type ReasoningEffort, type ThinkingCategory } from "../reasoning";
 import { capabilityModelOf } from "../relayUpstream";
 import { effectiveServerTools, type ServerToolId } from "../serverTools";
-import type { StreamOptions, TextVerbosity } from "../types";
+import type { StreamMessage, StreamOptions, TextVerbosity } from "../types";
+import { admitMedia } from "../mediaParts";
 import { catalogFact } from "./cells/catalog";
 import { wireThinks, type ThinkingState } from "./conditions";
 import { carried, trusted } from "./intent";
@@ -185,6 +186,22 @@ export function requestClipFps(opts: MediaPlanInput): ClipFps {
   const wire = wireOf(opts);
   const model = planModel(opts);
   return clipFps(wire, model, opts, admittedMedia(wire, model, opts));
+}
+
+/**
+ * The media projection every request from these options applies
+ * (`streamCompletion`: `admitMedia` over `plan.media` and `plan.clipFps`), for a
+ * reader that measures the history before there is a request — the agent
+ * runtime's trimming, thinking budget and checkpoint. Measuring the unprojected
+ * history instead counts a clip at the fps it was attached with: attached at
+ * 0.5 on 百炼 and sent to 智谱 at the default, the runtime would see ≈8.9k where
+ * the request's own pre-flight sees ≈35.6k, never trim, and have every round
+ * refused (docs/feature/video-input.md §4).
+ */
+export function mediaProjection(opts: MediaPlanInput): (messages: readonly StreamMessage[]) => StreamMessage[] {
+  const media = requestMedia(opts);
+  const fps = requestClipFps(opts);
+  return (messages) => admitMedia(messages, media, fps);
 }
 
 export function planRequest(opts: PlanInput): RequestPlan {

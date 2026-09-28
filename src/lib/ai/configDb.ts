@@ -401,8 +401,10 @@ export interface Model {
    * part's `fps` field. Absent sends nothing, which the endpoint treats as
    * about 2. Measured on a 60 s 720p clip: 0.5 → 8,912 tokens in 20 s,
    * default → 35,642 in 125 s, 4 → 71,282. Stored clamped to 0.1–10
-   * (`clampVideoFps`); only 0.5–4 were measured. Not a `ConnOptions` field:
-   * it rides on the content part, built where the message is composed.
+   * (`clampVideoFps`); only 0.5–4 were measured. It rides on the content part,
+   * but which fps a clip carries is each request's decision: `ConnOptions`
+   * carries the declaration and the plan writes it onto every admitted clip
+   * (`RequestPlan.clipFps`, docs/feature/video-input.md §4).
    */
   videoFps?: number;
   /**

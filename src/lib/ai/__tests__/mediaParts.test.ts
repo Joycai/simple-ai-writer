@@ -139,6 +139,16 @@ describe("admitMedia: the clip's fps", () => {
     expect(admitMedia(h, ALL, "as-built")[0]).toBe(h[0]);
   });
 
+  it("in one message, a refused picture becomes a note and the clip beside it still gets this request's fps", () => {
+    const h = turn(CLIP);
+    const [m] = admitMedia(h, { image: false, video: true, pdf: true }, 0.5);
+    const parts = m.content as ContentPart[];
+    expect(parts.some((p) => p.type === "image_url")).toBe(false);
+    expect(clipOf(m)).toEqual({ ...CLIP, fps: 0.5 });
+    expect(parts[parts.length - 1]).toEqual(text(expect.stringMatching(/^\[picture not sent/) as unknown as string));
+    expect(h).toEqual(turn(CLIP));
+  });
+
   it("a copied clip keeps its estimated cost, now at the fps it goes out with", () => {
     const clip: ContentPart = { type: "video_url", video_url: { url: "data:video/mp4;base64,AAAA" } };
     noteVideoCost(clip, (fps) => (fps === 0.5 ? 1_000 : 4_000));

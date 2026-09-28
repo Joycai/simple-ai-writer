@@ -67,9 +67,10 @@ export function canReadVideo(
  * 第十四个样本), so estimating by it there would only misstate the bill.
  *
  * What the composer estimates a clip at, and writes onto the part it builds —
- * the latter only as the runtime's estimate for the history
- * (docs/feature/video-input.md §4): the wire takes the fps each request's plan
- * gives, whatever the clip was attached with.
+ * the latter only for the readers that weigh the raw history (compaction, the
+ * context bar; docs/feature/video-input.md §4): the wire, the request's
+ * pre-flight and the agent runtime take the fps each request's plan gives,
+ * whatever the clip was attached with.
  */
 export function sentVideoFps(
   model: Parameters<typeof clipFpsOf>[0] | null | undefined,
