@@ -19,7 +19,7 @@ import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate"
 import { imagePart, imagePayload, MAX_REQUEST_IMAGE_CHARS } from "../ai/imagePart";
 import { nonWebServerTools } from "../ai/serverTools";
 import { addReportedCost } from "../ai/reportedCost";
-import { ImagePayloadError } from "../ai/types";
+import { ImagePayloadError, type StreamOptions } from "../ai/types";
 import { isOnOffCategory, type NativeReasoning } from "../ai/reasoning";
 import { effortMenuOnWire, resolveThinkingCategory } from "../ai/capabilities";
 import { wireOf } from "../ai/platforms";
@@ -602,11 +602,13 @@ export interface AgentRuntimeOptions extends ConnOptions {
    */
   inputCeilingTokens?: number;
   /**
-   * Extra top-level request fields (e.g. response_format for JSON mode).
-   * JSON mode conflicts with tool calling on several providers, so presets
-   * that use it should keep `tools: []`.
+   * This run wants JSON back (`StreamOptions.structured`): every round's
+   * request is shaped for it, and a refused tier is stepped down inside that
+   * round's `streamCompletion`. JSON mode conflicts with tool calling on
+   * several providers, so presets that use it keep `tools: []` — which also
+   * makes the run a single round.
    */
-  extraBody?: Record<string, unknown>;
+  structured?: StreamOptions["structured"];
 
   // ── Task ───────────────────────────────────────────────────────────────────
   preset: TaskPreset;
@@ -1126,7 +1128,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         ...pickConnOptions(opts),
         ...(thinkingFallback?.off ? { reasoningEffort: "off" as const } : {}),
         messages: history,
-        extraBody: opts.extraBody,
+        structured: opts.structured,
         tools: forceHandoff
           ? [handoffToolDefinition()]
           : withholdTools

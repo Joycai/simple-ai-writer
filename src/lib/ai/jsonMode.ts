@@ -29,7 +29,7 @@ import { capabilityVerdict, hasCapability } from "./capabilities";
 import { capabilityModelOf, type RelayUpstreamChoice } from "./relayUpstream";
 import { forAnthropic, strictify } from "./jsonSchemaStrict";
 import { catalogFact } from "./capability/cells/catalog";
-import { classify, downgradeJsonMode, learnedCeiling, noteLearned, STRUCTURED_RANK } from "./capability/learned";
+import { learnedCeiling, STRUCTURED_RANK } from "./capability/learned";
 import { resolvePlatform, type PlatformId, type Wire } from "./platforms";
 import { familyOf, type ApiStandard, type StreamMessage } from "./types";
 
@@ -341,13 +341,13 @@ export function jsonModeShaping(
  * Which models take strict `json_schema` — and which relays reject
  * `response_format` outright — is not recoverable from the config, but the
  * endpoint's 400 says so definitively, arrives before a single token is
- * generated, and costs nothing to act on. So a refusal is remembered for the
- * session, per endpoint+model, as a **ceiling** on the mode: `json_schema`
- * refused → `json_object` from now on; `json_object` refused → `off` (the cue is
- * the whole mechanism). The memo is the shared learned store
+ * generated, and costs nothing to act on. So a refusal is remembered, per
+ * endpoint+model, as a **ceiling** on the mode: `json_schema` refused →
+ * `json_object` from now on; `json_object` refused → `off` (the cue is the
+ * whole mechanism). The memo is the shared learned store
  * (`capability/learned.ts`), whose `structuredOutput` rule is the classifier;
- * `jsonModeCeiling` and `noteJsonModeRefused` keep their names for one phase as
- * its facade (docs/api/capability-resolution-lld.md P3).
+ * the retry is `streamCompletion`'s, for a request that carries `structured`
+ * (docs/api/capability-resolution-lld.md P7).
  *
  * An author's explicit declaration is capped too (§5.4 of the plan): picking a
  * mode the endpoint rejects should cost "that mode didn't take", not "lore
@@ -375,42 +375,4 @@ export function effectiveStructuredOutput(t: JsonModeTarget): StructuredOutputMo
 /** The strongest mode this endpoint+model is still allowed, or undefined when nothing was refused. */
 export function jsonModeCeiling(t: JsonModeTarget): StructuredOutputMode | undefined {
   return learnedCeiling(t, "structuredOutput");
-}
-
-/** Remember that `refused` was rejected: from now on this endpoint gets the next weaker mode. */
-export function noteJsonModeRefused(t: JsonModeTarget, refused: StructuredOutputMode): void {
-  const next = downgradeJsonMode(refused);
-  if (next) noteLearned(t, "structuredOutput", next);
-}
-
-/**
- * Run `attempt` under the strongest JSON mode this endpoint is known to take,
- * downgrading once per refusal.
- *
- * The attempt receives the shaping (fields + cue) and builds its own request
- * from it — the two callers assemble their messages differently, and the cue's
- * position is part of that. On a 400 that names `response_format`, the refusal
- * is recorded and the loop re-shapes one level down; a request in `off` mode
- * carries no JSON parameter, so nothing there is retried and the loop ends.
- * Every other error is the caller's, surfaced as-is.
- */
-export async function withJsonModeFallback<T>(
-  target: JsonModeTarget,
-  promptText: string,
-  schema: JsonSchemaSource | undefined,
-  attempt: (shaping: JsonModeShaping) => Promise<T>,
-): Promise<T> {
-  for (;;) {
-    const shaping = jsonModeShaping(target, promptText, schema);
-    try {
-      return await attempt(shaping);
-    } catch (err) {
-      // A request in `off` mode used no JSON parameter, so nothing is learned
-      // and the loop ends; every learned ceiling is strictly lower, so it ends
-      // anyway within two refusals.
-      const learned = classify(err, { structuredOutput: shaping.mode });
-      if (!learned) throw err;
-      noteLearned(target, learned.fact, learned.ceiling);
-    }
-  }
 }

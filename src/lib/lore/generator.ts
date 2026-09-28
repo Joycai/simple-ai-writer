@@ -12,7 +12,7 @@ import type { AgentEvent } from "../agent/events";
 import { LORE_GENERATE_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
 import { stripMentions } from "../agent/mentionText";
-import { withJsonModeFallback, type JsonSchemaSource } from "../ai/jsonMode";
+import type { JsonSchemaSource } from "../ai/jsonMode";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { imagePart } from "../ai/imagePart";
 import type { ContentPart } from "../ai/types";
@@ -118,45 +118,32 @@ export async function generateLore(opts: ConnOptions & {
 
   // JSON mode: native API enforcement where the protocol has it, plus a text
   // cue where it doesn't (or where it can't be trusted alone). See ai/jsonMode.
-  // The system prompt is author-overridable, so it is passed in here rather
-  // than assumed: on the OpenAI family the word "json" in it is a precondition,
-  // not a nicety. The model's own declaration rides in on the conn options, so
-  // an author can switch this off for a relay that rejects `response_format`.
-  // On a model that takes strict `json_schema`, the entity schema goes along —
-  // and its `category` enum is the authoritative list above, enforced by the
-  // endpoint rather than asked for in prose. A 400 naming `response_format`
-  // steps the mode down and is remembered for the session (ai/jsonMode.ts).
+  // The system prompt is author-overridable, so the "json" precondition on the
+  // OpenAI family is read off the messages as sent, not assumed. The model's
+  // own declaration rides in on the conn options, so an author can switch this
+  // off for a relay that rejects `response_format`. On a model that takes
+  // strict `json_schema`, the entity schema goes along — and its `category`
+  // enum is the authoritative list above, enforced by the endpoint rather than
+  // asked for in prose. A 400 naming the field steps the mode down and is
+  // remembered (`streamCompletion`, the learned store).
   let fullText = "";
-  await withJsonModeFallback(
-    pickConnOptions(opts),
-    `${systemPrompt}
-${promptText}`,
-    loreEntitySchema(categoryIds),
-    async (json) => {
-      fullText = "";
-      const userParts = [
-        ...baseUserParts,
-        ...(json.cue ? [{ type: "text" as const, text: json.cue }] : []),
-      ];
-      await runAgent({
-        ...pickConnOptions(opts),
-        extraBody: json.extraBody,
-        preset: LORE_GENERATE_PRESET,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userParts },
-        ],
-        // Single-shot preset — tools are empty, so the context is never consulted.
-        toolContext: { projectPath: "", loreIndex: {}, multimodal: true },
-        signal: opts.signal ?? new AbortController().signal,
-        onEvent: opts.onEvent ?? (() => {}),
-        onOutputText: (text) => {
-          fullText = text;
-          opts.onProgress(text);
-        },
-      });
+  await runAgent({
+    ...pickConnOptions(opts),
+    structured: { schema: loreEntitySchema(categoryIds) },
+    preset: LORE_GENERATE_PRESET,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: baseUserParts },
+    ],
+    // Single-shot preset — tools are empty, so the context is never consulted.
+    toolContext: { projectPath: "", loreIndex: {}, multimodal: true },
+    signal: opts.signal ?? new AbortController().signal,
+    onEvent: opts.onEvent ?? (() => {}),
+    onOutputText: (text) => {
+      fullText = text;
+      opts.onProgress(text);
     },
-  );
+  });
 
   // Extract JSON: markdown fences first, then outermost braces. Sliced to the
   // outermost braces even when the reply already starts with one — a model that

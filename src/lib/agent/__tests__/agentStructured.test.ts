@@ -140,109 +140,6 @@ describe("runStructuredTask", () => {
     expect(mockStream).toHaveBeenCalledTimes(1);
   });
 
-  it("enforces the output schema on the fallback when the model takes strict json_schema mode", async () => {
-    // The whole point of the per-model declaration: a thinking model that
-    // refuses forced tool_choice used to fall back to "valid JSON, shape in
-    // prose". With json_schema it falls back to the same schema the tool path
-    // would have enforced — and the nulls strict mode requires come back out.
-    mockStream.mockImplementationOnce(async () => {
-      throw new Error("Thinking mode does not support this tool_choice");
-    });
-    mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
-      opts.onChunk({ text: '{"name":"Ava","note":null}' });
-      opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
-      return {};
-    });
-
-    const tool: ToolDefinition = {
-      ...OUTPUT_TOOL,
-      function: {
-        ...OUTPUT_TOOL.function,
-        parameters: {
-          type: "object",
-          properties: { name: { type: "string" }, note: { type: "string" } },
-          required: ["name"],
-        },
-      },
-    };
-    const result = await runStructuredTask(makeArgs({ modelId: "qwen3.8-max", outputTool: tool }));
-
-    expect(JSON.parse(result)).toEqual({ name: "Ava" });
-    const second = mockStream.mock.calls[1][0];
-    expect(second.extraBody).toEqual({
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "emit_result",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: { name: { type: "string" }, note: { type: ["string", "null"] } },
-            required: ["name", "note"],
-            additionalProperties: false,
-          },
-        },
-      },
-    });
-    // Strict mode has no "json" precondition, so no cue turn is appended.
-    expect(second.messages).toHaveLength(2);
-  });
-
-  it("steps json_schema down to json_object when the endpoint rejects it, and remembers", async () => {
-    // Forced tool refused → fallback in json_schema → the endpoint says it
-    // does not take that either → one more request in json_object, which is
-    // where the model's next structured task starts.
-    mockStream.mockImplementationOnce(async () => {
-      throw new Error("Thinking mode does not support this tool_choice");
-    });
-    mockStream.mockImplementationOnce(async () => {
-      throw new Error("400 Invalid parameter: 'response_format' of type 'json_schema' is not supported with this model.");
-    });
-    mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
-      opts.onChunk({ text: '{"name":"Ava"}' });
-      opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
-      return {};
-    });
-
-    const args = makeArgs({ modelId: "qwen3.8-max", baseUrl: "https://relay/v1" });
-    expect(JSON.parse(await runStructuredTask(args))).toEqual({ name: "Ava" });
-    expect(mockStream).toHaveBeenCalledTimes(3);
-    expect(mockStream.mock.calls[1][0].extraBody).toMatchObject({ response_format: { type: "json_schema" } });
-    expect(mockStream.mock.calls[2][0].extraBody).toEqual({ response_format: { type: "json_object" } });
-
-    // Second task on the same endpoint+model: no json_schema attempt at all.
-    mockStream.mockReset();
-    mockStream.mockImplementationOnce(async () => {
-      throw new Error("Thinking mode does not support this tool_choice");
-    });
-    mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
-      opts.onChunk({ text: '{"name":"Kael"}' });
-      opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
-      return {};
-    });
-    await runStructuredTask(args);
-    expect(mockStream).toHaveBeenCalledTimes(2);
-    expect(mockStream.mock.calls[1][0].extraBody).toEqual({ response_format: { type: "json_object" } });
-  });
-
-  it("sends no JSON parameter on the fallback when the model's declaration is off", async () => {
-    mockStream.mockImplementationOnce(async () => {
-      throw new Error("Thinking mode does not support this tool_choice");
-    });
-    mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
-      opts.onChunk({ text: '{"name":"Ava"}' });
-      opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
-      return {};
-    });
-
-    await runStructuredTask(makeArgs({ modelId: "qwen3.8-max", structuredOutput: "off" }));
-
-    const second = mockStream.mock.calls[1][0];
-    expect(second.extraBody).toBeUndefined();
-    // The cue is the whole mechanism now, so it is always there.
-    expect(second.messages).toHaveLength(3);
-  });
-
   it("does not fall back on a genuine malformed-call error that happens to contain \"function call\"", async () => {
     mockStream.mockImplementationOnce(async () => {
       throw new Error("Invalid function call: missing required argument 'name'");
@@ -273,7 +170,7 @@ describe("runStructuredTask", () => {
       expect(mockStream).toHaveBeenCalledTimes(1);
       const only = mockStream.mock.calls[0][0];
       expect(only.tools).toBeUndefined();
-      expect(only.extraBody).toMatchObject({ response_format: { type: "json_schema" } });
+      expect(only.structured).toEqual({ schema: OUTPUT_TOOL.function });
     });
 
     it("still tries the tool when only json_object would be available", async () => {
@@ -341,30 +238,17 @@ describe("runStructuredTask", () => {
     });
 
     it("stops skipping once the endpoint has also refused json_schema", async () => {
-      // Both memos say no: forcing is downgraded and strict mode is gone, so
+      // Both ceilings say no: forcing is downgraded and strict mode is gone, so
       // the tool attempt under `auto` is again the stronger bet.
-      mockStream.mockImplementationOnce(async () => {
-        throw new Error("Thinking mode does not support this tool_choice");
-      });
-      mockStream.mockImplementationOnce(async () => {
-        throw new Error("400 Invalid parameter: 'response_format' of type 'json_schema' is not supported with this model.");
-      });
-      mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
-        opts.onChunk({ text: '{"name":"Ava"}' });
-        opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
-        return {};
-      });
-      // A category that does not predict the downgrade, so the first run tries the tool.
-      const generic = { ...qwenThinking, thinkingCategory: "openai-generic" as const };
-      await runStructuredTask(makeArgs(generic));
-
-      mockStream.mockReset();
+      noteLearned(qwenThinking, "forcedToolChoice", false);
+      noteLearned(qwenThinking, "structuredOutput", "json_object");
       mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
         opts.onChunk({ toolCalls: [{ index: 0, id: "c1", name: "emit_result", arguments: '{"name":"Ava"}' }] });
         opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
         return {};
       });
-      await runStructuredTask(makeArgs(generic));
+      // A category that does not predict the downgrade, so only the ceilings decide.
+      await runStructuredTask(makeArgs({ ...qwenThinking, thinkingCategory: "openai-generic" }));
       expect(mockStream.mock.calls[0][0].tools).toHaveLength(1);
     });
   });

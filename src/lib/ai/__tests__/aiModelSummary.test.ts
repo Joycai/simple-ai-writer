@@ -4,8 +4,7 @@
  * spelled as the wire spells it, and an undeclared model shows nothing at all.
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { __resetLearned } from "../capability/learned";
-import { noteJsonModeRefused } from "../jsonMode";
+import { __resetLearned, noteLearned } from "../capability/learned";
 import { declarationMarks, isMeasured, wireSummary, type WireInput } from "../modelSummary";
 
 afterEach(() => __resetLearned());
@@ -72,7 +71,7 @@ describe("wireSummary", () => {
     const claude: WireInput = { ...base, modelId: "claude-sonnet-5" };
     const url = "https://api.anthropic.com";
     expect(wireSummary(claude, "anthropic", url)).toContainEqual({ key: "output_config.format", value: "json_schema", scope: "structured" });
-    noteJsonModeRefused({ standard: "anthropic", baseUrl: url, modelId: "claude-sonnet-5" }, "json_schema");
+    noteLearned({ standard: "anthropic", baseUrl: url, modelId: "claude-sonnet-5" }, "structuredOutput", "json_object");
     expect(keys(wireSummary(claude, "anthropic", url))).not.toContain("output_config.format");
   });
 
@@ -170,7 +169,7 @@ describe("wireSummary", () => {
     const t = { standard: "openai_compat" as const, baseUrl: "https://relay/v1", modelId: "qwen3.8-max" };
     expect(wireSummary({ ...base, modelId: t.modelId }, t.standard, t.baseUrl, "dashscope"))
       .toContainEqual({ key: "response_format", value: "json_schema", scope: "structured" });
-    noteJsonModeRefused(t, "json_schema");
+    noteLearned(t, "structuredOutput", "json_object");
     expect(wireSummary({ ...base, modelId: t.modelId }, t.standard, t.baseUrl, "dashscope"))
       .toContainEqual({ key: "response_format", value: "json_object", scope: "structured" });
     // Another endpoint serving the same model id is unaffected.

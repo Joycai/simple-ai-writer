@@ -18,7 +18,6 @@
 
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
-import { withJsonModeFallback } from "../ai/jsonMode";
 import { planRequest } from "../ai/capability/plan";
 import { stripNulls } from "../ai/jsonSchemaStrict";
 import type { ContentPart, StreamMessage, ToolDefinition } from "../ai/types";
@@ -89,13 +88,6 @@ function forcedToolIsWasted(o: ConnOptions, outputTool: ToolDefinition): boolean
   return plan.toolChoice?.downgradedBy !== undefined && plan.structured === "json_schema";
 }
 
-/** The text a multimodal user turn carries, for the "json" precondition check. */
-function userText(content: string | ContentPart[]): string {
-  return typeof content === "string"
-    ? content
-    : content.map((p) => (p.type === "text" ? p.text : "")).join("\n");
-}
-
 /**
  * Run one structured task and resolve with the raw JSON string of the result
  * (already extracted, not yet parsed — callers own their schema validation).
@@ -160,41 +152,34 @@ export async function runStructuredTask(args: StructuredTaskArgs): Promise<strin
   // likely to volunteer clean JSON. The output tool's parameters go along as
   // the schema: on a model that takes strict `json_schema` mode, this path
   // enforces the same shape the tool path would have. An endpoint that rejects
-  // the mode says so with a 400 before generating; the runner steps down one
-  // mode and remembers (ai/jsonMode.ts), so the whole request is re-sent at
-  // most twice and never again for that endpoint this session.
-  const runJson = (): Promise<string> => withJsonModeFallback(
-    common,
-    `${args.systemPrompt}\n${args.jsonInstruction}\n${userText(args.userContent)}`,
-    args.outputTool.function,
-    async (json) => {
-      let acc = "";
-      args.onText?.("");
-      const messages: StreamMessage[] = [
+  // the mode says so with a 400 before generating; `streamCompletion` steps
+  // down one mode and remembers, so the request is re-sent at most twice and
+  // not again for that endpoint.
+  const runJson = async (): Promise<string> => {
+    let acc = "";
+    args.onText?.("");
+    const { structured } = await streamCompletion({
+      ...common,
+      messages: [
         { role: "system", content: `${args.systemPrompt}\n${args.jsonInstruction}` },
         { role: "user", content: args.userContent },
-      ];
-      if (json.cue) messages.push({ role: "user", content: json.cue });
-      await streamCompletion({
-        ...common,
-        messages,
-        extraBody: json.extraBody,
-        onChunk: (chunk) => {
-          if ("reasoning" in chunk) {
-            noteReasoning(chunk);
-          } else if ("text" in chunk) {
-            acc += chunk.text;
-            args.onText?.(acc);
-          }
-        },
-      });
-      const raw = extractJsonObject(acc);
-      // Strict mode made every optional field nullable so the schema could be
-      // sent at all; callers are written against *absent*, so take the nulls
-      // back out before they see it (see ai/jsonSchemaStrict.ts).
-      return json.mode === "json_schema" ? JSON.stringify(stripNulls(JSON.parse(raw))) : raw;
-    },
-  );
+      ],
+      structured: { schema: args.outputTool.function },
+      onChunk: (chunk) => {
+        if ("reasoning" in chunk) {
+          noteReasoning(chunk);
+        } else if ("text" in chunk) {
+          acc += chunk.text;
+          args.onText?.(acc);
+        }
+      },
+    });
+    const raw = extractJsonObject(acc);
+    // Strict mode made every optional field nullable so the schema could be
+    // sent at all; callers are written against *absent*, so take the nulls
+    // back out before they see it (see ai/jsonSchemaStrict.ts).
+    return structured === "json_schema" ? JSON.stringify(stripNulls(JSON.parse(raw))) : raw;
+  };
 
   if (forcedToolIsWasted(common, args.outputTool)) return runJson();
 
