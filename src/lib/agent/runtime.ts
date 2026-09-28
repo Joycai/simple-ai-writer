@@ -757,7 +757,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
   /**
    * After a thinking cut, how every remaining request of this run goes: `off`
    * sends the model's own thinking-off, `nudge` carries a notice (retracted after
-   * each request) to act without deliberating. Null until a cut happens.
+   * each request) to act without deliberating — one, the other, or both where
+   * the model's off is only its lowest level. Null until a cut happens.
    *
    * For the rest of the run, not only the retry. Measured on a 32k local model:
    * the retry happened to be a tool round, the round after it went back to full
@@ -765,7 +766,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
    * written — longer than no guard at all. Never written to the model's
    * settings: the next run starts from the author's own choice again.
    */
-  let thinkingFallback: "off" | "nudge" | null = null;
+  let thinkingFallback: { off: boolean; nudge: boolean } | null = null;
   /** The round right after a cut — the round-limit card is not asked twice for it. */
   let retryingAfterCut = false;
   /**
@@ -1078,7 +1079,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // retracted after each request like the notices above.
     retryingAfterCut = false;
     let answerNowNotice: StreamMessage | null = null;
-    if (thinkingFallback === "nudge") {
+    if (thinkingFallback?.nudge) {
       answerNowNotice = {
         role: "user",
         content: i18n.t("ai.instructions.thinkingBudgetAnswerNow", {
@@ -1123,7 +1124,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     try {
       await streamCompletion({
         ...pickConnOptions(opts),
-        ...(thinkingFallback === "off" ? { reasoningEffort: "off" as const } : {}),
+        ...(thinkingFallback?.off ? { reasoningEffort: "off" as const } : {}),
         messages: history,
         extraBody: opts.extraBody,
         tools: forceHandoff
@@ -1327,19 +1328,29 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // each request carries a notice. "On this wire" is the dial's own reading
     // (`effortMenuOnWire`): a model measured without an off level has its off
     // rewritten to low (`effortOnWire`), which would keep it thinking.
+    // Where the model's own off is only its lowest level (`offSpelling:
+    // "lowest"` — Gemini 3, Claude), off is sent *and* the notice rides along:
+    // measured, an unset Gemini row already thinks at about its lowest level,
+    // so off alone left the retry thinking as much as the round that was cut,
+    // while off with the notice was the leanest on both vendors
+    // (capability-resolution-lld.md §9.12).
     if (thinkingCut && !opts.signal.aborted) {
       thinkingCutUsed = true;
       retryingAfterCut = true;
       const wire = wireOf(opts);
       const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory, modelId: opts.modelId }, opts.standard, wire.platform);
       const offOnWire = effortMenuOnWire(category.menu, wire, capabilityModelOf(opts)).includes("off");
-      thinkingFallback = offOnWire || isOnOffCategory(category) ? "off" : "nudge";
+      const off = offOnWire || isOnOffCategory(category);
+      thinkingFallback = { off, nudge: !off || category.offSpelling === "lowest" };
       opts.onEvent({
         kind: "output-truncated",
         round,
         cause: "thinking-budget",
         thinkingOnly: true,
-        recovery: { kind: thinkingFallback === "off" ? "thinking-off" : "answer-now", attempt: 1 },
+        recovery: {
+          kind: thinkingFallback.off ? (thinkingFallback.nudge ? "thinking-low" : "thinking-off") : "answer-now",
+          attempt: 1,
+        },
         at: Date.now(),
       });
       // The author's round cap does not pay for the runtime's retry.

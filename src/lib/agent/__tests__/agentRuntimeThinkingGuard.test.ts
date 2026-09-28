@@ -100,6 +100,8 @@ describe("thinking guard", () => {
       thinkingOnly: true,
       recovery: { kind: "thinking-off", attempt: 1 },
     });
+    // Its off really is off, so there is nothing to ask of it on top.
+    expect(sent[1].messages.some((m) => String(m.content).includes(NOTICE))).toBe(false);
     // The cut round wrote nothing, so the transcript holds only the answer.
     expect(opts.messages.map((m) => m.role)).toEqual(["system", "user", "assistant"]);
   });
@@ -165,6 +167,43 @@ describe("thinking guard", () => {
     await runAgent(sol);
     expect(sent[1].reasoningEffort).toBe("off");
     expect(truncations(sol.events)[0].recovery).toEqual({ kind: "thinking-off", attempt: 1 });
+  });
+
+  // Gemini 3 and Claude have no true off: the wire sends their lowest level.
+  // Measured, an unset Gemini row already thinks at about that level, so off
+  // alone left the retry thinking as much as the cut round; off with the
+  // notice was the leanest on both (capability-resolution-lld.md §9.12).
+  it("sends off and the notice where the model's off is only its lowest level", async () => {
+    const lowest = [
+      { standard: "gemini_compat" as const, thinkingCategory: "gemini3" as const, modelId: "gemini-3.8-flash" },
+      { standard: "anthropic_compat" as const, thinkingCategory: "claude-adaptive" as const, modelId: "claude-sonnet-5" },
+    ];
+    for (const model of lowest) {
+      sent.length = 0;
+      spiral();
+      mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
+        sent.push({ ...opts, messages: [...opts.messages] });
+        opts.onChunk({ toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] });
+        opts.onChunk({ done: true, inputTokens: 50, outputTokens: 10 });
+      });
+      answer("写好了。");
+      const opts = makeOptions({
+        ...model,
+        preset: { id: "continue", tools: ["list_lore_entities"], maxRounds: 4, finishPolicy: "force-text" },
+      });
+
+      await runAgent(opts);
+
+      // Off on every request after the cut, and the notice on each of them too.
+      expect(sent.map((o) => o.reasoningEffort), model.thinkingCategory).toEqual([undefined, "off", "off"]);
+      for (const req of sent.slice(1)) {
+        expect(String(req.messages[req.messages.length - 1].content), model.thinkingCategory).toContain(NOTICE);
+      }
+      expect(sent[0].messages.some((m) => String(m.content).includes(NOTICE))).toBe(false);
+      expect(truncations(opts.events)[0].recovery).toEqual({ kind: "thinking-low", attempt: 1 });
+      // Retracted after each request, as for any model that gets the notice.
+      expect(opts.messages.some((m) => typeof m.content === "string" && m.content.includes(NOTICE))).toBe(false);
+    }
   });
 
   it("cuts at most once per run", async () => {

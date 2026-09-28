@@ -526,12 +526,13 @@ export type AgentEvent = AgentEventScope & (
        * rather than three identical lines. Absent on older events, and on the
        * surfaces that only report truncation without recovering from it.
        *
-       * `thinking-off` / `answer-now` — the runtime cut a round for its thinking
-       * budget (`cause: "thinking-budget"`) and retried it once, with thinking
-       * switched off for that one request where the model's category can say
-       * so, else with a notice to answer directly.
+       * `thinking-off` / `thinking-low` / `answer-now` — the runtime cut a
+       * round for its thinking budget (`cause: "thinking-budget"`) and retried
+       * it, with thinking switched off for the rest of the run where the
+       * model's category can say so, else with a notice to answer directly;
+       * `thinking-low` is both, for a model whose off is only its lowest level.
        */
-      recovery?: { kind: "text" | "tool-args" | "thinking-off" | "answer-now"; attempt: number };
+      recovery?: { kind: "text" | "tool-args" | "thinking-off" | "thinking-low" | "answer-now"; attempt: number };
       at: number;
     }
   | {

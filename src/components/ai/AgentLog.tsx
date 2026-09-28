@@ -173,6 +173,10 @@ function recoverySentence(t: TFunction, recovery: TruncationRecovery): string {
       return t("ai.agent.log.thinkingBudgetOff", {
         defaultValue: "思考用掉了窗口剩余空间的一半，还没开始作答 —— 已中止这一轮，关掉思考重答一次",
       });
+    case "thinking-low":
+      return t("ai.agent.log.thinkingBudgetLow", {
+        defaultValue: "思考用掉了窗口剩余空间的一半，还没开始作答 —— 已中止这一轮，这次任务余下的请求都把思考降到最低档（这个模型关不掉思考），并要求不展开思考",
+      });
     case "answer-now":
       return t("ai.agent.log.thinkingBudgetAnswerNow", {
         defaultValue: "思考用掉了窗口剩余空间的一半，还没开始作答 —— 已中止这一轮，要求直接作答重试一次",
