@@ -20,7 +20,9 @@ const generateImage = vi.fn(async (..._args: unknown[]) => ({
   images: [{ dataUrl: "data:image/png;base64,aGk=" }],
   usage: undefined,
 }));
-vi.mock("../../ai/image", () => ({
+// The real module otherwise: `imageConnOf` is what builds the conn under test.
+vi.mock("../../ai/image", async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
   generateImage: (...a: unknown[]) => generateImage(...a),
   isEditUnsupportedError: () => false,
 }));

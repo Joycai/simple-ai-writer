@@ -12,6 +12,7 @@ import {
   authModesFor, familyOf, parseTextVerbosity, type ApiStandard, type AuthMode, type ImageRoute, type TextVerbosity,
 } from "./types";
 import type { ImageDialect } from "./imageDialects";
+import { effectiveImageRoute, routeConventions } from "./imageRoute";
 import {
   parseReasoningEffort, parseThinkingCategory,
   type ReasoningEffort, type ThinkingCategoryId,
@@ -123,12 +124,15 @@ export interface ImageCaps {
 }
 
 /**
- * Default capabilities for a newly added image model, by wire protocol.
- * `openai_compat` is the conservative case: relays and xAI commonly expose
- * /images/generations but no /images/edits, and guessing "yes" there would
- * promise the author an edit button that always errors.
+ * Default capabilities for a newly added image model: first what every model
+ * on its *effective* route is known to do (`routeConventions` — a model left
+ * on 自动 on DashScope's native route edits like one declared there), then by
+ * wire protocol. `openai_compat` is the conservative case: relays and xAI
+ * commonly expose /images/generations but no /images/edits, and guessing "yes"
+ * there would promise the author an edit button that always errors.
  */
-export function defaultImageCaps(standard: ApiStandard): ImageCaps {
+export function defaultImageCaps(standard: ApiStandard, decl?: Pick<ImageCaps, "route">): ImageCaps {
+  if (routeConventions(effectiveImageRoute(standard, decl)).edit) return { edit: true };
   switch (standard) {
     case "openai":
     case "openai_responses":

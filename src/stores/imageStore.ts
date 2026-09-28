@@ -17,7 +17,7 @@
 import { create } from "zustand";
 import { nanoid } from "nanoid";
 
-import { generateImage, isEditUnsupportedError, type ImageResult } from "../lib/ai/image";
+import { generateImage, imageConnOf, isEditUnsupportedError, type ImageResult } from "../lib/ai/image";
 import type { Model, Provider } from "../lib/ai/configDb";
 import { imageForModel } from "../lib/image/normalize";
 import { imageRequestParams, inputImageSize, recordImageUsage } from "../lib/image";
@@ -277,17 +277,7 @@ function messageOf(e: unknown): string {
 
 function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<ImageResult> {
   return generateImage(
-    {
-      baseUrl: ctx.provider.baseUrl,
-      apiKey: ctx.apiKey,
-      standard: ctx.provider.apiStandard,
-      authMode: ctx.provider.authMode,
-      modelId: ctx.model.modelId,
-      safetySettings: ctx.provider.safetySettings,
-      route: ctx.model.caps?.route,
-      asyncTask: ctx.model.caps?.asyncTask,
-      comfy: ctx.model.caps?.comfy,
-    },
+    imageConnOf(ctx.model, ctx.provider, ctx.apiKey),
     {
       prompt,
       ...(ctx.negative ? { negative: ctx.negative } : {}),

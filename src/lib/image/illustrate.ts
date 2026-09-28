@@ -8,7 +8,7 @@
  */
 
 import i18n from "../../i18n";
-import { generateImage, isEditUnsupportedError, type ImageProgress } from "../ai/image";
+import { generateImage, imageConnOf, isEditUnsupportedError, type ImageProgress } from "../ai/image";
 import type { ToolProgress } from "../agent/events";
 import { imageCostFor } from "../ai/configDb";
 import type { IllustrateProposal } from "../agent/registry";
@@ -98,17 +98,7 @@ export async function runIllustration(
   }
 
   const apiKey = (await loadApiKey(provider.id)) ?? "";
-  const conn = {
-    baseUrl: provider.baseUrl,
-    apiKey,
-    standard: provider.apiStandard,
-    authMode: provider.authMode,
-    modelId: model.modelId,
-    safetySettings: provider.safetySettings,
-    route: model.caps?.route,
-    asyncTask: model.caps?.asyncTask,
-    comfy: model.caps?.comfy,
-  };
+  const conn = imageConnOf(model, provider, apiKey);
   // The model's declared dialect turns the proposal's aspect into whatever
   // fields its endpoint actually takes (Gemini ratio, GPT-Image pixel size…).
   // Edits get their own resolution: several dialects speak a narrower size

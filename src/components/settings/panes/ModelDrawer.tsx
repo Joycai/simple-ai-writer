@@ -82,6 +82,9 @@ import r from "./Routes.module.css";
 import { CapabilityMatrix } from "./CapabilityMatrix";
 import { ValueFactMatrix } from "./ValueFactMatrix";
 import { UpstreamSection } from "./UpstreamFields";
+import {
+  draftFromCaps, draftRoute, imageCapsToSave, routeSeed, showsAsyncToggle, type ImageCapsDraft,
+} from "./imageCapsDraft";
 
 /** i18n key per workflow-import parse failure (lib/comfy/workflow.ts). */
 const COMFY_ERR_KEYS: Record<ComfyParseError, string> = {
@@ -272,6 +275,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     ? categoriesForFamily(family).filter((c) => c !== "off")
     : null;
 
+  // The stored image section, as the draft the drawer edits.
+  const stored = draftFromCaps(existing?.caps);
   const [form, setForm] = useState({
     // ComfyUI takes no model id on the wire (it takes a whole node graph), but
     // the column is required and the save button gates on it — so seed it
@@ -289,10 +294,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     // not render as the empty field that means "send nothing".
     temperature: existing?.temperature !== undefined ? String(existing.temperature) : "",
     pricePerImage: existing?.pricePerImage ? String(existing.pricePerImage) : "",
-    capsSizes: (existing?.caps?.sizes ?? []).join(", "),
-    capsRoute: existing?.caps?.route ?? (comfySeed ? "comfyui" : ""),
+    capsSizes: stored.sizes.join(", "),
+    capsRoute: stored.route || (comfySeed ? "comfyui" : ""),
     // "" = generic (the free-form sizes list); otherwise a declared dialect.
-    capsDialect: (existing?.caps?.dialect ?? "") as ImageDialect | "",
+    capsDialect: stored.dialect,
     reasoningEffort: existing?.reasoningEffort ?? ("default" as ReasoningEffort),
     // "auto" ↔ stored undefined.
     thinkingCategory: (existing?.thinkingCategory ?? "auto") as ThinkingCategoryId | "auto",
@@ -318,11 +323,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   });
   // Out of `form` for a different reason: the price row below casts `form` to
   // Record<string, string> to index its fields, which a boolean would break.
-  const [capsEdit, setCapsEdit] = useState(existing?.caps?.edit ?? false);
+  const [capsEdit, setCapsEdit] = useState(stored.edit);
   // dashscope route only: the async submit-and-poll flow (wan text-to-image).
-  const [capsAsync, setCapsAsync] = useState(existing?.caps?.asyncTask ?? false);
+  const [capsAsync, setCapsAsync] = useState(stored.asyncTask);
   // comfyui route only: the imported API-format workflow JSON, verbatim.
-  const [comfyWorkflow, setComfyWorkflow] = useState(existing?.caps?.comfy?.workflow ?? "");
+  const [comfyWorkflow, setComfyWorkflow] = useState(stored.comfyWorkflow);
   // Import feedback — errors only; a healthy import renders its summary from
   // the workflow itself, so the two can never disagree.
   const [comfyError, setComfyError] = useState<string | null>(null);
@@ -606,6 +611,19 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     && knownJsonSchemaModel(catalogId);
 
   const sizes = form.capsSizes.split(",").map((x) => x.trim()).filter(Boolean);
+  // The image section as imageCapsDraft sees it. Every "which endpoint" question
+  // below — the async switch, what a save keeps, what a change seeds — reads
+  // the *effective* route through it, the answer the image client dispatches
+  // on (docs/feature/image-route.md).
+  const imageDraft: ImageCapsDraft = {
+    route: form.capsRoute as ImageRoute | "",
+    dialect: form.capsDialect,
+    edit: capsEdit,
+    asyncTask: capsAsync,
+    sizes,
+    comfyWorkflow,
+  };
+  const asyncShown = showsAsyncToggle(provider?.apiStandard, imageDraft);
 
   /**
    * The current route's fields as they would be saved — what `handleSave`
@@ -660,6 +678,19 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     }));
     setProbed({ at: prof.probedAt, ctx: prof.probedContextSize, out: prof.probedMaxOutput });
     setVlHighResolution(prof.vlHighResolution ?? false);
+    // An image model left on 自动 follows the route's family, so moving the
+    // route can move its pictures (Chat → images-api, native → DashScope) —
+    // the same seed the endpoint dropdown gives.
+    if (isImageModel) {
+      const seed = routeSeed(
+        draftRoute(provider?.apiStandard, imageDraft),
+        draftRoute(nextProvider.apiStandard, imageDraft),
+        form.capsSizes,
+      );
+      const seedSizes = seed.sizes;
+      if (seedSizes) setForm((f) => ({ ...f, capsSizes: seedSizes }));
+      if (seed.edit) setCapsEdit(true);
+    }
     setRoute(next);
     setPendingRoute(null);
   };
@@ -687,47 +718,15 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
       const parsedPerImage = parseFloat(form.pricePerImage);
       const parsedPerSecond = Number(form.pricePerSecond) || 0;
       const pricePerImage = isImageModel && parsedPerImage > 0 ? parsedPerImage : undefined;
-      // comfyui: input-image support is a fact of the imported workflow — the
-      // LoadImage count — not a declaration. Derived here instead of a
-      // checkbox, so it cannot disagree with the graph it describes.
-      const comfySlots = isComfy
-        ? (() => {
-            const parsed = parseComfyWorkflow(comfyWorkflow);
-            return "graph" in parsed ? analyzeComfyWorkflow(parsed.graph).loadImageNodes.length : 0;
-          })()
-        : 0;
       // Image-only settings. Cleared for other types so a model that used to be
       // an image model doesn't keep billing per image after being switched.
+      // `standard` is the route this drawer saves as `activeRoute` — the one
+      // the client will draw on; the stored row's own is for `maxRefs`.
       const caps = isImageModel
-        ? {
-            edit: isComfy ? comfySlots > 0 : capsEdit,
-            ...(isComfy && comfySlots > 0 ? { maxRefs: comfySlots } : {}),
-            // Off comfyui the drawer has no control for the cap, so it keeps
-            // the one the row came with (a starter row's 10 / 14) — rebuilding
-            // without it silently lifted the input-image limit on every save.
-            // Only while the row still speaks to the same endpoint the same
-            // way: a comfyui row's LoadImage count, or lite's 14 on a row
-            // switched to pro's dialect (10), would be a wrong limit, which is
-            // worse than none — the endpoint's own 400 costs nothing.
-            ...(!isComfy && existing?.caps?.maxRefs
-              && existing.caps.route !== "comfyui"
-              && (existing.caps.route ?? "") === form.capsRoute
-              && (existing.caps.dialect ?? "") === form.capsDialect
-              ? { maxRefs: existing.caps.maxRefs } : {}),
-            // A dialect belongs to cloud parameter vocabularies; on comfyui
-            // the free-form sizes list is the whole story.
-            ...(!isComfy && form.capsDialect ? { dialect: form.capsDialect as ImageDialect } : {}),
-            // A dialect supersedes the free-form list, but an existing list is
-            // kept so switching back to 通用 restores it untouched.
-            ...(sizes.length ? { sizes } : {}),
-            ...(form.capsRoute ? { route: form.capsRoute as ImageRoute } : {}),
-            // Only meaningful on the dashscope route; dropped elsewhere so a
-            // route change can't leave a stale flag steering the wrong client.
-            ...(form.capsRoute === "dashscope" && capsAsync ? { asyncTask: true } : {}),
-            // The workflow travels only while the route is comfyui — same
-            // clearing rule as asyncTask above.
-            ...(isComfy ? { comfy: { workflow: comfyWorkflow } } : {}),
-          }
+        ? imageCapsToSave(imageDraft, provider?.apiStandard, existing && {
+            caps: existing.caps,
+            standard: channel ? routeProvider(channel, activeFamily(existing, channel))?.apiStandard : undefined,
+          })
         : undefined;
       const shared = {
         providerId,
@@ -898,7 +897,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     form.prefix.trim() !== "" && t("aiConfig.models.prefixLabelShort"),
   ].filter(Boolean).join(" · ");
 
-  const imageHas = !!form.capsDialect || !!form.capsRoute || capsEdit || sizes.length > 0 || capsAsync || !!comfyWorkflow;
+  const imageHas = !!form.capsDialect || !!form.capsRoute || capsEdit || sizes.length > 0
+    || (asyncShown && capsAsync) || !!comfyWorkflow;
   const imageSum = [
     t(DIALECT_LABEL_KEY[isComfy ? "" : form.capsDialect] ?? DIALECT_LABEL_KEY[""]),
     t(ROUTE_LABEL_KEY[form.capsRoute] ?? ROUTE_LABEL_KEY[""]),
@@ -1221,7 +1221,12 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                   : { asrFormat: "" as const };
                 setForm({ ...form, type, ...asrSeed, ...(seedDialect ? { capsDialect: "nanobanana" as const } : {}) });
                 if (type === "image" && !existing && provider) {
-                  setCapsEdit(defaultImageCaps(provider.apiStandard).edit ?? false);
+                  // Both by the route the pictures would actually go to — 自动
+                  // on DashScope's native route is DashScope, and edits.
+                  const decl = form.capsRoute ? { route: form.capsRoute as ImageRoute } : undefined;
+                  setCapsEdit(defaultImageCaps(provider.apiStandard, decl).edit ?? false);
+                  const seedSizes = routeSeed(undefined, draftRoute(provider.apiStandard, imageDraft), form.capsSizes).sizes;
+                  if (seedSizes) setForm((f) => ({ ...f, capsSizes: seedSizes }));
                 }
                 // A section swap the author asked for: show the new one.
                 setOpen((o) => ({
@@ -1941,18 +1946,16 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 ]}
                 ariaLabel={t("aiConfig.models.capsRouteLabel")}
                 onChange={(capsRoute) => {
-                  setForm((f) => ({
-                    ...f,
-                    capsRoute,
-                    // Seed DashScope's conventions once: its image models all
-                    // edit, and sizes are written 宽*高. Only fills blanks —
-                    // an author's own list is never overwritten.
-                    ...(capsRoute === "dashscope" && !f.capsSizes
-                      ? { capsSizes: "1024*1024, 1328*1328" }
-                      : {}),
-                  }));
-                  // Every Seedream version takes reference images (10–14).
-                  if (capsRoute === "dashscope" || capsRoute === "ark") setCapsEdit(true);
+                  // Seed the conventions of the route the pictures now go to —
+                  // the effective one, so 自动 on the native route counts as
+                  // DashScope and picking it explicitly there changes nothing.
+                  const seed = routeSeed(
+                    draftRoute(provider?.apiStandard, imageDraft),
+                    draftRoute(provider?.apiStandard, { route: capsRoute as ImageRoute | "" }),
+                    form.capsSizes,
+                  );
+                  setForm((f) => ({ ...f, capsRoute, ...(seed.sizes ? { capsSizes: seed.sizes } : {}) }));
+                  if (seed.edit) setCapsEdit(true);
                 }} />
             </Field>
             {/* PR1 of the comfyui route cannot take input images — the
@@ -1976,7 +1979,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                   onChange={(e) => setForm({ ...form, capsSizes: e.target.value })} />
               </Field>
             </Fold>
-            <Fold open={form.capsRoute === "dashscope"}>
+            <Fold open={asyncShown}>
               <ToggleField
                 title={t("aiConfig.models.capsAsyncLabel")}
                 hint={t("aiConfig.models.briefAsync")}
