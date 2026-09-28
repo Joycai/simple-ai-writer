@@ -103,10 +103,12 @@ const SPELLING: Record<ProtocolFamily, SummarySpelling> = {
       ? { key: "generationConfig.responseJsonSchema", value: "strict", scope: "structured" }
       : { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" }),
   },
-  // The native parameters carry Chat Completions' names (dashscope.ts).
+  // The native parameters carry Chat Completions' names (dashscope.ts). Named
+  // bare, like every other item on this line: the `parameters` envelope is the
+  // adapter's, and prefixing one field alone read as if the rest were top-level.
   dashscope: {
     serverTools: (ids) => flatten(openaiServerToolsBody(ids)),
-    structured: (mode) => ({ key: "parameters.response_format", value: mode, scope: "structured" }),
+    structured: (mode) => ({ key: "response_format", value: mode, scope: "structured" }),
   },
   anthropic: {
     // The adapter sends `thinking` on every request for a dialect that has

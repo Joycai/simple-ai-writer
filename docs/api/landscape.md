@@ -2351,7 +2351,7 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 >
 > **信封。** `{model, input:{messages}, parameters:{…}}`。`parameters` 里的字段与 compatible-mode 的请求体同名同义：
 > `temperature` / `max_tokens` / `tools` + `tool_choice` / `enable_thinking` + `thinking_budget` / `reasoning_effort` /
-> `response_format` / `enable_search`，逐项实测生效。`result_format:"message"` 让回包是 `output.choices[].message`。
+> `response_format` / `enable_search`，逐项实测生效（`reasoning_effort` 的档位见下「思考」）。`result_format:"message"` 让回包是 `output.choices[].message`。
 >
 > **消息。** 与 Chat Completions 同形（`system` / `user` / `assistant` 带 `tool_calls` / `tool` 带 `tool_call_id`），唯一的
 > 区别是 content part：没有 `type`，直接是 `{text}` / `{image}` / `{video}` / `{file}`。`{image:"data:image/png;base64,…"}`
@@ -2371,7 +2371,10 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 > `event:error` + `:HTTP_STATUS/400` + `data:{code, message, request_id}`（图片尺寸的例子）。
 >
 > **思考。** qwen3.7：`enable_thinking:true` + `thinking_budget:256` 想（955 字），`enable_thinking:false` 不想。
-> qwen3.8：`reasoning_effort:"low"` 想，`enable_thinking:false` 不想；qwen3.8-max 默认就想。
+> qwen3.8：`enable_thinking:false` 不想；`enable_thinking:true` + `reasoning_effort:"low"` 想。qwen3.8-flash 与 qwen3.8-max
+> 什么都不发也想（3.8-flash 同一道题两次 235 / 244 个 `reasoning_tokens`）；只发 `reasoning_effort:"low"` 两次 146 / 120，
+> `"xhigh"` 两次 320 / 119——字段看来被读到了，但两次样本离散太大，**档位对深度的影响不作结论**。
+> `enable_thinking:false` 同时带 `reasoning_effort` 是 400：「'reasoning_effort' must be 'none' when 'enable_thinking' is false」。
 >
 > **强制工具。** `tool_choice:"required"` 与具名函数，思考关闭时：qwen3.8-flash 照办；**qwen3.7-flash 不理，用文字答**
 > ——在 compatible-mode 上也一样，是模型的性质，不是这一面的。
@@ -2405,7 +2408,7 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
   OpenAI 兼容层并存。原生接口能拿到 `num_ctx` 之类的本地参数。
 - **Cohere `/v2/chat`** —— 自有 shape。
 - **阿里 DashScope 原生** —— `input.messages` + `parameters` 两段式；对话面的实测见 §7 第二十一个样本。
-- **AWS Bedrock Converse `POST /model/{id}/converse`** —— 实际上是第五种独立
+- **AWS Bedrock Converse `POST /model/{id}/converse`** —— 实际上是又一种独立
   body：`system` 是独立数组、content 恒为 block 数组、camelCase 命名、
   `inferenceConfig` / `toolConfig` 分组、`additionalModelRequestFields` 兜住厂商
   私有参数、usage 为 `inputTokens`/`outputTokens`/`cacheReadInputTokens`。

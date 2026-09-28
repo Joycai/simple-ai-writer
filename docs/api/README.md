@@ -46,7 +46,7 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 
 ## 本目录不覆盖
 
-- **AWS Bedrock Converse** —— 它其实是第五种独立 body（见
+- **AWS Bedrock Converse** —— 它其实是又一种独立 body（与本项目接的第五族 DashScope 原生不是一回事；见
   [`landscape.md`](landscape.md) §7），但需要 SigV4 签名，本项目短期不会接。
   记录存在性即可，不展开。
 - **MCP** —— 工具与上下文的协议，与模型 API 正交，不在这一层。

@@ -122,8 +122,8 @@ const SEARCH_HINT_KEY: Record<ProtocolFamily, string> = {
   responses: "aiConfig.models.serverToolsHintResponses",
   gemini: "aiConfig.models.serverToolsHintGemini",
   anthropic: "aiConfig.models.serverToolsHint",
-  // The same `enable_search`, moved into `parameters`.
-  dashscope: "aiConfig.models.serverToolsHintOpenai",
+  // The same `enable_search`, inside the native `parameters`.
+  dashscope: "aiConfig.models.serverToolsHintDashscope",
 };
 const EXTRACT_HINT_KEY: Record<ProtocolFamily, string> = {
   openai: "aiConfig.models.serverToolsHintExtractor",

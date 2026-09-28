@@ -1,5 +1,5 @@
 /**
- * Endpoint URLs for the four wire protocols — every base-URL default and every
+ * Endpoint URLs for the five wire protocols — every base-URL default and every
  * path built on it lives here.
  *
  * It exists because the ecosystems disagree about what a "base URL" *is*,
