@@ -62,10 +62,10 @@ token（`usage.prompt_tokens_details.video_tokens`）：
    三层：协议那一层是适配器有没有拼法（`spelledMedia`：图片五族都有，视频只有 ①，PDF 除原生外都有），总是生效；模型那一层是声明
    （类型看不看图、`videoInput`、`pdfInput`）；平台那一层是能力格（`videoInput` / `pdfInput`，按 id 与中转上游），只对声明发问。
    `ConnOptions` 带上三项声明，`planRequest` 产出 `RequestPlan.media`；决定建不建 part 的门——输入框的视频门 `canReadVideo`、PDF 子代理的资格 `readsPdf`——经 `conn.ts` 的
-   `admittedMediaOf` 读同一个组合，「将发送」的 fps 行读 `plan.media.video`。三处不再各问一遍能力表，`mediaAdmission.test.ts`
+   `admittedMediaOf` 读同一个组合，「将发送」的 fps 行读 `plan.clipFps`（见下面「片段的 fps 也按请求决定」）。三处不再各问一遍能力表，`mediaAdmission.test.ts`
    随机走全部平台 × 线路 × 声明 × 中转上游，钉住它们逐格相等。
 2. **投影，不改写。** `streamCompletion` 在一切读 `messages` 的环节（token 估算、图片载荷门、API 日志、适配器）之前调
-   `admitMedia(messages, plan.media)`：不放行的 part 换成一句给模型读的英文说明（`[video clip not sent: …]`），文字保留
+   `admitMedia(messages, plan.media, plan.clipFps)`（片段的 fps 也在这里写，见下面一小节）：不放行的 part 换成一句给模型读的英文说明（`[video clip not sent: …]`），文字保留
    （`withoutParts`，与裁剪、落盘同一条规则）。返回新数组，历史本身一个字节不动——切回收得下的模型，视频原样再发。
 3. **适配器只剩后备。** 四个适配器对拼不出的 part 统一抛 `unsendablePart`；正常路径到不了，`mediaHistory.test.ts` 走真实的
    `streamCompletion` 证明这一点（随机 平台 × 线路 × 声明 × 历史，外加「切原生再切回」「不看图的模型 + 历史图片」两个场景）。
@@ -86,6 +86,12 @@ token（`usage.prompt_tokens_details.video_tokens`）：
 - **压缩与上下文条仍按未投影的历史估**：`compact.ts` 的折叠规划、`compactRun` / `skillStateRun` 的前后对比、`contextBreakdown.ts`
   的上下文条。换过模型之后，这里的数可能与实际发出的不同，两个方向都有（收不下的媒体多算；附加时 0.5、现在按缺省发的片段少算）。
   它们不决定请求发不发——超窗由上面的运行时裁剪兜住——所以不在本次一并改；要改也是读同一个 `mediaProjection`。
+  但**自动归纳会改写历史**（`chatJob.ts` → `compact.ts` 的 `planFold`），多算那一侧有代价：片段附在智谱（历史里不带 `fps`，
+  按缺省计 ≈35.6k），切到声明 0.5 的百炼（实际发 ≈8.9k），归纳线落在两者之间时，每一轮前都会多做一次计费的归纳请求，
+  片段那一轮若在保留的轮次之外会被折进摘要、从历史里没了——而这一轮本来装得下。作者的出路：关掉自动归纳，或切回附加时的模型。
+  （整体 review 第 1 轮 N1；是否让归纳也读 `mediaProjection` 由作者定。）
+- **裁剪会删掉这一轮本来只发说明句的媒体**（既有行为，整体 review 第 1 轮 N2）：运行时按投影称量之后，这类媒体只按说明句计，
+  删掉它腾不出空间，但 `trimHistory` 的第一轮循环照样把它写成省略说明——切回收得下的模型时它已经不在了。另开任务处理。
 - **手拼的请求（探针、live 测试）不带声明，发协议拼得出的一切**，不看平台格。平台格是量出来的，而 `live.video-input.test.ts`
   这类探针正是去量它的：若它也受格约束，一个没测过的平台收到的永远是说明句，探针量到的是表而不是平台（片 3 review F1）。
   协议那一层照样生效，适配器的后备报错到不了。
