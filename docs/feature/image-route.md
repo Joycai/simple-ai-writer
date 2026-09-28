@@ -1,6 +1,6 @@
 # 出图接口：声明值与有效路线
 
-> 状态：`planned`（2026-09-28）。起因是 [`dashscope-native-plan.md`](../api/dashscope-native-plan.md) §3 的一条边界；
+> 状态：`shipped`（2026-09-28）。起因是 [`dashscope-native-plan.md`](../api/dashscope-native-plan.md) §3 的一条边界；
 > 各出图接口的报文见 [`image-generation-plan.md`](image-generation-plan.md)。
 
 ## 1. 问题的形状
@@ -59,16 +59,17 @@ routeConventions(route)                   // 某条接口上「所有模型都�
 | 读者 | 以前 | 现在 |
 |---|---|---|
 | 出图客户端 `generateImage` | `resolveImageRoute(standard, conn.route)`，派发时读 `conn.asyncTask` | `effectiveImageRoute` + `effectiveAsyncTask`；`resolveImageRoute` 删除 |
+| 组 conn 的两处调用方（`imageStore`、`illustrate.ts`） | 各抄一遍九个字段 | `imageConnOf(model, providerFor(model), key)`：声明值原样带上，解析留给客户端 |
 | 生图弹窗「chat 线路没有张数 / 尺寸」 | `resolveImageRoute(...) === "chat"` | `effectiveImageRoute(...) === "chat"` |
 | 抽屉：异步开关是否出现 | `form.capsRoute === "dashscope"` | `showsAsyncToggle(standard, draft)` → 有效路线 |
-| 抽屉：保存时留不留 `asyncTask` | `form.capsRoute === "dashscope" && capsAsync` | `imageCapsToSave` → `effectiveAsyncTask` |
+| 抽屉：保存时留不留 `asyncTask` | `form.capsRoute === "dashscope" && capsAsync` | `imageCapsToSave`：开关在屏上（`showsAsyncToggle`）且开着——存下的就是作者看到的 |
 | 抽屉：保存时留不留 `maxRefs` | 声明值相同 | 有效路线相同（保存前的线路 vs 现在的线路） |
 | 抽屉：改图 / 尺寸预填 | 选中 dashscope / ark 时 | 有效路线**变成** dashscope / ark 时——下拉改了，或模型的线路切了 |
 | 新图片模型的改图缺省 `defaultImageCaps` | 只看 `standard` | 先看有效路线的 `routeConventions`，再看 `standard` |
 | 「将发送」里的 `route` | 只在声明时列出 | 恒列有效路线——「自动」到底是哪个接口，在这一行看得到 |
 
-抽屉的出图字段收进 `src/components/settings/panes/imageCapsDraft.ts`（`ImageCapsDraft` / `imageCapsToSave` /
-`showsAsyncToggle` / `routeSeed`）：组件只管状态，判断是纯函数。这样「抽屉和客户端是否一致」能直接拿两边的
+抽屉的出图字段收进 `src/components/settings/panes/imageCapsDraft.ts`（`ImageCapsDraft` / `draftFromCaps` /
+`imageCapsToSave` / `draftRoute` / `showsAsyncToggle` / `routeSeed`）：组件只管状态，判断是纯函数。这样「抽屉和客户端是否一致」能直接拿两边的
 真函数去测，而不是在测试里再抄一遍抽屉的逻辑。
 
 ## 3. 为什么不是别的形状
@@ -82,8 +83,13 @@ routeConventions(route)                   // 某条接口上「所有模型都�
 ## 4. 测试
 
 - `src/lib/ai/__tests__/imageRoute.test.ts`：推导表逐族；`effectiveAsyncTask` 只在 dashscope 上为真；
-  源码守卫——`caps.route` / `capsRoute` / `conn.route` 不许直接和 `images-api` / `gemini` / `dashscope` 比。
+  源码守卫——`caps.route` / `capsRoute` / `conn.route` / `draft.route` 不许直接和 `images-api` / `gemini` / `dashscope` 比。
 - `src/components/settings/panes/__tests__/imageRouteAgreement.test.ts`：属性测试。随机的
   （协议族，声明值，asyncTask）以及随机的编辑序列（改下拉、拨开关、切线路、保存再打开），每次保存后用真的
   `generateImage`（`fetch` 打桩）看请求打到哪个 URL、带不带 `X-DashScope-Async`，断言与抽屉此刻显示的有效路线
-  和异步开关一致；并单独钉住第 2 轮的回归：原生线路上「DashScope 原生 + 异步 → 改回自动 → 保存」之后仍走异步任务。
+  和异步开关一致，且保存前后抽屉显示的一样；并单独钉住两件事：第 2 轮的回归（原生线路上「DashScope 原生 + 异步 → 改回自动 →
+  保存」之后仍走异步任务），与 §3 原来的边界（原生线路上的「自动」打 DashScope 原生，不再 404）。
+- 随机游走**按权重偏向**原生线路、「自动」与异步开关：均匀抽样时 359 次保存里一次也没走到「原生 · 自动 · 异步开着」，
+  把第 2 轮的写法放回去测试照样全绿。加权后 885 次保存里有 44 次落在那里，放回去就挂。
+- 两边共用同一个主人，所以把推导规则改回旧的，「一致性」那两条仍然绿——它们证明的是一致，不是对错；对错由上面两条钉住的
+  用例和 `imageRoute.test.ts` 的逐族推导表负责。
