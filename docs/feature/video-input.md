@@ -1,6 +1,6 @@
 # 视频输入：对话里 `@` 一段视频给能读视频的模型
 
-> **状态：`shipped`**（2026-09-14）。实测只覆盖千问 DashScope 兼容模式 Chat Completions；其他厂商的视频输入**没有**接，也没有测。
+> **状态：`shipped`**（2026-09-14）。token、`fps` 与片段限制只在千问 DashScope 兼容模式 Chat Completions 上量过。收不收 `video_url` 另测了五家（2026-09-28，landscape §7 第十九个样本）：智谱、火山方舟 Coding Plan 收，DeepSeek、xAI、OrcaRouter 不收，门按平台判定（不变量 1）。
 > 代码：`src/lib/ai/videoInput.ts`（门、内容块、fps、token 估算）· `src/lib/fs/video.ts`（读文件、MP4/MOV 头解析）· `src/lib/agent/chatRefs.ts`（组装）· `src/lib/agent/imageHistory.ts` + `runtime.ts`（历史里只留最新一段）· 设置在 `ModelDrawer.tsx` 能力 → 输入。
 
 ## 1. 作者的两个决定
