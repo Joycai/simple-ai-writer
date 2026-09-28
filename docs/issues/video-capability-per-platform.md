@@ -1,7 +1,8 @@
 # 视频输入按平台判定（能力判定 C4）
 
 > **状态：open。** 作者 2026-09-19 定为搁置、记入待办。行为今天没有错到出事的程度，但判据放错了层；
-> 动手的前提是几条实测样本，不是代码。设计与上下文见 [`../api/capability-gating-plan.md`](../api/capability-gating-plan.md) §4 C4、§7 第 2 条。
+> 动手的前提是几条实测样本，不是代码。**2026-09-28 样本已补齐大半**（见「实测结果」）：只剩 OpenAI 官方与火山方舟按量付费没量，
+> 其余足以按「做法」改表。设计与上下文见 [`../api/capability-gating-plan.md`](../api/capability-gating-plan.md) §4 C4、§7 第 2 条。
 
 ## 现象
 
@@ -37,6 +38,23 @@
 
 每条要看三件事：HTTP 状态；模型是否真的描述了画面（200 而内容与视频无关 = 静默丢弃，按不收记）；
 `usage` 里有无视频 token。
+
+## 实测结果（2026-09-28）
+
+`live.video-input.test.ts`，一段 4 秒红转蓝的片段，走应用自己的 `videoPart` 与 openai 适配器。逐条数据在 landscape.md §7 第十九个样本。
+
+| 平台 | 收不收 `video_url` | `fps` | 按「做法」该写的格 |
+| --- | --- | --- | --- |
+| 百炼（对照） | 收 | 生效 | `true`（已知） |
+| 火山方舟 Coding Plan | **收**，读对了画面 | 两种拼法都不改这段片段的账单 | `videoInput: true`；`videoFps` 不写（未定） |
+| DeepSeek | 不收：422 点名 `video_url` 不是可接受的类型 | — | `false` |
+| xAI | 不收：400 `Empty content block` | — | `false` |
+| OrcaRouter ① | 不收：Gemini **静默丢弃**（200、答错、token 不变），GPT 400 | — | `false` |
+| OpenAI 官方 | 未量（本机无 key） | — | 不写，落到「未列出」 |
+| 火山方舟按量付费 | 未量（本机只有 Coding Plan 的 key） | — | 不写；与 Coding Plan 同源，大概率同样收，但按规矩要样本 |
+
+- OrcaRouter 那一条最要紧：不报错，作者看不出视频没到。按族放行的今天，它正是「看起来发了、其实没到」。
+- 火山方舟收视频，说明「只有千问一族」的说法太窄；「按平台点名」的做法不受影响。
 
 ## 待决
 
