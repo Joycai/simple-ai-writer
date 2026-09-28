@@ -672,6 +672,43 @@ describe("zhipu", () => {
   });
 });
 
+// A `video_url` part is a vendor extension (capability-gating-plan C4): sent
+// where a sample saw a clip read, refused by name where one saw it refused or
+// dropped, never to a platform nobody tried — and to a relay, at `unknown`.
+describe("videoInput", () => {
+  const verdictOn = (platform: Wire["platform"], standard: Wire["standard"] = "openai_compat", type: "vision" | "text" = "vision") =>
+    capabilityVerdict("videoInput", { platform, standard }, { type });
+  it("is measured on the platforms that read a clip", () => {
+    for (const p of ["dashscope", "dashscope-intl", "zhipu", "volcengine-plan"] as const) {
+      expect(verdictOn(p), p).toEqual({ status: "yes", reason: "measured" });
+    }
+  });
+  it("is absent, by measurement, where a clip was refused or silently dropped", () => {
+    for (const p of ["deepseek", "xai", "orcarouter"] as const) {
+      expect(verdictOn(p), p).toEqual({ status: "no", reason: "platform-absent" });
+    }
+  });
+  it("is not sent to a platform nobody measured, official OpenAI included", () => {
+    expect(verdictOn("openai", "openai")).toEqual({ status: "no", reason: "platform-unlisted" });
+    for (const p of ["volcengine", "minimax", "ollama", "comfyui"] as const) {
+      expect(verdictOn(p), p).toEqual({ status: "no", reason: "platform-unlisted" });
+    }
+  });
+  it("is a relay's to try", () => {
+    for (const p of ["newapi", "custom"] as const) expect(verdictOn(p), p).toEqual({ status: "unknown", reason: "relay" });
+  });
+  it("stays on Chat Completions, and on models that see", () => {
+    expect(verdictOn("dashscope", "openai_responses_compat")).toEqual({ status: "no", reason: "family" });
+    expect(verdictOn("volcengine-plan", "anthropic_compat")).toEqual({ status: "no", reason: "family" });
+    expect(verdictOn("dashscope", "openai_compat", "text")).toEqual({ status: "no", reason: "model-type" });
+  });
+  it("takes its fps along only where DashScope's knob is read", () => {
+    const fps = (p: Wire["platform"]) => hasCapability("videoFps", { platform: p, standard: "openai_compat" }, { type: "vision" });
+    expect(fps("dashscope")).toBe(true);
+    for (const p of ["zhipu", "volcengine-plan", "deepseek"] as const) expect(fps(p), p).toBe(false);
+  });
+});
+
 // DashScope's vision knobs belong to the platforms that read them: its own two,
 // plus the host-less relays that may front it — never a hosted vendor that
 // merely speaks the same family (智谱 ignores both, landscape.md §7 第十四个样本).

@@ -388,7 +388,8 @@ export interface Model {
    * qwen3-vl-flash and qwen3.8-flash read video behind a DashScope endpoint
    * where other vision models may not, and no probe can ask without spending
    * a real clip. Honoured only where `canReadVideo` (lib/ai/videoInput) says —
-   * a model that can see, on the `openai` family. Absent means no.
+   * a model that can see, on a Chat Completions wire the capability table
+   * gives `videoInput` (per platform, as measured). Absent means no.
    */
   videoInput?: boolean;
   /**

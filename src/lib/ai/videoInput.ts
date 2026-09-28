@@ -40,9 +40,11 @@ export function clampVideoFps(value: unknown): number | undefined {
  *
  * Three conditions, all required: the author declared it (no probe can ask
  * without spending a real clip), the model reads pictures at all, and the
- * provider's wire has a `video_url` part — the capability table's
- * `videoInput`, today Chat Completions on every platform (per-platform cells
- * are shelved until measured, capability-gating-plan C4). The family is not a formality — on
+ * provider's wire takes a `video_url` part — the capability table's
+ * `videoInput`: Chat Completions, on the platforms a sample saw read a clip
+ * (and a relay, which may front one of them; capability-gating-plan C4). The
+ * part is a vendor extension, and one platform drops it without a word, so an
+ * unmeasured platform is not sent it. The family is not a formality either — on
  * DashScope's Responses surface qwen3-vl-plus is `Unsupported model`, and a
  * `video_url` part there once came back as an empty answer with no error; the
  * Gemini and Anthropic adapters have no spelling for the part. Gating here is

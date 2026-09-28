@@ -56,26 +56,26 @@
 
 ## videoInput
 
-`native` · 规则缺省适用的协议族：Chat
+`private` · 规则缺省适用的协议族：Chat
 
 | 平台 | Chat | Resp | Gemini | Anth |
 | --- | --- | --- | --- | --- |
-| openai | ✓ protocol | · |  |  |
+| openai | · | · |  |  |
 | anthropic |  |  |  | · |
 | google |  |  | · |  |
-| deepseek | ✓ protocol | · |  | · |
-| dashscope | ✓ protocol | · |  | · |
-| dashscope-intl | ✓ protocol | · |  |  |
-| xai | ✓ protocol | · |  |  |
-| minimax | ✓ protocol |  |  | · |
-| volcengine | ✓ protocol | · |  |  |
-| volcengine-plan | ✓ protocol | · |  | · |
-| zhipu | ✓ protocol |  |  |  |
-| orcarouter | ✓ protocol | · | · | · |
-| newapi | ✓ protocol | · | · | · |
-| ollama | ✓ protocol |  |  |  |
-| comfyui | ✓ protocol |  |  |  |
-| custom | ✓ protocol | · | · | · |
+| deepseek | · | · |  | · |
+| dashscope | ✓ measured | · |  | · |
+| dashscope-intl | ✓ measured | · |  |  |
+| xai | · | · |  |  |
+| minimax | · |  |  | · |
+| volcengine | · | · |  |  |
+| volcengine-plan | ✓ measured | · |  | · |
+| zhipu | ✓ measured |  |  |  |
+| orcarouter | · | · | · | · |
+| newapi | ? relay | · | · | · |
+| ollama | · |  |  |  |
+| comfyui | · |  |  |  |
+| custom | ? relay | · | · | · |
 
 ## videoFps
 

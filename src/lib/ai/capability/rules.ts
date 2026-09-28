@@ -74,9 +74,12 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // 智谱 takes both with a 200 and bills the same tokens either way
   // (landscape.md §7 第十四个样本). A relay may front DashScope.
   vlHighResolution: { families: ["openai"], origin: "private", relay: "unknown", modelTypes: SEES_IMAGES },
-  // A `video_url` part: Chat Completions only (lib/ai/videoInput). Still
-  // family-wide — per-platform gating is shelved until measured (plan C4).
-  videoInput: { families: ["openai"], origin: "native", modelTypes: SEES_IMAGES },
+  // A `video_url` part (lib/ai/videoInput). Not a Chat Completions part type:
+  // a vendor extension, so it reaches only the platforms a sample saw take it
+  // (landscape.md §7 第六 / 第十四 / 第十九个样本). One refusal is silent — a
+  // 200 that answers as if no clip came — which is why an unmeasured platform
+  // is not sent it. A relay may front one that takes it (capability-gating-plan C4).
+  videoInput: { families: ["openai"], origin: "private", relay: "unknown", modelTypes: SEES_IMAGES },
   videoFps: { families: ["openai"], origin: "private", relay: "unknown", modelTypes: SEES_IMAGES, requires: ["videoInput"] },
   // `tool_choice: required | {function}` being honoured.
   forcedToolChoice: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native" },

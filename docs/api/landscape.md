@@ -2239,8 +2239,9 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 - 花费：Claude $0.94、Gemini $0.23（OrcaRouter 报价）。一道题、每格 5 次，只看方向。
 ### 第十九个样本：视频输入补测——① 族的 `video_url` 片段，六个端点（2026-09-28 实测）
 
-`video_url` 不在 Chat Completions 规范里，是千问一族兼容端的扩展；能力表今天按族放行，① 族平台都会被发它
+`video_url` 不在 Chat Completions 规范里，是千问一族兼容端的扩展；测的时候能力表按族放行，① 族平台都会被发它
 （[`../issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)）。这里各发一次。
+这条样本写成格子之后改为按平台判定（C4，[`capability-gating-plan.md`](capability-gating-plan.md) §9）。
 
 **做法**（`live.video-input.test.ts`，走应用自己的 `videoPart` 与真实 openai 适配器）：一段猜不出来的 4 秒片段——前 2 秒纯红、后 2 秒纯蓝，
 640×480、25 fps、5 KB（`fs/__tests__/fixtures/v4s_640_red_blue.mp4`）。问「先后出现了哪两种颜色」，看三件事：HTTP 状态；

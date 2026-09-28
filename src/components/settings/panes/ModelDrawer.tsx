@@ -62,6 +62,7 @@ import {
 } from "../../../lib/ai/jsonMode";
 import { isMeasured, valueFacts, wireSummary, type WireItem } from "../../../lib/ai/modelSummary";
 import { categoryNote, contextNote, effortForNewId, maxOutputNote, sourceName } from "./valueNotes";
+import { declNotSentNote } from "./declNotes";
 import {
   canSeeImages, defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, MAX_TEMPERATURE, MODEL_TYPES,
   TRANSLATE_FORMATS, ASR_FORMATS,
@@ -375,6 +376,17 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     w && resolvedUpstream.upstream && capabilityVerdict(id, w, capModel).reason === "upstream"
       ? t("aiConfig.upstream.notSent", { upstream: t(`aiConfig.upstream.name.${resolvedUpstream.upstream}`) })
       : undefined;
+  // The hint under a declaration this route won't send, by the verdict's
+  // reason (panes/declNotes): no spelling on the route, the relay's upstream,
+  // a platform measured refusing it, one nobody measured… each in its words.
+  const notSentHint = (id: CapabilityId, m: Parameters<typeof hasCapability>[2]) => {
+    const routeName = route ? ROUTE_LONG[route] : "";
+    return curWire
+      ? declNotSentNote(t, capabilityVerdict(id, curWire, m).reason, {
+        route: routeName, platform: curWire.platform, modelId: form.modelId.trim(), upstream: resolvedUpstream.upstream,
+      })
+      : t("aiConfig.models.declNotOnRoute", { route: routeName });
+  };
   // Whether this model takes whole PDFs as message content (lib/ai/configDb).
   const [pdfInput, setPdfInput] = useState(existing?.pdfInput ?? false);
   // DashScope high-resolution image reading (Model.vlHighResolution).
@@ -513,7 +525,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // each exists only for a model that reads pictures. Hi-res and clip fps are
   // DashScope's private knobs — 智谱 takes both and ignores them — and fps also
   // requires the clip part itself (capabilities.ts `requires`). A `video_url`
-  // part is Chat Completions only (lib/ai/videoInput).
+  // part is Chat Completions only, on the platforms measured taking it
+  // (lib/ai/videoInput, capability-gating-plan C4).
   // `text.verbosity` — the Responses family's field.
   const verbosityWire = can("textVerbosity", capModel);
   // The Sakura translation declaration: a text model on Chat Completions.
@@ -755,8 +768,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // Same clearing rule: only where the switch is shown.
         vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
         // A model declaration like the PDF one: kept across routes, and
-        // honoured only where `canReadVideo` says (a seeing model on Chat
-        // Completions). The fps goes with the switch (off = nothing kept).
+        // honoured only where `canReadVideo` says (a seeing model on a Chat
+        // Completions wire whose platform takes the part). The fps goes with
+        // the switch (off = nothing kept).
         videoInput: canSeeImages(form) && videoInput ? true : undefined,
         videoFps: canSeeImages(form) && videoInput ? clampVideoFps(videoFpsText) : undefined,
         // Cleared on the same rule, and the stakes are higher here than for the
@@ -1627,7 +1641,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 title={t("aiConfig.models.pdfInputLabel")}
                 hint={pdfWire
                   ? t("aiConfig.models.briefPdf")
-                  : upstreamRefuses(curWire, "pdfInput") ?? t("aiConfig.models.declNotOnRoute", { route: route ? ROUTE_LONG[route] : "" })}
+                  : notSentHint("pdfInput", capModel)}
                 on={pdfInput}
                 onChange={setPdfInput}
                 {...whyProps("pdf", t("aiConfig.models.pdfInputHint"))}
@@ -1652,7 +1666,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             <Fold open={videoWire || (videoInput && canSeeImages(form))}>
               <ToggleField
                 title={t("aiConfig.models.videoInputLabel")}
-                hint={videoWire ? t("aiConfig.models.briefVideo") : t("aiConfig.models.declNotOnRoute", { route: route ? ROUTE_LONG[route] : "" })}
+                hint={videoWire ? t("aiConfig.models.briefVideo") : notSentHint("videoInput", { type: form.type })}
                 on={videoInput}
                 onChange={setVideoInput}
                 {...whyProps("video", t("aiConfig.models.videoInputHint"))}
