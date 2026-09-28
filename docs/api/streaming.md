@@ -91,6 +91,24 @@ data: {"error": {"message": "insufficient credits", "type": "…", "code": "…"
 正常的回复——而被丢掉的通常正是 system 指令。没有任何字段会说明这件事发生过。
 唯一的防御是发送前自己估算并拦截。
 
+### 3.5 请求被拒：报文的几种形状
+
+与上面四种相反，这一种**会**响——非 2xx——但报文的形状各家不同，而且**不一定是 JSON 正文**：
+
+| 谁 | 报文 | 出处 |
+| --- | --- | --- |
+| ① ② OpenAI 与兼容层 | `{error:{message, type, param, code}}`，`code` 可以是 `null`；**`param` 常常是唯一点名字段的地方**（`message` 只说 `Invalid value: 'required'…`） | 官方文档 |
+| 百炼 compatible-mode（①） | 同上的对象，顶层多一个 `request_id`；思考中拒强制 `tool_choice` 时，400 的正文是**一行 SSE**：`data: {"error":{…}}` | 实测，[`landscape.md`](landscape.md) §7 第二十二个样本 |
+| ④ Anthropic | `{type:"error", error:{type, message}}`，顶层 `request_id`；没有 `code`，`type`（`overloaded_error` 等）就是分类 | 官方文档 |
+| ③ Gemini | `{error:{code: <数字>, message, status:"INVALID_ARGUMENT", details:[…]}}`；它的 OpenAI 兼容层把同一个对象包在一元素数组里 `[{error:…}]` | 官方文档；数组包装未实测 |
+| DashScope 原生 | 裸 `{code, message, request_id}`；请求带 `X-DashScope-SSE` 时，400 的正文是一帧 SSE（`event:error` + `data:{…}`），不带是 JSON | 实测，第二十一、二十二个样本 |
+| 百炼 ④ 面 | 裸 `{message, type}`（坏 key 403） | 实测，`landscape.md` §7 |
+| OpenRouter 形状的中继 | `{error:{code: <数字>, message:"Provider returned error", metadata:{provider_name, raw}}}`——真正的原因只在 `raw`（上游的原报文，字符串或对象） | 官方文档，未实测 |
+
+**推论：** 形状跟着请求头与厂商走，不跟状态码、也不一定跟 `content-type` 走；一个给人看的读取器要把「整段是 JSON」与「逐行
+`data:`」都试一遍，`message` 之外的 `param` / `code` / `request_id` 也是信息，而读不出时原文就是诊断本身（多半是「回来的不是
+这个 API」）。
+
 ## 4. ① 兼容层的其余已知差异
 
 同一族内，第三方端点与官方端点的实际差异清单（截至 2026-08）：

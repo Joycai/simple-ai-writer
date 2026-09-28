@@ -90,7 +90,8 @@
 - **开流之前就被拒的请求，报错里只放厂商的 `code: message`，两种报文形状都认。**（2026-09-28，第二十二个样本。）拒绝的报文
   跟着 `X-DashScope-SSE` 头走、不跟状态码走：带头是 400 + `text/event-stream` 的一帧（`id:1` / `event:error` /
   `:HTTP_STATUS/400` / `data:{code, message, request_id}`），不带是 400 + `application/json` 的同一个对象。适配器此前把
-  `res.text()` 原样拼进报错，作者看到的是整帧 SSE 脚手架。现在 `dashscope.ts` 的 `refusalText` 先把整段当 JSON 读，
+  `res.text()` 原样拼进报错，作者看到的是整帧 SSE 脚手架。现在 `refusalText` 先把整段当 JSON 读（起初写在 `dashscope.ts` 里，后来移到五个适配器共用的
+  `refusal.ts`，见 [`refusal-plan.md`](refusal-plan.md)），
   再逐行读 `data:`（行先 trim，与流读取器认同样的分帧），取到带 `message` 的对象就报 `code: message (request_id …)`；两种都读
   不出（网关的 HTML、没有 `message` 的对象）才退回原文。流开始之后的 `event:error` 帧是同一个对象，两处共用 `vendorErrorText`
   拼这一句，所以中途失败的报错也带 `request_id`。
@@ -108,8 +109,8 @@
   `url error` 的提示在帧形状上仍在、CRLF 与缩进的 `data:` 行也认、读不出时退回原文、`tool_choice` 的拒绝两种形状都被 `classify`
   认出并端到端以 `auto` 重发。
 
-  **没做的：** ① 适配器（`openai.ts`）在百炼 compatible-mode 上被拒时，回包同样是一行 `data: {"error":{…}}`，照旧原样进报错——
-  本次只收原生线路；要做，应当是所有适配器共用一个「读被拒回包」的函数，而不是在 `openai.ts` 里再抄一份。多行 `data:` 拼接
-  （SSE 规范允许）两个读取器都不认，百炼没出现过，不为它加代码；读不出时的原文退回不截断，与其余四个适配器一致。
+  **后续（已做，2026-09-28）：** ① 适配器在百炼 compatible-mode 上被拒时，回包同样是一行 `data: {"error":{…}}`、原样进报错。
+  按这里当时写的方向，做成了所有适配器共用的一个读取器，而不是在 `openai.ts` 里再抄一份——[`refusal-plan.md`](refusal-plan.md)。
+  多行 `data:` 拼接（SSE 规范允许）仍不认，没有厂商这样发过拒绝；读不出时的原文退回不截断。
 - 流没等到带真实 `finish_reason` 的结束帧就关掉，按失败处理，不把半截回答当整段交出（原生协议没有 `[DONE]`）。
 - Token Plan 全部按文档，未实测。

@@ -21,6 +21,7 @@ import { planRequest } from "./capability/plan";
 import { chatParams, toWireMessages } from "./openai";
 import { createChatDeltaReader } from "./chatDelta";
 import { nativeUrl } from "./urls";
+import { refusalText, vendorErrorText } from "./refusal";
 import type { StreamOptions } from "./types";
 
 const LABEL = "DashScope";
@@ -82,43 +83,6 @@ export function nativeBody(opts: StreamOptions): Record<string, unknown> {
 /** What a 400 `url error` means on this route, for the author. */
 const URL_ERROR_HINT =
   " — this model answers on DashScope's text-generation endpoint, which this route does not speak; switch the model to the Chat route";
-
-/**
- * DashScope's error object — `{code, message, request_id}`, on a refused
- * request and on a mid-stream `error` frame alike — as one line, or undefined
- * when it carries no message. The message is kept verbatim, so the learned
- * fallback still finds the field it names (`capability/learned.ts`); the
- * request id rides along because the API log records only the thrown message.
- */
-function vendorErrorText(json: unknown): string | undefined {
-  if (!json || typeof json !== "object") return undefined;
-  const { code, message, request_id: id } = json as { code?: unknown; message?: unknown; request_id?: unknown };
-  if (typeof message !== "string" || !message) return undefined;
-  const prefix = typeof code === "string" && code ? `${code}: ` : "";
-  const suffix = typeof id === "string" && id ? ` (request_id ${id})` : "";
-  return `${prefix}${message}${suffix}`;
-}
-
-/**
- * The vendor's error out of a refused request's body, or the raw text when it
- * is neither shape. The body follows the request's `X-DashScope-SSE` header,
- * not the status (landscape.md §7 第二十二个样本): with it — as this route
- * always sends — even a 400 comes back as one SSE error frame, the object on
- * its `data:` line; without it, a plain JSON object. Lines are trimmed as the
- * stream reader trims them, so the two accept the same framing.
- */
-function refusalText(body: string): string {
-  const dataLines = body.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("data:")).map((l) => l.slice(5));
-  for (const text of [body, ...dataLines]) {
-    try {
-      const found = vendorErrorText(JSON.parse(text));
-      if (found) return found;
-    } catch {
-      // not JSON — try the next candidate
-    }
-  }
-  return body;
-}
 
 export async function streamDashscope(opts: StreamOptions): Promise<void> {
   if (!opts.baseUrl.trim()) throw new Error(`${LABEL}: the route has no address`);

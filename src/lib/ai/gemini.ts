@@ -4,6 +4,7 @@
  */
 
 import { fetch } from "../http";
+import { refusalText } from "./refusal";
 import { reasoningBody } from "./reasoning";
 import { planRequest } from "./capability/plan";
 import { toSafetySettingsArray } from "./safety";
@@ -310,7 +311,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   });
 
   if (!res.ok) {
-    const err = await res.text();
+    const err = refusalText(await res.text());
     throw new Error(`Gemini API error ${res.status} (${url}): ${err}`);
   }
 
