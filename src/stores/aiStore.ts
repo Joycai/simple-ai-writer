@@ -19,8 +19,7 @@ import { fetchRemoteModels } from "../lib/ai/providerProbe";
 import { saveApiKey, loadApiKey, deleteApiKey, migrateLegacyKeys } from "../lib/keyStore";
 import { getGlobalDb, getGlobalDbPath } from "../lib/project";
 import { backfillUsagePartsQuietly } from "../lib/ai/usageBackfill";
-import { setLearnedSink } from "../lib/ai/capability/learned";
-import { learnedSink, loadLearned } from "../lib/ai/learnedDb";
+import { startLearned } from "../lib/ai/learnedDb";
 import { forgetOnDeclarationChange } from "../lib/ai/learnedForget";
 import { sqlTransaction } from "../lib/sqlTx";
 import { deletePref, readPref, writePref } from "../lib/prefs";
@@ -141,8 +140,7 @@ async function db() {
   }
   await legacyKeysSwept;
   if (!learnedLoaded) {
-    setLearnedSink(learnedSink(globalDb));
-    learnedLoaded = loadLearned(globalDb).catch((e) => console.warn("[aiStore] learned ceilings could not load:", e));
+    learnedLoaded = startLearned(globalDb).catch((e) => console.warn("[aiStore] learned ceilings could not load:", e));
   }
   await learnedLoaded;
   if (!usagePartsBackfilled) {

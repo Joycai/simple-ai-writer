@@ -21,7 +21,8 @@
  * The 「将发送」 line above the buttons is built by `lib/ai/modelSummary` from
  * the adapters' own body functions, so it cannot drift from the request.
  */
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useRef, useState, useSyncExternalStore } from "react";
+import { learnedVersion, subscribeLearned } from "../../../lib/ai/capability/learned";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -219,6 +220,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const { t } = useTranslation();
   const { providers, models, feeGroups, addModel, updateModel, fetchAndImportModels } = useAiStore();
   const feeWords = useFeeLabelWords();
+  // Re-render when the learned store changes — a probe run from this drawer
+  // forgets what the endpoint refused, and the note and the matrix read it.
+  useSyncExternalStore(subscribeLearned, learnedVersion);
   const existing = modelId ? models.find((m) => m.id === modelId) : undefined;
   /**
    * 新建时预填渠道的默认计费组（`initialFeeGroupId`；编辑时不填）。只是预填：

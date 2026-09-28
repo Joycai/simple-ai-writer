@@ -17,6 +17,7 @@
  */
 import { forgetLearned, type EndpointKey } from "./capability/learned";
 import type { Model, Provider } from "./configDb";
+import type { ProbeReport } from "./endpointProbe";
 import { activeFamily, providerFor } from "./routes";
 
 const keyOn = (route: Provider, modelId: string): EndpointKey =>
@@ -36,7 +37,21 @@ export function forgetOnDeclarationChange(prev: Model | undefined, next: Model, 
   if (route) forgetLearned(keyOn(route, next.modelId), ["structuredOutput"]);
 }
 
-/** Forget everything the probed route taught about this model. `route` is the route provider the probe ran on. */
-export function forgetOnProbe(route: Provider, modelId: string): void {
-  forgetLearned(keyOn(route, modelId));
+/**
+ * Whether the probe got the endpoint to answer — only then has it been looked
+ * at again. Its calibration requests are the first that must succeed; they
+ * leave either a calibration or, when the endpoint reports no usage, a
+ * warning saying so. A cancelled run does not count, whatever it got to.
+ */
+function probeReached(report: ProbeReport): boolean {
+  if (report.warnings.some((w) => w.code === "aborted")) return false;
+  return report.calibration !== undefined || report.warnings.some((w) => w.code === "no-usage-reported");
+}
+
+/**
+ * Forget everything the probed route taught about this model, when the probe
+ * reached the endpoint. `route` is the route provider the probe ran on.
+ */
+export function forgetOnProbe(route: Provider, modelId: string, report: ProbeReport): void {
+  if (probeReached(report)) forgetLearned(keyOn(route, modelId));
 }

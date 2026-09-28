@@ -9,9 +9,10 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  __resetLearned, __setLearnedClock, forgetLearned, LEARNED_TTL_MS, learnedCeiling, noteLearned, seedLearned, setLearnedSink,
+  __resetLearned, __setLearnedClock, clearLearned, forgetLearned, LEARNED_TTL_MS, learnedCeiling, learnedVersion, noteLearned,
+  seedLearned, setLearnedSink, subscribeLearned,
 } from "../capability/learned";
-import { ensureLearnedSchema, learnedSink, loadLearned } from "../learnedDb";
+import { ensureLearnedSchema, learnedSink, loadLearned, startLearned } from "../learnedDb";
 
 type Row = Record<string, unknown>;
 
@@ -171,6 +172,59 @@ describe("learned ceilings on disk", () => {
     noteLearned(QWEN, "structuredOutput", "json_object");
     await settle();
     expect(rows(raw)[0]).toMatchObject({ ceiling: "json_object", learned_at: t });
+  });
+
+  it("a few milliseconds ahead is two windows landing out of order, not a clock set back", async () => {
+    // Another window learned the stronger refusal a moment "later" and landed first.
+    const { raw, db } = open();
+    await ensureLearnedSchema(db);
+    raw.prepare("INSERT INTO learned_ceilings VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run("openai_compat", "https://relay/v1", "qwen3.8-max", "structuredOutput", "off", 0, t + 5);
+    setLearnedSink(learnedSink(db));
+    noteLearned(QWEN, "structuredOutput", "json_object");
+    await settle();
+    expect(rows(raw)[0]).toMatchObject({ ceiling: "off", learned_at: t + 5 });
+
+    __resetLearned();
+    __setLearnedClock(() => t);
+    await loadLearned(db, t);
+    expect(learnedCeiling(QWEN, "structuredOutput")).toBe("off");
+  });
+
+  it("carries a lesson from one run to the next through startLearned", async () => {
+    const { db } = open();
+    await ensureLearnedSchema(db);
+    await startLearned(db);
+    noteLearned(QWEN, "structuredOutput", "json_object");
+    await settle();
+
+    // The next launch: nothing in memory, the same database.
+    setLearnedSink(undefined);
+    __resetLearned();
+    __setLearnedClock(() => t + DAY);
+    await startLearned(db);
+    expect(learnedCeiling(QWEN, "structuredOutput")).toBe("json_object");
+    // And what this run learns is written too.
+    noteLearned(QWEN, "structuredOutput", "off");
+    await settle();
+    __resetLearned();
+    __setLearnedClock(() => t + DAY);
+    await loadLearned(db, t + DAY);
+    expect(learnedCeiling(QWEN, "structuredOutput")).toBe("off");
+  });
+
+  it("tells a subscriber when the store changes — learned, forgotten, cleared", () => {
+    let heard = 0;
+    const stop = subscribeLearned(() => heard++);
+    const v = learnedVersion();
+    noteLearned(QWEN, "structuredOutput", "json_object");
+    noteLearned(QWEN, "structuredOutput", "json_object"); // nothing new
+    forgetLearned(QWEN);
+    clearLearned();
+    stop();
+    noteLearned(QWEN, "structuredOutput", "off");
+    expect(heard).toBe(3);
+    expect(learnedVersion()).toBeGreaterThan(v);
   });
 
   it("a forget issued right after a write reaches the table after it", async () => {

@@ -20,7 +20,7 @@
  */
 import type Database from "@tauri-apps/plugin-sql";
 import {
-  LEARNED_TTL_MS, seedLearned, STRUCTURED_RANK,
+  LEARNED_CLOCK_SLACK_MS, LEARNED_TTL_MS, learnedNow, seedLearned, setLearnedSink, STRUCTURED_RANK,
   type EndpointKey, type LearnedFact, type LearnedRow, type LearnedSink,
 } from "./capability/learned";
 import { parseStructuredOutputMode } from "./jsonMode";
@@ -68,9 +68,12 @@ function parse(s: Stored): LearnedRow | undefined {
 }
 
 /** Delete what has aged out, then hand the rest to the store. */
-export async function loadLearned(db: Db, now = Date.now()): Promise<void> {
-  // A time in the future goes too — a clock set back after learning (learned.ts `young`).
-  await db.execute("DELETE FROM learned_ceilings WHERE learned_at <= ? OR learned_at > ?", [now - LEARNED_TTL_MS, now]);
+export async function loadLearned(db: Db, now = learnedNow()): Promise<void> {
+  // A time well in the future goes too — a clock set back after learning (learned.ts `young`).
+  await db.execute(
+    "DELETE FROM learned_ceilings WHERE learned_at <= ? OR learned_at >= ?",
+    [now - LEARNED_TTL_MS, now + LEARNED_CLOCK_SLACK_MS],
+  );
   const rows = await db.select<Stored[]>(
     "SELECT standard, base_url, model_id, fact, ceiling, learned_at FROM learned_ceilings",
   );
@@ -98,8 +101,11 @@ export function learnedSink(db: Db): LearnedSink {
          ON CONFLICT (standard, base_url, model_id, fact) DO UPDATE SET
            ceiling = excluded.ceiling, rank = excluded.rank, learned_at = excluded.learned_at
          WHERE excluded.rank < learned_ceilings.rank
-            OR learned_ceilings.learned_at <= ? OR learned_ceilings.learned_at > excluded.learned_at`,
-        [r.standard, r.baseUrl ?? "", r.modelId ?? "", r.fact, spell(r), rankOf(r), r.learnedAt, r.learnedAt - LEARNED_TTL_MS],
+            OR learned_ceilings.learned_at <= ? OR learned_ceilings.learned_at >= ?`,
+        [
+          r.standard, r.baseUrl ?? "", r.modelId ?? "", r.fact, spell(r), rankOf(r), r.learnedAt,
+          r.learnedAt - LEARNED_TTL_MS, r.learnedAt + LEARNED_CLOCK_SLACK_MS,
+        ],
       ));
     },
     forget(k: EndpointKey, facts: readonly LearnedFact[]) {
@@ -110,4 +116,13 @@ export function learnedSink(db: Db): LearnedSink {
       ));
     },
   };
+}
+
+/**
+ * What the app does once `config.db` is open: register the sink first, so a
+ * refusal learned while the table loads is still written, then load.
+ */
+export function startLearned(db: Db): Promise<void> {
+  setLearnedSink(learnedSink(db));
+  return loadLearned(db);
 }

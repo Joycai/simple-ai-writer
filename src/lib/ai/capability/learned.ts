@@ -148,10 +148,19 @@ function keyOf(k: EndpointKey): string {
 
 /** How long a learned ceiling holds: a week, then the endpoint is asked again. */
 export const LEARNED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * How far in the future a learning time may sit and still count. Two windows
+ * stamp their lessons from the same clock but land them in any order, so a
+ * few milliseconds "ahead" is ordinary; only a clock set back by more than
+ * this is taken for one.
+ */
+export const LEARNED_CLOCK_SLACK_MS = 60 * 60 * 1000;
 
 type Held<F extends LearnedFact> = { ceiling: Ceilings[F]; learnedAt: number };
 const store = new Map<string, { [F in LearnedFact]?: Held<F> }>();
 let now = () => Date.now();
+/** The clock ages are measured by — the table's pruning reads the same one. */
+export const learnedNow = (): number => now();
 
 /** A ceiling as it is kept on disk: one row per endpoint+model+fact. */
 export type LearnedRow = { [F in LearnedFact]: EndpointKey & { fact: F; ceiling: Ceilings[F]; learnedAt: number } }[LearnedFact];
@@ -162,6 +171,25 @@ export interface LearnedSink {
   forget(k: EndpointKey, facts: readonly LearnedFact[]): void;
 }
 let sink: LearnedSink | undefined;
+
+/**
+ * Readers that render the store (the model drawer) and must hear when it
+ * changes — a probe forgets while the drawer is open. A version number, so a
+ * `useSyncExternalStore` snapshot stays a primitive.
+ */
+let version = 0;
+const listeners = new Set<() => void>();
+function changed(): void {
+  version++;
+  for (const l of listeners) l();
+}
+export function subscribeLearned(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => void listeners.delete(listener);
+}
+export function learnedVersion(): number {
+  return version;
+}
 
 /** Register (or, with undefined, drop) the persistence behind the store. */
 export function setLearnedSink(next: LearnedSink | undefined): void {
@@ -175,7 +203,7 @@ export function setLearnedSink(next: LearnedSink | undefined): void {
  */
 const young = (learnedAt: number): boolean => {
   const age = now() - learnedAt;
-  return age >= 0 && age < LEARNED_TTL_MS;
+  return age > -LEARNED_CLOCK_SLACK_MS && age < LEARNED_TTL_MS;
 };
 const live = <F extends LearnedFact>(held: Held<F> | undefined): Held<F> | undefined =>
   held && young(held.learnedAt) ? held : undefined;
@@ -195,6 +223,7 @@ function hold<F extends LearnedFact>(k: EndpointKey, fact: F, ceiling: Ceilings[
   if (current !== undefined && rankOf(current.ceiling) <= rankOf(ceiling)) return false;
   (entry as Record<LearnedFact, Held<LearnedFact>>)[fact] = { ceiling, learnedAt };
   store.set(key, entry);
+  changed();
   return true;
 }
 
@@ -227,11 +256,13 @@ export function forgetLearned(k: EndpointKey, facts: readonly LearnedFact[] = LE
   const entry = store.get(keyOf(k));
   if (entry) for (const f of facts) delete entry[f];
   sink?.forget(k, facts);
+  changed();
 }
 
 /** Forget everything in memory — the app reset, which empties the table itself. */
 export function clearLearned(): void {
   store.clear();
+  changed();
 }
 
 /**

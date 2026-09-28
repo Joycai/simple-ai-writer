@@ -118,7 +118,7 @@ export function ModelProbePanel(props: Props) {
       });
       // The endpoint has just been looked at again: what it refused before is
       // asked afresh rather than held for the rest of the week (learnedForget).
-      forgetOnProbe(provider, props.modelId);
+      forgetOnProbe(provider, props.modelId, result);
       setReport(result);
       setPhase("done");
     } catch (e) {
