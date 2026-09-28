@@ -12,9 +12,29 @@
 
 用一张**固定不变**的证书签名，designated requirement 就从「二进制的哈希」变成「证书的哈希」，跨版本稳定，ACL 一直认。
 
+### 同一个根因的第二个症状：本地网络权限
+
+macOS 的「本地网络」隐私权限（系统设置 → 隐私与安全性 → 本地网络）也是按代码签名身份记的
+（`/Library/Preferences/com.apple.networkextension.plist` 里的条目键就是
+`simple_ai_writer-<哈希>`）。ad-hoc 构建一换，旧身份的授权就不作数，新二进制发往局域网地址
+（`192.168.*`、`10.*`、`.local` …）的请求被系统**在发出之前**拦掉 —— 表现为自建同步 / 备份服务器、
+局域网里的 Ollama / LM Studio 全都「连不上」，而同一台机器上的 `curl` 一切正常（终端不受这道闸）。
+实测：一次本机重建之后备份服务器立刻连不上，服务端 `/health` 与带 token 的 `/v1/configs` 都正常，
+权限表里只有旧构建的身份。
+
+两处处理：
+
+- **`src-tauri/Info.plist` 声明 `NSLocalNetworkUsageDescription`**（tauri-bundler 会并进 bundle 的
+  Info.plist）。没有这个用途说明，系统弹不出一个像样的授权框，用户只能自己去设置里找开关；有了它，
+  新身份第一次访问局域网时会弹框问「允许」。这条与签名无关，ad-hoc 构建也生效。
+- **固定签名身份**（本手册的全部内容）让授权跨版本保留，不必每次更新都重新允许一次。
+
+临时办法：在上面那个设置页里把 Simple AI Writer 关掉再打开（或删掉旧条目后重启应用、触发一次同步，等弹框）。
+
 ### 做完能得到
 
 - 更新之后不再要登录密码（这是全部目的）
+- 「本地网络」授权跨版本保留（见上）
 - bundle 被正确签名并封装资源（今天只有可执行文件被 linker ad-hoc 签了，`Sealed Resources=none`）
 - 应用 `Identifier` 从 `simple_ai_writer-ed18bbf93812d9b5` 变成 `com.simple-ai-writer.app`
 

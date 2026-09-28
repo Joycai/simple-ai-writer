@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged by tauri-bundler into the .app's Info.plist. Why the key is here:
+     docs/reference/macos-signing.md § 0「本地网络权限」. -->
+<plist version="1.0">
+<dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Simple AI Writer 需要访问局域网，以连接你自建的知识库同步 / 配置备份服务器和本地模型服务（如 Ollama、LM Studio）。 · Simple AI Writer connects to servers on your local network: your self-hosted sync / backup server and local model servers such as Ollama or LM Studio.</string>
+</dict>
+</plist>
