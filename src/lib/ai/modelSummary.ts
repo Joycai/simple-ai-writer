@@ -22,7 +22,7 @@
  */
 
 import type { Model } from "./configDb";
-import { hasCapability, modelValue, thinkingCategoryOf, trusted, type Sourced } from "./capabilities";
+import { modelValue, thinkingCategoryOf, trusted, type Sourced } from "./capabilities";
 import { planRequest, type RequestPlan } from "./capability/plan";
 import { mediaDeclarationOf } from "./capability/media";
 import { effectiveImageRoute } from "./imageRoute";
@@ -198,11 +198,10 @@ export function wireSummary(
   const out = spellSummary(plan, !!m.thinkingBudget);
   // Not a body field — `fps` sits on the clip's content part. Listed anyway: it
   // changes the request, and the bill (4× between fps 0.5 and the default).
-  // Only where the plan admits a clip at all (`plan.media`, the same answer
-  // the composer's attach gate and the request's projection read), and then
-  // the same question `sentVideoFps` asks before writing it onto the clip.
-  if (plan.media.video && m.videoFps !== undefined && hasCapability("videoFps", plan.wire)) {
-    out.push({ key: "video_url.fps", value: String(m.videoFps), scope: "video" });
+  // The plan's own answer (`plan.clipFps`): the value the request's projection
+  // writes onto every admitted clip, and the one the composer estimates at.
+  if (typeof plan.clipFps === "number") {
+    out.push({ key: "video_url.fps", value: String(plan.clipFps), scope: "video" });
   }
   if (m.prefix?.trim()) out.push({ key: "system", value: "", scope: "prefix" });
   return out;

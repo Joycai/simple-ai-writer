@@ -31,8 +31,8 @@ import type { ServerToolId } from "./serverTools";
 import { isRelayPlatform, relayUpstreamFor, type RelayUpstreamChoice } from "./relayUpstream";
 import { canonicalModelId } from "./capability/modelId";
 import type { StructuredOutputMode } from "./jsonMode";
-import { requestMedia, type RequestPlan } from "./capability/plan";
-import { mediaDeclarationOf, type MediaAdmission } from "./capability/media";
+import { requestClipFps, requestMedia, type RequestPlan } from "./capability/plan";
+import { mediaDeclarationOf, type ClipFps, type MediaAdmission } from "./capability/media";
 import type { ApiStandard, AuthMode, TextVerbosity } from "./types";
 
 /**
@@ -145,10 +145,15 @@ export interface ConnOptions {
    * out. `connOptions()` fills all three (the booleans as `false`, never
    * absent); absent in a hand-built bag (a probe), whose parts are its own:
    * it sends whatever the protocol can spell.
+   *
+   * `videoFps` rides with them: the frame rate the row declares for a clip,
+   * which the plan writes onto every admitted clip where the route reads it
+   * (`RequestPlan.clipFps`) — whatever fps the clip was attached with.
    */
   modelType?: ModelType;
   videoInput?: boolean;
   pdfInput?: boolean;
+  videoFps?: number;
 }
 
 /**
@@ -285,6 +290,7 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     modelType: o.modelType,
     videoInput: o.videoInput,
     pdfInput: o.pdfInput,
+    videoFps: o.videoFps,
   };
 }
 
@@ -296,19 +302,34 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
  * is built only where it will also go out. Built from the same fields
  * `connOptions()` fills; `mediaAdmission.test.ts` holds the two to one answer.
  */
-export function admittedMediaOf(
-  model: Pick<Model, "relayUpstream" | "videoInput" | "pdfInput"> & { modelId?: string; type?: ModelType },
-  provider: Pick<Provider, "apiStandard" | "baseUrl" | "platform" | "upstreamPrefixes">,
-): MediaAdmission {
+export function admittedMediaOf(model: MediaModel, provider: MediaProvider): MediaAdmission {
+  return requestMedia(mediaPlanInput(model, provider));
+}
+
+/**
+ * The `fps` a clip to this model on this route goes out with — the plan's
+ * {@link RequestPlan.clipFps}, asked before there is a request. The composer
+ * estimates a clip at it (`sentVideoFps`), so the chip's ≈token and the
+ * request's own estimate read one frame rate.
+ */
+export function clipFpsOf(model: MediaModel, provider: MediaProvider): ClipFps {
+  return requestClipFps(mediaPlanInput(model, provider));
+}
+
+type MediaModel = Pick<Model, "relayUpstream" | "videoInput" | "pdfInput" | "videoFps"> & { modelId?: string; type?: ModelType };
+type MediaProvider = Pick<Provider, "apiStandard" | "baseUrl" | "platform" | "upstreamPrefixes">;
+
+/** The media fields of a request from this row, as `connOptions()` fills them. */
+function mediaPlanInput(model: MediaModel, provider: MediaProvider) {
   const platform = resolvePlatform(provider.platform, provider.baseUrl, provider.apiStandard);
-  return requestMedia({
+  return {
     standard: provider.apiStandard,
     baseUrl: provider.baseUrl,
     platform,
     modelId: model.modelId ?? "",
     relayUpstream: relayUpstreamFor(platform, model, provider),
     ...mediaDeclarationOf(model),
-  });
+  };
 }
 
 /** A model paired with the endpoint that serves it. */

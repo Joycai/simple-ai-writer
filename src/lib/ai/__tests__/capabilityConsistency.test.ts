@@ -136,7 +136,9 @@ const PROBES: Record<CapabilityId, Probe> = {
     canReadVideo: canReadVideo({ type: TYPE, videoInput: true, modelId: ctx.modelId, relayUpstream: ctx.relayUpstream }, provider(ctx)),
   }),
   videoFps: async (ctx) => ({
-    sentVideoFps: sentVideoFps({ videoFps: 1 }, provider(ctx)) !== undefined,
+    sentVideoFps: sentVideoFps(
+      { type: TYPE, videoInput: true, videoFps: 1, modelId: ctx.modelId, relayUpstream: ctx.relayUpstream }, provider(ctx),
+    ) !== undefined,
     summary: summarySends(ctx, { videoInput: true }, { videoInput: true, videoFps: 1 }),
   }),
   forcedToolChoice: async (ctx) => ({

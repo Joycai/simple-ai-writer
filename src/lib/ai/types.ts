@@ -612,10 +612,15 @@ export interface StreamOptions {
    * The model's media declarations (`ConnOptions.modelType` / `videoInput` /
    * `pdfInput`), read by the plan's media admission. Absent = a hand-built
    * bag: whatever the protocol can spell goes out.
+   *
+   * `videoFps` (`ConnOptions.videoFps`) is the declared frame rate the plan
+   * writes onto admitted clips (`RequestPlan.clipFps`); a bag that declares
+   * nothing sends its clips as built.
    */
   modelType?: ModelType;
   videoInput?: boolean;
   pdfInput?: boolean;
+  videoFps?: number;
 }
 
 /** Thrown before sending when the estimated prompt exceeds the model's configured context size. */
