@@ -71,7 +71,7 @@ async function historyAttachedUnder(model: Model, provider: Provider): Promise<S
 }
 
 /** One round on `model`, answering at once; what it sent and the events it logged. */
-async function runOn(model: Model, provider: Provider, messages: StreamMessage[]) {
+async function runOn(model: Model, provider: Provider, messages: StreamMessage[], ceiling = CEILING) {
   const sent: StreamMessage[][] = [];
   mockStream.mockImplementationOnce(async (o: StreamOptions) => {
     sent.push(structuredClone(o.messages));
@@ -84,7 +84,7 @@ async function runOn(model: Model, provider: Provider, messages: StreamMessage[]
     ...connOptions({ model, provider, apiKey: "k" }),
     preset: { id: "test", tools: [], maxRounds: 1, finishPolicy: "force-text" },
     messages,
-    inputCeilingTokens: CEILING,
+    inputCeilingTokens: ceiling,
     toolContext: { projectPath: "/p", loreIndex: { characters: [], world: [] } as unknown as LoreIndex, multimodal: true },
     signal: new AbortController().signal,
     onEvent: (e) => void events.push(e),
@@ -93,7 +93,8 @@ async function runOn(model: Model, provider: Provider, messages: StreamMessage[]
   await runAgent(opts);
   const round = events.find((e): e is Extract<AgentEvent, { kind: "round-start" }> => e.kind === "round-start")!;
   const clips = sent[0].flatMap((m) => (Array.isArray(m.content) ? m.content.filter((p) => p.type === "video_url") : []));
-  return { clips, estInputTokens: round.estInputTokens, trimmed: events.some((e) => e.kind === "context-trimmed") };
+  const toolResults = sent[0].filter((m) => m.role === "tool").map((m) => String(m.content));
+  return { clips, toolResults, estInputTokens: round.estInputTokens, trimmed: events.some((e) => e.kind === "context-trimmed") };
 }
 
 beforeEach(() => mockStream.mockReset());
@@ -113,5 +114,28 @@ describe("the runtime weighs a clip at the fps its request sends", () => {
     // The round's estimate is the clip at 0.5, not at the fps it was attached with.
     expect(run.estInputTokens).toBeGreaterThan(8_900);
     expect(run.estInputTokens).toBeLessThan(10_000);
+  });
+});
+
+describe("the runtime never trims media its route only sends as a note", () => {
+  // 百炼's native route has no spelling for a clip: it goes out as a one-line note.
+  const nativeRoute: Provider = { ...bailian, baseUrl: "https://maas.qianwenaiapi.com/api/v1", apiStandard: "dashscope_compat" };
+
+  it("over the ceiling on a route that refuses the clip, a tool result goes and the clip stays for the switch back", async () => {
+    const history = await historyAttachedUnder(qwen, bailian);
+    // A long tool round after the clip: what the ceiling actually has to shed.
+    history.splice(3, 0,
+      { role: "assistant", content: null, tool_calls: [{ id: "c1", type: "function", function: { name: "read_file", arguments: "{}" } }] },
+      { role: "tool", tool_call_id: "c1", content: "x".repeat(40_000) },
+      { role: "assistant", content: "读完了。" },
+    );
+    const clipTurn = structuredClone(history[1]);
+    const run = await runOn(qwen, nativeRoute, history, 5_000);
+    expect(run.trimmed).toBe(true);
+    // Not touched at all — no elision note either: it freed nothing to drop.
+    expect(history[1]).toEqual(clipTurn);
+    expect(run.toolResults.some((r) => r.length >= 40_000)).toBe(false);
+    // Still in the history (the runtime hands streamCompletion the history as it stands).
+    expect(run.clips).toHaveLength(1);
   });
 });

@@ -143,7 +143,7 @@ export function admitMedia(
  * untouched message stays the same object.
  */
 function withClipFps(parts: ContentPart[], fps: ClipFps): ContentPart[] {
-  if (fps === "as-built") return parts;
+  if (fps === "as-built" || !parts.some((p) => p.type === "video_url")) return parts;
   let changed = false;
   const out = parts.map((p) => {
     if (p.type !== "video_url") return p;

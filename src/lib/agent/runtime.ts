@@ -463,18 +463,21 @@ function roundInProgressStart(history: StreamMessage[]): number {
  * Anthropic's signed thinking): shrinking ours would lower the estimate without
  * changing the wire — or, for a signed block, break it.
  *
- * `measure` is how the history is weighed against the ceiling: the run passes
- * the estimate of the history *as its requests carry it* (`mediaProjection`),
- * so a clip counts at the fps it goes out with and a medium the route refuses
- * counts as its note.
+ * `project` is the history *as the run's requests carry it* (`mediaProjection`):
+ * the ceiling weighs the projection, so a clip counts at the fps it goes out
+ * with and a medium the route refuses counts as its note — and a medium that
+ * goes out only as a note is never elided, since that frees nothing and loses
+ * it for good: switch back to a model that reads it and it would be gone.
+ * Absent, the history is weighed as it stands.
  *
  * Returns how many messages it changed so the caller can log it.
  */
 export function trimHistory(
   history: StreamMessage[],
   ceilingTokens?: number,
-  measure: (history: StreamMessage[]) => number = estimateMessagesTokens,
+  project: (history: readonly StreamMessage[]) => StreamMessage[] = (h) => [...h],
 ): number {
+  const measure = (h: StreamMessage[]) => estimateMessagesTokens(project(h));
   // Images first, and unconditionally. The token estimate charges a flat rate
   // per picture (see ai/tokenEstimate) because that is what a provider bills —
   // but the *payload* is base64, megabytes of it, and a chat history persists
@@ -488,6 +491,9 @@ export function trimHistory(
 
   for (let i = 0; i < protectedFrom; i++) {
     const m = history[i];
+    // The message as the request carries it: media the route refuses is
+    // already a note there, so eliding it would free nothing.
+    const sent = hasMediaParts(m) ? project([m])[0] : undefined;
     // A result no longer than its placeholder stays: replacing "Note saved."
     // with a sentence about dropping it buys nothing and loses the fact.
     if (
@@ -498,8 +504,9 @@ export function trimHistory(
     ) {
       m.content = ELIDED_TOOL_RESULT;
       dropped++;
-    } else if (hasMediaParts(m)) {
-      m.content = hasVideoParts(m)
+    } else if (hasMediaParts(m) && sent && hasMediaParts(sent)) {
+      // Only what goes out: a clip this route refuses stays beside an elided picture.
+      m.content = hasVideoParts(sent)
         ? contentWithoutMedia(m, `${ELIDED_IMAGE}\n\n${ELIDED_VIDEO}`)
         : contentWithoutImages(m, ELIDED_IMAGE);
       dropped++;
@@ -1086,7 +1093,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       }
     }
 
-    const dropped = trimHistory(history, messageCeiling, measure);
+    const dropped = trimHistory(history, messageCeiling, project);
     if (dropped > 0) {
       opts.onEvent({ kind: "context-trimmed", count: dropped, at: Date.now() });
       // Re-arms the checkpoint notice, but only past CHECKPOINT_MIN_GAP_ROUNDS.

@@ -199,8 +199,10 @@ export function requestClipFps(opts: MediaPlanInput): ClipFps {
  * refused (docs/feature/video-input.md §4).
  */
 export function mediaProjection(opts: MediaPlanInput): (messages: readonly StreamMessage[]) => StreamMessage[] {
-  const media = requestMedia(opts);
-  const fps = requestClipFps(opts);
+  const wire = wireOf(opts);
+  const model = planModel(opts);
+  const media = admittedMedia(wire, model, opts);
+  const fps = clipFps(wire, model, opts, media);
   return (messages) => admitMedia(messages, media, fps);
 }
 
