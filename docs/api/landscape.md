@@ -639,6 +639,12 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
 > - **其余第三方模型**：kimi-k2-thinking 收下 `disabled`，**照想**（200，thinking 块有文本）；kimi-k2.6 无论开关都回一个
 >   **文本与签名都空**的 thinking 块（不发 `thinking` 与 `disabled` 都这样，内容上没想；显式 `enabled` 才有文本）；
 >   deepseek-v4-pro 收 `disabled`，真关。
+> - **最低档与空块回传**（同日，glm-5.3 与 MiniMax-M2.5，`output_config:{effort:"low"}`；一个计数工具要连调 4 次，
+>   共 5 轮，每轮把上一轮的 `content` 原样带回）：
+>   - glm-5.3 **非流式**每轮回一个 `{type:"thinking",thinking:"",signature:""}` 空块，工具轮各输出 10 token。历史里的空块
+>     累积到 4 个，5 轮都 200，第 5 轮 `end_turn`。**流式**的同一请求**一个 thinking 块都不发**，只有 `tool_use`，5 轮也都 200。
+>   - MiniMax-M2.5 在最低档下仍想：每轮 thinking 块有文本（55–363 字符），`signature` 为空串。流式、非流式各 5 轮，都 200。
+>   - 所以上文「关掉思考时仍有空块」对 glm-5.3 只在非流式时成立。非流式时空块原样回传、在历史里累积多轮也收；流式时没有块可回传，5 轮同样都收。
 > - **错误原文**：`thinking.type:"bogus"` → 400 `Request body format invalid`（不点名字段）；未知模型 → 400
 >   ``The model `qwen-nonexistent` does not exist or you do not have access to it.``；`temperature:2.5` → 400
 >   `Temperature should be in [0.0, 2.0)`；`budget_tokens:1024` 配 `max_tokens:512` → 400
@@ -1625,6 +1631,25 @@ Responses adapter：
 >
 >   ① 面那句 1210 在 ④ 面原样出现，外面多包一层 `[1210][…][id]`。`thinking.type:"bogus"` 回的也是这句 1210，不是「非法值」。
 >   顶层未知字段 200 放过，与 ① 面一致。
+> - **① 面补测：关不掉时发最低档（2026-09-28，glm-5.3 / 5.3-flash）**。请求带一个函数工具，两组媒体文件、每组调一次，
+>   `temperature:0.6`、`max_tokens:4096`、非流式，每格两次：
+>
+>   | 请求 | glm-5.3 `reasoning_tokens` | glm-5.3 耗时 | glm-5.3-flash `reasoning_tokens` |
+>   | --- | --- | --- | --- |
+>   | 不发思考字段 | 232、262 | 7.3、7.2 s | 47、156 |
+>   | `reasoning_effort:"low"` | **0、0** | 3.7、3.5 s | **0、0** |
+>   | `thinking:{type:"enabled"}` + `reasoning_effort:"low"` | 0、0 | 3.5、1.5 s | — |
+>   | `reasoning_effort:"high"` | 0、39 | 3.4、4.4 s | — |
+>   | `thinking:{type:"disabled"}` | **400** `{"error":{"code":"1210","message":"该模型始终思考，不支持关闭思考；请使用 low、high 或 max。"}}` | — | — |
+>   | 换成三组、需要想一想的文件（不发 / `low`） | 1,476、757 / **131、43** | 23.4、14.8 / 6.4、3.0 s | — |
+>
+>   - **`low` 是最少，不是关**：简单题上是 0，难一点仍想 43–131 token。但难题上比不发少十倍以上；耗时简单题约减半，难题降到 1/4 到 1/5。
+>   - **不发时比 `high` 想得还多**：默认不等于 `low` 也不等于 `high`（`max` 这次没测）。与上面逐模型校准表里的「真分档」
+>     不冲突——那是不带工具的应用题，各档都显式发。
+>   - **决定不变**：各档工具调用的个数一致，看得到参数的调用（每次记下前两个）`kind` 都一致；`title` 的写法各档都有出入（全名或简名，`high` 一次写成日文罗马字原名），
+>     不随档位走。可选的 `year` 在 Blade Runner、Heat 两组上各档都给；另两组（Frieren、The Office）不发时 6 次缺 2 次，
+>     `low` 下 6 次缺 5 次——少想的代价落在可选字段上。
+>   - ① 面的 1210 是裸的 `{"error":{code, message}}`，没有 ④ 面那层 `[1210][…][id]`。
 > - **上限**（文档「核心参数」表，4.5-air 已实测）：5.x 与 4.6 / 4.7 默认 65,536、最大 131,072；4.5 系列最大 98,304；
 >   4.6v 32,768；4.5v 16,384。上下文：5.3 / 5.3-flash / 5.2 1M，4.6–5.1 200K，4.5 系列 128K。
 > - **耗时**：多数 0.3–10 s；4.7 偶有长尾（一次关思考的工具轮 136 s）。

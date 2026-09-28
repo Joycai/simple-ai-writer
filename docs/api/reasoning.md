@@ -159,6 +159,10 @@
   拒绝并说明关不掉——智谱 `1210 该模型始终思考，不支持关闭思考`，百炼则借自家 ① 方言的字段名
   `The value of the enable_thinking parameter is restricted to True.`；**收下但照想**——MiniMax M2.7、
   百炼上的 kimi-k2-thinking。第三种请求侧没有任何信号（200，没有警告字段），只能看回复里还有没有思考内容。
+- **关不掉时，最接近关的是最低档，但它不是关**（实测 2026-09-28）。智谱 5.3 代拒绝 `disabled` 的那句 1210 自己就指了路
+  （`请使用 low、high 或 max`）：① 面发 `reasoning_effort:"low"`，带一个工具时 glm-5.3 的 `reasoning_tokens` 从 232–262
+  降到 0，难一点的题从 757–1,476 降到 43–131；智谱自家 ④ 面发 `output_config:{effort:"low"}`，不回 thinking 块。百炼 ④ 面上
+  glm-5.3 在最低档下也不想（非流式回一个空块，流式连块都没有），MiniMax-M2.5 仍想一点。细节见 [`landscape.md`](landscape.md) §7 第六、第十四个样本。
 
 ### 1.8 ④ 的新旧代互斥，且代次不可从模型名判断
 
@@ -253,9 +257,14 @@ output_config.effort`）——「少想」只能靠低 `effort`，关不掉。
 | Claude 当前代，默认 `omitted` | 空 | 有 | 想了（照计费） |
 | 百炼上的千问 | 有 | 恒为空串 | 想了 |
 | 百炼上的 kimi-k2.6（不发 `thinking`，或 `disabled`） | 空 | 空 | 没想 |
+| 百炼上的 glm-5.3，`output_config:{effort:"low"}`，非流式 | 空 | 空 | 没想 |
 
 只认文本，会把 Claude 的 `omitted` 读成「没想」；只认块在不在，会把 kimi-k2.6 读成「关不掉」
 （它显式 `enabled` 时块里才有文本）。
+
+**同一个请求，流式与非流式回的块可能不一样。** 上表最后一行在流式下**一个 thinking 块都没有**
+（没有这个块的 `content_block_start`），只有 `tool_use`（实测 2026-09-28，两种各连跑 5 轮）。
+用非流式探出来的形状推断流式线路上会收到什么，会猜错；要判的是流式线路，就用流式去测。
 
 ### 2.3 token 计数
 
