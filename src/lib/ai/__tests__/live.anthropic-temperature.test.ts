@@ -15,10 +15,12 @@
  *
  * Three samples per platform:
  *   1. disabled + 0.3 — status, and that thinking really is off;
- *   2. disabled: 0.01, 0 and no temperature, 20 runs each, on a prompt with a
- *      handful of likely answers — heeded = 0.01 collapses onto one answer
+ *   2. disabled: 0.01, 0, 1 and no temperature, 20 runs each, on prompts with
+ *      a handful of likely answers — heeded = 0.01 collapses onto one answer
  *      while no temperature does not. (Counting distinct sentences on an open
- *      prompt could not tell the two apart: every sentence differs.)
+ *      prompt could not tell the two apart: every sentence differs.) Two
+ *      prompts, because a model whose default already collapses one of them
+ *      (MiniMax on the fruit) says nothing there.
  *   3. adaptive: 0.3 once for the status, then 0.01 against none, 20 each.
  *
  * Results: docs/api/landscape.md §7 「B6 补测」.
@@ -49,7 +51,10 @@ const TARGETS: Target[] = [
 ];
 
 const STANDARD: ApiStandard = "anthropic_compat";
-const PICK_PROMPT = "Name one random fruit. Reply with the single word only.";
+const PICK_PROMPTS = {
+  fruit: "Name one random fruit. Reply with the single word only.",
+  number: "Pick a random whole number from 1 to 50. Reply with the number only.",
+};
 const RUNS = 20;
 
 /** Bodies as they left for the endpoint, after the injection. */
@@ -97,11 +102,11 @@ async function ask(t: Target, effort: "off" | "on", temperature: number | undefi
 
 const lastSent = () => sent[sent.length - 1];
 
-/** RUNS answers to PICK_PROMPT, in parallel; an error is kept as its first words. */
-const answers = (t: Target, effort: "off" | "on", temp: number | undefined) =>
+/** RUNS answers to one prompt, in parallel; an error is kept as its first words. */
+const answers = (t: Target, effort: "off" | "on", temp: number | undefined, prompt: string) =>
   Promise.all(Array.from({ length: RUNS }, async () => {
-    const c = await ask(t, effort, temp, PICK_PROMPT);
-    return c.error ? `ERROR ${c.error.slice(0, 80)}` : c.text.trim().toLowerCase().replace(/[^a-z]/g, "");
+    const c = await ask(t, effort, temp, prompt);
+    return c.error ? `ERROR ${c.error.slice(0, 80)}` : c.text.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
   }));
 
 /** `{answer: count}`, most frequent first. */
@@ -119,22 +124,26 @@ for (const t of TARGETS) {
       log(t, "disabled+0.3", { error: c.error, reasoningChars: c.reasoning.length, text: c.text.slice(0, 120) });
     }, 120_000);
 
-    it("2. thinking disabled: 0.01 / 0 / none, 20 runs each", async () => {
-      for (const temp of [0.01, 0, undefined]) {
-        const outs = await answers(t, "off", temp);
-        log(t, `disabled, temperature ${temp ?? "none"}`, tally(outs));
-        expect(lastSent().thinking).toEqual({ type: "disabled" });
-        expect(lastSent().temperature).toBe(temp);
+    it("2. thinking disabled: 0.01 / 0 / 1 / none, 20 runs each", async () => {
+      for (const [name, prompt] of Object.entries(PICK_PROMPTS)) {
+        for (const temp of [0.01, 0, 1, undefined]) {
+          const outs = await answers(t, "off", temp, prompt);
+          log(t, `${name}, disabled, temperature ${temp ?? "none"}`, tally(outs));
+          expect(lastSent().thinking).toEqual({ type: "disabled" });
+          expect(lastSent().temperature).toBe(temp);
+        }
       }
-    }, 600_000);
+    }, 900_000);
 
     it("3. thinking adaptive: 0.3 once, then 0.01 / none, 20 runs each", async () => {
       const c = await ask(t, "on", 0.3);
       expect(lastSent()).toMatchObject({ thinking: { type: "adaptive" }, temperature: 0.3 });
       log(t, "adaptive+0.3", { error: c.error, reasoningChars: c.reasoning.length, text: c.text.slice(0, 120) });
-      for (const temp of [0.01, undefined]) {
-        log(t, `adaptive, temperature ${temp ?? "none"}`, tally(await answers(t, "on", temp)));
+      for (const [name, prompt] of Object.entries(PICK_PROMPTS)) {
+        for (const temp of [0.01, undefined]) {
+          log(t, `${name}, adaptive, temperature ${temp ?? "none"}`, tally(await answers(t, "on", temp, prompt)));
+        }
       }
-    }, 600_000);
+    }, 900_000);
   });
 }

@@ -1197,6 +1197,6 @@ P6 的逻辑部分让留空的类目、窗口、上限跟随平台行、目录�
    反方理由：作者可以在菜单里选 off，作者选了它，它就该是 off。要先量一次，看 LOW 或 low 档是否仍会把预算耗尽。
 2. **B6（Anthropic 族关思考时带温度）** 需要一条 ④ 上 minimax / doubao-switch「disabled + temperature 0.3」的实测。
    已记进 [`issues/anthropic-temperature-thinking-off.md`](../issues/anthropic-temperature-thinking-off.md)（样本清单与三种结论各自的做法）。
-   2026-09-28 火山方舟一家已量：关思考时温度生效（`0` 除外，等于没发），开思考时 200 而被无视；MiniMax 的 key 失效，没有样本。
-   改不改、只改 `doubao-switch` 还是等 MiniMax，见该文「待决」。
+   2026-09-28 两家都已量，结论相反：火山方舟关思考时温度生效（`0` 除外，等于没发）；MiniMax 收下但不理会；两家开思考时都 200 而不收敛。
+   所以账本里 B6 的写法（整条换成按线上思考状态）对 `minimax` 是错的；只改 `doubao-switch`、落在类目上还是平台格上，见该文「待决」。
 3. **学到的存储持久化**（D3）随 provider-layering §7 一起决定。

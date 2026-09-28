@@ -198,7 +198,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [volcengine-files-api.md](issues/volcengine-files-api.md) | `open` | 火山方舟 PDF 只走 base64 内联（<50MB），厂商推荐的 Files API / `file_id` 与 `file_url` 未支持；套餐 key 没有 Files API（`/api/plan/…/files` 全 404、`/api/v3/files` 401，2026-09-23 复测），只对按量 key 有意义——而按量线路整条都未实测；`file_url` 套餐三面都通但要公网 URL，对本地文件无用。前提是一把按量 key |
 | [video-capability-per-platform.md](issues/video-capability-per-platform.md) | `open` | 能力判定 C4，作者定为搁置的待办：视频输入仍按协议族放行（① 族任何平台），而 `video_url` 是千问一族的扩展，只在百炼、智谱实测过。做法是改成按平台点名、中继 `unknown`、其余实测前 `no`；前提是 OpenAI 官方 / DeepSeek / xAI / 火山方舟各一条 ① 线路样本 |
 | [relay-claude-channel-gating.md](issues/relay-claude-channel-gating.md) | `open` | 中转站上 Claude 的能力裁决。按上游裁决已做（作者在渠道上配前缀 → 上游，内置画像，capability-gating-plan §8.11）；仍未决的是 New API 的 ①→④ 转换层：① 面对所有上游都丢 `response_format`、`reasoning_effort: "max"` 等于不想，只有一台 New API 的样本，先补样本 |
-| [anthropic-temperature-thinking-off.md](issues/anthropic-temperature-thinking-off.md) | `open` | 能力解析账本 B6，不排期：④ 族上 `minimax` / `doubao-switch` 设为「关闭」时线上真关思考，温度却仍按「类目不是 off 就在想」不发、抽屉也不给填。改成按线上思考状态裁决只动这一处。火山方舟 ④ 已量（2026-09-28）：关思考时温度生效但 `0` 等于没发，开思考时 200 而被无视；MiniMax 的 key 失效，还缺它的样本 |
+| [anthropic-temperature-thinking-off.md](issues/anthropic-temperature-thinking-off.md) | `open` | 能力解析账本 B6，不排期：④ 族上 `minimax` / `doubao-switch` 设为「关闭」时线上真关思考，温度却仍按「类目不是 off 就在想」不发、抽屉也不给填。两家已量（2026-09-28），结论相反：火山方舟关思考时温度生效（`0` 等于没发），MiniMax 收下但不理会，开思考时两家都 200 而不收敛。原写法「整条按线上思考状态裁决」对 `minimax` 是错的；待决的是只改 `doubao-switch` 落在类目还是平台格 |
 
 ---
 
