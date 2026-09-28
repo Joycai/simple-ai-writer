@@ -2367,7 +2367,8 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 > **工具调用增量。** 与 Chat Completions 的 delta 同形：首帧带 `id` + `function.name`，之后的帧 `id:""`、只带
 > `function.arguments` 的片段，按 `index` 累加——空串 id 不能覆盖首帧的 id。
 >
-> **失败怎么送达。** 请求被拒是非 2xx + `{code, message, request_id}`。**流开始之后的失败在 HTTP 200 里**：
+> **失败怎么送达。** 请求被拒是非 2xx + `{code, message, request_id}`（不带 `X-DashScope-SSE` 时是 JSON；带了头，同一个对象
+> 装在一帧 SSE 的 `data:` 行里——第二十二个样本）。**流开始之后的失败在 HTTP 200 里**：
 > `event:error` + `:HTTP_STATUS/400` + `data:{code, message, request_id}`（图片尺寸的例子）。
 >
 > **思考。** qwen3.7：`enable_thinking:true` + `thinking_budget:256` 想（955 字），`enable_thinking:false` 不想。
