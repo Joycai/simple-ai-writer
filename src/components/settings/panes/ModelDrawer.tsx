@@ -47,7 +47,7 @@ import {
 import { providerWire } from "../../../lib/ai/platforms";
 import {
   canonicalModelId, capabilityVerdict, effortMenuOnWire, hasAnyServerTool, hasCapability, platformModelCalibration,
-  thinkingCategoryOf, type CapabilityId, type Source,
+  temperatureReaches as temperatureReachesWire, thinkingCategoryOf, type CapabilityId, type Source,
 } from "../../../lib/ai/capabilities";
 import {
   capabilityModelOf, isRelayPlatform, resolveRelayUpstream, type RelayUpstreamChoice,
@@ -354,7 +354,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const modelOwn = (v: { value: number; source: Source } | undefined) => (v && v.source !== "default" ? v.value : undefined);
   // With the upstream, as the adapters ask: behind some relay upstreams a
   // temperature is rewritten or refused, and the field would edit nothing.
-  const temperatureReaches = !curWire || hasCapability("temperature", curWire, { ...capModel, thinkingCategory: formCategory?.id });
+  // With the effort too: a category whose off heeds it (`temperatureWhenOff`)
+  // shows the field only while off is picked.
+  const temperatureReaches = !curWire || (formCategory
+    ? temperatureReachesWire(curWire, capModel, formCategory, form.reasoningEffort)
+    : hasCapability("temperature", curWire, capModel));
   // The wires with a whole-file content part the adapters map
   // (openai.ts `file`, responses.ts `input_file`), plus an Anthropic
   // `document` block where a platform or the relay's upstream measured it
@@ -523,6 +527,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const temperature = Number.isFinite(parsedTemp)
     ? Math.max(0, Math.min(MAX_TEMPERATURE, parsedTemp))
     : undefined;
+  // Where the field shows at all, whether this endpoint reads 0 as unset.
+  const zeroIsUnset = !!formCategory?.temperatureWhenOff?.zeroIsUnset;
   const thinkingBudget = (() => {
     if (formCategory?.shape !== "budget") return undefined;
     const n = Math.round(Number(form.thinkingBudget));
@@ -1749,9 +1755,13 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 control that does nothing. Any stored value survives while the
                 row is folded, so flipping the category back brings it out
                 unchanged. Empty = dashed + 不发; 0 = solid + 确定性, because the
-                two used to look the same and mean opposite things. */}
+                two used to look the same and mean opposite things — except
+                where the endpoint reads 0 as unset (`zeroIsUnset`): no tag,
+                and the line under the field says so instead of calling 0
+                deterministic. */}
             <Fold open={temperatureReaches}>
-              <Field label={t("aiConfig.models.tempLabel")} scope={routeScope} hint={t("aiConfig.models.briefTemp")}
+              <Field label={t("aiConfig.models.tempLabel")} scope={routeScope}
+                hint={t(zeroIsUnset ? "aiConfig.models.briefTempZeroUnset" : "aiConfig.models.briefTemp")}
                 {...whyProps("temp", t("aiConfig.models.temperatureHint"))}>
                 <div className={s.numRow}>
                   <input
@@ -1762,7 +1772,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                     onChange={(e) => setForm({ ...form, temperature: e.target.value })}
                     aria-label={t("aiConfig.models.tempLabel")}
                   />
-                  {temperature === 0 && <span className={s.tag}>{t("aiConfig.models.tempDeterministic")}</span>}
+                  {temperature === 0 && !zeroIsUnset && <span className={s.tag}>{t("aiConfig.models.tempDeterministic")}</span>}
                 </div>
               </Field>
             </Fold>

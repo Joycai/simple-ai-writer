@@ -14,7 +14,8 @@ import type { CapabilityId, CapabilityReason, CapabilityStatus, CapabilityVerdic
 import { CAPABILITY_RULES } from "./rules";
 import { PLATFORM_CELLS, platformCell } from "./cells/platform";
 import { UPSTREAM_CELLS } from "./cells/upstream";
-import { conditionFires, type RequestContext } from "./conditions";
+import { conditionFires, temperatureHeard, type RequestContext } from "./conditions";
+import type { ReasoningEffort, ThinkingCategory } from "../reasoning";
 import { patternMatches, rawModelKey } from "./modelId";
 
 /**
@@ -76,7 +77,7 @@ export function familyVerdict(
     if (familyVerdict(dep, platform, family, model, official).status === "no") return verdict("no", "requires");
   }
   const fired = rule.unless?.[family]?.find((c) => conditionFires(c, model));
-  if (fired) return verdict("no", fired.when === "categoryThinks" ? "thinking" : "condition");
+  if (fired) return verdict("no", fired.when === "temperatureIgnored" ? "thinking" : "condition");
 
   // Behind a relay the upstream is the more specific measurement: the relay's
   // own cells hold for whatever upstream a model has, these for one.
@@ -109,4 +110,17 @@ export function familyVerdict(
 /** Whether the wire has it — `unknown` counts: it is offered and sent. */
 export function hasCapability(id: CapabilityId, wire: Wire, model?: CapabilityModel): boolean {
   return capabilityVerdict(id, wire, model).status !== "no";
+}
+
+/**
+ * Whether a declared temperature goes out — the one question the planner asks
+ * before sending it and the drawer asks before showing the field, so the two
+ * cannot drift. `category` resolved, `effort` as the wire takes it (the drawer
+ * passes the form's: `effortOnWire` touches only the OpenAI ladders, which
+ * have no temperature condition).
+ */
+export function temperatureReaches(
+  wire: Wire, model: CapabilityModel, category: ThinkingCategory, effort: ReasoningEffort | undefined,
+): boolean {
+  return hasCapability("temperature", wire, { ...model, temperatureHeard: temperatureHeard(category, effort) });
 }

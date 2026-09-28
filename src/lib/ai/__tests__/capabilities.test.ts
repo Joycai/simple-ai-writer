@@ -281,12 +281,12 @@ describe("capabilityVerdict", () => {
       .toEqual({ status: "no", reason: "requires" });
   });
 
-  it("rules temperature out on Anthropic unless the model is declared not to think", () => {
+  it("rules temperature out on Anthropic unless the request says it is heard", () => {
     const anth = { platform: "anthropic" as const, standard: "anthropic" as const };
-    expect(capabilityVerdict("temperature", anth, { thinkingCategory: "claude-adaptive" })).toEqual({ status: "no", reason: "thinking" });
-    expect(hasCapability("temperature", anth, { thinkingCategory: "off" })).toBe(true);
-    expect(hasCapability("temperature", chat("dashscope"), { thinkingCategory: "qwen-budget" })).toBe(true);
-    // No category = the family default, which thinks: the safe answer for a caller that forgot to resolve it.
+    expect(capabilityVerdict("temperature", anth, { temperatureHeard: false })).toEqual({ status: "no", reason: "thinking" });
+    expect(hasCapability("temperature", anth, { temperatureHeard: true })).toBe(true);
+    expect(hasCapability("temperature", chat("dashscope"), { temperatureHeard: false })).toBe(true);
+    // Not said = not heard: the safe answer for a caller that forgot to ask.
     expect(capabilityVerdict("temperature", anth)).toEqual({ status: "no", reason: "thinking" });
     expect(hasCapability("temperature", { platform: "google", standard: "gemini" })).toBe(true);
   });
@@ -336,7 +336,7 @@ describe("relay upstreams", () => {
     it("keeps what works", () => {
       for (const modelId of KIRO) {
         expect(hasCapability("temperature", chat("newapi"), inferred(modelId))).toBe(true);
-        expect(hasCapability("temperature", anth("newapi"), { ...inferred(modelId), thinkingCategory: "off" })).toBe(true);
+        expect(hasCapability("temperature", anth("newapi"), { ...inferred(modelId), temperatureHeard: true })).toBe(true);
       }
     });
 

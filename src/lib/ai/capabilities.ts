@@ -49,7 +49,7 @@ export { CAPABILITY_IDS, CAPABILITY_REASONS, SERVER_TOOL_CAPABILITIES, type Capa
 export { CAPABILITY_RULES } from "./capability/rules";
 export { PLATFORM_CELLS, platformModelCalibration, platformResponsesInclude } from "./capability/cells/platform";
 export { UPSTREAM_CELLS } from "./capability/cells/upstream";
-export { familyVerdict, hasCapability, upstreamApplies } from "./capability/resolve";
+export { familyVerdict, hasCapability, temperatureReaches, upstreamApplies } from "./capability/resolve";
 export { carried, TRUST, trusted, type Source, type Sourced } from "./capability/intent";
 export { modelValue, resolveThinkingCategory, thinkingCategoryOf } from "./capability/values";
 export { canonicalModelId } from "./capability/modelId";

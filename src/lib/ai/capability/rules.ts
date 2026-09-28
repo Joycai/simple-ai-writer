@@ -40,8 +40,8 @@ interface CapabilityRule {
    * Conditions of the request under which it is `no` on a family, whatever
    * the cells say (`conditions.ts`). A verdict asked without the request's
    * input answers per the condition's `absent`. Ruled out by a condition, the
-   * reason is `condition` — `thinking` for `categoryThinks`, the reason the
-   * drawer has always shown for it.
+   * reason is `condition` — `thinking` for `temperatureIgnored`, the reason
+   * the drawer has always shown for it.
    */
   unless?: Partial<Record<ProtocolFamily, readonly Condition[]>>;
   /**
@@ -57,7 +57,7 @@ interface CapabilityRule {
 
 const SEES_IMAGES: readonly ModelType[] = ["multimodal", "vision"];
 
-const CATEGORY_THINKS: Condition = { when: "categoryThinks", absent: "fire" };
+const TEMPERATURE_IGNORED: Condition = { when: "temperatureIgnored", absent: "fire" };
 const WITH_FUNCTION_TOOLS: Condition = { when: "functionTools", absent: "defer" };
 
 /**
@@ -111,9 +111,10 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // author's 0.2 up to the one legal value would send the opposite of what
   // they asked for under the name of honouring it, so the adapter omits it —
   // and the drawer, asking the same cell, never renders a control that does
-  // nothing.
+  // nothing. Where an Anthropic-shaped endpoint was measured heeding it with
+  // thinking switched off, the category says so (`temperatureWhenOff`).
   temperature: {
-    families: ["openai", "responses", "gemini", "anthropic"], origin: "native", unless: { anthropic: [CATEGORY_THINKS] },
+    families: ["openai", "responses", "gemini", "anthropic"], origin: "native", unless: { anthropic: [TEMPERATURE_IGNORED] },
   },
   // `text.verbosity` exists on the Responses family only.
   textVerbosity: { families: ["responses"], origin: "native" },

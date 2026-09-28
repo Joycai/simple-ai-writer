@@ -15,11 +15,67 @@ claude-budget unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- ma
 minimax unset:auto default:auto off:auto minimal:auto low:auto medium:auto high:auto xhigh:auto max:auto
 doubao-switch unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 
-# temperature sent (family · category)
-openai off:yes openai-generic:yes deepseek:yes qwen-budget:yes qwen-effort:yes glm:yes glm-effort:yes glm-switch:yes doubao:yes responses-effort:yes gemini3:yes claude-adaptive:yes claude-budget:yes minimax:yes doubao-switch:yes
-responses off:yes openai-generic:yes deepseek:yes qwen-budget:yes qwen-effort:yes glm:yes glm-effort:yes glm-switch:yes doubao:yes responses-effort:yes gemini3:yes claude-adaptive:yes claude-budget:yes minimax:yes doubao-switch:yes
-gemini off:yes openai-generic:yes deepseek:yes qwen-budget:yes qwen-effort:yes glm:yes glm-effort:yes glm-switch:yes doubao:yes responses-effort:yes gemini3:yes claude-adaptive:yes claude-budget:yes minimax:yes doubao-switch:yes
-anthropic off:yes openai-generic:- deepseek:- qwen-budget:- qwen-effort:- glm:- glm-effort:- glm-switch:- doubao:- responses-effort:- gemini3:- claude-adaptive:- claude-budget:- minimax:- doubao-switch:-
+# temperature sent (family · category · effort)
+openai off unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai openai-generic unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai deepseek unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai qwen-budget unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai qwen-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai glm unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai glm-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai glm-switch unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai doubao unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai responses-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai gemini3 unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai claude-adaptive unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai claude-budget unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai minimax unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai doubao-switch unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses off unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses openai-generic unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses deepseek unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses qwen-budget unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses qwen-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses glm unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses glm-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses glm-switch unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses doubao unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses responses-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses gemini3 unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses claude-adaptive unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses claude-budget unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses minimax unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses doubao-switch unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini off unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini openai-generic unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini deepseek unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini qwen-budget unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini qwen-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini glm unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini glm-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini glm-switch unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini doubao unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini responses-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini gemini3 unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini claude-adaptive unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini claude-budget unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini minimax unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini doubao-switch unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+anthropic off unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+anthropic openai-generic unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic deepseek unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic qwen-budget unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic qwen-effort unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic glm unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic glm-effort unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic glm-switch unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic doubao unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic responses-effort unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic gemini3 unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic claude-adaptive unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic claude-budget unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic minimax unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic doubao-switch unset:- default:- off:yes minimal:- low:- medium:- high:- xhigh:- max:-
 
 # DashScope openai_compat, server tools declared
 off unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true

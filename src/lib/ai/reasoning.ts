@@ -209,6 +209,20 @@ export interface ThinkingCategory {
    * cannot see. Unlike `defaultOn` this is about the wire, not a toggle.
    */
   unsetThinks?: true;
+  /**
+   * The endpoint heeds a `temperature` while this category's off is on the
+   * wire. Absent = it does not, or nobody measured: the Anthropic family
+   * leaves the field out whenever the category is not `off`
+   * (`capability/conditions.ts` `temperatureHeard`), because the Messages API
+   * takes 1 alone while thinking and a relay of it may refuse the rest.
+   * A vendor fact, like `forcing`: MiniMax and 火山方舟 spell off the same
+   * way, and only 火山方舟's Anthropic route heeds the value
+   * (docs/issues/anthropic-temperature-thinking-off.md).
+   *
+   * `zeroIsUnset`: `0` there lands on the endpoint's default, not the
+   * greediest pick — the drawer says so under the field.
+   */
+  temperatureWhenOff?: { zeroIsUnset?: true };
 }
 
 /**
@@ -374,6 +388,10 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     hintKey: "aiConfig.models.thinkingCatDoubaoSwitchHint",
     family: "anthropic", dialect: "switch", shape: "onoff", menu: [],
     offSpelling: "disable", unsetThinks: true,
+    // Off, 0.01 collapses 19–20 of 20 picks onto one answer; 0 is as spread
+    // as no temperature; on, neither collapses (landscape.md §7 第十二个样本
+    // 「B6 补测」). MiniMax, same spelling, takes the field and ignores it.
+    temperatureWhenOff: { zeroIsUnset: true },
   },
 };
 
