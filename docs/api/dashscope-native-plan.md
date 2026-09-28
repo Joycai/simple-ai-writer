@@ -89,5 +89,30 @@
 
   **什么时候重开：** 学到的降级接不住了（报错不再点名 `tool_choice`，每次都失败而不是每周一轮），或者出现「想着也能强制」的
   新一代，让预降级变成真的损失——那时该做的是「按模型的默认思考」这一个事实，两条线路一起，而不是在原生族上打补丁。
+- **开流之前就被拒的请求，报错里只放厂商的 `code: message`，两种报文形状都认。**（2026-09-28，第二十二个样本。）拒绝的报文
+  跟着 `X-DashScope-SSE` 头走、不跟状态码走：带头是 400 + `text/event-stream` 的一帧（`id:1` / `event:error` /
+  `:HTTP_STATUS/400` / `data:{code, message, request_id}`），不带是 400 + `application/json` 的同一个对象。适配器此前把
+  `res.text()` 原样拼进报错，作者看到的是整帧 SSE 脚手架。现在 `refusalText` 先把整段当 JSON 读（起初写在 `dashscope.ts` 里，后来移到五个适配器共用的
+  `refusal.ts`，见 [`refusal-plan.md`](refusal-plan.md)），
+  再逐行读 `data:`（行先 trim，与流读取器认同样的分帧），取到带 `message` 的对象就报 `code: message (request_id …)`；两种都读
+  不出（网关的 HTML、没有 `message` 的对象）才退回原文。流开始之后的 `event:error` 帧是同一个对象，两处共用 `vendorErrorText`
+  拼这一句，所以中途失败的报错也带 `request_id`。
+  理由：
+  1. **头不去掉。** 它是这条线路能流式的前提；去掉就是整段 JSON 在最后一次给出，换一种报错形状的代价是丢流式。
+  2. **不按 `content-type` 分支。** 形状由头决定，但中间的代理可能改写或丢掉 `content-type`；两种形状都试一遍，读的只是字节。
+  3. **`message` 一字不改。** 学到的降级（`capability/learned.ts` 的 `/tool[_ ]?choice/i`）与 `url error` → 改走 Chat 线路的
+     提示都匹配这段原文；只剥掉包装，不改写内容。`request_id` 留在句尾：API 日志的 `error` 条目只记报错的 message、不记回包，
+     剥掉它就再也找不回找厂商排查要用的那个 id。
+  4. **不与 `providerProbe.apiErrorMessage` 合并。** 那个函数回答的是「回来的是不是 API」（有 `error` 就算），只认 JSON，
+     不取 `code`；这里要的是给作者看的一句话，两个问题不同。`endpointProbe` 的输出上限探测也带这个头，但它只在报文里
+     正则找「Range of max_tokens…」，帧包装不影响，这次不动。
+
+  `dashscope.test.ts` 直接调 `streamDashscope`、在 `globalThis.fetch` 上桩两种报文：两种形状报出同一句、帧的脚手架不进报错、
+  `url error` 的提示在帧形状上仍在、CRLF 与缩进的 `data:` 行也认、读不出时退回原文、`tool_choice` 的拒绝两种形状都被 `classify`
+  认出并端到端以 `auto` 重发。
+
+  **后续（已做，2026-09-28）：** ① 适配器在百炼 compatible-mode 上被拒时，回包同样是一行 `data: {"error":{…}}`、原样进报错。
+  按这里当时写的方向，做成了所有适配器共用的一个读取器，而不是在 `openai.ts` 里再抄一份——[`refusal-plan.md`](refusal-plan.md)。
+  多行 `data:` 拼接（SSE 规范允许）仍不认，没有厂商这样发过拒绝；读不出时的原文退回不截断。
 - 流没等到带真实 `finish_reason` 的结束帧就关掉，按失败处理，不把半截回答当整段交出（原生协议没有 `[DONE]`）。
 - Token Plan 全部按文档，未实测。

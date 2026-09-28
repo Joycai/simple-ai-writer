@@ -17,6 +17,7 @@
 import i18n from "../../i18n";
 import { fetch } from "../http";
 import { unsendablePart } from "./mediaParts";
+import { refusalText } from "./refusal";
 import {
   reasoningBody,
   thinkingBody, type ThinkingCategory,
@@ -660,7 +661,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
     });
 
     if (!res.ok) {
-      const err = await res.text();
+      const err = refusalText(await res.text());
       // The URL is part of the message on purpose: the most common failure on a
       // third-party endpoint is a base URL that resolves somewhere unintended,
       // and a bare "404: <html>" gives the author nothing to compare against the

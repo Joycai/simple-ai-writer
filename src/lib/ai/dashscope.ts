@@ -22,6 +22,7 @@ import { planRequest } from "./capability/plan";
 import { chatParams, toWireMessages } from "./openai";
 import { createChatDeltaReader } from "./chatDelta";
 import { nativeUrl } from "./urls";
+import { refusalText, vendorErrorText } from "./refusal";
 import type { StreamOptions } from "./types";
 
 const LABEL = "DashScope";
@@ -101,7 +102,7 @@ export async function streamDashscope(opts: StreamOptions): Promise<void> {
   });
 
   if (!res.ok) {
-    const err = await res.text();
+    const err = refusalText(await res.text());
     throw new Error(`DashScope API error ${res.status} (${url}): ${err}${/url error/i.test(err) ? URL_ERROR_HINT : ""}`);
   }
 
@@ -130,7 +131,7 @@ export async function streamDashscope(opts: StreamOptions): Promise<void> {
     // A failure mid-stream (a refused image, a moderation stop, an outage)
     // arrives on a 200 as an `error` frame: `{code, message, request_id}`.
     if (event === "error" || (json.code && !json.output)) {
-      throw new Error(`${LABEL}: ${json.code ?? "error"}: ${json.message ?? data}`);
+      throw new Error(`${LABEL}: ${vendorErrorText(json) ?? `${json.code ?? "error"}: ${data}`}`);
     }
     if (json.usage) {
       // Cumulative on every frame, so the last one is the turn's.

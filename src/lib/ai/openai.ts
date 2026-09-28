@@ -3,6 +3,7 @@
  */
 
 import { fetch } from "../http";
+import { refusalText } from "./refusal";
 import { reasoningBody, type NativeReasoning, ENCRYPTED_REASONING_FIELD } from "./reasoning";
 import { openaiServerToolsBody } from "./serverTools";
 import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
@@ -130,7 +131,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   });
 
   if (!res.ok) {
-    const err = await res.text();
+    const err = refusalText(await res.text());
     throw new Error(`OpenAI API error ${res.status} (${url}): ${err}`);
   }
 

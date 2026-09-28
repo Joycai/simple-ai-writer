@@ -65,11 +65,14 @@ describe("Anthropic probing", () => {
     ).resolves.toMatchObject({ ok: true });
   });
 
-  it("testProviderConnection surfaces the status and body on failure", async () => {
-    mockFetch({ error: { message: "invalid x-api-key" } }, false);
+  it("testProviderConnection surfaces the status and the vendor's message on failure", async () => {
+    mockFetch({ type: "error", error: { type: "authentication_error", message: "invalid x-api-key" }, request_id: "req_1" }, false);
     await expect(
       testProviderConnection("https://api.anthropic.com/v1", "bad", "anthropic"),
-    ).resolves.toMatchObject({ ok: false });
+    ).resolves.toEqual({
+      ok: false,
+      error: "API error 401 (https://api.anthropic.com/v1/models?limit=1): authentication_error: invalid x-api-key (request_id req_1)",
+    });
   });
 
   it("reports a credit gate as failure, with the relay's own message", async () => {

@@ -68,6 +68,7 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 | [`tool-search.md`](tool-search.md) | 工具按需加载（tool search / `defer_loading`）的各族对照：形状、缓存、回传、限制，与本项目运行状态装载的关系（文档调研，未实测） | ✅ |
 | [`gpt56-plan.md`](gpt56-plan.md) | GPT-5.6 支持度盘点：已通的、缺口、逐条方案（本项目的取舍，不是协议事实） | 计划 |
 | [`dashscope-native-plan.md`](dashscope-native-plan.md) | 百炼新地址、Token Plan 平台，与 DashScope 原生协议作为本项目的第五个协议族（本项目的取舍）；事实在 `landscape.md` §7 第二十一个样本 | 已做 |
+| [`refusal-plan.md`](refusal-plan.md) | 被拒请求的报文：五个适配器共用一个读取器——认哪些形状、剥掉什么留下什么（`param` / `request_id` / 中继的上游报文）、为什么不与连接测试的「是不是 API」判据合并（本项目的取舍）；事实在 `streaming.md` §3.5 | 已做 |
 | [`zhipu-plan.md`](zhipu-plan.md) | 智谱 BigModel 与本项目现状的对照：原样可用的、十个缺口、P1（按量平台 + 对话模型，已做）与 P2–P5 方案；事实在 `landscape.md` §7 第十四个样本 | P1 已做 |
 
 ## 接一个新协议族时，先看这三条

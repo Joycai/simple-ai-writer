@@ -111,6 +111,8 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 - **GLM `glm` 类目**：`reasoning_effort` + `thinking:{clear_thinking:false}`。✅ 2026-09-19 在智谱标准端点上实测 glm-5.3-flash：
   组合被接受，low / high / max 三档生效，其余值（含 `none`）400；关不掉思考（[`landscape.md`](../api/landscape.md) §7 第十四个样本）。
   跨轮「保留式思考」是否因此受益未量（[`zhipu-plan.md`](../api/zhipu-plan.md) P4）。
+  2026-09-28 带工具补测 glm-5.3 / 5.3-flash：`low` 的推理降到 0（难一点的题 43–131 token），**不发 `reasoning_effort` 时比 `high`
+  想得还多**（232–1,476；测试没带 `clear_thinking`）——这个类目上「不设」不是省钱的一档，最省的是 `low`（同上，第十四个样本 ① 面补测）。
 - **GLM `glm-switch` 类目**：只发 `thinking:{type:enabled/disabled}`。✅ 2026-09-19 实测 glm-4.7 / glm-4.5-air：关 = 无推理，
   不设 = 照常思考（端点默认），`reasoning_effort` 在这两款上被静默无视——所以这个类目不发它。同日校准 5.1 / 5 / 5-turbo / 4.6 / 4.5 同理。
 - **GLM `glm-effort` 类目**（GLM-5.2）：关发 `thinking:{type:"disabled"}`，开发 `reasoning_effort`。✅ 2026-09-19 实测：`none` 关不掉、
