@@ -116,7 +116,7 @@ describe("stream watchdog", () => {
 
     await vi.advanceTimersByTimeAsync(90_000 + 3 * 300_000 + 1_000);
 
-    await expect(run.done).resolves.toBeUndefined();
+    await expect(run.done).resolves.toEqual({});
     const text = run.received.flatMap((c) => ("text" in c ? [c.text] : [])).join("");
     expect(text).toBe("段0段1段2");
   });

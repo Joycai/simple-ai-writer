@@ -32,7 +32,7 @@
  * `resolve`, docs/api/capability-resolution-lld.md P1) and are re-exported
  * here, so every caller keeps importing from `capabilities`. What stays in
  * this file is what is built on the verdict: the effort ladder and the
- * server-tool section gate — and the one place the session's learned
+ * server-tool section gate — and the one place an endpoint's learned
  * refusals meet the tables (`capability/learned.ts`).
  */
 
@@ -56,8 +56,8 @@ export { canonicalModelId } from "./capability/modelId";
 
 /**
  * The one answer, from the tables (`capability/resolve.ts`) — and, given the
- * endpoint's address, capped by what that endpoint+model refused this session
- * (reason `learned`). The resolution itself stays a pure function of the
+ * endpoint's address, capped by what that endpoint+model has refused (reason
+ * `learned`). The resolution itself stays a pure function of the
  * tables; the cap is laid on here, after it, so a table `no` keeps its own
  * reason. Only the drawer passes the address: the request path reads the same
  * store through `effectiveStructuredOutput` and the forced-choice checks.

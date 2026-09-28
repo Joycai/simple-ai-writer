@@ -33,6 +33,7 @@ function spiral(): void {
       opts.onChunk({ reasoning: "或者更戏剧一点，或者写成现实悬疑。".repeat(4) });
     }
     opts.onChunk({ done: true, inputTokens: 50, outputTokens: 950, truncated: true, stopReason: "length" });
+    return {};
   });
 }
 
@@ -42,6 +43,7 @@ function answer(text: string): void {
     opts.onChunk({ reasoning: "好。" });
     opts.onChunk({ text });
     opts.onChunk({ done: true, inputTokens: 50, outputTokens: 20 });
+    return {};
   });
 }
 
@@ -114,6 +116,7 @@ describe("thinking guard", () => {
       sent.push({ ...opts, messages: [...opts.messages] });
       opts.onChunk({ toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] });
       opts.onChunk({ done: true, inputTokens: 50, outputTokens: 10 });
+      return {};
     });
     answer("写好了。");
     const opts = makeOptions({
@@ -185,6 +188,7 @@ describe("thinking guard", () => {
         sent.push({ ...opts, messages: [...opts.messages] });
         opts.onChunk({ toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] });
         opts.onChunk({ done: true, inputTokens: 50, outputTokens: 10 });
+        return {};
       });
       answer("写好了。");
       const opts = makeOptions({
@@ -250,6 +254,7 @@ describe("thinking guard", () => {
       opts.onChunk({ reasoning: "想一想……" });
       controller.abort();
       if (opts.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      return {};
     });
     const opts = makeOptions({ signal: controller.signal });
 

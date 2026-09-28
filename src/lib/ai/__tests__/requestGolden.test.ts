@@ -11,8 +11,8 @@
  * reviewed, the same way `capability-matrix.md` shows which cells moved.
  *
  * Everything goes through the real producers: rows become a request through
- * `connOptions()` (thinking category, output cap, relay upstream), structured
- * requests through `jsonModeShaping()`, and the request through
+ * `connOptions()` (thinking category, output cap, relay upstream), and the
+ * request — structured ones with their intent, shaped by the plan — through
  * `streamCompletion()`, whose `fetch` is the only thing stubbed — it records
  * the URL and body and fails the call. The 将发送 summary is taken beside each
  * row from `wireSummary()`, so the day the two are made to agree (LLD B10) the
@@ -27,7 +27,7 @@ import { __resetLearned } from "../capability/learned";
 import { connOptions } from "../conn";
 import type { Model, Provider } from "../configDb";
 import { streamCompletion } from "../index";
-import { jsonModeShaping } from "../jsonMode";
+import { planRequest } from "../capability/plan";
 import { wireSummary } from "../modelSummary";
 import { PLATFORM_IDS, platformEndpoints, platformOrigin, type PlatformId } from "../platforms";
 import { RELAY_UPSTREAMS, isRelayPlatform, type RelayUpstreamChoice } from "../relayUpstream";
@@ -161,15 +161,14 @@ async function platformGolden(platform: PlatformId): Promise<string> {
           .map((i) => `${i.scope ? `${i.scope}:` : ""}${i.key}=${i.value}`).join(" ");
         out.push("", `### ${label} · ${preset}`, `summary: ${summary || "—"}`);
         for (const req of REQUESTS.filter((r) => r.preset === preset)) {
-          const shaping = preset === "structured"
-            ? jsonModeShaping(conn, MESSAGES.map((m) => (typeof m.content === "string" ? m.content : "")).join("\n"), SCHEMA)
-            : undefined;
+          const structured = preset === "structured" ? { schema: SCHEMA } : undefined;
+          const shaping = structured ? planRequest({ ...conn, messages: MESSAGES, structured }).json : undefined;
           const sent = await capture({
             ...conn,
             messages: MESSAGES,
             onChunk: () => {},
             ...(req.tools ? { tools: [FUNCTION_TOOL], toolChoice: "required" as const } : {}),
-            ...(shaping?.extraBody ? { extraBody: shaping.extraBody } : {}),
+            ...(structured ? { structured } : {}),
           });
           out.push(
             `- ${req.tools ? "tools+required" : "plain"}${shaping ? ` (json ${shaping.mode}${shaping.cue ? " +cue" : ""})` : ""}`,

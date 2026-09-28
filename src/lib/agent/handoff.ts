@@ -136,7 +136,7 @@ export function parseHandoffBrief(raw: string): HandoffBrief {
  * forced tool_choice 会被静默降级成 `auto`（请求计划的 `toolChoiceOf`，
  * lib/ai/capability/plan.ts，那里的注释论证过那对 `structured.ts`
  * 是安全的——对本设计不是）；DeepSeek V4 那种直接 400 拒掉强制档的端点则由
- * lib/ai/toolChoice.ts 用 `auto` 重发同一轮，落到这里的形状完全一样。降级之后
+ * `streamCompletion`（lib/ai/index.ts）用 `auto` 重发同一轮，落到这里的形状完全一样。降级之后
  * 若退回「主模型自己写」，作者开了开关、看到的却是主模型的输出，而且没有任何
  * 报错：开关形同虚设。
  *

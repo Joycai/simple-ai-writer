@@ -72,6 +72,7 @@ function queueRound(chunks: Array<Record<string, unknown>>): void {
   mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
     sent.push([...opts.messages]);
     for (const c of chunks) opts.onChunk(c as never);
+    return {};
   });
 }
 
@@ -412,17 +413,17 @@ describe("runAgent", () => {
     expect(opts.messages[2]).toEqual({ role: "assistant", content: "plain" });
   });
 
-  it("passes extraBody (JSON mode) through to the streaming client", async () => {
+  it("passes the structured-output intent through to the streaming client", async () => {
     queueRound([{ text: "{}" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
-    const extraBody = { response_format: { type: "json_object" } };
+    const structured = { schema: { name: "emit", parameters: { type: "object" } } };
     const opts = makeOptions({
       preset: { id: "json", tools: [], maxRounds: 1, finishPolicy: "force-text" },
-      extraBody,
+      structured,
     });
 
     await runAgent(opts);
 
-    expect(mockStream.mock.calls[0][0].extraBody).toBe(extraBody);
+    expect(mockStream.mock.calls[0][0].structured).toBe(structured);
   });
 
   it("throws AbortError when the signal is already aborted", async () => {

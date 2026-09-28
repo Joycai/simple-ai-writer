@@ -18,7 +18,6 @@
 
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
-import { withJsonModeFallback } from "../ai/jsonMode";
 import { planRequest } from "../ai/capability/plan";
 import { stripNulls } from "../ai/jsonSchemaStrict";
 import type { ContentPart, StreamMessage, ToolDefinition } from "../ai/types";
@@ -77,7 +76,7 @@ const TOOL_CAPABILITY_ERROR = new RegExp(
  * `tool_choice` goes out as `auto` — for any of the plan's reasons: the
  * thinking dialect (Qwen's switch with thinking on, MiniMax always), the
  * table's cell (智谱; a relay's Kiro or anti upstream; Azure's Chat route), or
- * the endpoint's own 400 learned this session — **and** the JSON path gets
+ * the endpoint's own 400, learned — **and** the JSON path gets
  * strict `json_schema`. Under `auto` the model may still call the tool, so
  * with only `json_object` to fall back on the attempt is a gamble worth
  * making. With `json_schema` available the JSON path enforces the same schema,
@@ -87,13 +86,6 @@ const TOOL_CAPABILITY_ERROR = new RegExp(
 function forcedToolIsWasted(o: ConnOptions, outputTool: ToolDefinition): boolean {
   const plan = planRequest({ ...o, tools: [outputTool], toolChoice: "required" });
   return plan.toolChoice?.downgradedBy !== undefined && plan.structured === "json_schema";
-}
-
-/** The text a multimodal user turn carries, for the "json" precondition check. */
-function userText(content: string | ContentPart[]): string {
-  return typeof content === "string"
-    ? content
-    : content.map((p) => (p.type === "text" ? p.text : "")).join("\n");
 }
 
 /**
@@ -160,41 +152,34 @@ export async function runStructuredTask(args: StructuredTaskArgs): Promise<strin
   // likely to volunteer clean JSON. The output tool's parameters go along as
   // the schema: on a model that takes strict `json_schema` mode, this path
   // enforces the same shape the tool path would have. An endpoint that rejects
-  // the mode says so with a 400 before generating; the runner steps down one
-  // mode and remembers (ai/jsonMode.ts), so the whole request is re-sent at
-  // most twice and never again for that endpoint this session.
-  const runJson = (): Promise<string> => withJsonModeFallback(
-    common,
-    `${args.systemPrompt}\n${args.jsonInstruction}\n${userText(args.userContent)}`,
-    args.outputTool.function,
-    async (json) => {
-      let acc = "";
-      args.onText?.("");
-      const messages: StreamMessage[] = [
+  // the mode says so with a 400 before generating; `streamCompletion` steps
+  // down one mode and remembers, so the request is re-sent at most twice and
+  // not again for that endpoint.
+  const runJson = async (): Promise<string> => {
+    let acc = "";
+    args.onText?.("");
+    const { structured } = await streamCompletion({
+      ...common,
+      messages: [
         { role: "system", content: `${args.systemPrompt}\n${args.jsonInstruction}` },
         { role: "user", content: args.userContent },
-      ];
-      if (json.cue) messages.push({ role: "user", content: json.cue });
-      await streamCompletion({
-        ...common,
-        messages,
-        extraBody: json.extraBody,
-        onChunk: (chunk) => {
-          if ("reasoning" in chunk) {
-            noteReasoning(chunk);
-          } else if ("text" in chunk) {
-            acc += chunk.text;
-            args.onText?.(acc);
-          }
-        },
-      });
-      const raw = extractJsonObject(acc);
-      // Strict mode made every optional field nullable so the schema could be
-      // sent at all; callers are written against *absent*, so take the nulls
-      // back out before they see it (see ai/jsonSchemaStrict.ts).
-      return json.mode === "json_schema" ? JSON.stringify(stripNulls(JSON.parse(raw))) : raw;
-    },
-  );
+      ],
+      structured: { schema: args.outputTool.function },
+      onChunk: (chunk) => {
+        if ("reasoning" in chunk) {
+          noteReasoning(chunk);
+        } else if ("text" in chunk) {
+          acc += chunk.text;
+          args.onText?.(acc);
+        }
+      },
+    });
+    const raw = extractJsonObject(acc);
+    // Strict mode made every optional field nullable so the schema could be
+    // sent at all; callers are written against *absent*, so take the nulls
+    // back out before they see it (see ai/jsonSchemaStrict.ts).
+    return structured === "json_schema" ? JSON.stringify(stripNulls(JSON.parse(raw))) : raw;
+  };
 
   if (forcedToolIsWasted(common, args.outputTool)) return runJson();
 

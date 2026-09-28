@@ -318,7 +318,7 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
 | **usage 缺失** | 不认 `stream_options.include_usage`，或返回全零 usage |
 | **`/models` 不可信** | 返回空、返回全量目录、或返回该 key 无权访问的模型 |
 | **工具调用降级** | 声明支持但实际不返回 `tool_calls`，或 `arguments` 不是合法 JSON |
-| **强制 `tool_choice` 被拒** | DeepSeek V4（flash/pro）恒在思考模式，`required` 与具名工具一律 400 `Thinking mode does not support this tool_choice`；请求里**没有任何字段**能提前判断，只能从它自己的 400 学（`src/lib/ai/toolChoice.ts`） |
+| **强制 `tool_choice` 被拒** | DeepSeek V4（flash/pro）恒在思考模式，`required` 与具名工具一律 400 `Thinking mode does not support this tool_choice`；请求里**没有任何字段**能提前判断，只能从它自己的 400 学（学到的降级存储 `src/lib/ai/capability/learned.ts`，重试在 `streamCompletion`） |
 | **HTTP 200 + SSE 内错误** | 余额不足、上游故障、内容审核以 `data: {"error":…}` 事件送达，而非错误状态码 |
 | **静默截断 prompt** | 本地栈（ollama 等）超出上下文时从头部丢弃，system 指令先没 |
 | **`<think>` 内联** | 部分中继把思维链混进正文，用 `<think>…</think>` 包裹 |
@@ -559,7 +559,7 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
 - **思考中强制 `tool_choice`**：qwen3.8-flash 与 MiniMax-M2.5 400
   （`The tool_choice parameter does not support being set to required or object in thinking mode`），
   **其余 5 个接受**——文档说的「思考模式不支持强制」并非全端点常态。报文含
-  `tool_choice` 字样，`streamCompletion` 的一次性重试（`lib/ai/toolChoice.ts`）能接住，
+  `tool_choice` 字样，`streamCompletion` 的重试（学到后以 `auto` 重发）能接住，
   7 个模型的 forced 请求最终都拿到了工具调用。并行工具调用**默认就发生**
   （不发 `parallel_tool_calls` 也回两个调用），与文档「默认关」不符。
 - **工具轮回传 `reasoning_content`**：带与不带都 200，6 个思考模型均如此——这里

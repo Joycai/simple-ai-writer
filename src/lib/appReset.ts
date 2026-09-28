@@ -9,6 +9,8 @@
  * **总体用量**（`config.db` 的 `token_usage`）跟着一起清：它是配置库的一部分，
  * 而重置之后模型和计费组都不在了，留着一堆指向不存在的模型的行只会在用量页上
  * 显示成一串「已删除的模型」。项目文件夹里的那一份不动——理由在下一段。
+ * **端点学到的降级**（`learned_ceilings`，连同内存里那一份）也清：刚装好的
+ * 应用什么都没学过。
  *
  * **不碰**作者的稿子：项目文件夹里的文档、`.ai-writer/` 下的知识库、
  * `project.db` 里的用量与对话记录，一个字节都不动——它们在文件系统上，不属于
@@ -41,6 +43,7 @@
  */
 
 import { listProviders, listModels, listPrompts, ensureAiSchema, dropLegacyKeyTable } from "./ai/configDb";
+import { clearLearned } from "./ai/capability/learned";
 import { loadCustomFormats } from "./docx/presets";
 import { clearAllSecrets } from "./keyStore";
 import { clearAllPrefs, prefEntries } from "./prefs";
@@ -138,7 +141,10 @@ export async function resetApp(): Promise<ResetSummary> {
     { sql: "DELETE FROM fee_groups", values: [] },
     // 总体用量。项目文件夹里的那一份不动——那是作者的稿子那一边的东西。
     { sql: "DELETE FROM token_usage", values: [] },
+    // 端点学到的降级（learnedDb.ts）。内存里那一份紧跟着清。
+    { sql: "DELETE FROM learned_ceilings", values: [] },
   ]);
+  clearLearned();
 
   // 3. 排版格式和历史遗留的明文密钥表都不在上面那个事务里，理由和
   //    `applyConfigImport` 一样：它们和上面几张表没有外键关系，塞进去只会把

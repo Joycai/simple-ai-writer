@@ -36,7 +36,7 @@ export function CapabilityMatrix({
   current: ProtocolFamily;
   wireFor: (f: ProtocolFamily) => Wire | undefined;
   /**
-   * The route's address — with it, a cell the endpoint refused this session
+   * The route's address — with it, a cell the endpoint has refused
    * reads `— · learned` (lib/ai/capability/learned.ts). Absent = the tables alone.
    */
   baseUrlFor?: (f: ProtocolFamily) => string | undefined;

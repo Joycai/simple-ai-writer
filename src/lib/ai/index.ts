@@ -13,9 +13,12 @@ import { streamResponses } from "./responses";
 import { estimateMessagesTokens, estimateToolsTokens } from "./tokenEstimate";
 import { carried, trusted } from "./capability/intent";
 import { classify, noteLearned } from "./capability/learned";
-import { planRequest } from "./capability/plan";
-import { forcedToolChoiceRefused, isForcedToolChoice } from "./toolChoice";
-import { applyPrefix, ContextSizeError, familyOf, ImagePayloadError, StreamStallError, type StreamOptions } from "./types";
+import { isForcedToolChoice, planRequest, type RequestPlan } from "./capability/plan";
+import type { StructuredOutputMode } from "./jsonMode";
+import {
+  applyPrefix, ContextSizeError, familyOf, ImagePayloadError, StreamStallError,
+  type MessageContent, type StreamMessage, type StreamOptions,
+} from "./types";
 import { imagePayload, MAX_REQUEST_IMAGE_CHARS } from "./imagePart";
 
 export * from "./types";
@@ -103,43 +106,92 @@ function createStallWatch(outer: AbortSignal | undefined, firstMs: number, idleM
   };
 }
 
-export async function streamCompletion(opts: StreamOptions): Promise<void> {
-  // Some endpoints answer a forced `tool_choice` with a 400 rather than
-  // honouring or quietly ignoring it, and nothing in the config predicts which
-  // (DeepSeek V4 thinks unconditionally, and forcing is illegal while it does).
-  // Once one has said so, stop asking — see ./toolChoice and the learned
-  // store it reads (./capability/learned).
-  const base: StreamOptions =
-    isForcedToolChoice(opts.toolChoice) && forcedToolChoiceRefused(opts)
-      ? { ...opts, toolChoice: "auto" }
-      : opts;
-  const merged: StreamOptions = { ...base, messages: applyPrefix(base.messages, base.prefix) };
-  const log = beginApiLog(merged);
-  const estimated = estimateMessagesTokens(merged.messages) + estimateToolsTokens(merged.tools);
+/** What a finished call reports back beyond its chunks. */
+interface StreamResult {
+  /** The JSON tier the request that went through was shaped with; absent without `structured`. */
+  structured?: StructuredOutputMode;
+}
+
+/**
+ * The one entry point, and the one fallback executor
+ * (docs/api/capability-resolution-lld.md §3.7, P7).
+ *
+ * Some refusals are not recoverable from the config: DeepSeek V4 answers a
+ * forced `tool_choice` with a 400 while it thinks, a relay rejects
+ * `response_format`, a model refuses strict `json_schema`. The endpoint's 400
+ * says so before generating anything, so each is learned (./capability/learned)
+ * and the request is planned again under the lowered ceiling and re-sent.
+ * A refusal is only learned about a fact the request carried, as
+ * a ceiling strictly below what it carried (`LEARN_RULES`), and the next plan
+ * is capped by it — so every retry sends strictly less, and with forcing on two
+ * levels and JSON on three the loop ends within three retries.
+ */
+export async function streamCompletion(opts: StreamOptions): Promise<StreamResult> {
+  const merged: StreamOptions = { ...opts, messages: applyPrefix(opts.messages, opts.prefix) };
+  for (;;) {
+    // What the request carries, decided once per attempt for whichever adapter
+    // spells it — the forced choice and the JSON tier read the learned store.
+    const plan = planRequest(merged);
+    if (!(await sendOnce(shape(merged, plan.json), plan))) return plan.json ? { structured: plan.json.mode } : {};
+  }
+}
+
+/**
+ * The JSON shaping put on the request: its fields merged into `extraBody`, its
+ * cue appended to the last user turn — inside that turn rather than as a turn
+ * of its own, since some local chat templates reject two user turns in a row.
+ */
+function shape(req: StreamOptions, json: RequestPlan["json"]): StreamOptions {
+  if (!json) return req;
+  return {
+    ...req,
+    ...(json.extraBody ? { extraBody: { ...req.extraBody, ...json.extraBody } } : {}),
+    ...(json.cue ? { messages: withCue(req.messages, json.cue) } : {}),
+  };
+}
+
+function withCue(messages: StreamMessage[], cue: string): StreamMessage[] {
+  let at = messages.length - 1;
+  while (at >= 0 && messages[at].role !== "user") at--;
+  if (at < 0) return [...messages, { role: "user", content: cue }];
+  const turn = messages[at] as { role: "user"; content: MessageContent };
+  const content: MessageContent = typeof turn.content === "string"
+    ? `${turn.content}\n\n${cue}`
+    : [...turn.content, { type: "text", text: cue }];
+  return messages.map((m, i) => (i === at ? { ...turn, content } : m));
+}
+
+/**
+ * One request. Resolves false when it went through; true when the endpoint
+ * refused something the request carried and a ceiling went down, so it is
+ * worth planning again. Any other failure is thrown as it came.
+ */
+async function sendOnce(req: StreamOptions, plan: RequestPlan): Promise<boolean> {
+  const log = beginApiLog(req);
+  const estimated = estimateMessagesTokens(req.messages) + estimateToolsTokens(req.tools);
   // Only the author's window refuses a request: a table's may be wrong for this
   // endpoint, and a wrong one here means nothing is sent at all (TRUST.contextGate).
-  const gate = trusted(carried(merged.contextSize, merged.provenance?.contextSize), "contextGate");
+  const gate = trusted(carried(req.contextSize, req.provenance?.contextSize), "contextGate");
   if (gate && estimated > gate) {
     const err = new ContextSizeError(estimated, gate);
     log.error(err);
     throw err;
   }
-  const images = imagePayload(merged.messages);
+  const images = imagePayload(req.messages);
   if (images.chars > MAX_REQUEST_IMAGE_CHARS) {
     const err = new ImagePayloadError(images.count, images.chars, MAX_REQUEST_IMAGE_CHARS);
     log.error(err);
     throw err;
   }
-  // Whether anything has reached the caller yet. The retry below is only ever
-  // correct on a request that failed before its first chunk — which is where a
-  // rejected `tool_choice` fails, the status line arriving before generation —
-  // and this is what says so rather than an assumption about the adapters.
+  // Whether anything has reached the caller yet. A retry is only ever correct
+  // on a request that failed before its first chunk — which is where a refused
+  // parameter fails, the status line arriving before generation — and this is
+  // what says so rather than an assumption about the adapters.
   let streamed = false;
-  const watch = createStallWatch(merged.signal, firstChunkDeadlineMs(estimated), STREAM_IDLE_MS);
+  const watch = createStallWatch(req.signal, firstChunkDeadlineMs(estimated), STREAM_IDLE_MS);
   const wrapped: StreamOptions = {
-    ...merged,
-    // What the request carries, decided once for whichever adapter spells it.
-    _plan: planRequest(merged),
+    ...req,
+    _plan: plan,
     signal: watch.signal,
     // Wired here, not by callers: it is the log's own plumbing. An adapter that
     // sends several requests for one call reports each of them through it.
@@ -147,13 +199,13 @@ export async function streamCompletion(opts: StreamOptions): Promise<void> {
     // through it, and replacing it left them asserting on nothing.
     _onRequestBody: (body) => {
       log.requestBody(body);
-      merged._onRequestBody?.(body);
+      req._onRequestBody?.(body);
     },
     onChunk: (chunk) => {
       streamed = true;
       watch.alive();
       log.chunk(chunk);
-      merged.onChunk(chunk);
+      req.onChunk(chunk);
     },
   };
   try {
@@ -174,22 +226,24 @@ export async function streamCompletion(opts: StreamOptions): Promise<void> {
         await streamOpenAI(wrapped);
     }
     log.success();
+    return false;
   } catch (e) {
     // Whatever the adapter threw on the watchdog's abort (an AbortError, the
     // reason itself, a network error), the truth is that the stream stalled.
     const err = watch.stalled() ?? e;
     log.error(err);
-    watch.done();
-    // The endpoint refused the forced choice. Retried once with `auto` — the
-    // request cost nothing (it was rejected before generation) and both callers
-    // that force already handle "the model didn't call it". The recursion ends
-    // here: `auto` is not a forced choice, so this branch can't run again.
-    const learned = streamed ? undefined : classify(err, { forcedToolChoice: isForcedToolChoice(merged.toolChoice) });
-    if (learned) {
-      noteLearned(merged, learned.fact, learned.ceiling);
-      return streamCompletion({ ...base, toolChoice: "auto" });
-    }
-    throw err;
+    // Both callers that force a tool already handle "the model didn't call
+    // it", and a JSON tier stepped down still carries the cue — so neither
+    // retry changes what the caller has to cope with.
+    const learned = streamed
+      ? undefined
+      : classify(err, { forcedToolChoice: isForcedToolChoice(plan.toolChoice?.sent), structuredOutput: plan.json?.mode });
+    if (!learned) throw err;
+    // Retried whether or not this call is the one that lowered the ceiling: a
+    // parallel request to the same endpoint may have learned it first, and the
+    // next plan is capped either way.
+    noteLearned(req, learned.fact, learned.ceiling);
+    return true;
   } finally {
     watch.done();
   }

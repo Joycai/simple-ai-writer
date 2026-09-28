@@ -101,6 +101,7 @@ function queueRound(chunks: Array<Record<string, unknown>>): void {
   mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
     sent.push({ ...opts, snapshot: [...opts.messages] });
     for (const c of chunks) opts.onChunk(c as never);
+    return {};
   });
 }
 

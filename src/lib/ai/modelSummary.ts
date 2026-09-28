@@ -145,7 +145,7 @@ function spellSummary(plan: RequestPlan, budgetDeclared: boolean): WireItem[] {
  * without function tools — the conditions that drop `enable_code_interpreter`
  * and the `agent_max` strategy are the request's, not the model's.
  *
- * `baseUrl` names the endpoint for the session's learned refusals: with it,
+ * `baseUrl` names the endpoint for its learned refusals: with it,
  * the structured-output item is what will *actually* be sent, not what the
  * config alone would say. `platform` decides which server tools can be spelled
  * (`lib/ai/platforms.ts`); absent = inferred from `baseUrl`, as the adapters do.

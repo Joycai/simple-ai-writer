@@ -53,6 +53,7 @@ function queueRound(chunks: Array<Record<string, unknown>>, before?: () => void)
     before?.();
     offered.push(opts.tools?.map((t: ToolDefinition) => t.function.name));
     for (const c of chunks) opts.onChunk(c as never);
+    return {};
   });
 }
 

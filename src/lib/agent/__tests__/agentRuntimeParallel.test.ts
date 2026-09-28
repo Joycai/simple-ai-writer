@@ -61,6 +61,7 @@ function makeOptions(overrides: Partial<AgentRuntimeOptions> = {}): AgentRuntime
 function queueRound(chunks: Array<Record<string, unknown>>): void {
   mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
     for (const c of chunks) opts.onChunk(c as never);
+    return {};
   });
 }
 

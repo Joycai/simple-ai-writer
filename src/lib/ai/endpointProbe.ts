@@ -138,6 +138,11 @@ export interface ProbeReport {
   /** What the run actually spent, for the receipt shown after it finishes. */
   spent: ProbeCost;
   probedAt: number;
+  /**
+   * Whether the endpoint answered at least one completion request — that the
+   * run looked at the endpoint at all, whatever its numbers came to.
+   */
+  answered: boolean;
 }
 
 // ─── Cost planning ───────────────────────────────────────────────────────────
@@ -435,6 +440,8 @@ interface Session {
   outputParam: string;
   inputTokens: number;
   outputTokens: number;
+  /** Some completion request came back 2xx. */
+  answered: boolean;
 }
 
 function warn(s: Session, code: ProbeWarningCode, detail?: string): void {
@@ -468,7 +475,10 @@ async function probeRequest(
     throwIfAborted(s.signal);
     const res = await chatRequest(s.target, prompt, maxTokens, s.outputParam, s.signal);
     account(s, res);
-    if (res.ok) return res;
+    if (res.ok) {
+      s.answered = true;
+      return res;
+    }
     last = res;
     const info = classifyProbeError(res.status, res.body);
 
@@ -848,6 +858,7 @@ export async function probeEndpoint(opts: ProbeOptions): Promise<ProbeReport> {
     outputParam: outputParamFor(opts.standard),
     inputTokens: 0,
     outputTokens: 0,
+    answered: false,
   };
 
   let calibration: Calibration | undefined;
@@ -919,5 +930,6 @@ export async function probeEndpoint(opts: ProbeOptions): Promise<ProbeReport> {
     warnings: s.warnings,
     spent: estimateProbeCost(s.inputTokens, s.outputTokens, 0, 0),
     probedAt: Date.now(),
+    answered: s.answered,
   };
 }

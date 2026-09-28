@@ -68,8 +68,9 @@ export type CapabilityStatus = "yes" | "unknown" | "no";
  *     working or not (UPSTREAM_CELLS).
  *   - `condition`: this request's own condition rules it out — function tools beside it, or thinking
  *     off where it needs thinking (`rules.ts` `unless`). Only an adapter asks with the request.
- *   - `learned`: the tables allow it, but this endpoint+model answered it with a 400 earlier this
- *     session (`capability/learned.ts`); it is no longer sent until the app restarts.
+ *   - `learned`: the tables allow it, but this endpoint+model answered it with a 400 within the
+ *     last week (`capability/learned.ts`); it is not sent again until that ages out or the
+ *     author probes the model or changes its declaration (`learnedForget.ts`).
  */
 export const CAPABILITY_REASONS = [
   "measured", "protocol", "unmeasured", "relay", "platform-absent", "platform-unlisted",

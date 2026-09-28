@@ -25,8 +25,6 @@ interface LoreAgentTaskArgs extends AiConn {
   /** Project context for the preset's tools (ignored for tools: []). */
   projectPath: string;
   loreIndex: LoreIndex;
-  /** Extra top-level request fields (JSON mode etc.) — single-shot presets only. */
-  extraBody?: Record<string, unknown>;
   signal?: AbortSignal;
   /**
    * 取材范围（见 lib/lore/collections）。这些模态也要认围栏：一次「改进条目」
@@ -55,7 +53,6 @@ export async function runLoreAgentTask(args: LoreAgentTaskArgs): Promise<string>
   let accumulated = "";
   await runAgent({
     ...connOptions(args),
-    extraBody: args.extraBody,
     preset: args.preset,
     messages,
     toolContext,

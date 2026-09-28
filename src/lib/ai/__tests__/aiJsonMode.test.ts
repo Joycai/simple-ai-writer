@@ -12,10 +12,10 @@
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { __resetLearned } from "../capability/learned";
+import { __resetLearned, noteLearned } from "../capability/learned";
 import {
-  effectiveStructuredOutput, JSON_ONLY_CUE, jsonModeCeiling, jsonModeShaping, knownJsonSchemaModel, noteJsonModeRefused, parseStructuredOutputMode,
-  resolveStructuredOutput, withJsonModeFallback,
+  effectiveStructuredOutput, JSON_ONLY_CUE, jsonModeCeiling, jsonModeShaping, knownJsonSchemaModel, parseStructuredOutputMode,
+  resolveStructuredOutput,
 } from "../jsonMode";
 
 const WITH = "Return the entry as strict JSON.";
@@ -186,7 +186,7 @@ describe("resolveStructuredOutput", () => {
 
   it("gives Anthropic the cue alone once the schema tier is refused", () => {
     const target = { standard: "anthropic" as const, baseUrl: "https://api.anthropic.com", modelId: "claude-sonnet-5" };
-    noteJsonModeRefused(target, "json_schema");
+    noteLearned(target, "structuredOutput", "json_object");
     const shaping = jsonModeShaping(target, "x", { name: "pick", parameters: { type: "object", properties: {} } });
     expect(shaping).toEqual({ mode: "off", cue: JSON_ONLY_CUE });
   });
@@ -334,7 +334,7 @@ describe("jsonModeShaping · the Responses family", () => {
 
   it("steps down through the same ceiling memo, keyed by this family's standard", () => {
     const t = { standard: "openai_responses_compat" as const, baseUrl: "https://relay.example.com/v1", modelId: "gpt-5.5" };
-    noteJsonModeRefused(t, "json_schema");
+    noteLearned(t, "structuredOutput", "json_object");
     expect(jsonModeShaping(t, WITH, SCHEMA).extraBody).toEqual({ text: { format: { type: "json_object" } } });
     // The Chat Completions half of the same host is a different endpoint.
     expect(jsonModeCeiling({ ...t, standard: "openai_compat" })).toBeUndefined();
@@ -350,71 +350,34 @@ describe("json-mode refusal memo", () => {
 
   it("steps a refused mode down one level and caps later shaping", () => {
     expect(jsonModeShaping(qwen, WITH, SCHEMA).mode).toBe("json_schema");
-    noteJsonModeRefused(qwen, "json_schema");
+    noteLearned(qwen, "structuredOutput", "json_object");
     expect(jsonModeCeiling(qwen)).toBe("json_object");
     expect(jsonModeShaping(qwen, WITH, SCHEMA).mode).toBe("json_object");
-    noteJsonModeRefused(qwen, "json_object");
+    noteLearned(qwen, "structuredOutput", "off");
     expect(jsonModeShaping(qwen, WITH, SCHEMA)).toEqual({ mode: "off", cue: JSON_ONLY_CUE });
   });
 
   it("is what effectiveStructuredOutput reads, so every consumer sees the same capped answer", () => {
     expect(effectiveStructuredOutput(qwen)).toBe("json_schema");
-    noteJsonModeRefused(qwen, "json_schema");
+    noteLearned(qwen, "structuredOutput", "json_object");
     expect(effectiveStructuredOutput(qwen)).toBe("json_object");
     expect(effectiveStructuredOutput({ ...qwen, structuredOutput: "off" })).toBe("off");
   });
 
   it("caps an explicit declaration too — a wrong pick costs the mode, not the feature", () => {
-    noteJsonModeRefused(qwen, "json_schema");
+    noteLearned(qwen, "structuredOutput", "json_object");
     expect(jsonModeShaping({ ...qwen, structuredOutput: "json_schema" }, WITH, SCHEMA).mode).toBe("json_object");
   });
 
   it("keys the memo by endpoint and model, not by model alone", () => {
-    noteJsonModeRefused(qwen, "json_schema");
+    noteLearned(qwen, "structuredOutput", "json_object");
     expect(jsonModeShaping({ ...qwen, baseUrl: "https://other/v1" }, WITH, SCHEMA).mode).toBe("json_schema");
     expect(jsonModeShaping({ ...qwen, modelId: "qwen3.7-plus" }, WITH, SCHEMA).mode).toBe("json_schema");
   });
 
   it("never raises a ceiling", () => {
-    noteJsonModeRefused(qwen, "json_object");
-    noteJsonModeRefused(qwen, "json_schema");
+    noteLearned(qwen, "structuredOutput", "off");
+    noteLearned(qwen, "structuredOutput", "json_object");
     expect(jsonModeCeiling(qwen)).toBe("off");
-  });
-});
-
-describe("withJsonModeFallback", () => {
-  beforeEach(() => __resetLearned());
-
-  const qwen = { standard: "openai_compat" as const, platform: "dashscope" as const, baseUrl: "https://relay/v1", modelId: "qwen3.8-max" };
-  const refusal = (mode: string) =>
-    new Error(`400 Invalid parameter: 'response_format' of type '${mode}' is not supported with this model.`);
-
-  it("re-runs one level down per refusal and remembers where it landed", async () => {
-    const seen: string[] = [];
-    const result = await withJsonModeFallback(qwen, WITH, SCHEMA, async (s) => {
-      seen.push(s.mode);
-      if (s.mode !== "off") throw refusal(s.mode);
-      return "done";
-    });
-    expect(result).toBe("done");
-    expect(seen).toEqual(["json_schema", "json_object", "off"]);
-    // The next call starts where the last one ended — no wasted round trips.
-    expect(jsonModeShaping(qwen, WITH, SCHEMA).mode).toBe("off");
-  });
-
-  it("surfaces an error that is not about the parameter, without touching the memo", async () => {
-    await expect(withJsonModeFallback(qwen, WITH, SCHEMA, async () => {
-      throw new Error("429 rate limited");
-    })).rejects.toThrow("429");
-    expect(jsonModeCeiling(qwen)).toBeUndefined();
-  });
-
-  it("does not retry a request that carried no JSON parameter", async () => {
-    let calls = 0;
-    await expect(withJsonModeFallback({ ...qwen, structuredOutput: "off" }, WITH, SCHEMA, async () => {
-      calls++;
-      throw refusal("json_object");
-    })).rejects.toThrow("response_format");
-    expect(calls).toBe(1);
   });
 });
