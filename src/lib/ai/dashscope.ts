@@ -116,6 +116,9 @@ export async function streamDashscope(opts: StreamOptions): Promise<void> {
   // comment and says the same thing `event:error` does.
   let event = "";
   let buffer = "";
+  // Whether the last frame came — the one with a real finish reason. This wire
+  // has no `[DONE]`; that frame is the only sign the answer is whole.
+  let finished = false;
 
   const parseData = (data: string) => {
     let json: any; // JSON.parse's return type — matches openai.ts's untyped access
@@ -139,6 +142,7 @@ export async function streamDashscope(opts: StreamOptions): Promise<void> {
     if (choice) {
       // `"null"` — a string — on every frame before the last.
       const finish = choice.finish_reason === "null" ? undefined : choice.finish_reason;
+      if (typeof finish === "string" && finish) finished = true;
       choices.read({ delta: choice.message, finish_reason: finish });
     }
   };
@@ -163,6 +167,9 @@ export async function streamDashscope(opts: StreamOptions): Promise<void> {
   }
   // No sentinel on this wire: the stream simply ends.
   readLine(buffer);
+  // A stream closed between frames would otherwise hand half an answer over
+  // as a whole one (streaming.md, the failures that look like success).
+  if (!finished) throw new Error(`${LABEL}: the stream ended before the answer finished (no finish_reason)`);
 
   const { stopReason, truncated } = choices.finish();
   opts.onChunk({

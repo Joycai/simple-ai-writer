@@ -142,8 +142,9 @@ export const VALUE_FACTS: { [F in ValueFactId]: ValueFactSpec<ValueFactMap[F]> }
     scope: "transport",
     familyDefault: {
       openai: "openai-generic", responses: "responses-effort", gemini: "gemini3", anthropic: "claude-adaptive",
-      // Only 百炼 speaks it, and its general answer is the Qwen switch + budget;
-      // a model the catalog lists gets its own category.
+      // Only 百炼 speaks it, and the Qwen switch + budget is the spelling both
+      // generations take: qwen3.7's own, and qwen3.8 maps a budget onto its
+      // effort ladder (DashScope docs). The drawer offers `qwen-effort` beside it.
       dashscope: "qwen-budget",
     },
   },

@@ -174,6 +174,24 @@ describe("DashScope native route — reading the stream", () => {
     }
   });
 
+  it("does not hand a stream cut before its last frame over as a whole answer", async () => {
+    const raw = fixture("tools-qwen3.7-plus.sse");
+    const cut = raw.slice(0, raw.lastIndexOf("id:"));
+    await expect(run(() => sseResponse(cut))).rejects.toThrow(/DashScope: the stream ended before the answer finished/);
+  });
+
+  it("marks a length stop as truncated, and reports cached tokens", async () => {
+    const frame = (finish: string, text: string) =>
+      `id:1\nevent:result\n:HTTP_STATUS/200\ndata:${JSON.stringify({
+        output: { choices: [{ finish_reason: finish, message: { role: "assistant", content: [{ text }] } }] },
+        usage: { input_tokens: 40, output_tokens: 8, prompt_tokens_details: { cached_tokens: 32 } },
+      })}`;
+    // The last frame without a trailing newline: the tail is read too.
+    const { chunks } = await run(() => sseResponse(`${frame("null", "半")}\n\n${frame("length", "句")}`));
+    expect(textOf(chunks)).toBe("半句");
+    expect(doneOf(chunks)).toMatchObject({ truncated: true, stopReason: "length", cachedTokens: 32, inputTokens: 40 });
+  });
+
   it("throws the error frame an HTTP 200 stream carries", async () => {
     await expect(run(() => sseResponse(fixture("error-image-too-small.sse"))))
       .rejects.toThrow(/^DashScope: InvalidParameter: <400> .*must be larger than 10/);
