@@ -616,7 +616,7 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
 - **thinking block 的 `signature` 恒为空串**；工具轮把上一轮 `content` 原样带回（含空签名
   的 thinking block）或删掉 thinking block，两种都 200。关掉思考时响应里仍有一个
   `{type:"thinking",thinking:"",signature:""}` 空块，adapter 已能容忍。——**2026-09-28 按模型分**：
-  qwen3.8-flash 关时只回 text 块；kimi-k2.6 无论开关都回这个空块（见下方补测）。
+  qwen3.8-flash 关时只回 text 块；kimi-k2.6 不发 `thinking` 与 `disabled` 时都回这个空块（见下方补测）。
 - **事件序列**：`ping` 先于 `message_start`；`message_start.usage` 只有两个字段，完整
   usage（含 `cache_*`，另塞了一个非标准的 `prompt_tokens_details`）在 `message_delta`。
 - **强制 `tool_choice`**：`{type:"tool"}` 在 qwen3.8-flash 与 MiniMax-M2.5 思考中 400，
@@ -637,7 +637,8 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
 >   `<400> InternalError.Algo.InvalidParameter: The value of the enable_thinking parameter is restricted to True.`。glm-5.3 同样。
 >   一个 ④ 客户端收到的拒绝里**点名的是别家协议的字段**，按 `thinking` 找原因会找不到。
 > - **其余第三方模型**：kimi-k2-thinking 收下 `disabled`，**照想**（200，thinking 块有文本）；kimi-k2.6 无论开关都回一个
->   **文本与签名都空**的 thinking 块，内容上没想；deepseek-v4-pro 收 `disabled`，真关。
+>   **文本与签名都空**的 thinking 块（不发 `thinking` 与 `disabled` 都这样，内容上没想；显式 `enabled` 才有文本）；
+>   deepseek-v4-pro 收 `disabled`，真关。
 > - **错误原文**：`thinking.type:"bogus"` → 400 `Request body format invalid`（不点名字段）；未知模型 → 400
 >   ``The model `qwen-nonexistent` does not exist or you do not have access to it.``；`temperature:2.5` → 400
 >   `Temperature should be in [0.0, 2.0)`；`budget_tokens:1024` 配 `max_tokens:512` → 400
@@ -1482,7 +1483,7 @@ Responses adapter：
 来源（2026-09-18）：方舟控制台文档「文本生成」「图片理解」「文档理解」「联网搜索工具」「Function Calling」「Agent Plan 套餐概览」
 （`console.volcengine.com/ark/region:cn-beijing/docs/ark/…`），与上面的实测。
 
-> **另一条前缀（文档，2026-09-28，未实测）**：方舟的 Coding Plan 接入文章（`volcengine.com/article/38136`）给的 ④ 面 base 是
+> **另一条前缀（文档 + 无 key 探测，2026-09-28；带 key 未测）**：方舟的 Coding Plan 接入文章（`volcengine.com/article/38136`）给的 ④ 面 base 是
 > `https://ark.cn-beijing.volces.com/api/coding`、① 面 `/api/coding/v3`，并提醒别用 `/api/v3`（那是按量扣费）。上面实测的套餐前缀是
 > `/api/plan`（「Agent Plan 套餐概览」）。两者是两个套餐，还是同一套餐改过名，没有核实——**不要把 `/api/plan` 的实测结论套到
 > `/api/coding` 上**。按量付费的 `/api/v3` 没有 ④ 面文档。无 key 探测四条候选路径（`/api/v3/messages`、`/api/v3/v1/messages`、

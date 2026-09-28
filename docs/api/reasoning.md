@@ -55,7 +55,8 @@
 | DeepSeek `/anthropic`：deepseek-v4-pro、deepseek-flash | **想** | 收，真关 | [`landscape.md`](landscape.md) §7 第二十个样本 |
 | 百炼 `/apps/anthropic`：qwen3.8-flash、3.7-flash、3.5-plus | **想** | 收，真关 | 第六个样本 |
 | 百炼上的 qwen-turbo | 不想 | — | 第六个样本 |
-| 百炼上的 MiniMax-M2.5、glm-5.3 | 想 | **400**，关不掉 | 第六个样本 |
+| 百炼上的 MiniMax-M2.5 | 想 | **400**，关不掉 | 第六个样本 |
+| 百炼上的 glm-5.3 | — | **400**，关不掉 | 第六个样本 |
 | 百炼上的 kimi-k2-thinking | — | 收下，**照想** | 第六个样本 |
 | 智谱 `/api/anthropic`：glm-5.3、5.3-flash | **想** | **400**（1210），关不掉 | 第十四个样本 |
 | 智谱 glm-4.6 | — | 收，真关 | 第十四个样本 |
@@ -120,8 +121,9 @@
   Gemini 3 or later models. Use with earlier models results in an error.**"*
   枚举值是 `THINKING_LEVEL_UNSPECIFIED` / `MINIMAL` / `LOW` / `MEDIUM` / `HIGH`
   —— **全大写**，不是指南页里那个小写的 `thinking_level`。
-  **实测（2026-09-28，AI Studio `generateContent`，gemini-3-flash-preview / gemini-3.8-flash）：
-  值小写也收**——`"low"` 与 `"LOW"` 都 200，思考 token 无系统差别（同题各三次，20–72 之间随机）。
+  **实测（2026-09-28，AI Studio `generateContent`，gemini-3-flash-preview / gemini-3.8-flash，同一道一词题）：
+  值小写也收**——`"low"` 与 `"LOW"` 都 200。gemini-3-flash-preview 上思考 token 落在同一范围（小写几次 19–41，
+  大写三次 21–72，随机波动）；gemini-3.8-flash 两种写法各一次，都不报 `thoughtsTokenCount`。
   参考页只列大写，运行时不分大小写；会 400 的是枚举外的值：`"lowest"` →
   `Invalid value at 'generation_config.thinking_config.thinking_level' (type.googleapis.com/google.ai.generativelanguage.v1beta.ThinkingConfig.ThinkingLevel), "lowest"`，
   `details[].fieldViolations[].field` 同名。发小写不算错，别据此判错；照参考页发大写仍是稳妥写法。
@@ -250,9 +252,10 @@ output_config.effort`）——「少想」只能靠低 `effort`，关不掉。
 | --- | --- | --- | --- |
 | Claude 当前代，默认 `omitted` | 空 | 有 | 想了（照计费） |
 | 百炼上的千问 | 有 | 恒为空串 | 想了 |
-| 百炼上的 kimi-k2.6（开关都一样） | 空 | 空 | 没想 |
+| 百炼上的 kimi-k2.6（不发 `thinking`，或 `disabled`） | 空 | 空 | 没想 |
 
-只认文本，会把 Claude 的 `omitted` 读成「没想」；只认块在不在，会把 kimi-k2.6 读成「关不掉」。
+只认文本，会把 Claude 的 `omitted` 读成「没想」；只认块在不在，会把 kimi-k2.6 读成「关不掉」
+（它显式 `enabled` 时块里才有文本）。
 
 ### 2.3 token 计数
 
