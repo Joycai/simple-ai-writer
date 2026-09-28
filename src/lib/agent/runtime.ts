@@ -505,10 +505,17 @@ export function trimHistory(
       m.content = ELIDED_TOOL_RESULT;
       dropped++;
     } else if (hasMediaParts(m) && sent && hasMediaParts(sent)) {
-      // Only what goes out: a clip this route refuses stays beside an elided picture.
-      m.content = hasVideoParts(sent)
+      // Only the kinds that go out, and a note for each of those alone: a clip
+      // this route refuses stays beside an elided picture, a picture it refuses
+      // beside an elided clip, and a message that carried only a clip is not
+      // told a picture was dropped too.
+      const image = hasImageParts(sent);
+      const video = hasVideoParts(sent);
+      m.content = image && video
         ? contentWithoutMedia(m, `${ELIDED_IMAGE}\n\n${ELIDED_VIDEO}`)
-        : contentWithoutImages(m, ELIDED_IMAGE);
+        : video
+          ? contentWithoutVideo(m, ELIDED_VIDEO)
+          : contentWithoutImages(m, ELIDED_IMAGE);
       dropped++;
     } else {
       continue;

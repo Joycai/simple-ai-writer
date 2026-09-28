@@ -24,7 +24,8 @@ vi.mock("../../ai", () => ({ streamCompletion: vi.fn() }));
 
 import { streamCompletion } from "../../ai";
 import { buildChatMessage } from "../chatRefs";
-import { runAgent, type AgentRuntimeOptions } from "../runtime";
+import { runAgent, trimHistory, type AgentRuntimeOptions } from "../runtime";
+import { admitMedia } from "../../ai/mediaParts";
 import { connOptions } from "../../ai/conn";
 import { canReadVideo, sentVideoFps } from "../../ai/videoInput";
 import type { Model, Provider } from "../../ai/configDb";
@@ -137,5 +138,43 @@ describe("the runtime never trims media its route only sends as a note", () => {
     expect(run.toolResults.some((r) => r.length >= 40_000)).toBe(false);
     // Still in the history (the runtime hands streamCompletion the history as it stands).
     expect(run.clips).toHaveLength(1);
+  });
+
+  it("over the ceiling on a route that sends the clip, it is elided under the clip's note alone", async () => {
+    const history = await historyAttachedUnder(qwen, bailian);
+    const run = await runOn(qwen, bailian, history, 500);
+    expect(run.trimmed).toBe(true);
+    expect(run.clips).toEqual([]);
+    // The message carried only a clip: it must not be told a picture was dropped too.
+    expect(history[1].content).toContain("earlier video clip dropped");
+    expect(history[1].content).not.toContain("earlier image dropped");
+  });
+});
+
+describe("the ceiling elides exactly the kinds a message's request carries", () => {
+  // No row the app builds admits a clip but refuses pictures — `videoInput`
+  // holds only for types that see images — so this is the projection itself,
+  // over the admission that would say so: the trim must not lean on that rule.
+  const clipsOnly = (h: readonly StreamMessage[]) => admitMedia(h, { image: false, video: true, pdf: true }, "as-built");
+
+  it("a picture the route refuses stays beside the elided clip", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "图和视频对得上吗？" },
+          { type: "image_url", image_url: { url: "data:image/png;base64,SU1H" } },
+          { type: "video_url", video_url: { url: "data:video/mp4;base64,Q0xJUA" } },
+        ],
+      },
+      { role: "assistant", content: "对得上。" },
+      { role: "user", content: "再看看。" },
+    ];
+    expect(trimHistory(history, 50, clipsOnly)).toBeGreaterThan(0);
+    const parts = history[1].content as { type: string; text?: string }[];
+    expect(parts.map((p) => p.type)).toEqual(["text", "image_url", "text"]);
+    expect(parts[2].text).toContain("earlier video clip dropped");
+    expect(parts[2].text).not.toContain("earlier image dropped");
   });
 });
