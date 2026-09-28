@@ -50,16 +50,7 @@ export interface ImageConn {
  */
 export function resolveImageRoute(standard: ApiStandard, declared?: ImageRoute): ImageRoute {
   if (declared) return declared;
-  switch (familyOf(standard)) {
-    case "gemini":
-      return "gemini";
-    // A model on DashScope's native route: under `/api/v1` the only image
-    // endpoint is the native one — `/images/generations` there is a 404.
-    case "dashscope":
-      return "dashscope";
-    default:
-      return "images-api";
-  }
+  return familyOf(standard) === "gemini" ? "gemini" : "images-api";
 }
 
 /**

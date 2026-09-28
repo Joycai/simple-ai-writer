@@ -11,7 +11,7 @@ import { newChannelEndpoints, normalizeChannel, routeProvider } from "../routes"
 import { platformOrigin } from "../platforms";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
-  dashscopeNativeBase, generateImage, resolveImageRoute, ImageHttpError, isEditUnsupportedError, NoImageError,
+  dashscopeNativeBase, generateImage, ImageHttpError, isEditUnsupportedError, NoImageError,
   type ImageProgress,
 } from "../image";
 
@@ -603,12 +603,6 @@ describe("generateImage · dashscope route", () => {
 
   // 百炼's new host, from each route a channel on it can hand over: the Chat
   // route's base and the native route's own (dashscope-native-plan.md §2).
-  it("defaults a model on the native route to the native endpoint, and nowhere else", () => {
-    expect(resolveImageRoute("dashscope_compat")).toBe("dashscope");
-    expect(resolveImageRoute("openai_compat")).toBe("images-api");
-    expect(resolveImageRoute("dashscope_compat", "chat")).toBe("chat");
-  });
-
   it("derives it on the new host too, from the Chat route or the native one", () => {
     const channel = normalizeChannel({
       id: "p", name: "百炼", baseUrl: "", apiStandard: "openai_compat", createdAt: 0,

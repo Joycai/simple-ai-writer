@@ -163,11 +163,11 @@ export function authModesFor(standard: ApiStandard): AuthMode[] {
  *   - "dashscope"  — DashScope native (Qwen/Wan image models):
  *                    POST {api/v1}/services/aigc/multimodal-generation/generation,
  *                    or the async task flow when `ImageCaps.asyncTask` is set.
- *                    The default only on DashScope's native chat route —
- *                    `ProtocolFamily` "dashscope", a different type: the
- *                    protocol a route speaks, not an image endpoint. On the
- *                    Chat route (`openai_compat`) the derived route stays
- *                    "images-api", so a model there declares this one.
+ *                    Never a default — the DashScope provider preset is
+ *                    `openai_compat`, whose derived route must stay "images-api".
+ *                    Not `ProtocolFamily` "dashscope" (the native *chat*
+ *                    route): an image model declares this one explicitly
+ *                    (docs/api/dashscope-native-plan.md §3).
  *   - "comfyui"    — a local ComfyUI instance: POST {base}/prompt with the
  *                    model's imported workflow graph (`ImageCaps.comfy`), then
  *                    poll {base}/history/{id} and fetch via {base}/view. Never
