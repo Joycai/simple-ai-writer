@@ -522,7 +522,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // each exists only for a model that reads pictures. Hi-res and clip fps are
   // DashScope's private knobs — 智谱 takes both and ignores them — and fps also
   // requires the clip part itself (capabilities.ts `requires`). A `video_url`
-  // part is Chat Completions only (lib/ai/videoInput).
+  // part is Chat Completions only, on the platforms measured taking it
+  // (lib/ai/videoInput, capability-gating-plan C4).
   // `text.verbosity` — the Responses family's field.
   const verbosityWire = can("textVerbosity", capModel);
   // The Sakura translation declaration: a text model on Chat Completions.
@@ -764,8 +765,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // Same clearing rule: only where the switch is shown.
         vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
         // A model declaration like the PDF one: kept across routes, and
-        // honoured only where `canReadVideo` says (a seeing model on Chat
-        // Completions). The fps goes with the switch (off = nothing kept).
+        // honoured only where `canReadVideo` says (a seeing model on a Chat
+        // Completions wire whose platform takes the part). The fps goes with
+        // the switch (off = nothing kept).
         videoInput: canSeeImages(form) && videoInput ? true : undefined,
         videoFps: canSeeImages(form) && videoInput ? clampVideoFps(videoFpsText) : undefined,
         // Cleared on the same rule, and the stakes are higher here than for the
