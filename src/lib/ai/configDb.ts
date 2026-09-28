@@ -19,10 +19,9 @@ import {
 } from "./reasoning";
 import { parseServerTools, type ServerToolId } from "./serverTools";
 import { ensureLearnedSchema } from "./learnedDb";
-import { parsePlatform, platformToStore, providerWire, type PlatformId } from "./platforms";
-import { hasCapability } from "./capabilities";
+import { parsePlatform, platformToStore, type PlatformId } from "./platforms";
 import {
-  capabilityModelOf, parseRelayUpstreamChoice, parseUpstreamPrefixes, relayUpstreamFor,
+  parseRelayUpstreamChoice, parseUpstreamPrefixes,
   type RelayUpstreamChoice, type UpstreamPrefix,
 } from "./relayUpstream";
 import {
@@ -34,6 +33,7 @@ import type { ProtocolFamily } from "./types";
 import { parseStructuredOutputMode, type StructuredOutputMode } from "./jsonMode";
 import { migrateLegacyStandard } from "./urls";
 import { clampVideoFps } from "./videoInput";
+import { admittedMediaOf } from "./conn";
 import { ensureFeeGroupSchema, listFeeGroups, migrateModelPricesToFeeGroups } from "./feeGroupDb";
 import { ensureUsageSchema } from "./usageSchema";
 import { migrateLegacyThinking } from "./legacyThinking";
@@ -506,19 +506,10 @@ export function isAsrOnly(m: Pick<Model, "type">): boolean {
 }
 
 /**
- * 这个模型能不能看图 —— 请求里能不能放 base64 图片、读图工具能不能在场、看图
- * 子代理能不能绑它，问的都是这一个问题。
- *
- * 两个类型都算：「多模态」是会看图的通用对话模型（qwen3.8-flash、deepseek-flash），
- * 「视觉理解」是专门看图的模型（qwen3-vl-*、qwen-vl-ocr）。两者在线上完全一样
- * （同一个 `image_url` 片段，docs/api/landscape.md §6），区别只在 app 里：视觉
- * 理解模型不当写手（`subAgentModel` 的 writer 分支）。一个有名字的判据而不是散在
- * 二十处的 `type === "multimodal"`，因为漏改一处就是一个看得见图却被当成纯文本
- * 的模型，而且什么都不报。
+ * 这个模型看不看得见图——判据在 `capability/media.ts`（媒体放行的模型那一半），
+ * 从这里再导出，调用方不必知道它搬过家。
  */
-export function canSeeImages(m: Pick<Model, "type">): boolean {
-  return m.type === "multimodal" || m.type === "vision";
-}
+export { canSeeImages } from "./capability/media";
 
 /**
  * 这个模型在这条线路上能不能收整份 PDF。
@@ -532,6 +523,9 @@ export function canSeeImages(m: Pick<Model, "type">): boolean {
  * 切到 ④ 族再切回来，作者不该重填一遍（channel-model-route-plan.md §3）。所以声明
  * 留着，能不能用在这里按线路回答；PDF 子代理的资格、委派时的拦截都问这一句。
  * 不给渠道（手里没有渠道列表的界面）时只看声明。
+ *
+ * 给了渠道时就是请求计划的媒体放行（`admittedMediaOf`）：历史里已有的 PDF 每一轮
+ * 发不发，问的也是这一句。
  */
 export function readsPdf(
   m: Pick<Model, "pdfInput" | "relayUpstream"> & { modelId?: string },
@@ -539,9 +533,7 @@ export function readsPdf(
 ): boolean {
   if (!m.pdfInput) return false;
   if (!provider) return true;
-  const wire = providerWire(provider);
-  const relayUpstream = relayUpstreamFor(wire.platform, m, provider);
-  return hasCapability("pdfInput", wire, capabilityModelOf({ modelId: m.modelId, relayUpstream }));
+  return admittedMediaOf(m, provider).pdf;
 }
 
 /**

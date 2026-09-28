@@ -37,6 +37,7 @@ import type { PlatformId } from "./platforms";
 import type { RelayUpstreamChoice } from "./relayUpstream";
 import type { RequestPlan } from "./capability/plan";
 import type { Provenance } from "./capability/intent";
+import type { ModelType } from "./configDb";
 import i18n from "../../i18n";
 
 /**
@@ -605,6 +606,14 @@ export interface StreamOptions {
    * when a hand-built bag leaves it out.
    */
   relayUpstream?: RelayUpstreamChoice;
+  /**
+   * The model's media declarations (`ConnOptions.modelType` / `videoInput` /
+   * `pdfInput`), read by the plan's media admission. Absent = a hand-built
+   * bag: only the route decides.
+   */
+  modelType?: ModelType;
+  videoInput?: boolean;
+  pdfInput?: boolean;
 }
 
 /** Thrown before sending when the estimated prompt exceeds the model's configured context size. */

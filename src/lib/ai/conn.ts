@@ -20,7 +20,7 @@
  */
 
 import i18n from "../../i18n";
-import type { Model, Provider } from "./configDb";
+import type { Model, ModelType, Provider } from "./configDb";
 import type { ReasoningEffort, ThinkingCategoryId } from "./reasoning";
 import { modelValue, resolveThinkingCategory, type Sourced } from "./capabilities";
 import type { Provenance } from "./capability/intent";
@@ -31,6 +31,8 @@ import type { ServerToolId } from "./serverTools";
 import { isRelayPlatform, relayUpstreamFor, type RelayUpstreamChoice } from "./relayUpstream";
 import { canonicalModelId } from "./capability/modelId";
 import type { StructuredOutputMode } from "./jsonMode";
+import { requestMedia, type RequestPlan } from "./capability/plan";
+import type { MediaAdmission } from "./capability/media";
 import type { ApiStandard, AuthMode, TextVerbosity } from "./types";
 
 /**
@@ -135,6 +137,18 @@ export interface ConnOptions {
    * back to a product name in the id (`capabilityModelOf`).
    */
   relayUpstream?: RelayUpstreamChoice;
+  /**
+   * What the model row declares about media — its type, `videoInput`,
+   * `pdfInput` — for the request plan's media admission
+   * (`capability/media.ts`): the history a request carries may hold parts
+   * attached under another model, and this is what decides which of them go
+   * out. `connOptions()` fills all three (the booleans as `false`, never
+   * absent); absent in a hand-built bag, whose parts are its own, so only the
+   * route half applies.
+   */
+  modelType?: ModelType;
+  videoInput?: boolean;
+  pdfInput?: boolean;
 }
 
 /**
@@ -234,6 +248,9 @@ export function connOptions(conn: AiConn): ConnOptions {
     // Resolved here, the one place with the channel's prefix table in hand;
     // "none" rather than absent, so the adapters don't infer over the table.
     relayUpstream: relayUpstreamFor(platform, model, provider),
+    modelType: model.type,
+    videoInput: !!model.videoInput,
+    pdfInput: !!model.pdfInput,
   };
 }
 
@@ -267,7 +284,34 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     textVerbosity: o.textVerbosity,
     vlHighResolution: o.vlHighResolution,
     relayUpstream: o.relayUpstream,
+    modelType: o.modelType,
+    videoInput: o.videoInput,
+    pdfInput: o.pdfInput,
   };
+}
+
+/**
+ * Which media a request to this model on this route may carry — the plan's
+ * {@link RequestPlan.media}, asked before there is a request. The composer's
+ * attach gates read it (`canReadVideo`, `readsPdf`), so a part is offered
+ * only where it will also go out. Built from the same fields `connOptions()`
+ * fills; `aiConn.test.ts` holds the two to one answer.
+ */
+export function admittedMediaOf(
+  model: Pick<Model, "relayUpstream" | "videoInput" | "pdfInput"> & { modelId?: string; type?: ModelType },
+  provider: Pick<Provider, "apiStandard" | "baseUrl" | "platform" | "upstreamPrefixes">,
+): MediaAdmission {
+  const platform = resolvePlatform(provider.platform, provider.baseUrl, provider.apiStandard);
+  return requestMedia({
+    standard: provider.apiStandard,
+    baseUrl: provider.baseUrl,
+    platform,
+    modelId: model.modelId ?? "",
+    relayUpstream: relayUpstreamFor(platform, model, provider),
+    modelType: model.type,
+    videoInput: !!model.videoInput,
+    pdfInput: !!model.pdfInput,
+  });
 }
 
 /** A model paired with the endpoint that serves it. */
