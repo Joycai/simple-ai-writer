@@ -9,6 +9,7 @@
 import type { TFunction } from "i18next";
 import { describe, expect, it } from "vitest";
 
+import en from "../../../../i18n/locales/en.json";
 import zh from "../../../../i18n/locales/zh-CN.json";
 import { capabilityVerdict, type CapabilityId } from "../../../../lib/ai/capabilities";
 import type { Wire } from "../../../../lib/ai/platforms";
@@ -16,21 +17,22 @@ import { capabilityModelOf, type RelayUpstreamId } from "../../../../lib/ai/rela
 import { ROUTE_LONG } from "../../../../lib/ai/routes";
 import { declNotSentNote } from "../declNotes";
 
-/** i18next's lookup and `{{x}}` interpolation over the shipped zh-CN file. */
-const t = ((key: string, params: Record<string, unknown> = {}) => {
-  const raw = key.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], zh);
+/** i18next's lookup and `{{x}}` interpolation over a shipped locale file. */
+const lookup = (file: unknown) => ((key: string, params: Record<string, unknown> = {}) => {
+  const raw = key.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], file);
   if (typeof raw !== "string") throw new Error(`missing locale key ${key}`);
   return raw.replace(/\{\{(\w+)\}\}/g, (_, k: string) => String(params[k] ?? ""));
 }) as unknown as TFunction;
+const t = lookup(zh);
 
 /** The note the drawer shows, from the verdict it asks — the drawer's own arguments. */
-function note(id: CapabilityId, wire: Wire, opts: { modelId?: string; upstream?: RelayUpstreamId } = {}) {
+function note(id: CapabilityId, wire: Wire, opts: { modelId?: string; upstream?: RelayUpstreamId } = {}, tr: TFunction = t) {
   const model = id === "videoInput"
     ? { type: "vision" as const }
     : capabilityModelOf({ modelId: opts.modelId, relayUpstream: opts.upstream ?? "none" });
   const v = capabilityVerdict(id, wire, model);
   expect(v.status, `${id} on ${wire.platform}`).toBe("no");
-  return declNotSentNote(t, v.reason, {
+  return declNotSentNote(tr, v.reason, {
     route: ROUTE_LONG.responses, platform: wire.platform, modelId: opts.modelId ?? "", upstream: opts.upstream,
   });
 }
@@ -39,6 +41,11 @@ describe("the hint under a declaration that is not sent", () => {
   it("says a platform measured refusing video did so", () => {
     expect(note("videoInput", { platform: "deepseek", standard: "openai_compat" }))
       .toBe("声明保留在模型上，但请求里不发：DeepSeek 官方 实测不收，或收了不起作用");
+  });
+
+  it("reads as two sentences in English, the reason's own capital kept", () => {
+    expect(note("videoInput", { platform: "deepseek", standard: "openai_compat" }, {}, lookup(en)))
+      .toBe("Kept on the model, but not sent. Measured on DeepSeek (official): not accepted, or accepted and ignored.");
   });
 
   it("says a platform nobody measured was not", () => {

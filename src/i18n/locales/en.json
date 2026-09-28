@@ -2794,7 +2794,7 @@
       "serverToolUnmeasured": "Unmeasured on {{platform}}: this is the protocol's own tool, so it depends on whether the upstream passes it on — it may be rejected.",
       "serverToolModelUnmeasured": "{{platform}} has this tool, but {{model}} was never measured with it: it is sent, and may be rejected or silently ignored.",
       "declNotOnRoute": "Kept on the model; the {{route}} route has no spelling for it, so nothing is sent on this route",
-      "declNotSent": "Kept on the model, but not sent: {{why}}",
+      "declNotSent": "Kept on the model, but not sent. {{why}}.",
       "scopeRoute": "this route · {{route}}",
       "routeLabel": "Route",
       "routeCurrent": "The route this model takes now",

@@ -58,7 +58,7 @@
 
 ## 落地（2026-09-28）
 
-按「做法」三条做，代码只改了表：`videoInput` 规则改为 `private`、`relay: "unknown"`；按上表写格——百炼 ×2、智谱、
+按「做法」三条做，能力判定只改了表：`videoInput` 规则改为 `private`、`relay: "unknown"`；按上表写格——百炼 ×2、智谱、
 火山方舟 Coding Plan `true`，DeepSeek、xAI、OrcaRouter `false`。矩阵文档与一致性测试逐格显出变化，`videoFps` 一格没动。
 
 唯一动到界面的地方是抽屉里的一行提示：此前对任何「不发」都说「这条线路没有这项的拼法」，C4 之后对 DeepSeek（实测不收）
