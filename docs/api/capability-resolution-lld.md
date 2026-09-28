@@ -1232,5 +1232,18 @@ Anthropic 族 `doubao-switch` 的 `off` 从 `-` 变 `yes`。
 
 1. **agent 思考回退要不要看 `offSpelling`。** 如果看，gemini3 与 claude-adaptive 在预算耗尽时也会从「关思考」改成「提示作答」。
    反方理由：作者可以在菜单里选 off，作者选了它，它就该是 off。要先量一次，看 LOW 或 low 档是否仍会把预算耗尽。
+
+   **2026-09-28 已量**（landscape.md 第十八个样本「思考回退补测」，OrcaRouter 上的 Claude Sonnet 5 与 Gemini 3.8 Flash，一道计数题每格 5 次）：
+   - 最低档确实少想：Claude 从约 6,900 输出 token 降到约 2,300。但 **Gemini 不设档位时本来就在最低档附近**（1,980 对 1,977）——
+     不设档位的 Gemini 行被中止后，今天的回退发出去的请求和被中止的那次一样想，回退等于没做。
+   - 只换成提示（保留作者的档位）会两极：有时整段不想、直接报数，Gemini 那两次都答错；其余照常想，只是短一些。
+   - 关闭 + 提示两家都最省（约 1,400 / 1,300），正确率 4/5、5/5。
+
+   据此的三条路：维持现状（Gemini 不设档位时回退无效）；`offSpelling: "lowest"` 改走提示（Gemini 上有答错的代价）；
+   `offSpelling: "lowest"` **既发 off 又带提示**（两家都最省，倾向这条）。反方理由对第三条不成立：off 照发，作者选过的档没有被换掉，只是多了一句提示。
+
+   **要掂量的是值不值得改**：护栏只在一轮的思考超过窗口剩余空间的一半时才触发，而 `offSpelling: "lowest"` 的类目
+   （gemini3、claude-adaptive / -budget、glm）对应的模型窗口是 20 万到 100 万 token。实际会触发的主要是作者把窗口填小了的行，
+   或窗口小的中转上游。改动很小（`runAgent` 的 `thinkingCut` 分支，多一种回退），但受益面也小。
 2. ~~**B6（Anthropic 族关思考时带温度）**~~ 已量、已落（§9.11）。
 3. **学到的存储持久化**（D3）随 provider-layering §7 一起决定。
