@@ -20,6 +20,9 @@ const h = vi.hoisted(() => ({
     h.timeline.push(`secrets:${accounts.join(",")}`);
     return { removed: accounts.length, failed: 0 };
   }),
+  clearLearned: vi.fn(() => {
+    h.timeline.push("learned:cleared");
+  }),
   clearAllPrefs: vi.fn(async () => {
     h.timeline.push("prefs:cleared");
   }),
@@ -41,6 +44,7 @@ vi.mock("../ai/configDb", () => ({
     h.timeline.push("legacy:dropped");
   },
 }));
+vi.mock("../ai/capability/learned", () => ({ clearLearned: h.clearLearned }));
 vi.mock("../docx/presets", () => ({ loadCustomFormats: async () => [{ id: "f1" }] }));
 vi.mock("../keyStore", () => ({ clearAllSecrets: h.clearAllSecrets }));
 vi.mock("../prefs", () => ({
@@ -118,7 +122,10 @@ describe("resetApp", () => {
 
     // 计费组排在引用它的两张表之后；总体用量跟着配置库一起清（项目文件夹
     // 里的那一份不动——那是作者的稿子那一边的东西）。
-    expect(txTables()).toEqual(["models", "providers", "prompts", "fee_groups", "token_usage"]);
+    expect(txTables()).toEqual(["models", "providers", "prompts", "fee_groups", "token_usage", "learned_ceilings"]);
+    // The table and the store in memory go together: the table alone would
+    // leave this run still sending under what it had learned.
+    expect(h.timeline.indexOf("learned:cleared")).toBeGreaterThan(h.timeline.indexOf("invoke:sqlite_transaction"));
     // 排版格式和遗留的明文密钥表没有外键牵连，走事务外的尽力而为一路。
     expect(h.execute.mock.calls.map((c) => String(c[0]))).toContain("DELETE FROM doc_format");
     expect(h.timeline).toContain("legacy:dropped");

@@ -1,6 +1,6 @@
 /**
- * What an endpoint has refused this session, learned from its own 400
- * (docs/api/capability-resolution-lld.md §3.7, P3).
+ * What an endpoint has refused, learned from its own 400
+ * (docs/api/capability-resolution-lld.md §3.7, P3; kept across restarts, §9.13).
  *
  * Some refusals are not recoverable from the config. DeepSeek V4 thinks
  * unconditionally and answers a forced `tool_choice` with `400 Thinking mode
@@ -21,11 +21,19 @@
  * `capabilityVerdict` when it is given the endpoint's address, which is how the
  * drawer's matrix shows it (reason `learned`).
  *
- * Session-scoped and in memory on purpose (decision D3): it is a fact about an
- * endpoint, not about the author's config, and re-learning it costs one failed
- * request. Not keyed by thinking effort either — an endpoint that refuses
- * forcing only while thinking is treated as refusing it always, which costs at
- * worst the JSON fallback firing a turn early.
+ * A fact about an endpoint, not about the author's config (decision D3, as
+ * revised): so it has a time and an age limit. Reads are in memory and
+ * synchronous — the plan, the adapters and the drawer never wait on it. A sink
+ * (`learnedDb.ts`, registered once the config database is open) writes each
+ * lowering through to `config.db` and deletes what is forgotten; the table is
+ * read back into memory at startup (`seedLearned`). A ceiling older than
+ * {@link LEARNED_TTL_MS} is gone: endpoints and relays change, and re-learning
+ * one costs a single 400 before generation. The author forgets one sooner by
+ * changing the model's declaration or probing it again (`forgetLearned`).
+ *
+ * Not keyed by thinking effort — an endpoint that refuses forcing only while
+ * thinking is treated as refusing it always, which costs at worst the JSON
+ * fallback firing a turn early.
  */
 
 import type { StructuredOutputMode } from "../jsonMode";
@@ -39,7 +47,7 @@ import { hasCapability } from "./resolve";
  * several protocol families and they don't have to agree. A `ConnOptions` or
  * `StreamOptions` bag qualifies as it is.
  */
-interface EndpointKey {
+export interface EndpointKey {
   standard: ApiStandard;
   baseUrl?: string;
   modelId?: string;
@@ -50,7 +58,7 @@ interface Ceilings {
   forcedToolChoice: false;
   structuredOutput: StructuredOutputMode;
 }
-type LearnedFact = keyof Ceilings;
+export type LearnedFact = keyof Ceilings;
 type Ceiling = Ceilings[LearnedFact];
 /** A fact and a ceiling of that fact's own type. */
 type Learned = { [F in LearnedFact]: { fact: F; ceiling: Ceilings[F] } }[LearnedFact];
@@ -138,21 +146,76 @@ function keyOf(k: EndpointKey): string {
   return `${k.standard} ${k.baseUrl ?? ""} ${k.modelId ?? ""}`;
 }
 
-const store = new Map<string, Partial<Ceilings>>();
+/** How long a learned ceiling holds: a week, then the endpoint is asked again. */
+export const LEARNED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** The ceiling this endpoint+model has taught for one fact, or undefined when it refused nothing. */
+type Held<F extends LearnedFact> = { ceiling: Ceilings[F]; learnedAt: number };
+const store = new Map<string, { [F in LearnedFact]?: Held<F> }>();
+let now = () => Date.now();
+
+/** A ceiling as it is kept on disk: one row per endpoint+model+fact. */
+export type LearnedRow = { [F in LearnedFact]: EndpointKey & { fact: F; ceiling: Ceilings[F]; learnedAt: number } }[LearnedFact];
+
+/** Where a lowering is written through to, and a forgetting deleted from. */
+export interface LearnedSink {
+  write(row: LearnedRow): void;
+  forget(k: EndpointKey, facts: readonly LearnedFact[]): void;
+}
+let sink: LearnedSink | undefined;
+
+/** Register (or, with undefined, drop) the persistence behind the store. */
+export function setLearnedSink(next: LearnedSink | undefined): void {
+  sink = next;
+}
+
+const live = <F extends LearnedFact>(held: Held<F> | undefined): Held<F> | undefined =>
+  held && now() - held.learnedAt < LEARNED_TTL_MS ? held : undefined;
+
+/** The ceiling this endpoint+model has taught for one fact, or undefined when it refused nothing (lately). */
 export function learnedCeiling<F extends LearnedFact>(k: EndpointKey, fact: F): Ceilings[F] | undefined {
-  return store.get(keyOf(k))?.[fact];
+  return live(store.get(keyOf(k))?.[fact] as Held<F> | undefined)?.ceiling;
+}
+
+/** Put a ceiling in memory unless a lower one is already held. True when it went in. */
+function hold<F extends LearnedFact>(k: EndpointKey, fact: F, ceiling: Ceilings[F], learnedAt: number): boolean {
+  const key = keyOf(k);
+  const entry = store.get(key) ?? {};
+  const current = live(entry[fact] as Held<F> | undefined);
+  if (current !== undefined && rankOf(current.ceiling) <= rankOf(ceiling)) return false;
+  (entry as Record<LearnedFact, Held<LearnedFact>>)[fact] = { ceiling, learnedAt };
+  store.set(key, entry);
+  return true;
 }
 
 /** Remember a refusal. Only ever lowers: a weaker refusal learned earlier is never lifted by a later one. */
 export function noteLearned<F extends LearnedFact>(k: EndpointKey, fact: F, ceiling: Ceilings[F]): void {
-  const key = keyOf(k);
-  const entry = store.get(key) ?? {};
-  const current = entry[fact];
-  if (current !== undefined && rankOf(current) <= rankOf(ceiling)) return;
-  entry[fact] = ceiling;
-  store.set(key, entry);
+  const learnedAt = now();
+  if (!hold(k, fact, ceiling, learnedAt)) return;
+  sink?.write({ standard: k.standard, baseUrl: k.baseUrl, modelId: k.modelId, fact, ceiling, learnedAt } as LearnedRow);
+}
+
+/**
+ * Take in ceilings read back from disk. The lower of disk and memory wins —
+ * a request may have learned something while the table was loading — and an
+ * expired row is not taken. Nothing is written back.
+ */
+export function seedLearned(rows: readonly LearnedRow[]): void {
+  for (const r of rows) hold(r, r.fact, r.ceiling, r.learnedAt);
+}
+
+/** Every learnable fact. */
+const LEARNED_FACTS: readonly LearnedFact[] = ["forcedToolChoice", "structuredOutput"];
+
+/** Forget what this endpoint+model taught — every fact, or just these — in memory and on disk. */
+export function forgetLearned(k: EndpointKey, facts: readonly LearnedFact[] = LEARNED_FACTS): void {
+  const entry = store.get(keyOf(k));
+  if (entry) for (const f of facts) delete entry[f];
+  sink?.forget(k, facts);
+}
+
+/** Forget everything in memory — the app reset, which empties the table itself. */
+export function clearLearned(): void {
+  store.clear();
 }
 
 /**
@@ -171,7 +234,7 @@ const TAKES_AWAY: Partial<Record<CapabilityId, { fact: LearnedFact; keeps?: (wir
   jsonSchema: { fact: "structuredOutput", keeps: () => "json_schema" },
 };
 
-/** Whether this endpoint+model has refused the capability this session. */
+/** Whether this endpoint+model has refused the capability (within the age limit). */
 export function learnedRefuses(id: CapabilityId, wire: Wire, k: EndpointKey): boolean {
   const takes = TAKES_AWAY[id];
   if (!takes) return false;
@@ -180,7 +243,13 @@ export function learnedRefuses(id: CapabilityId, wire: Wire, k: EndpointKey): bo
   return ceiling === false || (takes.keeps !== undefined && STRUCTURED_RANK[ceiling] < STRUCTURED_RANK[takes.keeps(wire)]);
 }
 
-/** Tests only — the store outlives a single request by design. */
+/** Tests only — the store outlives a single request by design. Also restores the real clock. */
 export function __resetLearned(): void {
   store.clear();
+  now = () => Date.now();
+}
+
+/** Tests only: the clock ages are measured by. */
+export function __setLearnedClock(clock: () => number): void {
+  now = clock;
 }

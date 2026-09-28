@@ -19,6 +19,8 @@ import { fetchRemoteModels } from "../lib/ai/providerProbe";
 import { saveApiKey, loadApiKey, deleteApiKey, migrateLegacyKeys } from "../lib/keyStore";
 import { getGlobalDb, getGlobalDbPath } from "../lib/project";
 import { backfillUsagePartsQuietly } from "../lib/ai/usageBackfill";
+import { setLearnedSink } from "../lib/ai/capability/learned";
+import { learnedSink, loadLearned } from "../lib/ai/learnedDb";
 import { sqlTransaction } from "../lib/sqlTx";
 import { deletePref, readPref, writePref } from "../lib/prefs";
 import {
@@ -101,6 +103,15 @@ let schemaReady: Promise<void> | null = null;
 let legacyKeysSwept: Promise<void> | null = null;
 
 /**
+ * What endpoints refused on earlier runs (`lib/ai/learnedDb.ts`), read into the
+ * learned store once, after the schema. The sink goes in first, so a refusal
+ * learned while the table loads is still written; the store keeps the lower of
+ * the two. Never rethrown, like the sweep above: failing it costs at most one
+ * more 400 per endpoint, which is what every launch cost before.
+ */
+let learnedLoaded: Promise<void> | null = null;
+
+/**
  * 总账里老行的分项回填，一次就好，跟在 schema 后面。
  *
  * 和上面那个清理一样：**失败不重置、不抛出**。回填失败只是有些行在用量页里
@@ -128,6 +139,11 @@ async function db() {
       .catch((e) => console.warn("[aiStore] legacy key sweep failed:", e));
   }
   await legacyKeysSwept;
+  if (!learnedLoaded) {
+    setLearnedSink(learnedSink(globalDb));
+    learnedLoaded = loadLearned(globalDb).catch((e) => console.warn("[aiStore] learned ceilings could not load:", e));
+  }
+  await learnedLoaded;
   if (!usagePartsBackfilled) {
     usagePartsBackfilled = getGlobalDbPath()
       .then((path) => backfillUsagePartsQuietly(globalDb, path, "config.db"))

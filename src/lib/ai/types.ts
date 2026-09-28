@@ -85,6 +85,11 @@ const PROTOCOL_FAMILY: Record<ApiStandard, ProtocolFamily> = {
   anthropic_compat: "anthropic",
 };
 
+/** Whether a stored value is a standard this build knows — for values read back from disk. */
+export function isApiStandard(v: unknown): v is ApiStandard {
+  return typeof v === "string" && Object.prototype.hasOwnProperty.call(PROTOCOL_FAMILY, v);
+}
+
 /**
  * The protocol behind a standard. Branch on this, never on the standard itself,
  * wherever the question is "what do the messages look like" — otherwise every

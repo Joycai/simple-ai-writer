@@ -17,6 +17,7 @@ import {
   type ReasoningEffort, type ThinkingCategoryId,
 } from "./reasoning";
 import { parseServerTools, type ServerToolId } from "./serverTools";
+import { ensureLearnedSchema } from "./learnedDb";
 import { parsePlatform, platformToStore, providerWire, type PlatformId } from "./platforms";
 import { hasCapability } from "./capabilities";
 import {
@@ -831,6 +832,8 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await ensureFeeGroupSchema(db);
   // 总体用量：跨项目、比任何一个项目活得久（lib/ai/usageRow.ts 的两处 sink）。
   await ensureUsageSchema(db, "global");
+  // 端点学到的降级（learnedDb.ts）：不是作者的配置，备份与同步都不带它。
+  await ensureLearnedSchema(db);
   await db.execute(`
     CREATE TABLE IF NOT EXISTS providers (
       id TEXT PRIMARY KEY,
