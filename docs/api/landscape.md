@@ -2397,33 +2397,36 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 > `streamCompletion` 发 `tool_choice:"required"`，看首发的状态与报错、有没有重试、最后回来什么。原生线路的类目落在族缺省
 > `qwen-budget`、① 在百炼平台上落在 `openai-generic`——两者不设档位时都不预先降级，所以首发都带 `required`、都不带
 > `enable_thinking` / `reasoning_effort`。探针在 `live.dashscope-native.test.ts`，每次尝试的状态与报错从 `fetch` 旁路取。
-> 两轮，结果一致。
+> 四轮，状态、重试与最后的去向每轮一致。
 >
 > | 线路 · 模型 | 首发 | 重试 | 最后 |
 > | --- | --- | --- | --- |
-> | 原生 · qwen3.8-flash | **400** | 有，`auto` | 200，文字作答，无工具调用，有思考 |
+> | 原生 · qwen3.8-flash | **400** | 有，`auto` | 200，文字作答，无工具调用（重试那次的思考四轮里有一轮为空） |
 > | 原生 · qwen3.8-max | **400** | 有，`auto` | 同上 |
 > | ① · qwen3.8-flash | **400** | 有，`auto` | 同上 |
 > | ① · qwen3.8-max | **400** | 有，`auto` | 同上 |
 > | 原生 · qwen3.7-plus（对照） | **400** | 有，`auto` | 同上 |
-> | 原生 · qwen3.7-flash（对照） | 200 | 无 | 文字作答，不理 `required`，有思考（733 / 1147 字） |
+> | 原生 · qwen3.7-flash（对照） | 200 | 无 | 文字作答，不理 `required`，每轮都有思考（六百到一千多字） |
 >
 > **400 是真的，两条线路同一句。** 原生：真实的 HTTP 400，但因为请求带了 `X-DashScope-SSE: enable`，报文也是 SSE 帧——
 > `id:1` / `event:error` / `:HTTP_STATUS/400` / `data:{"code":"InvalidParameter","message":"<400> InternalError.Algo.InvalidParameter:
-> The tool_choice parameter does not support being set to required or object in thinking mode","request_id":…}`。（第二十一个样本
-> 记的「请求被拒是非 2xx + `{code, message, request_id}`」是不带这个头时的形状；带了头，拒绝也按帧来，状态码照旧非 2xx。）
+> The tool_choice parameter does not support being set to required or object in thinking mode","request_id":…}`。同一个请求用 curl
+> 对照：不带这个头是 400 + `application/json` 的 `{code, message, request_id}`（第二十一个样本记的形状）；带了头是 400 +
+> `text/event-stream`，内容就是上面的帧。拒绝跟着头走，状态码两种都是 400。
 > ①：HTTP 400，`data: {"error":{"code":"invalid_parameter_error","param":null,"message":"The tool_choice parameter does not support
 > being set to required or object in thinking mode","type":"invalid_request_error"}}`。两句都点名 `tool_choice`，学到的降级规则
 > （`learned.ts` 的 `/tool[_ ]?choice/i`）两边都认，重试以 `auto` 发出、200 作答。
 >
-> **不设 = 在想，四个模型都是。** qwen3.8 两个此前已知（第二十一个样本）；这次 qwen3.7-flash / -plus 什么都不发也有思考
-> 内容——原生线路服务的四个模型全部默认思考，与 ① 上 qianwen-compat-plan §1.1「3.7/3.8 代全部默认开」一致。
+> **不设 = 在想，四个模型都是。** qwen3.8 两个此前已知（第二十一个样本）；这次 qwen3.7-plus 什么都不发也被以「thinking mode」
+> 拒，qwen3.7-flash 什么都不发也有思考内容——原生线路服务的四个模型全部默认思考，与 ① 上 qianwen-compat-plan §1.1
+> 「3.7/3.8 代全部默认开」一致。证据是那句拒绝，不是重试之后的思考：以 `auto` 重发的那次仍在思考模式里，但模型可以不写
+> 思考（qwen3.8-flash 答「你好」四轮里有一轮 0 字）。
 >
 > **qwen3.7-flash 思考中也不拒 `required`**：200、照常思考、用文字答——与它在思考关闭时不理强制（第二十一个样本）是同一个
 > 性质。所以「思考中拒强制」按模型分，不是这条线路的规则：3.8 两个与 3.7-plus 拒，3.7-flash 收下不理。
 >
-> **代价。** 被拒的一次在生成之前，不计 token；学到的上限按「标准 + 地址 + 模型」记一周（`learnedDb` 落盘），这一周里同一
-> 端点的强制请求直接以 `auto` 发出。怎么处置见 `dashscope-native-plan.md` §3。
+> **代价。** 被拒的一次在生成之前，回包不带 usage（厂商是否另计未实测）；学到的上限按「标准 + 地址 + 模型」记一周
+> （`learnedDb` 落盘），这一周里同一端点的强制请求直接以 `auto` 发出。怎么处置见 `dashscope-native-plan.md` §3。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
 

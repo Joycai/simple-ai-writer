@@ -540,9 +540,11 @@ export function forcesToolChoiceAuto(
   effort: ReasoningEffort | undefined,
 ): boolean {
   // An unknown state counts as not thinking, so only an effort that says "on"
-  // downgrades. Qwen 3.7 / 3.8 do think unset and refuse the forcing once per
-  // endpoint before the learned store catches it — kept that way on purpose
-  // (dashscope-native-plan.md §3, landscape.md §7 第二十二个样本).
+  // downgrades: whether a model thinks unset is per model, and reading unknown
+  // as on would strip the forcing from ones that don't (qwen3-vl-plus). Qwen
+  // 3.7 / 3.8 do think unset, and most of them answer the forcing with a 400
+  // the learned store then holds for that endpoint + model for a week — kept
+  // that way on purpose (dashscope-native-plan.md §3, landscape.md §7 第二十二个样本).
   return category.forcing === "always"
     || (category.forcing === "while-thinking" && thinkingAs(wireThinks(category, effort), "off") === "on");
 }

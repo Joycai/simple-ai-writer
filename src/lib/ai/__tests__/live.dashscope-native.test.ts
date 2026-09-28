@@ -137,6 +137,8 @@ describe.skipIf(!KEY)("LIVE DashScope native", () => {
     // The control: qwen3.7 under the same family default.
     ["native", "qwen3.7-flash"], ["native", "qwen3.7-plus"],
   ] as const)("forced tool choice, thinking left unset: %s %s", async (route, modelId) => {
+    // The first attempt must not be pre-downgraded by an earlier lesson, and
+    // this case's lessons must not pre-downgrade a later test.
     __resetLearned();
     const attempts: { status: number; error?: string }[] = [];
     const realFetch = globalThis.fetch;
@@ -149,6 +151,10 @@ describe.skipIf(!KEY)("LIVE DashScope native", () => {
       const c = await run(modelId, {
         messages: [{ role: "user", content: "你好" }], tools: TOOLS, toolChoice: "required",
         ...(route === "compatible-mode" ? { baseUrl: COMPAT_BASE, standard: "openai_compat" as const } : {}),
+      }).catch((e: unknown) => {
+        // The attempts are the record; keep them when the fallback did not catch it.
+        console.log("forced/unset", route, modelId, JSON.stringify({ attempts, error: String(e) }));
+        throw e;
       });
       const sent = c.bodies.map((b) => {
         const p = (b.parameters ?? b) as Record<string, unknown>;
@@ -158,8 +164,15 @@ describe.skipIf(!KEY)("LIVE DashScope native", () => {
         attempts, sent, calls: c.toolCalls.map((t) => t.name), reasoning: c.reasoning.length, text: c.text.slice(0, 80), done: c.done,
       }));
       expect(sent[0]).toEqual({ tool_choice: "required" });
-      expect(c.reasoning.length).toBeGreaterThan(0);
-      if (modelId.startsWith("qwen3.8")) {
+      if (modelId === "qwen3.7-flash") {
+        // Takes the forcing while it thinks, and ignores it. The reasoning is
+        // the only sign it was thinking here.
+        expect(attempts.map((a) => a.status)).toEqual([200]);
+        expect(c.toolCalls).toHaveLength(0);
+        expect(c.reasoning.length).toBeGreaterThan(0);
+      } else {
+        // The refusal "in thinking mode" is the sign; the retry's own reasoning
+        // may be empty (qwen3.8-flash skipped it on a greeting once).
         expect(attempts[0].status).toBe(400);
         expect(attempts[0].error).toMatch(/tool_choice.*thinking mode/);
         expect(sent[1]).toEqual({ tool_choice: "auto" });
@@ -167,6 +180,7 @@ describe.skipIf(!KEY)("LIVE DashScope native", () => {
       }
     } finally {
       globalThis.fetch = realFetch;
+      __resetLearned();
     }
   }, 180_000);
 
