@@ -2733,6 +2733,7 @@
       "briefSoGemini": "自动 ＝ 按协议族默认；Gemini 2.5 / 3 系自动升到 JSON Schema（responseJsonSchema）。",
       "briefSoAnthropic": "该协议族只有 JSON Schema 一档（output_config.format），没有 JSON 模式；「自动」＝ Claude 4.5 起在实测过的线路上发它，否则不发、由应用用提示词约束格式。",
       "briefTemp": "空 ＝ 不发，用端点默认；0 是真实值，表示确定性输出。",
+      "briefTempZeroUnset": "空 ＝ 不发，用端点默认；这条线路把 0 也当作没填，要最稳的输出，填 0.01。",
       "verbosityLabel": "回答详略",
       "briefVerbosity": "自动 ＝ 不发，用端点默认；只有 OpenAI Responses 协议有这个字段。",
       "verbosityHint": "Responses 协议的 text.verbosity（GPT-5 系列）：控制回答写多长、展开多少，和思考力度无关。实测 gpt-5.6-terra 设成「简略」后，同一个问题的回答明显变短。\n它和结构化输出的 text.format 都放在 text 里发送，两者互不覆盖。其他协议没有对应字段，所以只在 Responses 服务商下显示。",

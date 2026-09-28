@@ -148,7 +148,7 @@ describe("wireThinks", () => {
 describe("request conditions", () => {
   it("answer per their `absent` when the request did not say", () => {
     expect(conditionFires({ when: "functionTools", absent: "defer" }, {})).toBe(false);
-    expect(conditionFires({ when: "categoryThinks", absent: "fire" }, {})).toBe(true);
+    expect(conditionFires({ when: "temperatureIgnored", absent: "fire" }, {})).toBe(true);
     expect(conditionFires({ when: "thinking", is: "off", unknownAs: "on", absent: "defer" }, {})).toBe(false);
   });
 

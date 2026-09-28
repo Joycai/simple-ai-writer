@@ -2741,6 +2741,7 @@
       "briefSoGemini": "Auto = family default; Gemini 2.5 / 3 are upgraded to JSON Schema (responseJsonSchema).",
       "briefSoAnthropic": "This family has JSON Schema only (output_config.format), no JSON mode; Auto = sent for Claude 4.5+ on a measured endpoint, otherwise nothing is sent and the app constrains format via prompt.",
       "briefTemp": "Empty = not sent, endpoint default; 0 is a real value meaning deterministic output.",
+      "briefTempZeroUnset": "Empty = not sent, endpoint default. This route reads 0 as unset too; for the steadiest output, enter 0.01.",
       "verbosityLabel": "Answer length",
       "briefVerbosity": "Auto = not sent, endpoint default; only the OpenAI Responses protocol has this field.",
       "verbosityHint": "The Responses protocol's text.verbosity (GPT-5 family): how long and expansive the answer is, independent of reasoning effort. Measured on gpt-5.6-terra, Concise visibly shortens the same answer.\nIt travels inside text next to structured output's text.format, and neither overwrites the other. No other protocol has the field, so it only appears for Responses providers.",

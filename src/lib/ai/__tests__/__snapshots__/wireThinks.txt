@@ -75,7 +75,7 @@ anthropic gemini3 unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:
 anthropic claude-adaptive unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 anthropic claude-budget unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 anthropic minimax unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
-anthropic doubao-switch unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic doubao-switch unset:- default:- off:yes minimal:- low:- medium:- high:- xhigh:- max:-
 
 # DashScope openai_compat, server tools declared
 off unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true

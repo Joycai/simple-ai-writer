@@ -16,7 +16,7 @@
  * itself, so the two cannot differ.
  */
 
-import { effortOnWire, hasCapability, platformResponsesInclude } from "../capabilities";
+import { effortOnWire, hasCapability, platformResponsesInclude, temperatureReaches } from "../capabilities";
 import { effectiveStructuredOutput, type StructuredOutputMode } from "../jsonMode";
 import { requiredMaxTokens } from "../modelLimits";
 import { wireOf, type Wire } from "../platforms";
@@ -137,12 +137,12 @@ export function planRequest(opts: PlanInput): RequestPlan {
   const effort = effortOnWire(opts.reasoningEffort, wire, model, functionTools);
   const state = wireThinks(category, effort);
   // What the request's conditions read (`capability/conditions.ts`).
-  const request: CapabilityModel = { ...model, thinkingCategory: category.id, thinking: state, functionTools };
+  const request: CapabilityModel = { ...model, thinking: state, functionTools };
   return {
     wire,
     model,
     thinking: { category, effort, budget: opts.thinkingBudget, state },
-    ...(opts.temperature !== undefined && hasCapability("temperature", wire, request) ? { temperature: opts.temperature } : {}),
+    ...(opts.temperature !== undefined && temperatureReaches(wire, model, category, effort) ? { temperature: opts.temperature } : {}),
     maxTokensOnWire: requiredMaxTokens(trusted(carried(opts.maxOutput, opts.provenance?.maxOutput), "anthropicMaxTokens")),
     toolChoice: toolChoiceOf(opts, category, effort, wire, model),
     serverTools: effectiveServerTools(wire, opts.serverTools, opts.modelId, opts.relayUpstream, request) ?? [],
