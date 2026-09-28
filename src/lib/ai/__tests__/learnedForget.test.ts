@@ -116,6 +116,21 @@ describe("forgetOnProbe", () => {
     expect(learnedCeiling(onMessages(), "forcedToolChoice")).toBe(false);
   });
 
+  it("forgets once the endpoint answered, even when its usage numbers were no use", async () => {
+    // A relay that reports the same prompt_tokens for every prompt: no calibration, no warning.
+    learnAll();
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => (String(url).endsWith("/chat/completions")
+      ? new Response(JSON.stringify({
+        choices: [{ message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 7, completion_tokens: 1 },
+      }), { status: 200, headers: { "content-type": "application/json" } })
+      : new Response("not found", { status: 404 }))));
+    const report = await probe();
+    expect(report.calibration).toBeUndefined();
+    forgetOnProbe(routeProvider(channel, "openai")!, model.modelId, report);
+    expect(learnedCeiling(onChat(), "structuredOutput")).toBeUndefined();
+  });
+
   it("forgets nothing when the endpoint refused every request", async () => {
     learnAll();
     vi.stubGlobal("fetch", vi.fn(async () => new Response("invalid api key", { status: 401 })));

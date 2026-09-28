@@ -197,9 +197,10 @@ export function setLearnedSink(next: LearnedSink | undefined): void {
 }
 
 /**
- * Whether a ceiling learned at `learnedAt` still counts. A time in the future
- * does not: a clock set back after learning would otherwise keep it for as
- * long as the clock was wrong, on top of the week.
+ * Whether a ceiling learned at `learnedAt` still counts: younger than the week,
+ * and not more than {@link LEARNED_CLOCK_SLACK_MS} in the future — a clock set
+ * back after learning would otherwise keep it for as long as the clock was
+ * wrong. The same two bounds are in `learnedDb.ts`'s load and upsert.
  */
 const young = (learnedAt: number): boolean => {
   const age = now() - learnedAt;

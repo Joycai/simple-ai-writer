@@ -39,13 +39,10 @@ export function forgetOnDeclarationChange(prev: Model | undefined, next: Model, 
 
 /**
  * Whether the probe got the endpoint to answer — only then has it been looked
- * at again. Its calibration requests are the first that must succeed; they
- * leave either a calibration or, when the endpoint reports no usage, a
- * warning saying so. A cancelled run does not count, whatever it got to.
+ * at again. A cancelled run does not count, whatever it got to.
  */
 function probeReached(report: ProbeReport): boolean {
-  if (report.warnings.some((w) => w.code === "aborted")) return false;
-  return report.calibration !== undefined || report.warnings.some((w) => w.code === "no-usage-reported");
+  return report.answered && !report.warnings.some((w) => w.code === "aborted");
 }
 
 /**
