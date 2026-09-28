@@ -1196,5 +1196,7 @@ P6 的逻辑部分让留空的类目、窗口、上限跟随平台行、目录�
 1. **agent 思考回退要不要看 `offSpelling`。** 如果看，gemini3 与 claude-adaptive 在预算耗尽时也会从「关思考」改成「提示作答」。
    反方理由：作者可以在菜单里选 off，作者选了它，它就该是 off。要先量一次，看 LOW 或 low 档是否仍会把预算耗尽。
 2. **B6（Anthropic 族关思考时带温度）** 需要一条 ④ 上 minimax / doubao-switch「disabled + temperature 0.3」的实测。
-   已记进 [`issues/anthropic-temperature-thinking-off.md`](../issues/anthropic-temperature-thinking-off.md)（样本清单与三种结论各自的做法），样本回来后再排期。
+   已记进 [`issues/anthropic-temperature-thinking-off.md`](../issues/anthropic-temperature-thinking-off.md)（样本清单与三种结论各自的做法）。
+   2026-09-28 火山方舟一家已量：关思考时温度生效（`0` 除外，等于没发），开思考时 200 而被无视；MiniMax 的 key 失效，没有样本。
+   改不改、只改 `doubao-switch` 还是等 MiniMax，见该文「待决」。
 3. **学到的存储持久化**（D3）随 provider-layering §7 一起决定。

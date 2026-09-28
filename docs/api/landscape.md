@@ -1393,6 +1393,30 @@ Responses adapter：
 >   与 Anthropic 官方文档的口径（篡改即 400；本次未对官方端点复测）不同，回传错了不会响。`anthropic.ts` 本来就累加 `signature_delta` 并整块回传
 >   `_thinkingBlocks`，不用改；删签名是否像 ① 那样让推理变差，未比。
 
+> **B6 补测：④ 面的温度（2026-09-28，同一把套餐 key，doubao-seed-2.0-mini；`live.anthropic-temperature.test.ts`）**：
+> 问的是 [`issues/anthropic-temperature-thinking-off.md`](../issues/anthropic-temperature-thinking-off.md)——`doubao-switch` 关思考时，
+> 温度该不该发。请求体是真实适配器的，只在 fetch 这一层补上 `temperature`（适配器今天不发它）。「生效」的判法：一道只有几个
+> 常见答案的题（「随便说一种水果，只答一个词」），每档 20 次，看低温度是否收敛到同一个答案。一开始用开放题、数不同句子
+> 的个数，分不出来——每句都不一样，温度 0 下 ① 面虽然五句开头趋同，个数照样是 5。
+>
+> | ④ 面 | 状态 | 20 次的答案 |
+> | --- | --- | --- |
+> | `disabled` + `0.3` | 200，推理 0 字 | — |
+> | `disabled` + `0.01` | 200 | strawberry ×20（直连一次、经适配器一次，两次都是 20/20） |
+> | `disabled` + `0` | 200 | strawberry 12 · banana 4 · apple 2 · mango 2（直连两次、经适配器一次：最多的答案 9–12/20） |
+> | `disabled`，不发温度 | 200 | strawberry 10 · mango 6 · banana 3 · apple 1（同样三次：10–13/20） |
+> | `adaptive` + `0.3` | **200**（不是官方的 400），推理 957 字 | — |
+> | `adaptive` + `0.01` | 200 | apple 9 · banana 6 · mango 5 |
+> | `adaptive`，不发温度 | 200 | apple 8 · banana 6 · mango 6 |
+>
+> - **关思考时温度生效**：0.01 与 0.1 / 0.3（直连补测 18/20、17/20）都明显收敛，不发时不收敛。
+> - **`0` 等于没发**：分布与不发温度分不开，三次复跑都是。像是把 0 当成「未设」、落到了缺省值——非零的最小值才是贪心。
+> - **开思考时不报错，但被无视**：0.01 与不发同样分散。官方在这种情况 400；这里 200 且静默。今天「在想就不发」对这家
+>   也成立——发了是个没人听的字段。
+> - ① 面对照（直连，同一模型、关思考）：`0` / `0.1` / `0.3` 都收敛（17–19/20），`1` 分散（9/20）——① 面上 `0` 是生效的，
+>   「0 等于没发」只在 ④ 面。
+> - MiniMax 的 ④ 面同时要跑，本机的 key 两个站点都 401（国内站「token is unusable」、国际站「invalid api key」），没有样本。
+
 来源（2026-09-18）：方舟控制台文档「文本生成」「图片理解」「文档理解」「联网搜索工具」「Function Calling」「Agent Plan 套餐概览」
 （`console.volcengine.com/ark/region:cn-beijing/docs/ark/…`），与上面的实测。
 
