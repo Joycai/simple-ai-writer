@@ -3,17 +3,13 @@
  */
 
 import { fetch } from "../http";
-import {
-  createThinkTagSplitter, readReasoningDelta, reasoningBody, type NativeReasoning,
-  ENCRYPTED_REASONING_FIELD, readEncryptedReasoning,
-} from "./reasoning";
+import { reasoningBody, type NativeReasoning, ENCRYPTED_REASONING_FIELD } from "./reasoning";
 import { openaiServerToolsBody } from "./serverTools";
 import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
-import { planRequest } from "./capability/plan";
+import { planRequest, type RequestPlan } from "./capability/plan";
 import { openaiUrl } from "./urls";
-import { createToolArgsProgress } from "./toolArgsProgress";
-import { mergeConcatenatedArgs } from "./toolArgs";
-import type { AccumulatedToolCall, StreamMessage, StreamOptions } from "./types";
+import { createChatDeltaReader } from "./chatDelta";
+import type { StreamMessage, StreamOptions } from "./types";
 
 /**
  * Turn the app's messages into wire messages.
@@ -55,37 +51,14 @@ function toWireMessages(messages: StreamMessage[], modelId: string): Record<stri
 }
 
 /**
- * The text of a `delta.content`, whichever shape it arrived in.
- *
- * A string on the protocol's own endpoints; a part array
- * (`[{type:"text",text}]`) on relays fronting a Responses- or Anthropic-shaped
- * backend, which mirror their backend's content verbatim (measured on relay
- * traffic 2026-08-14). Passed on as-is, an array became the text
- * "[object Object]" in the manuscript. Only `text` is read from an array: a
- * part with no text of its own has nothing for the answer.
+ * Every field of a Chat Completions body except the envelope (`model`,
+ * `messages`, `stream`, `stream_options`), in the order the body has always
+ * carried them. DashScope's native protocol takes the same fields under the
+ * same names inside its `parameters` object — which is why this is its own
+ * function rather than part of `streamOpenAI`'s body literal.
  */
-function deltaText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  let out = "";
-  for (const part of content) {
-    const t = (part as { text?: unknown } | null)?.text;
-    if (typeof t === "string") out += t;
-  }
-  return out;
-}
-
-export async function streamOpenAI(opts: StreamOptions): Promise<void> {
-  const url = openaiUrl(opts.baseUrl, "/chat/completions");
-  // Every decision about what this request carries — the effort as the wire
-  // takes it, the temperature, the tool choice, the server tools — is the
-  // plan's (capability/plan.ts); this function only spells it.
-  const plan = opts._plan ?? planRequest(opts);
-  const body: Record<string, unknown> = {
-    model: opts.modelId,
-    messages: toWireMessages(opts.messages, opts.modelId),
-    stream: true,
-    stream_options: { include_usage: true },
+function chatParams(opts: StreamOptions, plan: RequestPlan): Record<string, unknown> {
+  return {
     // Absent unless the author set one on this model, for the same reason as
     // the reasoning fields below: an unset model must keep sending exactly
     // what it sent before this setting existed. 0 is a real value here, so
@@ -122,6 +95,21 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     // Last: extraBody is the per-request escape hatch and outranks config.
     ...opts.extraBody,
   };
+}
+
+export async function streamOpenAI(opts: StreamOptions): Promise<void> {
+  const url = openaiUrl(opts.baseUrl, "/chat/completions");
+  // Every decision about what this request carries — the effort as the wire
+  // takes it, the temperature, the tool choice, the server tools — is the
+  // plan's (capability/plan.ts); this function only spells it.
+  const plan = opts._plan ?? planRequest(opts);
+  const body: Record<string, unknown> = {
+    model: opts.modelId,
+    messages: toWireMessages(opts.messages, opts.modelId),
+    stream: true,
+    stream_options: { include_usage: true },
+    ...chatParams(opts, plan),
+  };
   // This family carries the most thinking spellings of the four (effort,
   // enable_thinking, the disable switch, budgets) and the log's request entry
   // shows only the caller's messages — without the wire body there is no way
@@ -153,60 +141,10 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   let cachedTokens = 0;
   /** From the last chunk's `usage`, and only from a trusted platform (`reportedCost.ts`). */
   let reportedCost: number | undefined;
-  let truncated = false;
-  // The endpoint's own finish_reason, last non-empty one seen — reported on the
-  // done chunk so the log can say why a turn ended (stop / length / tool_calls
-  // / a vendor's own word), not just that it did.
-  let stopReason: string | undefined;
-  // Index-keyed map for accumulating streamed tool_calls across SSE chunks
-  const toolCallMap = new Map<number, { id: string; name: string; args: string }>();
-  // Accumulated across the whole response so the tool-call chunk below can hand
-  // the round's reasoning back whole. `field` is whichever name this endpoint
-  // used — remembered so the echo matches (see reasoning.ts NativeReasoning).
-  let reasoning: NativeReasoning | null = null;
-  // Endpoints that don't separate thinking from the answer wrap it in
-  // <think>…</think> inside `content`. Unsplit, that prose reaches the
-  // manuscript. A no-op for every endpoint that doesn't do it.
-  const inlineThink = createThinkTagSplitter();
-  // Display only, deliberately not accumulated into `reasoning` above: text
-  // that arrived *inside* `content` has no wire field of its own, so there is
-  // nothing to echo it back under. Inventing a name would put a key no endpoint
-  // knows into the next request.
-  const emit = (pieces: ReturnType<typeof inlineThink.push>) => {
-    for (const piece of pieces) opts.onChunk(piece);
-  };
+  const choices = createChatDeltaReader(opts);
   // Carry an incomplete trailing line across reads: a single SSE line can be split
   // across network chunks, and parsing the halves would silently drop tokens/usage.
   let buffer = "";
-
-  // See toolArgsProgress: the calls themselves cannot be handed over until the
-  // stream ends, so this is the only thing that can be said while they arrive.
-  const reportToolArgs = createToolArgsProgress(opts.onChunk);
-  const argChars = () => {
-    let n = 0;
-    for (const tc of toolCallMap.values()) n += tc.args.length;
-    return n;
-  };
-
-  const emitToolCalls = () => {
-    if (toolCallMap.size === 0) return;
-    // Some relays send the call id as "" rather than leaving it out. Kept, two
-    // calls of one round share the empty id, the next request is refused for
-    // a duplicate tool_call_id — and since history accumulates, so is every
-    // request after it. An empty id is a missing one: make one up, unique
-    // across rounds (the stamp) and within this one (the index).
-    const stamp = Date.now().toString(36);
-    const toolCalls: AccumulatedToolCall[] = [...toolCallMap.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([index, tc]) => ({
-        index,
-        id: tc.id || `call_${stamp}_${index}`,
-        name: tc.name,
-        // `{}{"id":1}` from some relays — see toolArgs.ts.
-        arguments: mergeConcatenatedArgs(tc.args),
-      }));
-    opts.onChunk({ toolCalls, ...(reasoning ? { _reasoning: reasoning } : {}) });
-  };
 
   const parseData = (data: string) => {
     let json: any; // JSON.parse's return type — matches the rest of this file's untyped access
@@ -242,64 +180,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       cachedTokens = json.usage.prompt_tokens_details?.cached_tokens ?? 0;
       reportedCost = reportedCostOf(platform, "openai", json.usage) ?? reportedCost;
     }
-    const choice = json.choices?.[0];
-    const delta = choice?.delta;
-    const content = deltaText(delta?.content);
-    if (content) emit(inlineThink.push(content));
-    // Thinking endpoints stream reasoning beside the answer, under a field name
-    // they don't agree on. Streamed for display and accumulated for the echo;
-    // an endpoint that sends none leaves both untouched.
-    const think = delta ? readReasoningDelta(delta as Record<string, unknown>) : null;
-    if (think) {
-      reasoning = { ...reasoning, field: think.field, text: (reasoning?.text ?? "") + think.text };
-      opts.onChunk({ reasoning: think.text });
-    }
-    // Not displayed — it is ciphertext — only carried for the echo.
-    const sealed = delta ? readEncryptedReasoning(delta as Record<string, unknown>) : null;
-    if (sealed) {
-      reasoning = {
-        field: reasoning?.field ?? "reasoning_content",
-        text: reasoning?.text ?? "",
-        encrypted: { modelId: opts.modelId, value: (reasoning?.encrypted?.value ?? "") + sealed },
-      };
-    }
-    // Accumulate tool_calls across partial SSE chunks
-    if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
-      for (const partial of delta.tool_calls as Array<{
-        index?: number; id?: string;
-        function?: { name?: string; arguments?: string };
-      }>) {
-        const idx = partial.index ?? 0;
-        if (!toolCallMap.has(idx)) toolCallMap.set(idx, { id: "", name: "", args: "" });
-        const entry = toolCallMap.get(idx)!;
-        if (partial.id) entry.id += partial.id;
-        if (partial.function?.name) entry.name += partial.function.name;
-        if (partial.function?.arguments) {
-          entry.args += partial.function.arguments;
-          reportToolArgs(() => ({ name: entry.name, chars: argChars() }));
-        }
-      }
-    }
-    // content_filter fires with little or no text — Azure OpenAI and several
-    // compat gateways signal it this way instead of an error status. Throw so
-    // it's treated as the safety refusal it is (modelHealth.isSafetyBlockMessage
-    // matches "content_filter") rather than a normal empty completion.
-    if (choice?.finish_reason === "content_filter") {
-      throw new Error("OpenAI: response was blocked (finish_reason: content_filter)");
-    }
-    // 智谱's names for the same three outcomes (landscape.md §7 第十四个样本).
-    // A stream that fails mid-way reports it *only* here — no error body — so
-    // read as a normal stop, these hand a half answer over as whole. The
-    // moderation stop keeps the `content_filter` wording so the safety-block
-    // memory (modelHealth.isSafetyBlockMessage) sees it.
-    if (choice?.finish_reason === "sensitive") {
-      throw new Error("OpenAI: response was blocked by the endpoint's moderation (finish_reason: sensitive, content_filter)");
-    }
-    if (choice?.finish_reason === "network_error") {
-      throw new Error("OpenAI: the endpoint stopped generating mid-response (finish_reason: network_error)");
-    }
-    if (typeof choice?.finish_reason === "string" && choice.finish_reason) stopReason = choice.finish_reason;
-    if (choice?.finish_reason === "length" || choice?.finish_reason === "model_context_window_exceeded") truncated = true;
+    choices.read(json.choices?.[0]);
   };
 
   while (true) {
@@ -313,8 +194,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       if (!trimmed || !trimmed.startsWith("data:")) continue;
       const data = trimmed.slice(5).trim();
       if (data === "[DONE]") {
-        emit(inlineThink.flush());
-        emitToolCalls();
+        const { stopReason, truncated } = choices.finish();
         opts.onChunk({
           done: true, inputTokens, outputTokens,
           ...(truncated ? { truncated } : {}),
@@ -334,8 +214,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     const data = tail.slice(5).trim();
     if (data !== "[DONE]") parseData(data);
   }
-  emit(inlineThink.flush());
-  emitToolCalls();
+  const { stopReason, truncated } = choices.finish();
   opts.onChunk({
     done: true, inputTokens, outputTokens,
     ...(truncated ? { truncated } : {}),
