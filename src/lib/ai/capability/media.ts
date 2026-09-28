@@ -49,6 +49,15 @@ interface MediaDeclaration {
 }
 
 /**
+ * A model row's declarations as a request carries them: the booleans as
+ * `false` rather than absent, since absent means a hand-built bag. The one
+ * mapping `connOptions()`, `admittedMediaOf` and the 将发送 summary share.
+ */
+export function mediaDeclarationOf(m: { type?: ModelType; videoInput?: boolean; pdfInput?: boolean }): MediaDeclaration {
+  return { modelType: m.type, videoInput: !!m.videoInput, pdfInput: !!m.pdfInput };
+}
+
+/**
  * 这个模型能不能看图 —— 请求里能不能放 base64 图片、读图工具能不能在场、看图
  * 子代理能不能绑它，问的都是这一个问题（媒体放行里模型的那一半；configDb 再导出）。
  *

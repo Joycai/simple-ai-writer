@@ -24,6 +24,7 @@
 import type { Model } from "./configDb";
 import { hasCapability, modelValue, thinkingCategoryOf, trusted, type Sourced } from "./capabilities";
 import { planRequest, type RequestPlan } from "./capability/plan";
+import { mediaDeclarationOf } from "./capability/media";
 import { effectiveImageRoute } from "./imageRoute";
 import type { StructuredOutputMode } from "./jsonMode";
 import { wireOf, type PlatformId } from "./platforms";
@@ -192,7 +193,7 @@ export function wireSummary(
     textVerbosity: m.textVerbosity, vlHighResolution: m.vlHighResolution,
     // The row's media declarations, as `connOptions()` carries them: the plan
     // reads the type for its `modelTypes` rules and admits media from all three.
-    modelType: m.type, videoInput: !!m.videoInput, pdfInput: !!m.pdfInput,
+    ...mediaDeclarationOf(m),
   });
   const out = spellSummary(plan, !!m.thinkingBudget);
   // Not a body field — `fps` sits on the clip's content part. Listed anyway: it

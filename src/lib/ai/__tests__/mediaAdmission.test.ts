@@ -115,10 +115,12 @@ describe("media admission", () => {
     for (const platform of PLATFORM_IDS) for (const e of platformEndpoints(platform)) {
       const wire = { platform, standard: standardOf({ family: e.family, official: !!e.official }) };
       const spelled = spelledMedia(wire);
-      for (const modelId of MODEL_IDS) {
-        const at = `${platform} ${e.family} ${modelId}`;
-        if (hasCapability("videoInput", wire, { modelId, type: "multimodal" })) expect(spelled.video, at).toBe(true);
-        if (hasCapability("pdfInput", wire, { modelId })) expect(spelled.pdf, at).toBe(true);
+      for (const modelId of [...MODEL_IDS, ...RELAY_IDS]) for (const relayUpstream of CHOICES) {
+        // Through the upstream cells too, as a request asks them.
+        const asked = capabilityModelOf({ modelId, relayUpstream });
+        const at = `${platform} ${e.family} ${modelId} ${relayUpstream ?? "(inferred)"}`;
+        if (hasCapability("videoInput", wire, { ...asked, type: "multimodal" })) expect(spelled.video, at).toBe(true);
+        if (hasCapability("pdfInput", wire, asked)) expect(spelled.pdf, at).toBe(true);
       }
     }
   });
@@ -143,8 +145,12 @@ describe("the plan carries the model's type", () => {
       sent = String(init.body);
       throw new Error("captured");
     }));
-    await streamCompletion({ ...connOptions({ model, provider, apiKey: "k" }), messages: [{ role: "user", content: "hi" }], onChunk: () => {} })
-      .catch(() => {});
+    // Only the stub's own error is expected: anything thrown before fetch
+    // would leave `sent` empty and make the "not sent" assertion vacuous.
+    await expect(
+      streamCompletion({ ...connOptions({ model, provider, apiKey: "k" }), messages: [{ role: "user", content: "hi" }], onChunk: () => {} }),
+    ).rejects.toThrow("captured");
+    expect(sent).toContain('"model":"qwen3.8-flash"');
     return sent;
   }
   const summarises = (model: Model) =>

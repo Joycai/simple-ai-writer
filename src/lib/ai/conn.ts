@@ -32,7 +32,7 @@ import { isRelayPlatform, relayUpstreamFor, type RelayUpstreamChoice } from "./r
 import { canonicalModelId } from "./capability/modelId";
 import type { StructuredOutputMode } from "./jsonMode";
 import { requestMedia, type RequestPlan } from "./capability/plan";
-import type { MediaAdmission } from "./capability/media";
+import { mediaDeclarationOf, type MediaAdmission } from "./capability/media";
 import type { ApiStandard, AuthMode, TextVerbosity } from "./types";
 
 /**
@@ -248,9 +248,7 @@ export function connOptions(conn: AiConn): ConnOptions {
     // Resolved here, the one place with the channel's prefix table in hand;
     // "none" rather than absent, so the adapters don't infer over the table.
     relayUpstream: relayUpstreamFor(platform, model, provider),
-    modelType: model.type,
-    videoInput: !!model.videoInput,
-    pdfInput: !!model.pdfInput,
+    ...mediaDeclarationOf(model),
   };
 }
 
@@ -309,9 +307,7 @@ export function admittedMediaOf(
     platform,
     modelId: model.modelId ?? "",
     relayUpstream: relayUpstreamFor(platform, model, provider),
-    modelType: model.type,
-    videoInput: !!model.videoInput,
-    pdfInput: !!model.pdfInput,
+    ...mediaDeclarationOf(model),
   });
 }
 

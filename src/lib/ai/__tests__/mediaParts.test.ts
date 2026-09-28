@@ -14,6 +14,7 @@ describe("partKind", () => {
     expect(partKind(PDF)).toBe("pdf");
     expect(partKind(text("x"))).toBeUndefined();
     expect(partKind({ type: "audio_url" } as unknown as ContentPart)).toBeUndefined();
+    expect(partKind({ type: "constructor" } as unknown as ContentPart)).toBeUndefined();
   });
 });
 

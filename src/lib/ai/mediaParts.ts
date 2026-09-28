@@ -25,11 +25,13 @@ export type MediaKind = "image" | "video" | "pdf";
 
 export const MEDIA_KINDS: readonly MediaKind[] = ["image", "video", "pdf"];
 
-const KIND_OF: Readonly<Partial<Record<string, MediaKind>>> = {
-  image_url: "image",
-  video_url: "video",
-  file: "pdf",
-};
+// A Map, not an object literal: a part's `type` is untrusted (persisted
+// history, extraBody), and `type: "constructor"` must not read Object.prototype.
+const KIND_OF: ReadonlyMap<unknown, MediaKind> = new Map<unknown, MediaKind>([
+  ["image_url", "image"],
+  ["video_url", "video"],
+  ["file", "pdf"],
+]);
 
 /**
  * The media kind a part carries, or `undefined` for text — and for a part of
@@ -37,7 +39,7 @@ const KIND_OF: Readonly<Partial<Record<string, MediaKind>>> = {
  * refuses it by name (`unsendablePart`).
  */
 export function partKind(part: ContentPart): MediaKind | undefined {
-  return KIND_OF[(part as { type?: unknown }).type as string];
+  return KIND_OF.get((part as { type?: unknown }).type);
 }
 
 /**
