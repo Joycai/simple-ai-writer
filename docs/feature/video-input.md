@@ -42,8 +42,8 @@ token（`usage.prompt_tokens_details.video_tokens`）：
 
 ## 3. 不变量
 
-1. **只有 `openai` 族，只对声明了 `videoInput` 且能看图的模型**（`canReadVideo`）。门在组装处（`agentStore` 的 `allowVideo`、`AgentChat` 的候选与读取），不靠 Responses / Gemini / Anthropic 适配器对未知内容块的具名报错兜底——那个报错还在，是最后一道。
-2. **按模型声明，不猜模型名。** 设置里「视频输入」开关只在 Chat Completions + 能看图的模型上出现；换了协议或类型，保存时清掉（fps 随开关一起清）。DashScope 预设给三个实测可读的模型预先打开。
+1. **只有 `openai` 族上实测收它的平台，只对声明了 `videoInput` 且能看图的模型**（`canReadVideo` 问能力表的 `videoInput`）。`video_url` 是厂商扩展：百炼、智谱、火山方舟 Coding Plan 收；DeepSeek、xAI、OrcaRouter 不收（OrcaRouter 回 200 却把视频静默丢掉）；没测过的平台不发，中继照发（capability-gating-plan §9，2026-09-28）。门在组装处（`agentStore` 的 `allowVideo`、`AgentChat` 的候选与读取），不靠 Responses / Gemini / Anthropic 适配器对未知内容块的具名报错兜底——那个报错还在，是最后一道。
+2. **按模型声明，不猜模型名。** 设置里「视频输入」开关只在收它的线路、能看图的模型上出现；已声明而当前线路不发的，开关照旧显示、可关，下面一行写明不发的原因（抽屉的 `declNotes`）。换了类型（不再看图），保存时清掉（fps 随开关一起清）；换线路不清，声明是模型的。DashScope 预设给三个实测可读的模型预先打开。
 3. **每条消息最多 1 段视频**（`MAX_MESSAGE_VIDEOS`）。一段就可能 20MB 请求体、上万 token；多出来的按路径点名、不发。
 4. **请求历史里只留最新 1 段**（`runtime.ts` 的 `MAX_VIDEO_RESULTS`，与图片的 3 张各算各的）。每一轮工具调用都重发整个历史并重新计费，36k token 的视频跑六轮就是六倍。更早的视频块换成一句说明，消息里的文字保留；会话落盘时视频数据全部丢掉（`chatSession.ts`）。
 5. **读字节之前先查大小**：`readFileHead(path, 0)` 一次往返拿到真实大小，超过 15MB（`MAX_VIDEO_BYTES`）直接拒，不把文件读进 webview；已知时长短于 2 秒也在挑选时就拒，而不是等请求 400。
