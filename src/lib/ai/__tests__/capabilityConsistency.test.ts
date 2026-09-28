@@ -25,6 +25,7 @@ import { PLATFORM_IDS, platformEndpoints, type PlatformId } from "../platforms";
 import { readsPdf } from "../configDb";
 import { wireSummary, type WireInput } from "../modelSummary";
 import { canReadVideo, sentVideoFps } from "../videoInput";
+import { streamCompletion } from "../index";
 import { standardOf } from "../routes";
 import { streamAnthropic } from "../anthropic";
 import { streamGemini } from "../gemini";
@@ -97,6 +98,30 @@ async function adapterSends(ctx: Ctx, without: Partial<StreamOptions>, withIt: P
   return (await bodyOf(ctx, without)) !== (await bodyOf(ctx, withIt));
 }
 
+/**
+ * Whether declaring `withIt` changes what the real `streamCompletion` sends for
+ * a history holding one bare clip — the request as the app builds it, declared
+ * (`connOptions()` always carries the media declarations), so the plan and the
+ * projection act, not just an adapter.
+ */
+async function requestSends(ctx: Ctx, withIt: Partial<StreamOptions>): Promise<boolean> {
+  const bodyFor = async (extra: Partial<StreamOptions>) => {
+    let body = "";
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      body = String(init.body);
+      throw new Error("captured");
+    }));
+    await streamCompletion({
+      baseUrl: BASE_URL, apiKey: "k", standard: ctx.standard, platform: ctx.platform, modelId: ctx.modelId,
+      relayUpstream: ctx.relayUpstream, modelType: TYPE, videoInput: true, pdfInput: false,
+      messages: [{ role: "user", content: [{ type: "text", text: "hi" }, { type: "video_url", video_url: { url: "data:video/mp4;base64,AAAA" } }] }],
+      onChunk: () => {}, ...extra,
+    }).catch(() => {});
+    return body;
+  };
+  return (await bodyFor({})) !== (await bodyFor(withIt));
+}
+
 function summarySends(ctx: Ctx, without: Partial<WireInput>, withIt: Partial<WireInput>): boolean {
   const row = (m: Partial<WireInput>) =>
     JSON.stringify(wireSummary({ type: TYPE, modelId: ctx.modelId, ...m }, ctx.standard, BASE_URL, ctx.platform, ctx.relayUpstream));
@@ -136,8 +161,11 @@ const PROBES: Record<CapabilityId, Probe> = {
     canReadVideo: canReadVideo({ type: TYPE, videoInput: true, modelId: ctx.modelId, relayUpstream: ctx.relayUpstream }, provider(ctx)),
   }),
   videoFps: async (ctx) => ({
-    sentVideoFps: sentVideoFps({ videoFps: 1 }, provider(ctx)) !== undefined,
+    sentVideoFps: sentVideoFps(
+      { type: TYPE, videoInput: true, videoFps: 1, modelId: ctx.modelId, relayUpstream: ctx.relayUpstream }, provider(ctx),
+    ) !== undefined,
     summary: summarySends(ctx, { videoInput: true }, { videoInput: true, videoFps: 1 }),
+    request: await requestSends(ctx, { videoFps: 1 }),
   }),
   forcedToolChoice: async (ctx) => ({
     adapter: await adapterSends(ctx, { tools: [FUNCTION_TOOL], toolChoice: "auto" }, { tools: [FUNCTION_TOOL], toolChoice: "required" }),

@@ -134,9 +134,10 @@ export async function streamCompletion(opts: StreamOptions): Promise<StreamResul
     // What the request carries, decided once per attempt for whichever adapter
     // spells it — the forced choice and the JSON tier read the learned store.
     // The history may hold media attached under another model; what goes out
-    // is what this route and model admit (`plan.media`), the rest as a note.
+    // is what this route and model admit (`plan.media`), the rest as a note,
+    // and every clip at this request's fps (`plan.clipFps`).
     const plan = planRequest(merged);
-    const admitted = { ...merged, messages: admitMedia(merged.messages, plan.media) };
+    const admitted = { ...merged, messages: admitMedia(merged.messages, plan.media, plan.clipFps) };
     if (!(await sendOnce(shape(admitted, plan.json), plan))) return plan.json ? { structured: plan.json.mode } : {};
   }
 }

@@ -19,7 +19,7 @@
 import i18n from "../../i18n";
 import type { ContentPart, MessageContent } from "../ai/types";
 import { imagePart, imagesWithinBudget, MAX_REQUEST_IMAGE_CHARS } from "../ai/imagePart";
-import { noteVideoTokens } from "../ai/tokenEstimate";
+import { noteVideoCost } from "../ai/tokenEstimate";
 import { estimateVideoTokens, videoPart } from "../ai/videoInput";
 import { readEntityFile } from "../lore/entity";
 import { projectRelative } from "../paths";
@@ -213,7 +213,13 @@ export async function buildChatMessage(
      * like any other recording: a path, and whatever `transcribe` says.
      */
     allowVideo?: boolean;
-    /** The model's declared `videoFps`; absent sends no `fps`. */
+    /**
+     * The fps this model's requests send a clip at (`sentVideoFps`), written
+     * onto the part for the readers that still weigh the raw history
+     * (compaction planning, the context bar). Not what goes out: each
+     * request's plan writes its own fps onto the clip (`RequestPlan.clipFps`),
+     * so a switched model sends its own.
+     */
     videoFps?: number;
     /** Lets the 【附图】 list name pictures by project-relative path; absent keeps them absolute. */
     projectPath?: string;
@@ -364,9 +370,10 @@ export async function buildChatMessage(
 
   const videoParts = sentVideos.map((v) => {
     const part = videoPart(v.dataUrl, opts.videoFps);
-    // Beside the part, never on it: openai.ts sends parts verbatim.
-    const estimate = estimateVideoTokens({ ...v, fps: opts.videoFps });
-    if (estimate !== null) noteVideoTokens(part, estimate);
+    // Beside the part, never on it: openai.ts sends parts verbatim. As a
+    // function of the fps, since each request writes its own onto the clip.
+    const { durationSec, width, height } = v;
+    noteVideoCost(part, (fps) => estimateVideoTokens({ durationSec, width, height, fps }));
     return part;
   });
 

@@ -16,6 +16,7 @@ import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate";
+import { mediaProjection } from "../ai/capability/plan";
 import { imagePart, imagePayload, MAX_REQUEST_IMAGE_CHARS } from "../ai/imagePart";
 import { nonWebServerTools } from "../ai/serverTools";
 import { addReportedCost } from "../ai/reportedCost";
@@ -462,9 +463,21 @@ function roundInProgressStart(history: StreamMessage[]): number {
  * Anthropic's signed thinking): shrinking ours would lower the estimate without
  * changing the wire — or, for a signed block, break it.
  *
+ * `project` is the history *as the run's requests carry it* (`mediaProjection`):
+ * the ceiling weighs the projection, so a clip counts at the fps it goes out
+ * with and a medium the route refuses counts as its note — and a medium that
+ * goes out only as a note is never elided, since that frees nothing and loses
+ * it for good: switch back to a model that reads it and it would be gone.
+ * Absent, the history is weighed as it stands.
+ *
  * Returns how many messages it changed so the caller can log it.
  */
-export function trimHistory(history: StreamMessage[], ceilingTokens?: number): number {
+export function trimHistory(
+  history: StreamMessage[],
+  ceilingTokens?: number,
+  project: (history: readonly StreamMessage[]) => StreamMessage[] = (h) => [...h],
+): number {
+  const measure = (h: StreamMessage[]) => estimateMessagesTokens(project(h));
   // Images first, and unconditionally. The token estimate charges a flat rate
   // per picture (see ai/tokenEstimate) because that is what a provider bills —
   // but the *payload* is base64, megabytes of it, and a chat history persists
@@ -473,11 +486,14 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
   // reads as comfortably under the ceiling.
   let dropped = elideOldImageResults(history) + elideImagesOverBudget(history) + elideOldVideos(history);
   if (!ceilingTokens || ceilingTokens <= 0) return dropped;
-  if (estimateMessagesTokens(history) <= ceilingTokens) return dropped;
+  if (measure(history) <= ceilingTokens) return dropped;
   const protectedFrom = roundInProgressStart(history);
 
   for (let i = 0; i < protectedFrom; i++) {
     const m = history[i];
+    // The message as the request carries it: media the route refuses is
+    // already a note there, so eliding it would free nothing.
+    const sent = hasMediaParts(m) ? project([m])[0] : undefined;
     // A result no longer than its placeholder stays: replacing "Note saved."
     // with a sentence about dropping it buys nothing and loses the fact.
     if (
@@ -488,15 +504,16 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
     ) {
       m.content = ELIDED_TOOL_RESULT;
       dropped++;
-    } else if (hasMediaParts(m)) {
-      m.content = hasVideoParts(m)
+    } else if (hasMediaParts(m) && sent && hasMediaParts(sent)) {
+      // Only what goes out: a clip this route refuses stays beside an elided picture.
+      m.content = hasVideoParts(sent)
         ? contentWithoutMedia(m, `${ELIDED_IMAGE}\n\n${ELIDED_VIDEO}`)
         : contentWithoutImages(m, ELIDED_IMAGE);
       dropped++;
     } else {
       continue;
     }
-    if (estimateMessagesTokens(history) <= ceilingTokens) return dropped;
+    if (measure(history) <= ceilingTokens) return dropped;
   }
 
   for (let i = 0; i < protectedFrom; i++) {
@@ -513,7 +530,7 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
     if (!changed) continue;
     m.tool_calls = calls;
     dropped++;
-    if (estimateMessagesTokens(history) <= ceilingTokens) return dropped;
+    if (measure(history) <= ceilingTokens) return dropped;
   }
   return dropped;
 }
@@ -716,6 +733,12 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
    * runs that write lore on a small window.
    */
   let messageCeiling = opts.inputCeilingTokens;
+  // The history as every request of this run carries it: media the route or
+  // model refuses as its note, each clip at this model's fps. The run's model
+  // is fixed, so the projection is too; weighing the raw history would count a
+  // clip at the fps it was attached with (docs/feature/video-input.md §4).
+  const project = mediaProjection(opts);
+  const measure = (h: StreamMessage[]) => estimateMessagesTokens(project(h));
 
   // The run's own lore snapshot. The write tools patch it and resync it in
   // place (see writeTools.syncLore) — but the object callers hand in is the
@@ -1021,7 +1044,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // conclusions into notes *before* trimming starts, and trimming follows
       // the ceiling as group loads shrink it.
       messageCeiling &&
-      estimateMessagesTokens(history) > messageCeiling * CHECKPOINT_RATIO &&
+      measure(history) > messageCeiling * CHECKPOINT_RATIO &&
       (lastCheckpointRound === 0 ||
         (trimmedSinceCheckpoint && round - lastCheckpointRound >= CHECKPOINT_MIN_GAP_ROUNDS))
     ) {
@@ -1070,7 +1093,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       }
     }
 
-    const dropped = trimHistory(history, messageCeiling);
+    const dropped = trimHistory(history, messageCeiling, project);
     if (dropped > 0) {
       opts.onEvent({ kind: "context-trimmed", count: dropped, at: Date.now() });
       // Re-arms the checkpoint notice, but only past CHECKPOINT_MIN_GAP_ROUNDS.
@@ -1093,7 +1116,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       history.push(answerNowNotice);
     }
 
-    const estInputTokens = estimateMessagesTokens(history);
+    const estInputTokens = measure(history);
     // The handoff round carries one hand-written definition rather than the
     // preset's toolset, so the run's usual figure would overstate it wildly.
     const roundToolTokens = forceHandoff

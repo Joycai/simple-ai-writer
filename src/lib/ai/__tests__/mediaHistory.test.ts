@@ -110,7 +110,7 @@ function draw(seed: number) {
   // declares nothing, which only the protocol's spelling binds.
   const conn = connOptions({ model, provider, apiKey: "k" });
   const handBuilt = r() < 0.2;
-  const { modelType: _t, videoInput: _v, pdfInput: _p, ...bare } = conn;
+  const { modelType: _t, videoInput: _v, pdfInput: _p, videoFps: _f, ...bare } = conn;
   const transport: ConnOptions = handBuilt ? bare : conn;
   return { transport, ...history(r, seed) };
 }

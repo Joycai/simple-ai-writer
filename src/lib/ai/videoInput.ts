@@ -10,11 +10,8 @@
  * wherever it is shown.
  */
 
-import type { Model } from "./configDb";
 import type { ContentPart } from "./types";
-import { providerWire } from "./platforms";
-import { hasCapability } from "./capabilities";
-import { admittedMediaOf } from "./conn";
+import { admittedMediaOf, clipFpsOf } from "./conn";
 
 /** Lowest `fps` the settings field accepts. Only 0.5–4 were measured. */
 export const MIN_VIDEO_FPS = 0.1;
@@ -63,17 +60,25 @@ export function canReadVideo(
 }
 
 /**
- * The `fps` a clip to this model actually carries: its declared value where the
- * wire reads DashScope's knob, else none — 智谱 reads the clip but ignores the
- * field (same tokens at 0.5 and 2, landscape.md §7 第十四个样本), so sending it
- * or estimating by it would only misstate the bill.
+ * The `fps` a clip to this model on this route goes out with — the request
+ * plan's answer (`RequestPlan.clipFps`), asked before there is a request: the
+ * declared value where the route reads DashScope's knob, else none. 智谱 reads
+ * the clip but ignores the field (same tokens at 0.5 and 2, landscape.md §7
+ * 第十四个样本), so estimating by it there would only misstate the bill.
+ *
+ * What the composer estimates a clip at, and writes onto the part it builds —
+ * the latter only for the readers that weigh the raw history (compaction, the
+ * context bar; docs/feature/video-input.md §4): the wire, the request's
+ * pre-flight and the agent runtime take the fps each request's plan gives,
+ * whatever the clip was attached with.
  */
 export function sentVideoFps(
-  model: Pick<Model, "videoFps"> | null | undefined,
-  provider: Parameters<typeof providerWire>[0] | null | undefined,
+  model: Parameters<typeof clipFpsOf>[0] | null | undefined,
+  provider: Parameters<typeof clipFpsOf>[1] | null | undefined,
 ): number | undefined {
   if (!model || !provider) return undefined;
-  return hasCapability("videoFps", providerWire(provider)) ? model.videoFps : undefined;
+  const fps = clipFpsOf(model, provider);
+  return typeof fps === "number" ? fps : undefined;
 }
 
 /** The one builder for a clip's content part. `fps` absent = endpoint default. */

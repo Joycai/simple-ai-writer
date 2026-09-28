@@ -23,12 +23,13 @@ import { wireOf, type Wire } from "../platforms";
 import { forcesToolChoiceAuto, type ReasoningEffort, type ThinkingCategory } from "../reasoning";
 import { capabilityModelOf } from "../relayUpstream";
 import { effectiveServerTools, type ServerToolId } from "../serverTools";
-import type { StreamOptions, TextVerbosity } from "../types";
+import type { StreamMessage, StreamOptions, TextVerbosity } from "../types";
+import { admitMedia } from "../mediaParts";
 import { catalogFact } from "./cells/catalog";
 import { wireThinks, type ThinkingState } from "./conditions";
 import { carried, trusted } from "./intent";
 import { learnedCeiling } from "./learned";
-import { admittedMedia, type MediaAdmission } from "./media";
+import { admittedMedia, clipFps, type ClipFps, type MediaAdmission } from "./media";
 import type { CapabilityModel } from "./resolve";
 import { resolveThinkingCategory } from "./values";
 
@@ -44,7 +45,7 @@ export type PlanInput = Pick<
   | "standard" | "baseUrl" | "platform" | "modelId" | "canonicalModelId" | "relayUpstream"
   | "thinkingCategory" | "reasoningEffort" | "thinkingBudget" | "temperature" | "maxOutput" | "provenance"
   | "tools" | "toolChoice" | "serverTools" | "structuredOutput" | "textVerbosity" | "vlHighResolution"
-  | "modelType" | "videoInput" | "pdfInput"
+  | "modelType" | "videoInput" | "pdfInput" | "videoFps"
 > & Partial<Pick<StreamOptions, "messages" | "structured">>;
 
 export interface RequestPlan {
@@ -104,6 +105,12 @@ export interface RequestPlan {
    * sees them: a part of a kind not admitted goes out as a one-line note.
    */
   media: MediaAdmission;
+  /**
+   * What an admitted clip's `fps` field says on this request (`clipFps`):
+   * the projection writes it onto every clip, or strips it, whatever the
+   * history holds.
+   */
+  clipFps: ClipFps;
 }
 
 /** Whether this choice tells the model to call a tool rather than offering. */
@@ -157,7 +164,7 @@ function planModel(opts: MediaPlanInput): CapabilityModel {
 
 /** What {@link RequestPlan.media} is made from — a subset of {@link PlanInput}. */
 type MediaPlanInput = Pick<
-  PlanInput, "standard" | "baseUrl" | "platform" | "modelId" | "relayUpstream" | "modelType" | "videoInput" | "pdfInput"
+  PlanInput, "standard" | "baseUrl" | "platform" | "modelId" | "relayUpstream" | "modelType" | "videoInput" | "pdfInput" | "videoFps"
 >;
 
 /**
@@ -168,6 +175,35 @@ type MediaPlanInput = Pick<
  */
 export function requestMedia(opts: MediaPlanInput): MediaAdmission {
   return admittedMedia(wireOf(opts), planModel(opts), opts);
+}
+
+/**
+ * {@link RequestPlan.clipFps} without the rest of the plan: the fps the
+ * composer estimates a clip at (`sentVideoFps`), answered by the same
+ * composition the plan uses.
+ */
+export function requestClipFps(opts: MediaPlanInput): ClipFps {
+  const wire = wireOf(opts);
+  const model = planModel(opts);
+  return clipFps(wire, model, opts, admittedMedia(wire, model, opts));
+}
+
+/**
+ * The media projection every request from these options applies
+ * (`streamCompletion`: `admitMedia` over `plan.media` and `plan.clipFps`), for a
+ * reader that measures the history before there is a request — the agent
+ * runtime's trimming, thinking budget and checkpoint. Measuring the unprojected
+ * history instead counts a clip at the fps it was attached with: attached at
+ * 0.5 on 百炼 and sent to 智谱 at the default, the runtime would see ≈8.9k where
+ * the request's own pre-flight sees ≈35.6k, never trim, and have every round
+ * refused (docs/feature/video-input.md §4).
+ */
+export function mediaProjection(opts: MediaPlanInput): (messages: readonly StreamMessage[]) => StreamMessage[] {
+  const wire = wireOf(opts);
+  const model = planModel(opts);
+  const media = admittedMedia(wire, model, opts);
+  const fps = clipFps(wire, model, opts, media);
+  return (messages) => admitMedia(messages, media, fps);
 }
 
 export function planRequest(opts: PlanInput): RequestPlan {
@@ -183,6 +219,7 @@ export function planRequest(opts: PlanInput): RequestPlan {
   const state = wireThinks(category, effort);
   // What the request's conditions read (`capability/conditions.ts`).
   const request: CapabilityModel = { ...model, thinking: state, functionTools };
+  const media = admittedMedia(wire, model, opts);
   const json = {
     standard: opts.standard, baseUrl: opts.baseUrl, platform: wire.platform, modelId: opts.modelId,
     canonicalModelId: opts.canonicalModelId,
@@ -206,6 +243,7 @@ export function planRequest(opts: PlanInput): RequestPlan {
     // non-reasoning ids were never measured with it.
     responsesInclude: catalogFact("reasons", opts.canonicalModelId ?? opts.modelId) === false ? [] : platformResponsesInclude(wire.platform),
     promptCache: hasCapability("promptCache", wire, model),
-    media: admittedMedia(wire, model, opts),
+    media,
+    clipFps: clipFps(wire, model, opts, media),
   };
 }

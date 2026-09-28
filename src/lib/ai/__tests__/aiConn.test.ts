@@ -124,7 +124,7 @@ describe("connOptions", () => {
     expect(Object.keys(pickConnOptions(wide)).sort()).toEqual([
       "apiKey", "authMode", "baseUrl", "canonicalModelId", "contextSize", "maxOutput",
       "modelId", "modelType", "pdfInput", "platform", "prefix", "provenance", "reasoningEffort", "relayUpstream", "safetySettings", "serverTools",
-      "standard", "structuredOutput", "temperature", "textVerbosity", "thinkingBudget", "thinkingCategory", "videoInput", "vlHighResolution",
+      "standard", "structuredOutput", "temperature", "textVerbosity", "thinkingBudget", "thinkingCategory", "videoFps", "videoInput", "vlHighResolution",
     ]);
   });
 });

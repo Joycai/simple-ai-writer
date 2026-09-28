@@ -15,7 +15,7 @@ import { streamCompletion } from "../index";
 import { wireSummary } from "../modelSummary";
 import { admittedMediaOf, connOptions } from "../conn";
 import { readsPdf, type Model, type ModelType, type Provider } from "../configDb";
-import { canReadVideo } from "../videoInput";
+import { canReadVideo, sentVideoFps } from "../videoInput";
 import { planRequest } from "../capability/plan";
 import { hasCapability } from "../capabilities";
 import { PLATFORM_IDS, platformEndpoints, providerWire } from "../platforms";
@@ -54,7 +54,22 @@ function draw(seed: number): { model: Model; provider: Provider } {
     ...(r() < 0.7 ? { pdfInput: true } : {}),
     ...(relayUpstream ? { relayUpstream } : {}),
   };
-  return { model, provider };
+  // Last, so the draws above stay what they were for every seed.
+  const fps = r() < 0.6 ? pick([0.5, 1, 4] as const) : undefined;
+  return { model: fps === undefined ? model : { ...model, videoFps: fps }, provider };
+}
+
+// Weighted for the fps walk: the routes that read a clip — with and without
+// the knob — are a handful among dozens, and the interesting cells are there.
+const CLIP_ROUTES = ROUTES.filter((r) => ["dashscope", "zhipu", "volcengine-plan"].includes(r.platform) && familyOf(r.standard) === "openai");
+
+function drawClip(seed: number): { model: Model; provider: Provider } {
+  const drawn = draw(seed);
+  const r = rng(seed * 7919);
+  if (r() < 0.5) return drawn;
+  const route = CLIP_ROUTES[Math.floor(r() * CLIP_ROUTES.length)];
+  const type = r() < 0.8 ? (r() < 0.5 ? "multimodal" : "vision") : drawn.model.type;
+  return { model: { ...drawn.model, type }, provider: { ...drawn.provider, apiStandard: route.standard, platform: route.platform } };
 }
 
 describe("media admission", () => {
@@ -97,16 +112,53 @@ describe("media admission", () => {
     expect([...seen.image].sort()).toEqual([false, true]);
   });
 
+  it("the clip's fps: the plan, sentVideoFps and the 将发送 line give one answer", () => {
+    const seen = { set: 0, declaredButNone: 0 };
+    for (let seed = 1; seed < 1500; seed++) {
+      const { model, provider } = drawClip(seed);
+      const conn = connOptions({ model, provider, apiKey: "k" });
+      const planned = planRequest(conn).clipFps;
+      const at = `seed ${seed}: ${provider.platform} ${provider.apiStandard} ${model.type} ${model.modelId} fps=${model.videoFps}`;
+
+      // A row always declares, so the plan never leaves a clip as built.
+      expect(planned, at).not.toBe("as-built");
+      const fps = typeof planned === "number" ? planned : undefined;
+      expect(sentVideoFps(model, provider), at).toBe(fps);
+      const line = wireSummary(model, provider.apiStandard, provider.baseUrl, provider.platform, conn.relayUpstream, conn.canonicalModelId)
+        .find((i) => i.key === "video_url.fps");
+      expect(line?.value, at).toBe(fps === undefined ? undefined : String(fps));
+
+      // Independently: the declared value, where a clip is admitted and the
+      // route reads the knob for this model.
+      const wire = providerWire(provider);
+      const asked = { ...capabilityModelOf({ modelId: model.modelId, relayUpstream: conn.relayUpstream }), type: model.type };
+      const expected = model.videoFps !== undefined && canReadVideo(model, provider) && hasCapability("videoFps", wire, asked)
+        ? model.videoFps : undefined;
+      expect(fps, at).toBe(expected);
+
+      if (fps !== undefined) seen.set++;
+      else if (model.videoFps !== undefined && canReadVideo(model, provider)) seen.declaredButNone++;
+    }
+    // Both outcomes for a clip that goes out: its fps written, and withheld
+    // (智谱, 火山方舟 Coding Plan read the clip but not the knob).
+    expect(seen.set).toBeGreaterThan(50);
+    expect(seen.declaredButNone).toBeGreaterThan(50);
+  });
+
   it("a hand-built bag, which declares nothing, sends what the protocol can spell — a probe measures the platform, not the table", () => {
     for (let seed = 1; seed < 1500; seed++) {
       const { model, provider } = draw(seed);
-      const { modelType: _t, videoInput: _v, pdfInput: _p, ...bag } = connOptions({ model, provider, apiKey: "k" });
+      const { modelType: _t, videoInput: _v, pdfInput: _p, videoFps: _f, ...bag } = connOptions({ model, provider, apiKey: "k" });
       const family = familyOf(bag.standard);
-      expect(planRequest(bag).media, `seed ${seed}`).toEqual({
+      const plan = planRequest(bag);
+      expect(plan.media, `seed ${seed}`).toEqual({
         image: true,
         video: family === "openai",
         pdf: family !== "dashscope",
       });
+      // …and its clips as it built them: a probe measuring whether a platform
+      // reads `fps` must be able to send one the table does not list.
+      expect(plan.clipFps, `seed ${seed}`).toBe("as-built");
     }
   });
 

@@ -188,12 +188,13 @@ export interface RequestPlan {
   serverTools: readonly ServerToolId[];          // 过完声明、格、请求条件
   textVerbosity?: TextVerbosity;
   vlHighResolution: boolean;
-  videoFps?: number;
   instructionsField: boolean;
   responsesInclude: readonly string[];
   promptCache: boolean;
   /** 这次请求能带哪几类媒体（image / video / pdf）——capability/media.ts；streamCompletion 按它投影 messages（2026-09-28，B17）。 */
   media: MediaAdmission;
+  /** 放行的片段带什么 fps：数值 = 写上，"none" = 删掉，"as-built" = 手拼请求原样；投影时写到片段副本上（B18）。 */
+  clipFps: number | "none" | "as-built";
   /** 声明了但没发的，逐项带原因——「将发送」的「已声明、不发送」读这里。 */
   withheld: readonly { fact: FactId; reason: CapabilityReason }[];
 }
@@ -520,7 +521,8 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
 | B14 | 结构化任务的 JSON cue 并进最后一条 user 消息 | P7 | 结构化任务走 JSON 路径、且需要 cue 的请求：cue 从单独一条 user 消息变成接在最后一条 user 消息末尾（字符串空一行接上，分块追加一块）。条目生成今天就是这样 | 两条连续的 user 消息在要求严格交替的本地模板上会报错；两个调用方各拼一份是 P7 要去掉的 |
 | B15 | 条目生成在 JSON 被拒时只重发那一次请求 | P7 | 执行日志里不再先出现一条错误事件、再整轮重跑；请求体不变 | 拒绝在生成之前，重跑整轮与重发一次等价；错误事件是假的 |
 | B16 | 学到的上限跨重启保留，7 天过期 | D3（§9.13） | 重启后第一次结构化任务不再先撞一次已知的 400；矩阵悬停与抽屉说明不再写「本会话」。另：已被类目或格降成 `auto` 的强制请求，再收到点名 `tool_choice` 的 400 不再原样重发一次 | 作者 2026-09-28 改判 D3；后一条是 `Attempt` 改读「发出了」 |
-| B17 | 计划持有媒体放行：`ConnOptions` 带模型类型 / `videoInput` / `pdfInput`，`plan.model` 带类型，`plan.media` 决定历史里的图 / 视频 / PDF 发不发 | 媒体按请求放行（2026-09-28） | 历史里有当前线路或模型收不下的媒体时：换成说明句而不是适配器报错 / 上游 400。计划里问到的 `modelTypes` 规则（`vlHighResolution`；`videoInput` 经 `plan.media`）对不看图的模型生效（`videoFps` 计划不问，由 `sentVideoFps` 与将发送按线路问）；金标零差异，`canReadVideo` 在全部线路 × 上游上与旧写法逐格一致 | 附加门、将发送、发送时是同一个答案（[`video-input.md`](../feature/video-input.md) §4） |
+| B17 | 计划持有媒体放行：`ConnOptions` 带模型类型 / `videoInput` / `pdfInput`，`plan.model` 带类型，`plan.media` 决定历史里的图 / 视频 / PDF 发不发 | 媒体按请求放行（2026-09-28） | 历史里有当前线路或模型收不下的媒体时：换成说明句而不是适配器报错 / 上游 400。计划里问到的 `modelTypes` 规则（`vlHighResolution`；`videoInput` 经 `plan.media`）对不看图的模型生效（`videoFps` 当时计划不问，后由 B18 收进计划）；金标零差异，`canReadVideo` 在全部线路 × 上游上与旧写法逐格一致 | 附加门、将发送、发送时是同一个答案（[`video-input.md`](../feature/video-input.md) §4） |
+| B18 | 计划持有片段的 fps：`ConnOptions` 带 `videoFps` 声明，`plan.clipFps` 决定每个放行片段带什么 `fps`，投影时写到副本上 | 片段 fps 按请求决定（2026-09-28） | 换过模型的历史：智谱附的片段到百炼 0.5 上带 `fps: 0.5`，百炼附的片段到智谱上不再带 `fps`。不换模型、手拼请求零差异。「读不读 fps」改为带模型类型与中转上游问——中转上游表里没有 `videoFps` 格，今天逐格相同；发送前估算按投影后的 `fps`。运行时（裁剪 / 每轮估值 / 思考守卫 / 检查点）改按 `mediaProjection(opts)` 投影后的历史称量：片段按发出的 `fps` 计，被拒的媒体按说明句计——B17 下运行时的多算随之取消（裁剪更晚、思考预算更大）；压缩规划与上下文条仍按未投影历史 | 附加时的估算、将发送、线上是同一个答案（[`video-input.md`](../feature/video-input.md) §4「片段的 fps 也按请求决定」） |
 
 ## 6. PR 分期
 

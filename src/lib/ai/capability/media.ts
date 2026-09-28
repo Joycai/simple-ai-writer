@@ -37,6 +37,15 @@ import { SEES_IMAGES } from "./rules";
 export type MediaAdmission = Readonly<Record<MediaKind, boolean>>;
 
 /**
+ * What this request does to an admitted clip's `fps` field: write this value,
+ * remove the field (`"none"`: the route ignores it, or no fps is declared), or
+ * leave each clip as its caller built it (`"as-built"`: a hand-built request
+ * that declares nothing — a live probe measuring whether a platform reads the
+ * field, which a table-bound answer would only ever send the table's guess).
+ */
+export type ClipFps = number | "none" | "as-built";
+
+/**
  * What the model row declares about media. `connOptions()` fills all three
  * from the row; each is absent only in a hand-built bag (a probe, a live test,
  * a unit test), whose parts are the caller's own — there only the protocol
@@ -46,6 +55,8 @@ interface MediaDeclaration {
   modelType?: ModelType;
   videoInput?: boolean;
   pdfInput?: boolean;
+  /** The frame rate the row declares for a clip's `fps`; absent = none declared. */
+  videoFps?: number;
 }
 
 /**
@@ -53,8 +64,10 @@ interface MediaDeclaration {
  * `false` rather than absent, since absent means a hand-built bag. The one
  * mapping `connOptions()`, `admittedMediaOf` and the 将发送 summary share.
  */
-export function mediaDeclarationOf(m: { type?: ModelType; videoInput?: boolean; pdfInput?: boolean }): MediaDeclaration {
-  return { modelType: m.type, videoInput: !!m.videoInput, pdfInput: !!m.pdfInput };
+export function mediaDeclarationOf(
+  m: { type?: ModelType; videoInput?: boolean; pdfInput?: boolean; videoFps?: number },
+): MediaDeclaration {
+  return { modelType: m.type, videoInput: !!m.videoInput, pdfInput: !!m.pdfInput, videoFps: m.videoFps };
 }
 
 /**
@@ -101,7 +114,7 @@ export function spelledMedia(wire: Wire): MediaAdmission {
  */
 export function admittedMedia(wire: Wire, model: CapabilityModel, declared: MediaDeclaration): MediaAdmission {
   const spelled = spelledMedia(wire);
-  const typed: CapabilityModel = declared.modelType === undefined ? model : { ...model, type: declared.modelType };
+  const typed = typedModel(model, declared);
   const reads = (declaration: boolean | undefined, id: "videoInput" | "pdfInput") =>
     declaration === undefined || (declaration && hasCapability(id, wire, typed));
   return {
@@ -109,4 +122,26 @@ export function admittedMedia(wire: Wire, model: CapabilityModel, declared: Medi
     video: spelled.video && reads(declared.videoInput, "videoInput"),
     pdf: spelled.pdf && reads(declared.pdfInput, "pdfInput"),
   };
+}
+
+/** The capability model with the declared type, so the tables' `modelTypes` rules see it. */
+function typedModel(model: CapabilityModel, declared: MediaDeclaration): CapabilityModel {
+  return declared.modelType === undefined ? model : { ...model, type: declared.modelType };
+}
+
+/**
+ * The `fps` every admitted clip on this request carries — decided here, per
+ * request, and written onto the clips by the projection (`admitMedia`), never
+ * baked into the history: the history outlives the model, and a clip attached
+ * under 智谱 (which ignores the field) must still go out at the frame rate a
+ * DashScope model declares once the author switches to it, and back.
+ *
+ * The declared value where the route reads DashScope's knob for this model
+ * (the `videoFps` cell, asked with the type and relay upstream like
+ * `videoInput`), else none. A request that declares nothing is left as built.
+ */
+export function clipFps(wire: Wire, model: CapabilityModel, declared: MediaDeclaration, admission: MediaAdmission): ClipFps {
+  if (declared.videoInput === undefined) return "as-built";
+  if (!admission.video || declared.videoFps === undefined) return "none";
+  return hasCapability("videoFps", wire, typedModel(model, declared)) ? declared.videoFps : "none";
 }
