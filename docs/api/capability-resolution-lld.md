@@ -192,6 +192,8 @@ export interface RequestPlan {
   instructionsField: boolean;
   responsesInclude: readonly string[];
   promptCache: boolean;
+  /** 这次请求能带哪几类媒体（image / video / pdf）——capability/media.ts；streamCompletion 按它投影 messages（2026-09-28，B17）。 */
+  media: MediaAdmission;
   /** 声明了但没发的，逐项带原因——「将发送」的「已声明、不发送」读这里。 */
   withheld: readonly { fact: FactId; reason: CapabilityReason }[];
 }
@@ -513,11 +515,12 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
 | B11 | Chat 与 Gemini 适配器的温度开始问格 | P5 | 零：这两族今天没有温度的 `false` 格 | 同 B3 |
 | B12 | 火山方舟 Plan 上手加的 Doubao Seed id 得到预填 | P2 | 只在模型抽屉：窗口、上限、多模态、PDF、`doubao` 类目，与起步行相同。线上请求零差异 | 起步行与手加的行不再不一致（§9.3） |
 | B8 | agent 的思考回退问 `effortMenuOnWire` | P4 | OrcaRouter gpt-6-astra 在预算耗尽时从「关思考」变成「提示立即作答」 | 今天那个 off 在线上是 low，回退其实没生效 |
-| B9 | `vlHighResolution` 带着 subject（id 与上游）裁决 | P5 | 零：没有哪个上游写了这一格。请求路径上 subject 仍不带模型类型——`ConnOptions` 没有这个字段，本方案不加 | 与其它能力同一种问法 |
+| B9 | `vlHighResolution` 带着 subject（id 与上游）裁决 | P5 | 零：没有哪个上游写了这一格。请求路径上 subject 仍不带模型类型——`ConnOptions` 没有这个字段，本方案不加（后来由 B17 加上） | 与其它能力同一种问法 |
 | B13 | 新建模型不再预填类目、窗口、上限 | P6 界面 | 只影响此后新建、这三项留空的行：Anthropic 线路的 `max_tokens` 发 32,768 而非平台行的数；发送前不按平台窗口拦截。规划不变。已存的行不变 | D2 只让作者写下的值上线；平台以后更新的数能到达这一行（§9.9） |
 | B14 | 结构化任务的 JSON cue 并进最后一条 user 消息 | P7 | 结构化任务走 JSON 路径、且需要 cue 的请求：cue 从单独一条 user 消息变成接在最后一条 user 消息末尾（字符串空一行接上，分块追加一块）。条目生成今天就是这样 | 两条连续的 user 消息在要求严格交替的本地模板上会报错；两个调用方各拼一份是 P7 要去掉的 |
 | B15 | 条目生成在 JSON 被拒时只重发那一次请求 | P7 | 执行日志里不再先出现一条错误事件、再整轮重跑；请求体不变 | 拒绝在生成之前，重跑整轮与重发一次等价；错误事件是假的 |
 | B16 | 学到的上限跨重启保留，7 天过期 | D3（§9.13） | 重启后第一次结构化任务不再先撞一次已知的 400；矩阵悬停与抽屉说明不再写「本会话」。另：已被类目或格降成 `auto` 的强制请求，再收到点名 `tool_choice` 的 400 不再原样重发一次 | 作者 2026-09-28 改判 D3；后一条是 `Attempt` 改读「发出了」 |
+| B17 | 计划持有媒体放行：`ConnOptions` 带模型类型 / `videoInput` / `pdfInput`，`plan.model` 带类型，`plan.media` 决定历史里的图 / 视频 / PDF 发不发 | 媒体按请求放行（2026-09-28） | 历史里有当前线路或模型收不下的媒体时：换成说明句而不是适配器报错 / 上游 400。`modelTypes` 规则（`vlHighResolution`、`videoInput`、`videoFps`）在计划里对不看图的模型生效；金标零差异，`canReadVideo` 在全部线路 × 上游上与旧写法逐格一致 | 附加门、将发送、发送时是同一个答案（[`video-input.md`](../feature/video-input.md) §4） |
 
 ## 6. PR 分期
 

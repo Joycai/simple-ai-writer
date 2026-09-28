@@ -44,7 +44,7 @@
 **能力对齐 ①，但只开实测过的。**（作者决定。）温度、强制工具、JSON（object 与 schema）是协议本身的字段，规则的 `families` 列上原生族；
 `jsonSchema` 实测是真约束，格子写 `true`；联网搜索是百炼私有字段，和 ① 一样由平台格给出。**视频、PDF、代码解释器、网页抓取、
 `vl_high_resolution_images` 这次不在原生线路上开**：规则不列原生族，格子没有，缺省就是「不发」；它们在 ① 线路上照旧。
-适配器遇到视频 / 文件 part 会以名字报错——正常路径里构造不出来，碰到就是上游的 bug。
+历史里带着的视频 / 文件由请求计划投影成说明句（[`video-input.md`](../feature/video-input.md) §4），适配器的具名报错只是后备。
 
 **文生图 / ASR 不改。** 它们本来就在用原生协议（wan2.7 / qwen-image 走 `multimodal-generation`，录音文件识别走
 `/api/v1/services/audio/asr/transcription`），但 base 是从渠道地址按路径后缀改写出来的（`dashscopeNativeBase`），与 host 无关；
@@ -58,8 +58,10 @@
 - qwen3.7-flash 不理强制 `tool_choice`（两条线路都一样，第二十一个样本；思考中也是 200 收下不理，第二十二个样本）。强制工具的调用方本来就处理「模型没调」，这里不另设格子。
 - 原生 `/models` 不带上限，探测的第 0 步在原生线路上跳过。错误探测拿到的「Range of max_tokens should be [1, 131072]」
   取区间上端作输出上限（`probeAnalysis.parseLimitFromMessage`；① 在百炼上是同一句，一并受益）。上下文超限在原生端点上的措辞未测。
-- 一段视频留在对话历史里（`elideOldVideos` 保留最近一段），再把模型切到原生线路，之后每一轮都会以名字报错——与 Gemini / Anthropic
-  适配器对视频的现有处理一致，不在这次单独改。
+- ~~一段视频留在对话历史里（`elideOldVideos` 保留最近一段），再把模型切到原生线路，之后每一轮都会以名字报错——与 Gemini / Anthropic
+  适配器对视频的现有处理一致，不在这次单独改。~~ **已解决（2026-09-28，[`video-input.md`](../feature/video-input.md) §4）。**
+  没有在原生适配器里打补丁：媒体放行收进请求计划（`RequestPlan.media`），`streamCompletion` 按它把历史投影成这一次能发的样子，
+  五族一起、历史不改；附加门与「将发送」读同一个答案。
 - ~~图片模型的出图接口留在「自动」、而模型的线路被切到 DashScope 原生时，推出的仍是 `images-api`，打 `/api/v1/images/generations`
   会 404。~~ **已解决（2026-09-28，[`image-route.md`](../feature/image-route.md)）。** 整体 review 第 1 轮只改了推导规则，第 2 轮发现
   抽屉的异步开关与改图缺省只认声明值、「改回自动」会丢 `asyncTask`，于是撤回。后来按这里写的方向整体重做：有效路线只由
