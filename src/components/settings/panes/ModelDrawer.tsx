@@ -379,11 +379,14 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // The hint under a declaration this route won't send, by the verdict's
   // reason (panes/declNotes): no spelling on the route, the relay's upstream,
   // a platform measured refusing it, one nobody measured… each in its words.
-  const notSentHint = (id: CapabilityId, m: Parameters<typeof hasCapability>[2]) => curWire
-    ? declNotSentNote(t, capabilityVerdict(id, curWire, m).reason, {
-      route: route ? ROUTE_LONG[route] : "", platform: curWire.platform, modelId: form.modelId.trim(), upstream: resolvedUpstream.upstream,
-    })
-    : t("aiConfig.models.declNotOnRoute", { route: "" });
+  const notSentHint = (id: CapabilityId, m: Parameters<typeof hasCapability>[2]) => {
+    const routeName = route ? ROUTE_LONG[route] : "";
+    return curWire
+      ? declNotSentNote(t, capabilityVerdict(id, curWire, m).reason, {
+        route: routeName, platform: curWire.platform, modelId: form.modelId.trim(), upstream: resolvedUpstream.upstream,
+      })
+      : t("aiConfig.models.declNotOnRoute", { route: routeName });
+  };
   // Whether this model takes whole PDFs as message content (lib/ai/configDb).
   const [pdfInput, setPdfInput] = useState(existing?.pdfInput ?? false);
   // DashScope high-resolution image reading (Model.vlHighResolution).
