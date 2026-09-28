@@ -132,7 +132,9 @@ const PROBES: Record<CapabilityId, Probe> = {
     summary: summarySends(ctx, {}, { vlHighResolution: true }),
   }),
   // The clip part is built by the caller, so the chat surface's gate is the asker.
-  videoInput: async (ctx) => ({ canReadVideo: canReadVideo({ type: TYPE, videoInput: true }, provider(ctx)) }),
+  videoInput: async (ctx) => ({
+    canReadVideo: canReadVideo({ type: TYPE, videoInput: true, modelId: ctx.modelId, relayUpstream: ctx.relayUpstream }, provider(ctx)),
+  }),
   videoFps: async (ctx) => ({
     sentVideoFps: sentVideoFps({ videoFps: 1 }, provider(ctx)) !== undefined,
     summary: summarySends(ctx, { videoInput: true }, { videoInput: true, videoFps: 1 }),

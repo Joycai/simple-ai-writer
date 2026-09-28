@@ -28,6 +28,7 @@ import { catalogFact } from "./cells/catalog";
 import { wireThinks, type ThinkingState } from "./conditions";
 import { carried, trusted } from "./intent";
 import { learnedCeiling } from "./learned";
+import { admittedMedia, type MediaAdmission } from "./media";
 import type { CapabilityModel } from "./resolve";
 import { resolveThinkingCategory } from "./values";
 
@@ -43,11 +44,16 @@ export type PlanInput = Pick<
   | "standard" | "baseUrl" | "platform" | "modelId" | "canonicalModelId" | "relayUpstream"
   | "thinkingCategory" | "reasoningEffort" | "thinkingBudget" | "temperature" | "maxOutput" | "provenance"
   | "tools" | "toolChoice" | "serverTools" | "structuredOutput" | "textVerbosity" | "vlHighResolution"
+  | "modelType" | "videoInput" | "pdfInput"
 > & Partial<Pick<StreamOptions, "messages" | "structured">>;
 
 export interface RequestPlan {
   wire: Wire;
-  /** The model as every capability question about it is asked — its id and relay upstream. */
+  /**
+   * The model as every capability question about it is asked — its id, relay
+   * upstream and, when declared, its type (so the tables' `modelTypes` rules
+   * apply).
+   */
   model: CapabilityModel;
   thinking: {
     category: ThinkingCategory;
@@ -92,6 +98,12 @@ export interface RequestPlan {
   responsesInclude: readonly string[];
   /** Cache breakpoints on the system prompt and the toolset. */
   promptCache: boolean;
+  /**
+   * Which media kinds this request may carry (`capability/media.ts`).
+   * `streamCompletion` projects the messages through it before any adapter
+   * sees them: a part of a kind not admitted goes out as a one-line note.
+   */
+  media: MediaAdmission;
 }
 
 /** Whether this choice tells the model to call a tool rather than offering. */
@@ -138,9 +150,29 @@ function toolChoiceOf(
   return { requested, sent: downgradedBy ? "auto" : requested, ...(downgradedBy ? { downgradedBy } : {}) };
 }
 
+/** {@link RequestPlan.model}: the id and relay upstream, and the type when declared. */
+function planModel(opts: MediaPlanInput): CapabilityModel {
+  return { ...capabilityModelOf(opts), ...(opts.modelType !== undefined ? { type: opts.modelType } : {}) };
+}
+
+/** What {@link RequestPlan.media} is made from — a subset of {@link PlanInput}. */
+type MediaPlanInput = Pick<
+  PlanInput, "standard" | "baseUrl" | "platform" | "modelId" | "relayUpstream" | "modelType" | "videoInput" | "pdfInput"
+>;
+
+/**
+ * {@link RequestPlan.media} without the rest of the plan: the question the
+ * attach gates ask (`conn.ts` `admittedMediaOf`), answered by the same
+ * composition the plan uses, so what may be attached and what goes out
+ * cannot differ.
+ */
+export function requestMedia(opts: MediaPlanInput): MediaAdmission {
+  return admittedMedia(wireOf(opts), planModel(opts), opts);
+}
+
 export function planRequest(opts: PlanInput): RequestPlan {
   const wire = wireOf(opts);
-  const model = capabilityModelOf(opts);
+  const model = planModel(opts);
   const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory, modelId: opts.modelId }, opts.standard, wire.platform);
   const functionTools = !!opts.tools?.length;
   // The row's effort as this wire takes it: `off` beside function tools where
@@ -174,5 +206,6 @@ export function planRequest(opts: PlanInput): RequestPlan {
     // non-reasoning ids were never measured with it.
     responsesInclude: catalogFact("reasons", opts.canonicalModelId ?? opts.modelId) === false ? [] : platformResponsesInclude(wire.platform),
     promptCache: hasCapability("promptCache", wire, model),
+    media: admittedMedia(wire, model, opts),
   };
 }

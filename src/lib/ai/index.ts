@@ -21,6 +21,7 @@ import {
   type MessageContent, type StreamMessage, type StreamOptions,
 } from "./types";
 import { imagePayload, MAX_REQUEST_IMAGE_CHARS } from "./imagePart";
+import { admitMedia } from "./mediaParts";
 
 export * from "./types";
 
@@ -132,8 +133,11 @@ export async function streamCompletion(opts: StreamOptions): Promise<StreamResul
   for (;;) {
     // What the request carries, decided once per attempt for whichever adapter
     // spells it — the forced choice and the JSON tier read the learned store.
+    // The history may hold media attached under another model; what goes out
+    // is what this route and model admit (`plan.media`), the rest as a note.
     const plan = planRequest(merged);
-    if (!(await sendOnce(shape(merged, plan.json), plan))) return plan.json ? { structured: plan.json.mode } : {};
+    const admitted = { ...merged, messages: admitMedia(merged.messages, plan.media) };
+    if (!(await sendOnce(shape(admitted, plan.json), plan))) return plan.json ? { structured: plan.json.mode } : {};
   }
 }
 

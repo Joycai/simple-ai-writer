@@ -106,12 +106,12 @@ describe("a part type no wire can spell", () => {
 
   it("Anthropic names the type", () => {
     expect(() => convertToAnthropicMessages(history, "claude-sonnet-4-5"))
-      .toThrow(/unsupported content part type "video_url"/);
+      .toThrow(/^Anthropic adapter: no spelling for a "video_url" content part/);
   });
 
   it("Gemini names the type", () => {
     expect(() => convertToGeminiContents(history))
-      .toThrow(/unsupported content part type "video_url"/);
+      .toThrow(/^Gemini adapter: no spelling for a "video_url" content part/);
   });
 });
 

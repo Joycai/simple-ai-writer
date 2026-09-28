@@ -135,7 +135,7 @@ describe("DashScope native route — the request", () => {
       messages: [{ role: "user", content: [{ type: "video_url", video_url: { url: "data:video/mp4;base64,AAAA" } }] }],
       onChunk: () => {},
     } as StreamOptions;
-    expect(() => nativeBody(opts)).toThrow(/DashScope: a video_url part/);
+    expect(() => nativeBody(opts)).toThrow(/^DashScope adapter: no spelling for a "video_url" content part/);
   });
 });
 

@@ -42,7 +42,7 @@ token（`usage.prompt_tokens_details.video_tokens`）：
 
 ## 3. 不变量
 
-1. **只有 `openai` 族上实测收它的平台，只对声明了 `videoInput` 且能看图的模型**（`canReadVideo` 问能力表的 `videoInput`）。`video_url` 是厂商扩展：百炼、智谱、火山方舟 Coding Plan 收；DeepSeek、xAI、OrcaRouter 不收（OrcaRouter 上 Gemini 回 200 却把视频静默丢掉，GPT 直接报错）；没测过的平台不发，中继照发（capability-gating-plan §9，2026-09-28）。门在组装处（`agentStore` 的 `allowVideo`、`AgentChat` 的候选与读取），不靠 Responses / Gemini / Anthropic 适配器对未知内容块的具名报错兜底——那个报错还在，是最后一道。
+1. **只有 `openai` 族上实测收它的平台，只对声明了 `videoInput` 且能看图的模型**（`canReadVideo` 问能力表的 `videoInput`）。`video_url` 是厂商扩展：百炼、智谱、火山方舟 Coding Plan 收；DeepSeek、xAI、OrcaRouter 不收（OrcaRouter 上 Gemini 回 200 却把视频静默丢掉，GPT 直接报错）；没测过的平台不发，中继照发（capability-gating-plan §9，2026-09-28）。门在组装处（`agentStore` 的 `allowVideo`、`AgentChat` 的候选与读取）；已经在历史里的视频每一轮由请求计划再问一次（§4）。Responses / Gemini / Anthropic / 原生适配器对拼不出的内容块的具名报错（`unsendablePart`）还在，只是后备。
 2. **按模型声明，不猜模型名。** 设置里「视频输入」开关只在收它的线路、能看图的模型上出现；已声明而当前线路不发的，开关照旧显示、可关，下面一行写明不发的原因（抽屉的 `declNotes`）。换了类型（不再看图），保存时清掉（fps 随开关一起清）；换线路不清，声明是模型的。DashScope 预设给三个实测可读的模型预先打开。
 3. **每条消息最多 1 段视频**（`MAX_MESSAGE_VIDEOS`）。一段就可能 20MB 请求体、上万 token；多出来的按路径点名、不发。
 4. **请求历史里只留最新 1 段**（`runtime.ts` 的 `MAX_VIDEO_RESULTS`，与图片的 3 张各算各的）。每一轮工具调用都重发整个历史并重新计费，36k token 的视频跑六轮就是六倍。更早的视频块换成一句说明，消息里的文字保留；会话落盘时视频数据全部丢掉（`chatSession.ts`）。
@@ -50,7 +50,51 @@ token（`usage.prompt_tokens_details.video_tokens`）：
 6. **估算只是估算**：`estimateVideoTokens` 标 ≈；未知时长返回 null，不编一个数。估值记在 `tokenEstimate` 的 WeakMap 里给上下文预检用，**绝不**写到内容块上——`openai.ts` 原样发送内容块，任何附加字段都会上线。无估值的视频按 `VIDEO_TOKENS_UNKNOWN`（10k）计，而不是按一张图的 800。
 7. **工具在场性**：模型读不了视频时，视频退回成「一个录音文件的路径」，走现有的 `mediaRefs` / `mediaRefsNoTool` 文案——只在本次运行真有 `transcribe_audio` 时才点它的名。
 
-## 4. 有意没做
+## 4. 历史里的媒体按请求放行（2026-09-28）
+
+**问题。** 对话历史跨模型切换复用（`chats[key].history`，模型是全局的 `activeModelId`），而视频、图片、PDF 只在**附加那一刻**过门。
+一段视频留在历史里（§3 第 4 条保留最新一段），作者把模型切到原生 / Gemini / Anthropic / Responses 线路，之后每一轮都在适配器里以名字报错；
+切到不看图的模型，历史里的图照样打到 ① 上，由上游 400。「历史里的 part 每一轮都会重发」这件事没有拥有者。
+
+**决定：媒体放行归请求计划，发送时投影，历史不改。**
+
+1. **一个答案。** `capability/media.ts` 的 `admittedMedia(wire, model, 声明)` 是「这条线路 × 这个模型收哪几类媒体」的唯一答案：
+   三层：协议那一层是适配器有没有拼法（`spelledMedia`：图片五族都有，视频只有 ①，PDF 除原生外都有），总是生效；模型那一层是声明
+   （类型看不看图、`videoInput`、`pdfInput`）；平台那一层是能力格（`videoInput` / `pdfInput`，按 id 与中转上游），只对声明发问。
+   `ConnOptions` 带上三项声明，`planRequest` 产出 `RequestPlan.media`；决定建不建 part 的门——输入框的视频门 `canReadVideo`、PDF 子代理的资格 `readsPdf`——经 `conn.ts` 的
+   `admittedMediaOf` 读同一个组合，「将发送」的 fps 行读 `plan.media.video`。三处不再各问一遍能力表，`mediaAdmission.test.ts`
+   随机走全部平台 × 线路 × 声明 × 中转上游，钉住它们逐格相等。
+2. **投影，不改写。** `streamCompletion` 在一切读 `messages` 的环节（token 估算、图片载荷门、API 日志、适配器）之前调
+   `admitMedia(messages, plan.media)`：不放行的 part 换成一句给模型读的英文说明（`[video clip not sent: …]`），文字保留
+   （`withoutParts`，与裁剪、落盘同一条规则）。返回新数组，历史本身一个字节不动——切回收得下的模型，视频原样再发。
+3. **适配器只剩后备。** 四个适配器对拼不出的 part 统一抛 `unsendablePart`；正常路径到不了，`mediaHistory.test.ts` 走真实的
+   `streamCompletion` 证明这一点（随机 平台 × 线路 × 声明 × 历史，外加「切原生再切回」「不看图的模型 + 历史图片」两个场景）。
+
+**为什么不是别的做法。**
+- **适配器里丢弃**（把四个默认分支改成说明句）：判定仍散在五处；适配器不知道模型声明，不看图的模型带图走 ① 的那种情形覆盖不到；
+  token 估算和 API 日志看到的是丢弃前的请求；以后第六种 part 要改五处。
+- **切模型时改写历史**：切回去视频就没了；模型是全局的，一次切换改写所有对话；运行中切换有竞态。
+
+**已知取舍。**
+- `trimHistory` 与压缩（`compact.ts`）仍按未投影的历史估 token：这一轮收不下的媒体会被多算，结果是提早裁剪——保守，不会失败。
+  但裁剪会改写历史：窗口很小时（例如历史里一段 ≈36k 的视频，切到 32k 窗口、又不收视频的模型），这段视频和更早的工具结果会被
+  真正删掉，而这一轮实际只发了一句说明——此后切回去，那段视频不在了。「切回去还在」只在窗口装得下未投影历史时成立。
+  同一笔多算也落在运行时别的读者上：每轮开头的 token 估值、思考守卫（`runtime.ts` 按估值给思考留量，多算会让思考被砍、这一轮重跑
+  时预算更小）、上下文条（`contextBreakdown.ts`）。例如历史里一段 ≈36k 的视频、切到 64k 窗口的原生线路思考模型，思考预算会按
+  ≈13.5k 而不是 ≈31.5k 给。都是往保守那边偏，不会让请求失败。
+  让运行时也按 `plan.media` 估算，就是第二个地方持有这份判定；等真有作者撞上再议——那时该做的是让运行时读同一个 `plan.media`，
+  而不是另写一份。
+- **手拼的请求（探针、live 测试）不带声明，发协议拼得出的一切**，不看平台格。平台格是量出来的，而 `live.video-input.test.ts`
+  这类探针正是去量它的：若它也受格约束，一个没测过的平台收到的永远是说明句，探针量到的是表而不是平台（片 3 review F1）。
+  协议那一层照样生效，适配器的后备报错到不了。
+- **片段的 `fps` 仍在附加时写死，不随换模型重算**（整体 review 第 2 轮 N1，早于本次改动）。在智谱上附的片段不带 `fps`，
+  切到声明 `videoFps: 0.5` 的百炼模型后照样不带（按缺省约 2 帧 / 秒计费，约 4 倍 token），而「将发送」列着 `fps 0.5`；
+  反向则把百炼私有的 `fps` 发给不理它的平台。正确的形状与本节相同：`fps` 是这一次请求的决定，由计划给出、投影时写到片段上，
+  而不是附加时烙进历史——另开任务做，不在本节上再打补丁。
+- **没有给 Gemini / Anthropic / 原生线路加视频拼法。** Gemini 有 inline 视频、原生有 `{video}`，都没实测过；那是「开能力」，要样本，另开任务。
+- 界面上不标「这段视频本轮没发」。说明句是写给模型的，模型会告诉作者；要做界面提示先走 Claude Design。
+
+## 5. 有意没做
 
 - **没有 `read_video` 工具**——见决定 (a)。
 - **角色扮演的输入框不接视频**：它的 `@` 候选本来就不含音视频文件（只有文本和图片），加视频要同时补读取、芯片、历史裁剪三处，而没有人提出这个需求。
@@ -59,6 +103,6 @@ token（`usage.prompt_tokens_details.video_tokens`）：
 - **URL 形式的视频**（`https://…`）与帧序列形式（`{type:"video", video:[…]}`，实测要求 4–2000 帧）：本项目文件都在本地，只发 data URL。
 - **fps 的范围**：设置接受 0.1–10，实测只覆盖 0.5–4。
 
-## 5. 复测
+## 6. 复测
 
 `src/lib/ai/__tests__/live.qianwen.test.ts` 的 `video: qwen3-vl-plus`（需要 `QIANWEN_KEY`）：2 秒片段通过且输入 token 落在估值附近；1 秒片段报 too short；同一段 6 秒片段 `fps: 0.5` 比默认少。三个片段在 `src/lib/fs/__tests__/fixtures/`（ffmpeg 测试图样，共约 54KB）。

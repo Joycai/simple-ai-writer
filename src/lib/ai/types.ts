@@ -37,6 +37,7 @@ import type { PlatformId } from "./platforms";
 import type { RelayUpstreamChoice } from "./relayUpstream";
 import type { RequestPlan } from "./capability/plan";
 import type { Provenance } from "./capability/intent";
+import type { ModelType } from "./configDb";
 import i18n from "../../i18n";
 
 /**
@@ -217,7 +218,8 @@ export type ContentPart =
    *
    * Only the PDF subagent builds these (lib/agent/subagent.ts), so they live in
    * one fresh 2-message context and never enter a long-lived history — nothing
-   * like `imageHistory`'s eviction is needed for them.
+   * like `imageHistory`'s eviction is needed for them. The request still
+   * admits them per route like any other media (`RequestPlan.media`).
    */
   | { type: "file"; file: { file_data: string; filename: string } }
   /**
@@ -227,10 +229,11 @@ export type ContentPart =
    * the endpoint default (≈2 frames per second, measured).
    *
    * Only the `openai` family carries it, and only for a model declaring
-   * `videoInput` — the other adapters throw a named error on it, and the
-   * chat composer never builds one for them (`canReadVideo`). Build with
-   * `videoPart()`; never put bookkeeping fields on it, since openai.ts sends
-   * parts verbatim.
+   * `videoInput` — the composer attaches one only there (`canReadVideo`), and
+   * one already in the history goes out as a note wherever the request does
+   * not admit it (`RequestPlan.media`, `admitMedia`); the other adapters' named
+   * throw is only the backstop. Build with `videoPart()`; never put
+   * bookkeeping fields on it, since openai.ts sends parts verbatim.
    */
   | { type: "video_url"; video_url: { url: string }; fps?: number };
 
@@ -605,6 +608,14 @@ export interface StreamOptions {
    * when a hand-built bag leaves it out.
    */
   relayUpstream?: RelayUpstreamChoice;
+  /**
+   * The model's media declarations (`ConnOptions.modelType` / `videoInput` /
+   * `pdfInput`), read by the plan's media admission. Absent = a hand-built
+   * bag: whatever the protocol can spell goes out.
+   */
+  modelType?: ModelType;
+  videoInput?: boolean;
+  pdfInput?: boolean;
 }
 
 /** Thrown before sending when the estimated prompt exceeds the model's configured context size. */

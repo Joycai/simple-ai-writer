@@ -12,16 +12,13 @@
  *
  * So two places have to take them out again: `trimHistory` when a run is
  * outgrowing the model's window (and, unconditionally, past a count cap), and
- * session serialization before the history goes into a SQLite row. The rule
- * lives here rather than in both.
- *
- * **The words stay.** An earlier version replaced the whole `content` with a
- * note, which was harmless for a tool follow-up ("Visual reference for
- * read_lore_image: …") and destructive for the author's question — that message
- * is a turn boundary the compaction pass segments on, and blanking it threw
- * away what was asked while keeping the answer. Only the payload goes.
+ * session serialization before the history goes into a SQLite row. The part
+ * rule itself — the words stay, only the payload goes — is `withoutParts` in
+ * `lib/ai/mediaParts.ts`; this module adds the message-level predicates both
+ * callers ask with.
  */
 
+import { withoutParts, type MediaKind } from "../ai/mediaParts";
 import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
 
 /**
@@ -54,28 +51,9 @@ export function hasMediaParts(m: StreamMessage): m is MediaMessage {
   return hasImageParts(m) || hasVideoParts(m);
 }
 
-/**
- * The content with every part of the given types removed and `note` appended.
- *
- * Collapses to a plain string when only text is left: a single-element parts
- * array is a shape some Gemini endpoints reject (see lore/aiTask's
- * `buildUserContent`), and once the payload is gone there is nothing an array
- * expresses that the text doesn't. When other media survive (a clip elided from
- * a message that also carries a picture), the array stays and the note joins it
- * as a text part.
- */
-function without(m: MediaMessage, types: ReadonlySet<PartType>, note: string): MessageContent {
-  if (!Array.isArray(m.content)) return m.content;
-  const kept = m.content.filter((p) => !types.has(p.type));
-  if (kept.every((p) => p.type === "text")) {
-    return [...kept.map((p) => (p.type === "text" ? p.text : "")), note].join("\n\n");
-  }
-  return [...kept, { type: "text", text: note }];
-}
-
-const IMAGE = new Set<PartType>(["image_url"]);
-const VIDEO = new Set<PartType>(["video_url"]);
-const MEDIA = new Set<PartType>(["image_url", "video_url"]);
+const IMAGE = new Set<MediaKind>(["image"]);
+const VIDEO = new Set<MediaKind>(["video"]);
+const MEDIA = new Set<MediaKind>(["image", "video"]);
 
 /**
  * The message's content with every picture replaced by `note`.
@@ -84,15 +62,15 @@ const MEDIA = new Set<PartType>(["image_url", "video_url"]);
  * one dropped a picture for this request, another for good.
  */
 export function contentWithoutImages(m: MediaMessage, note: string): MessageContent {
-  return without(m, IMAGE, note);
+  return withoutParts(m.content, IMAGE, note);
 }
 
 /** The message's content with its video clip replaced by `note`. */
 export function contentWithoutVideo(m: MediaMessage, note: string): MessageContent {
-  return without(m, VIDEO, note);
+  return withoutParts(m.content, VIDEO, note);
 }
 
 /** The message's content with every picture and clip replaced by `note`. */
 export function contentWithoutMedia(m: MediaMessage, note: string): MessageContent {
-  return without(m, MEDIA, note);
+  return withoutParts(m.content, MEDIA, note);
 }

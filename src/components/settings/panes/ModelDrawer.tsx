@@ -980,6 +980,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
         videoInput: videoWire && videoInput ? true : undefined,
         videoFps,
+        pdfInput: !isImageModel && !isAsrModel && pdfInput ? true : undefined,
         prefix: form.prefix,
         caps: isImageModel
           ? {

@@ -292,7 +292,7 @@ describe("Responses adapter — request shape", () => {
     const history = [
       { role: "user", content: [{ type: "video_url", video_url: { url: "https://x/v.mp4" } }] },
     ] as unknown as StreamMessage[];
-    expect(() => toResponsesInput(history)).toThrow(/unsupported content part type "video_url"/);
+    expect(() => toResponsesInput(history)).toThrow(/^Responses adapter: no spelling for a "video_url" content part/);
   });
 
   it("crosses a tool round from another provider over as bare function_call / function_call_output items", () => {

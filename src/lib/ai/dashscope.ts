@@ -17,6 +17,7 @@
  */
 
 import { fetch } from "../http";
+import { unsendablePart } from "./mediaParts";
 import { planRequest } from "./capability/plan";
 import { chatParams, toWireMessages } from "./openai";
 import { createChatDeltaReader } from "./chatDelta";
@@ -32,9 +33,8 @@ export const NATIVE_CHAT_PATH = "/services/aigc/multimodal-generation/generation
 /**
  * One content part as the native protocol spells it: a bare `{text}` or
  * `{image}` object, no `type`. `detail` has no native spelling and is dropped.
- * A clip or a file is refused by name: this route's capability cells never
- * let one be built (`videoInput` / `pdfInput` are `no` here), so reaching
- * this is a bug upstream, not a request to send.
+ * A clip or a file has no spelling here and is refused by name
+ * (`unsendablePart`) — a backstop, not the decision about what to send.
  */
 function nativePart(part: Record<string, unknown>): Record<string, unknown> {
   switch (part.type) {
@@ -43,7 +43,7 @@ function nativePart(part: Record<string, unknown>): Record<string, unknown> {
     case "image_url":
       return { image: (part.image_url as { url: string }).url };
     default:
-      throw new Error(`${LABEL}: a ${String(part.type)} part is not sent on the native route — use the Chat route for it`);
+      throw unsendablePart(LABEL, part);
   }
 }
 

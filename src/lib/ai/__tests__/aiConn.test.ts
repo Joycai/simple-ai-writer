@@ -71,6 +71,11 @@ describe("connOptions", () => {
       structuredOutput: "json_schema",
       // A relay with no table and an id naming no upstream: resolved, to none.
       relayUpstream: "none",
+      // The media declarations, the booleans filled as `false` rather than
+      // left absent: absent means a hand-built bag (capability/media.ts).
+      modelType: "text",
+      videoInput: false,
+      pdfInput: false,
     });
   });
 
@@ -118,8 +123,8 @@ describe("connOptions", () => {
     const wide = { ...connOptions(conn), systemPrompt: "…", onText: () => {} };
     expect(Object.keys(pickConnOptions(wide)).sort()).toEqual([
       "apiKey", "authMode", "baseUrl", "canonicalModelId", "contextSize", "maxOutput",
-      "modelId", "platform", "prefix", "provenance", "reasoningEffort", "relayUpstream", "safetySettings", "serverTools",
-      "standard", "structuredOutput", "temperature", "textVerbosity", "thinkingBudget", "thinkingCategory", "vlHighResolution",
+      "modelId", "modelType", "pdfInput", "platform", "prefix", "provenance", "reasoningEffort", "relayUpstream", "safetySettings", "serverTools",
+      "standard", "structuredOutput", "temperature", "textVerbosity", "thinkingBudget", "thinkingCategory", "videoInput", "vlHighResolution",
     ]);
   });
 });

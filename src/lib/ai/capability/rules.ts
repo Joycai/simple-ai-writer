@@ -55,7 +55,8 @@ interface CapabilityRule {
   official?: "yes";
 }
 
-const SEES_IMAGES: readonly ModelType[] = ["multimodal", "vision"];
+/** The model types that read pictures (`canSeeImages`, capability/media.ts). */
+export const SEES_IMAGES: readonly ModelType[] = ["multimodal", "vision"];
 
 const TEMPERATURE_IGNORED: Condition = { when: "temperatureIgnored", absent: "fire" };
 const WITH_FUNCTION_TOOLS: Condition = { when: "functionTools", absent: "defer" };

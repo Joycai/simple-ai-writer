@@ -14,6 +14,7 @@ import type { Model } from "./configDb";
 import type { ContentPart } from "./types";
 import { providerWire } from "./platforms";
 import { hasCapability } from "./capabilities";
+import { admittedMediaOf } from "./conn";
 
 /** Lowest `fps` the settings field accepts. Only 0.5–4 were measured. */
 export const MIN_VIDEO_FPS = 0.1;
@@ -47,15 +48,18 @@ export function clampVideoFps(value: unknown): number | undefined {
  * unmeasured platform is not sent it. The family is not a formality either — on
  * DashScope's Responses surface qwen3-vl-plus is `Unsupported model`, and a
  * `video_url` part there once came back as an empty answer with no error; the
- * Gemini and Anthropic adapters have no spelling for the part. Gating here is
- * what keeps a clip off those wires; their named throw is only the backstop.
+ * Gemini and Anthropic adapters have no spelling for the part.
+ *
+ * The request plan's media admission, asked before there is a request
+ * (`admittedMediaOf`): the same answer that decides, every turn, whether a
+ * clip already in the history goes out or becomes a note.
  */
 export function canReadVideo(
-  model: Pick<Model, "type" | "videoInput"> | null | undefined,
-  provider: Parameters<typeof providerWire>[0] | null | undefined,
+  model: Parameters<typeof admittedMediaOf>[0] | null | undefined,
+  provider: Parameters<typeof admittedMediaOf>[1] | null | undefined,
 ): boolean {
-  if (!model || !provider || !model.videoInput) return false;
-  return hasCapability("videoInput", providerWire(provider), { type: model.type });
+  if (!model || !provider) return false;
+  return admittedMediaOf(model, provider).video;
 }
 
 /**
