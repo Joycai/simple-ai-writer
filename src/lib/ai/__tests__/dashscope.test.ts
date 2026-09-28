@@ -195,7 +195,7 @@ describe("DashScope native route — reading the stream", () => {
 
   it("throws the error frame an HTTP 200 stream carries", async () => {
     await expect(run(() => sseResponse(fixture("error-image-too-small.sse"))))
-      .rejects.toThrow(/^DashScope: InvalidParameter: <400> .*must be larger than 10/);
+      .rejects.toThrow(/^DashScope: InvalidParameter: <400> .*must be larger than 10\] \(request_id c269c642-174f-9d28-abe7-b3e3757c0eb6\)$/);
   });
 
   it("names the Chat route when the model lives on the text endpoint", async () => {
@@ -213,7 +213,7 @@ describe("DashScope native route — reading the stream", () => {
  * message.
  */
 describe("streamDashscope: a refused request's body", () => {
-  const URL = `${BASE}/services/aigc/multimodal-generation/generation`;
+  const ENDPOINT = `${BASE}/services/aigc/multimodal-generation/generation`;
   const TOOL_CHOICE_MESSAGE =
     "<400> InternalError.Algo.InvalidParameter: The tool_choice parameter does not support being set to required or object in thinking mode";
   const sseFrame = (payload: Record<string, unknown>) =>
@@ -234,7 +234,7 @@ describe("streamDashscope: a refused request's body", () => {
     const err = await refusal(fixture("error-image-too-small.sse"), "text/event-stream");
     expect(err.message).toMatch(
       new RegExp(
-        `^DashScope API error 400 \\(${URL.replace(/[.?]/g, "\\$&")}\\): InvalidParameter: <400> .*must be larger than 10\\]` +
+        `^DashScope API error 400 \\(${ENDPOINT.replace(/[.?]/g, "\\$&")}\\): InvalidParameter: <400> .*must be larger than 10\\]` +
         " \\(request_id c269c642-174f-9d28-abe7-b3e3757c0eb6\\)$",
       ),
     );
@@ -250,6 +250,13 @@ describe("streamDashscope: a refused request's body", () => {
     expect(json.message).not.toMatch(/[{}"]/);
   });
 
+  it("reads the frame the stream reader would read: CRLF endings, an indented data: line", async () => {
+    const crlf = fixture("error-image-too-small.sse").replace(/\n/g, "\r\n").replace(/^data:/m, "  data: ");
+    expect(crlf).toContain("\r\n  data: {");
+    const plain = await refusal(fixture("error-image-too-small.sse"), "text/event-stream");
+    expect((await refusal(crlf, "text/event-stream")).message).toBe(plain.message);
+  });
+
   it("keeps the Chat-route hint when the url error comes as a frame", async () => {
     const err = await refusal(
       sseFrame({ code: "InvalidParameter", message: "url error, please check url！", request_id: "r" }),
@@ -260,10 +267,10 @@ describe("streamDashscope: a refused request's body", () => {
 
   it("falls back to the raw text when the body is neither shape", async () => {
     const html = "<html><body>502 Bad Gateway</body></html>";
-    expect((await refusal(html, "text/html", 502)).message).toBe(`DashScope API error 502 (${URL}): ${html}`);
+    expect((await refusal(html, "text/html", 502)).message).toBe(`DashScope API error 502 (${ENDPOINT}): ${html}`);
     // An object without a message is not the vendor's refusal either.
     expect((await refusal('{"status":"busy"}', "application/json", 503)).message).toBe(
-      `DashScope API error 503 (${URL}): {"status":"busy"}`,
+      `DashScope API error 503 (${ENDPOINT}): {"status":"busy"}`,
     );
   });
 
