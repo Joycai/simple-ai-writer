@@ -83,6 +83,33 @@ export function nativeBody(opts: StreamOptions): Record<string, unknown> {
 const URL_ERROR_HINT =
   " — this model answers on DashScope's text-generation endpoint, which this route does not speak; switch the model to the Chat route";
 
+/**
+ * The vendor's `code: message` out of a refused request's body, or the raw
+ * text when it is neither shape. The body follows the request's
+ * `X-DashScope-SSE` header, not the status (landscape.md §7 第二十二个样本):
+ * with it — as this route always sends — even a 400 comes back as one SSE
+ * error frame, the object on its `data:` line; without it, a plain JSON
+ * `{code, message, request_id}`. The message is kept verbatim, so the learned
+ * fallback still finds the field it names (`capability/learned.ts`); the
+ * request id rides along because the API log records only this message.
+ */
+function refusalText(body: string): string {
+  const candidates = [body, ...body.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5))];
+  for (const text of candidates) {
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      continue;
+    }
+    if (!json || typeof json !== "object") continue;
+    const { code, message, request_id: id } = json as { code?: unknown; message?: unknown; request_id?: unknown };
+    if (typeof message !== "string" || !message) continue;
+    return `${typeof code === "string" && code ? `${code}: ` : ""}${message}${typeof id === "string" && id ? ` (request_id ${id})` : ""}`;
+  }
+  return body;
+}
+
 export async function streamDashscope(opts: StreamOptions): Promise<void> {
   if (!opts.baseUrl.trim()) throw new Error(`${LABEL}: the route has no address`);
   const url = nativeUrl(opts.baseUrl, NATIVE_CHAT_PATH);
@@ -101,7 +128,7 @@ export async function streamDashscope(opts: StreamOptions): Promise<void> {
   });
 
   if (!res.ok) {
-    const err = await res.text();
+    const err = refusalText(await res.text());
     throw new Error(`DashScope API error ${res.status} (${url}): ${err}${/url error/i.test(err) ? URL_ERROR_HINT : ""}`);
   }
 

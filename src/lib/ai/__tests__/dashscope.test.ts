@@ -2,16 +2,17 @@
  * DashScope's native route, end to end through `streamCompletion`: the
  * request it builds, and what it reads out of streams the endpoint really sent
  * (`fixtures/dashscope-native/`, recorded 2026-09-28 on maas.qianwenaiapi.com —
- * docs/api/landscape.md §7 第二十一个样本).
+ * docs/api/landscape.md §7 第二十一个样本), plus the refused-request bodies
+ * read off `streamDashscope` directly (第二十二个样本).
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { streamCompletion, type StreamChunk, type StreamMessage, type StreamOptions } from "../index";
-import { __resetLearned } from "../capability/learned";
-import { nativeBody, toNativeMessages } from "../dashscope";
-import type { AccumulatedToolCall } from "../types";
+import { __resetLearned, classify } from "../capability/learned";
+import { nativeBody, streamDashscope, toNativeMessages } from "../dashscope";
+import type { AccumulatedToolCall, ToolDefinition } from "../types";
 
 declare const __dirname: string;
 const fixture = (name: string) => readFileSync(join(__dirname, "fixtures/dashscope-native", name), "utf8");
@@ -201,5 +202,96 @@ describe("DashScope native route — reading the stream", () => {
     const body = '{"code":"InvalidParameter","message":"url error, please check url！","request_id":"r"}';
     await expect(run(() => new Response(body, { status: 400 }), { modelId: "qwen-plus" }))
       .rejects.toThrow(/DashScope API error 400 .*url error.*switch the model to the Chat route/);
+  });
+});
+
+/**
+ * A request refused before streaming. The body follows `X-DashScope-SSE`, which
+ * this route always sends: one SSE error frame on the 400, or — without the
+ * header — a plain JSON object (landscape.md §7 第二十二个样本). Called on
+ * `streamDashscope` itself, so nothing between it and the author reshapes the
+ * message.
+ */
+describe("streamDashscope: a refused request's body", () => {
+  const URL = `${BASE}/services/aigc/multimodal-generation/generation`;
+  const TOOL_CHOICE_MESSAGE =
+    "<400> InternalError.Algo.InvalidParameter: The tool_choice parameter does not support being set to required or object in thinking mode";
+  const sseFrame = (payload: Record<string, unknown>) =>
+    `id:1\nevent:error\n:HTTP_STATUS/400\ndata:${JSON.stringify(payload)}\n\n`;
+
+  /** The error `streamDashscope` throws when the endpoint answers `status` with `body`. */
+  async function refusal(body: string, contentType: string, status = 400): Promise<Error> {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { status, headers: { "content-type": contentType } })));
+    const err = await streamDashscope({
+      baseUrl: BASE, apiKey: "k", standard: "dashscope_compat", platform: "dashscope", modelId: "qwen3.8-flash",
+      messages: [{ role: "user", content: "hi" }], onChunk: () => {},
+    }).then(() => undefined, (e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    return err as Error;
+  }
+
+  it("reads code and message off the SSE frame's data line", async () => {
+    const err = await refusal(fixture("error-image-too-small.sse"), "text/event-stream");
+    expect(err.message).toMatch(
+      new RegExp(
+        `^DashScope API error 400 \\(${URL.replace(/[.?]/g, "\\$&")}\\): InvalidParameter: <400> .*must be larger than 10\\]` +
+        " \\(request_id c269c642-174f-9d28-abe7-b3e3757c0eb6\\)$",
+      ),
+    );
+    // None of the frame's scaffolding reaches the author.
+    expect(err.message).not.toMatch(/event:|HTTP_STATUS|data:|\bid:1\b|[{}"]/);
+  });
+
+  it("reads the same code and message off a plain JSON body", async () => {
+    const payload = JSON.parse(fixture("error-image-too-small.sse").split("\n").find((l) => l.startsWith("data:"))!.slice(5));
+    const json = await refusal(JSON.stringify(payload), "application/json");
+    const sse = await refusal(fixture("error-image-too-small.sse"), "text/event-stream");
+    expect(json.message).toBe(sse.message);
+    expect(json.message).not.toMatch(/[{}"]/);
+  });
+
+  it("keeps the Chat-route hint when the url error comes as a frame", async () => {
+    const err = await refusal(
+      sseFrame({ code: "InvalidParameter", message: "url error, please check url！", request_id: "r" }),
+      "text/event-stream",
+    );
+    expect(err.message).toMatch(/: InvalidParameter: url error, please check url！ \(request_id r\) — .*switch the model to the Chat route$/);
+  });
+
+  it("falls back to the raw text when the body is neither shape", async () => {
+    const html = "<html><body>502 Bad Gateway</body></html>";
+    expect((await refusal(html, "text/html", 502)).message).toBe(`DashScope API error 502 (${URL}): ${html}`);
+    // An object without a message is not the vendor's refusal either.
+    expect((await refusal('{"status":"busy"}', "application/json", 503)).message).toBe(
+      `DashScope API error 503 (${URL}): {"status":"busy"}`,
+    );
+  });
+
+  it("leaves the learned fallback able to read a forced tool_choice refusal in either shape", async () => {
+    const payload = { code: "InvalidParameter", message: TOOL_CHOICE_MESSAGE, request_id: "r" };
+    for (const err of [
+      await refusal(sseFrame(payload), "text/event-stream"),
+      await refusal(JSON.stringify(payload), "application/json"),
+    ]) {
+      expect(err.message).toContain(TOOL_CHOICE_MESSAGE);
+      expect(classify(err, { forcedToolChoice: true })).toEqual({ fact: "forcedToolChoice", ceiling: false });
+    }
+  });
+
+  it("re-sends a forced choice as auto after the framed 400, end to end", async () => {
+    const tool: ToolDefinition = {
+      type: "function",
+      function: { name: "emit", description: "d", parameters: { type: "object", properties: {} } },
+    };
+    let n = 0;
+    const { calls } = await run(
+      () => n++ === 0
+        ? new Response(sseFrame({ code: "InvalidParameter", message: TOOL_CHOICE_MESSAGE, request_id: "r" }), {
+          status: 400, headers: { "content-type": "text/event-stream" },
+        })
+        : sseResponse(fixture("json-qwen3.7-flash.sse")),
+      { modelId: "qwen3.8-flash", tools: [tool], toolChoice: "required" },
+    );
+    expect(calls.map((c) => (c.body.parameters as Record<string, unknown>).tool_choice)).toEqual(["required", "auto"]);
   });
 });
