@@ -1124,6 +1124,7 @@ const API_STANDARDS: ApiStandard[] = [
   "gemini_compat",
   "anthropic",
   "anthropic_compat",
+  "dashscope_compat",
 ];
 
 /**

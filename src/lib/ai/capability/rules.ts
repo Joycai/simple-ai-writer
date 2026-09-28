@@ -81,8 +81,11 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // is not sent it. A relay may front one that takes it (capability-gating-plan C4).
   videoInput: { families: ["openai"], origin: "private", relay: "unknown", modelTypes: SEES_IMAGES },
   videoFps: { families: ["openai"], origin: "private", relay: "unknown", modelTypes: SEES_IMAGES, requires: ["videoInput"] },
-  // `tool_choice: required | {function}` being honoured.
-  forcedToolChoice: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native" },
+  // `tool_choice: required | {function}` being honoured. DashScope's native
+  // protocol is in this list and the four below it because its `parameters`
+  // are these same fields (dashscope.ts); what it lacks — video, PDF, the
+  // interpreter, page reading — is simply not listed for it.
+  forcedToolChoice: { families: ["openai", "responses", "gemini", "anthropic", "dashscope"], origin: "native" },
   // A thinking effort beside function tools. The protocol has both, but
   // OpenAI's own Chat Completions refuses the pair from GPT-5.4 on unless the
   // effort is `none` — and the model's default is not `none`, so a request
@@ -117,7 +120,7 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // nothing. Where an Anthropic-shaped endpoint was measured heeding it with
   // thinking switched off, the category says so (`temperatureWhenOff`).
   temperature: {
-    families: ["openai", "responses", "gemini", "anthropic"], origin: "native", unless: { anthropic: [TEMPERATURE_IGNORED] },
+    families: ["openai", "responses", "gemini", "anthropic", "dashscope"], origin: "native", unless: { anthropic: [TEMPERATURE_IGNORED] },
   },
   // `text.verbosity` exists on the Responses family only.
   textVerbosity: { families: ["responses"], origin: "native" },
@@ -138,7 +141,7 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // `generationConfig.response*` / `output_config.format`). How strong is
   // jsonMode.ts's business; the Messages API has the schema tier and nothing
   // weaker, so an Anthropic model resolves to strict or off, never json_object.
-  structuredOutput: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native" },
+  structuredOutput: { families: ["openai", "responses", "gemini", "anthropic", "dashscope"], origin: "native" },
   // The strict tier of it (`response_format.json_schema` / `text.format`
   // json_schema / `responseJsonSchema`). The protocol defines it, but a
   // platform may take it with a 200 and ignore it — 智谱 answers with prose in a
@@ -146,12 +149,14 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // `unknown`: an author's declaration is sent, the auto tier never lifts to
   // it (jsonMode.ts). A capability of the wire, not the model id: DashScope
   // serves GLM with json_schema working, 智谱 serves the same GLM ignoring it.
-  jsonSchema: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native", assumed: "unknown", requires: ["structuredOutput"] },
+  jsonSchema: {
+    families: ["openai", "responses", "gemini", "anthropic", "dashscope"], origin: "native", assumed: "unknown", requires: ["structuredOutput"],
+  },
   // The tier below it: "any JSON object" (`response_format: json_object` /
   // `text.format` json_object / `responseMimeType`). The Messages API has the
   // schema tier and nothing weaker, so an Anthropic model's only JSON mode is
   // strict — asked without a schema, or capped below it, it gets the cue alone.
-  jsonObjectTier: { families: ["openai", "responses", "gemini"], origin: "native", requires: ["structuredOutput"] },
+  jsonObjectTier: { families: ["openai", "responses", "gemini", "dashscope"], origin: "native", requires: ["structuredOutput"] },
   // Explicit `cache_control` breakpoints on the system prompt and the toolset
   // (anthropic.ts). The official endpoint documents them; a compatible one is
   // `no` until measured — MiniMax documents `cache_control` on `system` but

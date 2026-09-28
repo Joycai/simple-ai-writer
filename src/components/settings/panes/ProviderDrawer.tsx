@@ -7,7 +7,8 @@ import { feeGroupOptions } from "../../../lib/ai/feeGroupList";
 import { useFeeLabelWords } from "./feeWords";
 import type { Model, Provider } from "../../../lib/ai/configDb";
 import { authModesFor, type AuthMode, type ProtocolFamily } from "../../../lib/ai/types";
-import { anthropicUrl, defaultBaseFor, geminiUrl, openaiUrl } from "../../../lib/ai/urls";
+import { anthropicUrl, defaultBaseFor, geminiUrl, nativeUrl, openaiUrl } from "../../../lib/ai/urls";
+import { NATIVE_CHAT_PATH } from "../../../lib/ai/dashscope";
 import {
   GEMINI_HARM_CATEGORIES,
   GEMINI_THRESHOLD_LEVELS,
@@ -228,6 +229,7 @@ function requestUrl(ep: Endpoint, base: string): string {
     case "anthropic": return anthropicUrl(b, "/messages");
     case "gemini": return geminiUrl(b, "/models/{model}:streamGenerateContent");
     case "responses": return openaiUrl(b, "/responses");
+    case "dashscope": return nativeUrl(b, NATIVE_CHAT_PATH);
     default: return openaiUrl(b, "/chat/completions");
   }
 }
@@ -798,11 +800,13 @@ function PlatformGrid({ current, onPick }: { current: PlatformId | null; onPick:
 /**
  * A caveat the author needs *before* typing a key (05k 屏 2a). Only where a
  * wrong pick fails in a way the connection test can't explain: 火山方舟's two
- * key kinds each 401 on the other's path, and both sit on one host. 智谱 the
+ * key kinds each 401 on the other's path, and both sit on one host; 百炼's
+ * Token Plan key is a 401 on the pay-as-you-go host and back. 智谱 the
  * other way round: one key reaches every path, so nothing stops a plan key
  * from quietly billing the balance here.
  */
 const PLATFORM_NOTES: Partial<Record<PlatformId, string>> = {
+  "dashscope-plan": "aiConfig.providers.platformNoteDashscopePlan",
   volcengine: "aiConfig.providers.platformNoteVolcengine",
   "volcengine-plan": "aiConfig.providers.platformNoteVolcenginePlan",
   zhipu: "aiConfig.providers.platformNoteZhipu",

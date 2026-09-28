@@ -300,7 +300,7 @@ export type AgentEvent = AgentEventScope & (
        * Emitted per **round**, not per run, because that is the only level at
        * which the two are comparable: a run's `token_usage` row is the sum of N
        * prompts, each longer than the last, and matches no single estimate.
-       * The four protocol families are already folded into one `Usage` shape by
+       * The five protocol families are already folded into one `Usage` shape by
        * their own clients (`lib/ai/anthropic.ts readUsage` has the hardest
        * case), so `actualInputTokens` means the same thing on all of them: the
        * whole prompt the server counted, cached parts included.

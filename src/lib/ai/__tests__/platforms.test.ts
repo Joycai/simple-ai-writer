@@ -131,6 +131,40 @@ describe("volcengine: two platforms on one host", () => {
   });
 });
 
+describe("dashscope: a new host, the old one kept, and the Token Plan beside them", () => {
+  const NEW = "https://maas.qianwenaiapi.com";
+  const OLD = "https://dashscope.aliyuncs.com";
+  const PLAN = "https://token-plan.maas.qianwenaiapi.com";
+
+  it("gives a new channel the new host", () => {
+    expect(platformOrigin("dashscope")).toBe(NEW);
+    expect(platformOrigin("dashscope-plan")).toBe(PLAN);
+  });
+
+  it("names both hosts dashscope, so a stored row on the old one keeps its platform", () => {
+    for (const host of [NEW, OLD]) {
+      expect(inferPlatform(`${host}/compatible-mode/v1`, "openai_compat")).toBe("dashscope");
+      expect(inferPlatform(`${host}/apps/anthropic`, "anthropic_compat")).toBe("dashscope");
+    }
+    expect(platformToStore({ platform: "dashscope", baseUrl: `${OLD}/compatible-mode/v1`, apiStandard: "openai_compat" }))
+      .toBeUndefined();
+  });
+
+  it("does not let the pay-as-you-go host swallow the plan's, which ends in it", () => {
+    expect(inferPlatform(`${PLAN}/compatible-mode/v1`, "openai_compat")).toBe("dashscope-plan");
+    expect(inferPlatform(`${PLAN}/apps/anthropic`, "anthropic_compat")).toBe("dashscope-plan");
+    expect(platformForAddress("dashscope", `${PLAN}/compatible-mode/v1`, "openai_compat")).toBe("dashscope-plan");
+    expect(platformForAddress("dashscope-plan", `${NEW}/compatible-mode/v1`, "openai_compat")).toBe("dashscope");
+  });
+
+  it("lists only the plan's two documented routes", () => {
+    expect(platformEndpoints("dashscope-plan")).toEqual([
+      { family: "openai", path: "/compatible-mode/v1" },
+      { family: "anthropic", path: "/apps/anthropic" },
+    ]);
+  });
+});
+
 // DeepSeek: off is the disable switch, which only the `deepseek` category sends.
 describe("deepseek calibration", () => {
   it("prefills the deepseek thinking category for its listed ids", () => {

@@ -177,6 +177,10 @@ export function parseLimitFromMessage(text: string): number | undefined {
     /limit(?:ed)? (?:is |to )(\d[\d,_]*)/i,
     /(?:n_ctx|num_ctx|max_model_len|context_length)\D{0,12}(\d[\d,_]*)/i,
     /(\d[\d,_]*) tokens?\)?\s*(?:maximum|limit|max)/i,
+    // DashScope, both its compatible and its native protocol: "Range of
+    // max_tokens should be [1, 131072]" (landscape.md §7 第二十一个样本). The
+    // upper bound is the limit; the lower bound carries no separators.
+    /range of [\w. ]+? (?:should|must) be \[\s*\d+\s*,\s*(\d[\d_]*)\s*\]/i,
   ];
   for (const re of patterns) {
     const m = re.exec(text);

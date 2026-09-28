@@ -122,18 +122,22 @@ const SEARCH_HINT_KEY: Record<ProtocolFamily, string> = {
   responses: "aiConfig.models.serverToolsHintResponses",
   gemini: "aiConfig.models.serverToolsHintGemini",
   anthropic: "aiConfig.models.serverToolsHint",
+  // The same `enable_search`, inside the native `parameters`.
+  dashscope: "aiConfig.models.serverToolsHintDashscope",
 };
 const EXTRACT_HINT_KEY: Record<ProtocolFamily, string> = {
   openai: "aiConfig.models.serverToolsHintExtractor",
   responses: "aiConfig.models.serverToolsHintExtractor",
   gemini: "aiConfig.models.serverToolsHintExtractorGemini",
   anthropic: "aiConfig.models.serverToolsHintExtractor",
+  dashscope: "aiConfig.models.serverToolsHintExtractor",
 };
 const CODE_HINT_KEY: Record<ProtocolFamily, string> = {
   openai: "aiConfig.models.serverToolsHintCodeInterpreter",
   responses: "aiConfig.models.serverToolsHintCodeInterpreterResponses",
   gemini: "aiConfig.models.serverToolsHintCodeInterpreterGemini",
   anthropic: "aiConfig.models.serverToolsHintCodeInterpreter",
+  dashscope: "aiConfig.models.serverToolsHintCodeInterpreter",
 };
 
 const SO_LABEL_KEY: Record<StructuredOutputMode, string> = {

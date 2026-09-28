@@ -33,6 +33,7 @@ const EFFORTS: readonly (ReasoningEffort | undefined)[] = [
 ];
 const FAMILY_STANDARD: Record<ProtocolFamily, ApiStandard> = {
   openai: "openai_compat", responses: "openai_responses_compat", gemini: "gemini_compat", anthropic: "anthropic_compat",
+  dashscope: "dashscope_compat",
 };
 
 const DASHSCOPE = "https://dashscope.aliyuncs.com/compatible-mode/v1";

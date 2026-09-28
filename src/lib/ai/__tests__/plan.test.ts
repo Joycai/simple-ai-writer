@@ -13,6 +13,7 @@ import { streamAnthropic } from "../anthropic";
 import { __resetLearned, noteLearned } from "../capability/learned";
 import { planRequest, type PlanInput } from "../capability/plan";
 import { streamGemini } from "../gemini";
+import { streamDashscope } from "../dashscope";
 import { streamOpenAI } from "../openai";
 import { PLATFORM_IDS, platformEndpoints } from "../platforms";
 import { streamResponses } from "../responses";
@@ -21,6 +22,7 @@ import type { ProtocolFamily, StreamOptions, ToolDefinition } from "../types";
 
 const ADAPTERS: Record<ProtocolFamily, (o: StreamOptions) => Promise<void>> = {
   openai: streamOpenAI, responses: streamResponses, anthropic: streamAnthropic, gemini: streamGemini,
+  dashscope: streamDashscope,
 };
 
 const TOOL: ToolDefinition = {

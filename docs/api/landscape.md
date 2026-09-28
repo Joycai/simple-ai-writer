@@ -2336,6 +2336,61 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 
 同一 host 的图片面见 §2.1。
 
+### 第二十一个样本：百炼换地址，与 DashScope 原生协议的对话面（2026-09-28 实测 qwen3.7-flash / qwen3.7-plus / qwen3.8-flash / qwen3.8-max）
+
+> **实测结论**（按量 key `sk-ws…`；原生端点 `POST {host}/api/v1/services/aigc/multimodal-generation/generation`）：
+>
+> **地址。** 文档把地址换成了 `https://maas.qianwenaiapi.com`，路径不变（`/compatible-mode/v1`、`/apps/anthropic`、
+> `/api/v1`）。旧地址 `dashscope.aliyuncs.com` 同一把 key 仍然全通。Token Plan 是另一个 host
+> `https://token-plan.maas.qianwenaiapi.com`，快速开始文档只列 `/compatible-mode/v1` 与 `/apps/anthropic` 两条对话面
+> （原生 `/api/v1` 只做图 / 视频 / 语音生成）；key 以 `sk-sp-` 开头，按量 key 打这个 host 是 401。套餐 key 未实测。
+>
+> **端点由模型定死，两个原生端点不重叠。** 上面四个模型只在 `multimodal-generation` 答；打 `text-generation` 是
+> 400 `InvalidParameter`「url error, please check url！」。老的纯文本模型（qwen-plus）正相反。qwen3.8-plus 不存在
+> （两端点都 404「Model not exist.」，`/models` 里也没有）。
+>
+> **信封。** `{model, input:{messages}, parameters:{…}}`。`parameters` 里的字段与 compatible-mode 的请求体同名同义：
+> `temperature` / `max_tokens` / `tools` + `tool_choice` / `enable_thinking` + `thinking_budget` / `reasoning_effort` /
+> `response_format` / `enable_search`，逐项实测生效（`reasoning_effort` 的档位见下「思考」）。`result_format:"message"` 让回包是 `output.choices[].message`。
+>
+> **消息。** 与 Chat Completions 同形（`system` / `user` / `assistant` 带 `tool_calls` / `tool` 带 `tool_call_id`），唯一的
+> 区别是 content part：没有 `type`，直接是 `{text}` / `{image}` / `{video}` / `{file}`。`{image:"data:image/png;base64,…"}`
+> 收（64×64 的图读对了颜色；1×1 的被以尺寸拒：`height:1 or width:1 must be larger than 10`）。工具轮把 assistant 的
+> `reasoning_content` 原样带回，下一轮正常作答。
+>
+> **流式。** 要请求头 `X-DashScope-SSE: enable`（不带就是一个完整 JSON）加 `parameters.incremental_output:true`（不带则每帧重复
+> 到目前为止的全部内容）。帧是 `id:N` / `event:result` / `:HTTP_STATUS/200` / `data:{…}` 四行加空行；**没有 `[DONE]`**，流直接结束。
+> 未结束的帧 `finish_reason` 是**字符串 `"null"`**；结束帧是 `"stop"` / `"tool_calls"` / `"length"`，content 为 `[]`。多模态端点的
+> `message.content` 是数组 `[{text}]`，思考在 `message.reasoning_content`。**每帧都带累计 usage**：`input_tokens` /
+> `output_tokens` / `prompt_tokens_details.cached_tokens` / `output_tokens_details.reasoning_tokens`。
+>
+> **工具调用增量。** 与 Chat Completions 的 delta 同形：首帧带 `id` + `function.name`，之后的帧 `id:""`、只带
+> `function.arguments` 的片段，按 `index` 累加——空串 id 不能覆盖首帧的 id。
+>
+> **失败怎么送达。** 请求被拒是非 2xx + `{code, message, request_id}`。**流开始之后的失败在 HTTP 200 里**：
+> `event:error` + `:HTTP_STATUS/400` + `data:{code, message, request_id}`（图片尺寸的例子）。
+>
+> **思考。** qwen3.7：`enable_thinking:true` + `thinking_budget:256` 想（955 字），`enable_thinking:false` 不想。
+> qwen3.8：`enable_thinking:false` 不想；`enable_thinking:true` + `reasoning_effort:"low"` 想。qwen3.8-flash 与 qwen3.8-max
+> 什么都不发也想（3.8-flash 同一道题两次 235 / 244 个 `reasoning_tokens`）；只发 `reasoning_effort:"low"` 两次 146 / 120，
+> `"xhigh"` 两次 320 / 119——字段看来被读到了，但两次样本离散太大，**档位对深度的影响不作结论**。
+> `enable_thinking:false` 同时带 `reasoning_effort` 是 400：「'reasoning_effort' must be 'none' when 'enable_thinking' is false」。
+>
+> **强制工具。** `tool_choice:"required"` 与具名函数，思考关闭时：qwen3.8-flash 照办；**qwen3.7-flash 不理，用文字答**
+> ——在 compatible-mode 上也一样，是模型的性质，不是这一面的。
+>
+> **JSON。** `response_format:{type:"json_object"}` 生效。`json_schema` + `strict:true`，schema 只许 `color` 取「绿色」、
+> 提问问的是晴天天空：qwen3.7-flash 与 qwen3.8-flash 都答 `{"color":"绿色"}`——schema 压过了提示词，是真约束。
+>
+> **搜索。** `parameters.enable_search:true` 生效：输入从十几个 token 涨到 4452，usage 多出 `plugins.search.{count,strategy}`。
+>
+> **上限。** `max_tokens:10000000` → 400「Range of max_tokens should be [1, 131072]」（qwen3.7-flash）。`max_tokens` 只卡答案、
+> 不卡思考：`max_tokens:8` 的一次回了 199 个输出 token，其中 187 个是思考。
+>
+> **模型列表。** `GET /api/v1/models?page_size=N&page_no=M`，`page_size` 上限 100（1000 被拒「exceeds the length limit」），
+> 形状 `{output:{total, page_no, page_size, models:[{model, name, description, features}]}}`，当天 `total` 518。条目里没有
+> 上下文 / 输出上限。不存在的模型打生成端点 → 404 `{"code":"InvalidParameter","message":"Model not exist."}`。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
@@ -2352,8 +2407,8 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 - **Ollama `/api/chat`** —— 自有 shape（`messages` + `options`），与它的
   OpenAI 兼容层并存。原生接口能拿到 `num_ctx` 之类的本地参数。
 - **Cohere `/v2/chat`** —— 自有 shape。
-- **阿里 DashScope 原生** —— `input.messages` + `parameters` 两段式。
-- **AWS Bedrock Converse `POST /model/{id}/converse`** —— 实际上是第五种独立
+- **阿里 DashScope 原生** —— `input.messages` + `parameters` 两段式；对话面的实测见 §7 第二十一个样本。
+- **AWS Bedrock Converse `POST /model/{id}/converse`** —— 实际上是又一种独立
   body：`system` 是独立数组、content 恒为 block 数组、camelCase 命名、
   `inferenceConfig` / `toolConfig` 分组、`additionalModelRequestFields` 兜住厂商
   私有参数、usage 为 `inputTokens`/`outputTokens`/`cacheReadInputTokens`。

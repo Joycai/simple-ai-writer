@@ -184,6 +184,15 @@ const DASHSCOPE: PlatformCells = {
       code_interpreter: "per-model",
       models: DASHSCOPE_CODE_INTERPRETER.responses,
     },
+    // The native `/api/v1` route (dashscope.ts): `parameters.enable_search`,
+    // the same private field ① sends at the top level; json_schema held
+    // against a prompt it contradicts on qwen3.7-flash and qwen3.8-flash
+    // (landscape.md §7 第二十一个样本). Only the domestic host lists the route,
+    // so the international deployment never reaches this.
+    dashscope: {
+      jsonSchema: true,
+      web_search: true,
+    },
   },
 };
 
@@ -326,6 +335,8 @@ export const PLATFORM_CELLS: Record<PlatformId, PlatformCells> = {
   // error naming it as no accepted variant (第十九个样本).
   deepseek: { families: { all: { models: DEEPSEEK_MODELS }, openai: { web_search: false, videoInput: false } } },
   dashscope: DASHSCOPE,
+  // Unmeasured: the protocol's own answers until a plan key has been through it.
+  "dashscope-plan": {},
   "dashscope-intl": DASHSCOPE,
   // json_schema with `strict:true`: 200, output matches (第十一个样本).
   // web_search measured on grok-4.3; web_extractor and the image searches are

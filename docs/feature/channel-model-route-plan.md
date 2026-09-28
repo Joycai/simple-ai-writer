@@ -104,7 +104,7 @@ DashScope 私有的 `enable_search` / `search_options` / `enable_code_interprete
 
 ```ts
 interface PlatformProfile {
-  id: PlatformId;                 // "dashscope" | "dashscope-intl" | "deepseek" | "openai" | "anthropic" | "google"
+  id: PlatformId;                 // "dashscope" | "dashscope-plan" | "dashscope-intl" | "deepseek" | "openai" | "anthropic" | "google"
                                   // | "xai" | "minimax" | "volcengine" | "volcengine-plan" | "orcarouter" | "newapi" | "ollama" | "comfyui" | "custom"
   name: string;
   /** 官方主机；newapi / custom / ollama 缺省，由作者在渠道上填。 */
@@ -402,6 +402,10 @@ P1–P4 在一个 PR 里落地（作者要求一次做完；§8「每期一个 P
 **没做的**：§5.1.2 的专用接口线路（`dashscope-native` / `comfyui` 进 `provider_endpoints`、出图 / 转写线路带按平台过滤）。
 出图与转写仍由 `caps.route` 与 `asrFormat` 选接口、由渠道地址推出原生前缀，行为与之前相同；专用接口进线路表要等一个
 「同一出图模型换接口」的样本（§9 同一理由）。
+
+2026-09-28：DashScope 原生协议作为**对话**线路进了线路表——第五个协议族 `dashscope`（`/api/v1`，`special` 那一列没有加，
+它就是一条普通的协议线路；`api/dashscope-native-plan.md`）。出图与转写**没有**改成跟这条线路走：它们照旧从渠道地址按路径后缀
+推原生前缀（`dashscopeNativeBase`），与 host 无关，所以百炼换到 maas.qianwenaiapi.com 也不用动。
 
 ## 13. 第一个「一台主机、两种 key」的平台：火山方舟（2026-09-18）
 
