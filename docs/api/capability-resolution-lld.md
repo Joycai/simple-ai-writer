@@ -1,6 +1,6 @@
 # 能力解析层重构：LLD
 
-> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P5 已落成（§9.1–§9.6），P6（逻辑与界面）与 P6b 已落成（§9.7–§9.9），旧思考方言一次性迁移（§9.10），B6 按实测只落在 `doubao-switch` 上（§9.11），P7 未开工。**
+> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P5 已落成（§9.1–§9.6），P6（逻辑与界面）与 P6b 已落成（§9.7–§9.9），旧思考方言一次性迁移（§9.10），B6 按实测只落在 `doubao-switch` 上（§9.11），思考回退在最低档类目上加提示（§9.12），P7 未开工。**
 > HLD：[`capability-resolution-hld.md`](capability-resolution-hld.md)。本文回答：分几个 PR、每个 PR 动哪些文件哪些函数、
 > 类型长什么样、算法怎样逐格复现今天的行为、怎么测、怎么回滚。对照的是 2026-09-27 的 `main`（`d31ab9fc`，#717 之后）；引用一律写文件 + 符号，不写行号（`docSourceRefs.test.ts`）。
 
@@ -1228,22 +1228,28 @@ Anthropic 族 `doubao-switch` 的 `off` 从 `-` 变 `yes`。
 请求体金标零差异（金标没有关思考又带温度的 doubao-switch 行）。
 抽屉在浏览器里挂真实组件核过：火山关闭 + 0 显示新说明、将发送带 `temperature 0`；切到开启温度栏收起、将发送不带；MiniMax 关闭 + 0.3 温度栏收起、不发。
 
+### 9.12 思考回退：最低档类目既发 off 又带提示（2026-09-28）
+
+**问题**（原 §10 第 1 条）：agent 的思考护栏中止一轮后，回退在档位菜单里有「关闭」的类目上发 off，没有的带一条「不要展开思考」的提示。
+gemini3 与 claude-adaptive 的菜单里有「关闭」，但线上没有真正的关（`offSpelling: "lowest"`：Claude 发 `effort: low`，Gemini 发 `thinkingLevel: LOW`）。
+
+**实测**（landscape.md 第十八个样本「思考回退补测」，OrcaRouter 上的 Claude Sonnet 5 与 Gemini 3.8 Flash，一道计数题每格 5 次，
+输出 token 中位数）：Claude 不设 6,962 → 关闭 2,270 → 关闭 + 提示 1,396；Gemini 不设 1,980 → 关闭 1,977 → 关闭 + 提示 1,300。
+Gemini 不设档位时本来就在最低档附近，只发 off 等于没回退。只换提示（保留作者档位）会两极，Gemini 有两次整段不想、都答错。
+
+**作者拍板**：最低档类目**既发 off 又带提示**。
+- 原来的反方理由（「作者可以在菜单里选 off，选了它就该是 off」）在这里不成立：off 照发，作者点得到的值没有被换掉，只是多一句提示。
+- 真能关的类目（通用、DeepSeek、豆包、开关型……）不变：只发 off，不带提示。没有「关闭」的（`off` 类目、B8 的 gpt-6-astra）不变：只带提示。
+- 受益面小：护栏只在一轮思考超过窗口剩余一半时触发，这些模型窗口 20 万到 100 万。改动也小，所以照做。
+
+**改动**：`runAgent` 的 `thinkingFallback` 从 `"off" | "nudge"` 改成 `{ off, nudge }`——`off` 照旧（菜单在这条线路上有 off，或开关型），
+`nudge` = 没有 off，或 `offSpelling === "lowest"`。执行日志的 `recovery` 多一种 `thinking-low`（两份 locale 各一句）。
+
+**测试**：`agentRuntimeThinkingGuard.test.ts` 加一例——gemini3 与 claude-adaptive 中止后余下每个请求都带 off 与提示、提示发完即撤、日志是 `thinking-low`；
+真能关的类目的例子补一条「不带提示」。变异检查四处都报红：最低档类目不带提示（即旧行为）；最低档类目只带提示不发 off；所有类目都带提示；日志仍写 `thinking-off`。
+
 ## 10. 待决
 
-1. **agent 思考回退要不要看 `offSpelling`。** 如果看，gemini3 与 claude-adaptive 在预算耗尽时也会从「关思考」改成「提示作答」。
-   反方理由：作者可以在菜单里选 off，作者选了它，它就该是 off。要先量一次，看 LOW 或 low 档是否仍会把预算耗尽。
-
-   **2026-09-28 已量**（landscape.md 第十八个样本「思考回退补测」，OrcaRouter 上的 Claude Sonnet 5 与 Gemini 3.8 Flash，一道计数题每格 5 次）：
-   - 最低档确实少想：Claude 从约 6,900 输出 token 降到约 2,300。但 **Gemini 不设档位时本来就在最低档附近**（1,980 对 1,977）——
-     不设档位的 Gemini 行被中止后，今天的回退发出去的请求和被中止的那次一样想，回退等于没做。
-   - 只换成提示（保留作者的档位）会两极：有时整段不想、直接报数，Gemini 那两次都答错；其余照常想，只是短一些。
-   - 关闭 + 提示两家都最省（约 1,400 / 1,300），正确率 4/5、5/5。
-
-   据此的三条路：维持现状（Gemini 不设档位时回退无效）；`offSpelling: "lowest"` 改走提示（Gemini 上有答错的代价）；
-   `offSpelling: "lowest"` **既发 off 又带提示**（两家都最省，倾向这条）。反方理由对第三条不成立：off 照发，作者选过的档没有被换掉，只是多了一句提示。
-
-   **要掂量的是值不值得改**：护栏只在一轮的思考超过窗口剩余空间的一半时才触发，而 `offSpelling: "lowest"` 的类目
-   （gemini3、claude-adaptive / -budget、glm）对应的模型窗口是 20 万到 100 万 token。实际会触发的主要是作者把窗口填小了的行，
-   或窗口小的中转上游。改动很小（`runAgent` 的 `thinkingCut` 分支，多一种回退），但受益面也小。
+1. ~~**agent 思考回退要不要看 `offSpelling`。**~~ 已量、已落（§9.12）：最低档类目既发 off 又带提示。
 2. ~~**B6（Anthropic 族关思考时带温度）**~~ 已量、已落（§9.11）。
 3. **学到的存储持久化**（D3）随 provider-layering §7 一起决定。
