@@ -25,18 +25,39 @@ const IMAGE_TOKENS = 800;
 export const VIDEO_TOKENS_UNKNOWN = 10_000;
 
 /**
- * Per-clip estimates, keyed by the part object itself.
+ * Per-clip cost, keyed by the part object itself: how many tokens the clip
+ * costs at a given `fps` (absent = the endpoint's default), or null when its
+ * size could not be read.
  *
  * Carried beside the part rather than on it because openai.ts sends parts
  * verbatim — a bookkeeping field would reach the endpoint. A WeakMap follows
  * the object through the history (trimming mutates `content` arrays but keeps
  * the parts it doesn't drop) and lets go of it once the clip is elided.
+ *
+ * A function of the fps rather than a number, because the fps is decided per
+ * request (`RequestPlan.clipFps`): the projection writes the one this request
+ * sends onto a copy of the part (`carryVideoCost`), and the estimate reads the
+ * part it is handed — so the request's pre-flight counts the frames that go
+ * out, not the ones the clip was attached at. A function also keeps this
+ * module a leaf: the formula stays in `videoInput.ts`, which the composer calls.
  */
-const videoTokenHints = new WeakMap<object, number>();
+const videoCosts = new WeakMap<object, (fps: number | undefined) => number | null>();
 
-/** Record the composer's estimate for a clip part it just built. */
-export function noteVideoTokens(part: object, tokens: number): void {
-  if (Number.isFinite(tokens) && tokens > 0) videoTokenHints.set(part, Math.round(tokens));
+/** Record how a clip part the composer just built costs, as a function of the fps it goes out at. */
+export function noteVideoCost(part: object, costAt: (fps: number | undefined) => number | null): void {
+  videoCosts.set(part, costAt);
+}
+
+/** Give a copy of a clip part (the projection's, with this request's fps) the original's cost. */
+export function carryVideoCost(from: object, to: object): void {
+  const costAt = videoCosts.get(from);
+  if (costAt) videoCosts.set(to, costAt);
+}
+
+/** A clip part's estimated cost at the fps it carries. */
+function videoTokens(part: { fps?: number }): number {
+  const tokens = videoCosts.get(part)?.(part.fps);
+  return tokens != null && Number.isFinite(tokens) && tokens > 0 ? Math.round(tokens) : VIDEO_TOKENS_UNKNOWN;
 }
 
 /** Per-message protocol overhead (role markers, separators). */
@@ -76,7 +97,7 @@ export function estimateMessagesTokens(messages: StreamMessage[]): number {
     } else if (Array.isArray(content)) {
       for (const part of content) {
         if (part.type === "text") total += estimateTextTokens(part.text);
-        else if (part.type === "video_url") total += videoTokenHints.get(part) ?? VIDEO_TOKENS_UNKNOWN;
+        else if (part.type === "video_url") total += videoTokens(part);
         else total += IMAGE_TOKENS;
       }
     }

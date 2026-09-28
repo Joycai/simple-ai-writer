@@ -17,8 +17,9 @@
  * away what was asked while keeping the answer. Only the payload goes.
  */
 
-import type { MediaAdmission } from "./capability/media";
+import type { ClipFps, MediaAdmission } from "./capability/media";
 import type { ContentPart, MessageContent, StreamMessage } from "./types";
+import { carryVideoCost } from "./tokenEstimate";
 
 /** The kinds of media a content part can carry. */
 export type MediaKind = "image" | "video" | "pdf";
@@ -99,21 +100,28 @@ const NOT_SENT: Readonly<Record<MediaKind, string>> = {
 
 /**
  * The messages as this request may carry them: every part of a kind the plan
- * does not admit (`RequestPlan.media`) replaced by a note, the words kept.
+ * does not admit (`RequestPlan.media`) replaced by a note, the words kept; every
+ * admitted clip carrying this request's `fps` (`RequestPlan.clipFps`) — the
+ * plan's value written, or the field removed, whatever the clip was attached
+ * with.
  *
  * A projection, not an edit. The history is the record of what the author
  * attached, and it outlives the model: switch to one that cannot take a clip
- * and the clip goes out as a note; switch back and it goes out again. So this
- * returns a new array and never writes into the one it was given — messages
- * it leaves alone are the same objects, the ones it changes are copies.
+ * and the clip goes out as a note; switch back and it goes out again. Switch
+ * from 智谱 to a DashScope model that declares `fps: 0.5` and the clip goes out
+ * at 0.5, and back without it. So this returns a new array and never writes
+ * into the one it was given — messages it leaves alone are the same objects,
+ * the ones it changes are copies, and a copied clip keeps its estimated cost
+ * (`carryVideoCost`).
  *
  * `streamCompletion` calls it before anything else reads the messages, so the
  * token estimate, the picture-payload gate, the API log and the adapter all
  * see the request that is actually sent.
  */
-export function admitMedia(messages: readonly StreamMessage[], admission: MediaAdmission): StreamMessage[] {
+export function admitMedia(
+  messages: readonly StreamMessage[], admission: MediaAdmission, fps: ClipFps,
+): StreamMessage[] {
   const refused = MEDIA_KINDS.filter((k) => !admission[k]);
-  if (!refused.length) return [...messages];
   return messages.map((m) => {
     // Only the plain variant carries parts; a tool-call turn's content is null.
     if (!Array.isArray(m.content)) return m;
@@ -122,8 +130,29 @@ export function admitMedia(messages: readonly StreamMessage[], admission: MediaA
       const kind = partKind(p);
       if (kind && refused.includes(kind)) kinds.add(kind);
     }
-    if (!kinds.size) return m;
+    const content = withClipFps(m.content, fps);
+    if (!kinds.size) return content === m.content ? m : ({ ...m, content } as StreamMessage);
     const note = MEDIA_KINDS.filter((k) => kinds.has(k)).map((k) => NOT_SENT[k]).join("\n");
-    return { ...m, content: withoutParts(m.content, kinds, note) } as StreamMessage;
+    return { ...m, content: withoutParts(content, kinds, note) } as StreamMessage;
   });
+}
+
+/**
+ * `parts` with every clip carrying `fps` — the same array when none needed a
+ * change (a request left `"as-built"`, or clips that already say it), so an
+ * untouched message stays the same object.
+ */
+function withClipFps(parts: ContentPart[], fps: ClipFps): ContentPart[] {
+  if (fps === "as-built") return parts;
+  let changed = false;
+  const out = parts.map((p) => {
+    if (p.type !== "video_url") return p;
+    const { fps: carried, ...rest } = p;
+    if (fps === "none" ? carried === undefined : carried === fps) return p;
+    changed = true;
+    const copy: ContentPart = fps === "none" ? rest : { ...rest, fps };
+    carryVideoCost(p, copy);
+    return copy;
+  });
+  return changed ? out : parts;
 }
