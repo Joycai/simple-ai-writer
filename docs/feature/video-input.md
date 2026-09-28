@@ -59,7 +59,8 @@ token（`usage.prompt_tokens_details.video_tokens`）：
 **决定：媒体放行归请求计划，发送时投影，历史不改。**
 
 1. **一个答案。** `capability/media.ts` 的 `admittedMedia(wire, model, 声明)` 是「这条线路 × 这个模型收哪几类媒体」的唯一答案：
-   模型那一半是声明（类型看不看图、`videoInput`、`pdfInput`），线路那一半是能力格（`videoInput` / `pdfInput`；图片五族都有拼法）。
+   三层：协议那一层是适配器有没有拼法（`spelledMedia`：图片五族都有，视频只有 ①，PDF 除原生外都有），总是生效；模型那一层是声明
+   （类型看不看图、`videoInput`、`pdfInput`）；平台那一层是能力格（`videoInput` / `pdfInput`，按 id 与中转上游），只对声明发问。
    `ConnOptions` 带上三项声明，`planRequest` 产出 `RequestPlan.media`；附加门 `canReadVideo`、`readsPdf` 经 `conn.ts` 的
    `admittedMediaOf` 读同一个组合，「将发送」的 fps 行读 `plan.media.video`。三处不再各问一遍能力表，`mediaAdmission.test.ts`
    随机走全部平台 × 线路 × 声明 × 中转上游，钉住它们逐格相等。
@@ -75,9 +76,13 @@ token（`usage.prompt_tokens_details.video_tokens`）：
 - **切模型时改写历史**：切回去视频就没了；模型是全局的，一次切换改写所有对话；运行中切换有竞态。
 
 **已知取舍。**
-- `trimHistory` 仍按未投影的历史估 token：这一轮收不下的媒体会被多算，结果是提早裁剪——保守，不会失败。让运行时也投影，
-  就是第二个地方持有这份判定。
-- 手拼的请求（探针、live 测试）不带声明，只受线路那一半约束：它们自己造 part，但适配器拼不出来的照样换成说明句。
+- `trimHistory` 与压缩（`compact.ts`）仍按未投影的历史估 token：这一轮收不下的媒体会被多算，结果是提早裁剪——保守，不会失败。
+  但裁剪会改写历史：窗口很小时（例如历史里一段 ≈36k 的视频，切到 32k 窗口、又不收视频的模型），这段视频和更早的工具结果会被
+  真正删掉，而这一轮实际只发了一句说明——此后切回去，那段视频不在了。「切回去还在」只在窗口装得下未投影历史时成立。
+  让运行时也按 `plan.media` 估算，就是第二个地方持有这份判定；等真有作者撞上再议。
+- **手拼的请求（探针、live 测试）不带声明，发协议拼得出的一切**，不看平台格。平台格是量出来的，而 `live.video-input.test.ts`
+  这类探针正是去量它的：若它也受格约束，一个没测过的平台收到的永远是说明句，探针量到的是表而不是平台（片 3 review F1）。
+  协议那一层照样生效，适配器的后备报错到不了。
 - **没有给 Gemini / Anthropic / 原生线路加视频拼法。** Gemini 有 inline 视频、原生有 `{video}`，都没实测过；那是「开能力」，要样本，另开任务。
 - 界面上不标「这段视频本轮没发」。说明句是写给模型的，模型会告诉作者；要做界面提示先走 Claude Design。
 

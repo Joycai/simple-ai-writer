@@ -611,7 +611,7 @@ export interface StreamOptions {
   /**
    * The model's media declarations (`ConnOptions.modelType` / `videoInput` /
    * `pdfInput`), read by the plan's media admission. Absent = a hand-built
-   * bag: only the route decides.
+   * bag: whatever the protocol can spell goes out.
    */
   modelType?: ModelType;
   videoInput?: boolean;

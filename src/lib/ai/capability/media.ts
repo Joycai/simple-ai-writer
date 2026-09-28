@@ -10,18 +10,24 @@
  * time — so a clip attached under one model stayed in the history and went
  * out, every turn, to whatever model the author switched to next.
  *
- * Two halves, both required:
+ * Three layers:
+ *   - **the protocol** — whether this family's adapter has a spelling for the
+ *     part at all (`spelledMedia`). A protocol fact, always applied: it is what
+ *     keeps a part from reaching an adapter's backstop throw.
  *   - **the model's declaration** — what the author said the model reads: its
  *     type (does it see pictures at all), `videoInput`, `pdfInput`. No probe
  *     can ask without spending a real payload.
- *   - **the route** — whether this wire has a spelling for the part at all, and
- *     on this platform was seen to read it (the `videoInput` / `pdfInput`
- *     capability cells). Every family spells a picture.
+ *   - **the platform** — whether this route, for this id behind this upstream,
+ *     was seen to read it (the `videoInput` / `pdfInput` capability cells).
+ *     Asked only about a declaration: a request that declares nothing — a live
+ *     probe measuring whether a platform reads a clip — sends what the protocol
+ *     can spell, or the probe would measure the table instead of the platform.
  */
 
 import type { ModelType } from "../configDb";
 import type { MediaKind } from "../mediaParts";
 import type { Wire } from "../platforms";
+import { familyOf, type ProtocolFamily } from "../types";
 import { hasCapability, type CapabilityModel } from "./resolve";
 import { SEES_IMAGES } from "./rules";
 
@@ -31,8 +37,8 @@ export type MediaAdmission = Readonly<Record<MediaKind, boolean>>;
 /**
  * What the model row declares about media. `connOptions()` fills all three
  * from the row; each is absent only in a hand-built bag (a probe, a live test,
- * a unit test), whose parts are the caller's own — there only the route half
- * applies.
+ * a unit test), whose parts are the caller's own — there only the protocol
+ * layer applies.
  */
 interface MediaDeclaration {
   modelType?: ModelType;
@@ -56,16 +62,40 @@ export function canSeeImages(m: { type?: ModelType }): boolean {
 }
 
 /**
+ * Which media each protocol's adapter can spell: a picture everywhere; a clip
+ * only as Chat Completions' `video_url` (Gemini's inline video and the native
+ * `{video}` are unmeasured, docs/feature/video-input.md §4); a PDF as Chat's
+ * `file`, Responses' `input_file`, Gemini's `inlineData` and Anthropic's
+ * `document` block, never on the native route. A `Record`, so a new family
+ * does not compile until it says.
+ */
+const SPELLED: Readonly<Record<ProtocolFamily, MediaAdmission>> = {
+  openai: { image: true, video: true, pdf: true },
+  responses: { image: true, video: false, pdf: true },
+  gemini: { image: true, video: false, pdf: true },
+  anthropic: { image: true, video: false, pdf: true },
+  dashscope: { image: true, video: false, pdf: false },
+};
+
+/** The protocol layer alone: what this wire's adapter has a spelling for. */
+export function spelledMedia(wire: Wire): MediaAdmission {
+  return SPELLED[familyOf(wire.standard)];
+}
+
+/**
  * The one answer: which media kinds this route × this model admits.
  *
  * `model` is the plan's capability model (id, relay upstream); its `type` is
  * taken from the declaration, so the tables' `modelTypes` rules see it.
  */
 export function admittedMedia(wire: Wire, model: CapabilityModel, declared: MediaDeclaration): MediaAdmission {
+  const spelled = spelledMedia(wire);
   const typed: CapabilityModel = declared.modelType === undefined ? model : { ...model, type: declared.modelType };
+  const reads = (declaration: boolean | undefined, id: "videoInput" | "pdfInput") =>
+    declaration === undefined || (declaration && hasCapability(id, wire, typed));
   return {
-    image: declared.modelType === undefined || canSeeImages({ type: declared.modelType }),
-    video: declared.videoInput !== false && hasCapability("videoInput", wire, typed),
-    pdf: declared.pdfInput !== false && hasCapability("pdfInput", wire, typed),
+    image: spelled.image && (declared.modelType === undefined || canSeeImages({ type: declared.modelType })),
+    video: spelled.video && reads(declared.videoInput, "videoInput"),
+    pdf: spelled.pdf && reads(declared.pdfInput, "pdfInput"),
   };
 }

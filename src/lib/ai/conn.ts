@@ -143,8 +143,8 @@ export interface ConnOptions {
    * (`capability/media.ts`): the history a request carries may hold parts
    * attached under another model, and this is what decides which of them go
    * out. `connOptions()` fills all three (the booleans as `false`, never
-   * absent); absent in a hand-built bag, whose parts are its own, so only the
-   * route half applies.
+   * absent); absent in a hand-built bag (a probe), whose parts are its own:
+   * it sends whatever the protocol can spell.
    */
   modelType?: ModelType;
   videoInput?: boolean;

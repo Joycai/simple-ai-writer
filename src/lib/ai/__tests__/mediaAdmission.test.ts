@@ -18,7 +18,9 @@ import { readsPdf, type Model, type ModelType, type Provider } from "../configDb
 import { canReadVideo } from "../videoInput";
 import { planRequest } from "../capability/plan";
 import { hasCapability } from "../capabilities";
-import { PLATFORM_IDS, platformEndpoints, providerWire, wireOf } from "../platforms";
+import { PLATFORM_IDS, platformEndpoints, providerWire } from "../platforms";
+import { spelledMedia } from "../capability/media";
+import { familyOf } from "../types";
 import { standardOf } from "../routes";
 import { RELAY_UPSTREAMS, capabilityModelOf, isRelayPlatform, relayUpstreamFor, type RelayUpstreamChoice } from "../relayUpstream";
 
@@ -95,18 +97,29 @@ describe("media admission", () => {
     expect([...seen.image].sort()).toEqual([false, true]);
   });
 
-  it("a hand-built bag, which declares nothing, is bound by the route alone", () => {
+  it("a hand-built bag, which declares nothing, sends what the protocol can spell — a probe measures the platform, not the table", () => {
     for (let seed = 1; seed < 1500; seed++) {
       const { model, provider } = draw(seed);
       const { modelType: _t, videoInput: _v, pdfInput: _p, ...bag } = connOptions({ model, provider, apiKey: "k" });
-      const plan = planRequest(bag);
-      const wire = wireOf(bag);
-      const untyped = capabilityModelOf(bag);
-      expect(plan.media, `seed ${seed}`).toEqual({
+      const family = familyOf(bag.standard);
+      expect(planRequest(bag).media, `seed ${seed}`).toEqual({
         image: true,
-        video: hasCapability("videoInput", wire, untyped),
-        pdf: hasCapability("pdfInput", wire, untyped),
+        video: family === "openai",
+        pdf: family !== "dashscope",
       });
+    }
+  });
+
+  it("no platform cell admits a kind the route's adapter cannot spell", () => {
+    // Otherwise the cell would be silently overruled by the protocol layer.
+    for (const platform of PLATFORM_IDS) for (const e of platformEndpoints(platform)) {
+      const wire = { platform, standard: standardOf({ family: e.family, official: !!e.official }) };
+      const spelled = spelledMedia(wire);
+      for (const modelId of MODEL_IDS) {
+        const at = `${platform} ${e.family} ${modelId}`;
+        if (hasCapability("videoInput", wire, { modelId, type: "multimodal" })) expect(spelled.video, at).toBe(true);
+        if (hasCapability("pdfInput", wire, { modelId })) expect(spelled.pdf, at).toBe(true);
+      }
     }
   });
 });

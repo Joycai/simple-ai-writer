@@ -85,9 +85,11 @@ function history(r: () => number, seed: number): { messages: StreamMessage[]; wo
       if (r() < 0.3) {
         const id = `call_${seed}_${t}`;
         messages.push({ role: "assistant", content: null, tool_calls: [{ id, type: "function", function: { name: "look", arguments: "{}" } }] });
-        messages.push({ role: "tool", tool_call_id: id, content: `tool result ${word}` });
+        messages.push({ role: "tool", tool_call_id: id, content: `tool result ${t}` });
       }
-      messages.push({ role: "assistant", content: `reply ${word}` });
+      // Replies carry no user word, so a word dropped from a user turn
+      // cannot be found in the reply instead.
+      messages.push({ role: "assistant", content: `reply ${t}` });
     }
   }
   return { messages, words, kinds };
