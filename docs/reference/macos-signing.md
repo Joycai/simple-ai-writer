@@ -12,31 +12,39 @@
 
 用一张**固定不变**的证书签名，designated requirement 就从「二进制的哈希」变成「证书的哈希」，跨版本稳定，ACL 一直认。
 
-### 同一个根因的第二个症状：本地网络权限
+### 已经做了的一半：bundle 整体 ad-hoc 签名（本地网络权限）
 
-macOS 的「本地网络」隐私权限（系统设置 → 隐私与安全性 → 本地网络）也是按代码签名身份记的
-（`/Library/Preferences/com.apple.networkextension.plist` 里的条目键就是
-`simple_ai_writer-<哈希>`）。ad-hoc 构建一换，旧身份的授权就不作数，新二进制发往局域网地址
-（`192.168.*`、`10.*`、`.local` …）的请求被系统**在发出之前**拦掉 —— 表现为自建同步 / 备份服务器、
-局域网里的 Ollama / LM Studio 全都「连不上」，而同一台机器上的 `curl` 一切正常（终端不受这道闸）。
-实测：一次本机重建之后备份服务器立刻连不上，服务端 `/health` 与带 token 的 `/v1/configs` 都正常，
-权限表里只有旧构建的身份。
+`tauri.conf.json` 的 `bundle.macOS.signingIdentity` 设成 `"-"`，打包时 tauri-bundler 对**整个 .app**
+做 ad-hoc 签名；`src-tauri/Info.plist` 声明 `NSLocalNetworkUsageDescription`。两条缺一不可。起因是 macOS 的
+「本地网络」隐私权限（系统设置 → 隐私与安全性 → 本地网络）：
 
-两处处理：
+- **不签 bundle 就拿不到权限，也不会弹框。** 之前只有可执行文件被 linker 签了
+  （`Identifier=simple_ai_writer-<哈希>`、`Info.plist=not bound`、`Sealed Resources=none`）。系统没法把进程
+  认成这个 bundle，读不到用途说明，发往局域网（`192.168.*`、`10.*`、`.local` …）的连接直接拿到
+  `EHOSTUNREACH`（os error 65，"No route to host"），前端只看到 reqwest 顶层的
+  `error sending request for url` —— 自建同步 / 备份服务器、局域网里的 Ollama / LM Studio 全都「连不上」，
+  同一台机器上的 `curl` 却一切正常（终端发起的请求算在终端头上）。
+- **权限表按 `SigningIdentifier` 认人，不看哈希。** `/Library/Preferences/com.apple.networkextension.plist`
+  里每条记录是 `SigningIdentifier` + 空的 `DesignatedRequirement`（`AllowEmptyDesignatedRequirement: true`）。
+  linker 签名的标识符里带二进制哈希，每次构建都变，授权永远对不上；bundle 签名后标识符是
+  `com.simple-ai-writer.app`，跨构建不变，授权一次就一直在。
 
-- **`src-tauri/Info.plist` 声明 `NSLocalNetworkUsageDescription`**（tauri-bundler 会并进 bundle 的
-  Info.plist）。没有这个用途说明，系统弹不出一个像样的授权框，用户只能自己去设置里找开关；有了它，
-  新身份第一次访问局域网时会弹框问「允许」。这条与签名无关，ad-hoc 构建也生效。
-- **固定签名身份**（本手册的全部内容）让授权跨版本保留，不必每次更新都重新允许一次。
+实测（2026-09-29，同一份 reqwest 0.12 探针二进制，放进三种 .app 用 `open` 启动）：
 
-临时办法：在上面那个设置页里把 Simple AI Writer 关掉再打开（或删掉旧条目后重启应用、触发一次同步，等弹框）。
+| 打包方式 | 结果 |
+| --- | --- |
+| 终端直接运行 | `200 OK` |
+| bundle 整体 ad-hoc 签名 + 用途说明 | 首次被拦，系统记下授权后 `200 OK` |
+| 只有 linker 签名 + 用途说明（= 旧的打包方式） | 13 次重试全部 `No route to host`，不弹框、不进权限表 |
+
+这**不解决**钥匙串密码框：ad-hoc bundle 签名的 designated requirement 仍是 `cdhash`，每次构建都变，
+钥匙串 ACL 照样失效 —— 那一半还得靠下面的固定证书。`APPLE_SIGNING_IDENTITY` 环境变量会覆盖这里的
+`"-"`，所以 §4 接上证书之后这项配置自然让位。
 
 ### 做完能得到
 
 - 更新之后不再要登录密码（这是全部目的）
-- 「本地网络」授权跨版本保留（见上）
-- bundle 被正确签名并封装资源（今天只有可执行文件被 linker ad-hoc 签了，`Sealed Resources=none`）
-- 应用 `Identifier` 从 `simple_ai_writer-ed18bbf93812d9b5` 变成 `com.simple-ai-writer.app`
+- designated requirement 从 `cdhash` 变成证书指纹，钥匙串 ACL 跨版本稳定
 
 ### 做完**得不到**
 
@@ -207,11 +215,11 @@ codesign -dvvv "/Applications/Simple AI Writer.app"
 
 | 字段 | 之前（ad-hoc） | 现在应该是 |
 |---|---|---|
-| `Identifier` | `simple_ai_writer-ed18bbf93812d9b5` | `com.simple-ai-writer.app` |
+| `Identifier` | `com.simple-ai-writer.app`（bundle ad-hoc 签名之前是 `simple_ai_writer-<哈希>`） | `com.simple-ai-writer.app` |
 | `Authority` | （没有） | `Simple AI Writer Self Signed` |
 | `Signature` | `adhoc` | （不再是 adhoc） |
-| `CodeDirectory flags` | `0x20002(adhoc,linker-signed)` | `0x10000(runtime)` |
-| `Sealed Resources` | `none` | `version=2 rules=13 …` |
+| `CodeDirectory flags` | `0x10002(adhoc,runtime)`（bundle ad-hoc 签名之前是 `0x20002(adhoc,linker-signed)`） | `0x10000(runtime)` |
+| `Sealed Resources` | `version=2 rules=13 …`（之前是 `none`） | `version=2 rules=13 …` |
 
 ### 6.2 designated requirement —— **最关键的一条**
 

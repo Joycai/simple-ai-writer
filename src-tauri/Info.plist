@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Merged by tauri-bundler into the .app's Info.plist. Why the key is here:
-     docs/reference/macos-signing.md § 0「本地网络权限」. -->
+<!-- Merged by tauri-bundler into the .app's Info.plist. Only takes effect because
+     tauri.conf.json signs the whole bundle (bundle.macOS.signingIdentity "-"); why:
+     docs/reference/macos-signing.md § 0「已经做了的一半」. -->
 <plist version="1.0">
 <dict>
 	<key>NSLocalNetworkUsageDescription</key>
