@@ -1,5 +1,5 @@
 /**
- * The learned store — what an endpoint refused this session, from its own 400
+ * The learned store — what an endpoint refused, from its own 400
  * (docs/api/capability-resolution-lld.md §3.7, P3).
  *
  * Three things are held: each rule learns only from an error that names its

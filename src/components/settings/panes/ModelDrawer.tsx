@@ -999,7 +999,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     : family === "gemini"
       ? t("aiConfig.models.briefSoGemini")
       : t("aiConfig.models.briefSoOpenai");
-  // What this endpoint has refused this session (lib/ai/jsonMode.ts memo): a
+  // What this endpoint has refused (the learned store, capability/learned.ts): a
   // measurement, so it outranks the resolved-config note — the author sees
   // what is actually being sent, and that their pick did not take.
   const soCeiling = provider

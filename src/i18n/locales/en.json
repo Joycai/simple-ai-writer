@@ -2788,7 +2788,7 @@
       "markMore": "+{{n}}",
       "sumEdit": "edit",
       "translateLabel": "Translation model format",
-      "noteSoCeiling": "this session · endpoint refused {{refused}}, now {{mode}}",
+      "noteSoCeiling": "measured · endpoint refused {{refused}}, now {{mode}}; changing the declaration or probing again retries it",
       "serverToolNotSent": "{{platform}} has no spelling for this tool: the switch is kept, but nothing is sent.",
       "serverToolNotForModel": "{{platform}} has this tool, but {{model}} doesn't run it: the switch is kept, but nothing is sent.",
       "serverToolUnmeasured": "Unmeasured on {{platform}}: this is the protocol's own tool, so it depends on whether the upstream passes it on — it may be rejected.",
@@ -3017,7 +3017,7 @@
       "thinking": "This route refuses it while thinking is on",
       "upstream": "Measured on the relay's upstream \"{{upstream}}\"",
       "condition": "Not sent under this request's conditions: function tools beside it, or thinking off",
-      "learned": "Measured this session: the endpoint refused it, so it is no longer sent; tried again after a restart"
+      "learned": "Measured: the endpoint refused it, so it is no longer sent; tried again after 7 days or a new probe"
     },
     "upstream": {
       "label": "Upstream",

@@ -69,8 +69,8 @@ export interface RequestPlan {
   /**
    * Only when the request carries a function-tool list. `sent` is what goes on the
    * wire; `downgradedBy` says why a forced choice became `auto` — the
-   * category's dialect, the table's cell, or the endpoint's own 400 learned
-   * this session.
+   * category's dialect, the table's cell, or the endpoint's own 400, learned
+   * within the week (`learned.ts`).
    */
   toolChoice?: { requested?: ToolChoice; sent?: ToolChoice; downgradedBy?: "category" | "cell" | "learned" };
   /** The endpoint-run tools this request carries, canonical and cut to the wire and the request. */
@@ -112,8 +112,8 @@ export function isForcedToolChoice(tc: StreamOptions["toolChoice"]): boolean {
  *     ignore forcing or refuse it with an error that never names the
  *     parameter, and relay upstreams that take it with a 200 and ignore it
  *     (Kiro, anti). A silent ignore teaches the learned store nothing.
- *   - `learned`: the endpoint answered a forced choice with a 400 earlier this
- *     session (DeepSeek V4, which thinks unconditionally; the store is
+ *   - `learned`: the endpoint answered a forced choice with a 400 within the
+ *     last week (DeepSeek V4, which thinks unconditionally; the store is
  *     `learned.ts`, the retry `streamCompletion`'s).
  *
  * Downgrading is safe because no caller relies on forcing: `agent/structured.ts`

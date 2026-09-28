@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { Activity, AlertTriangle, Check, Loader2, X } from "lucide-react";
 
 import { useAiStore } from "../../stores/aiStore";
+import { forgetOnProbe } from "../../lib/ai/learnedForget";
 import { planProbeCost, probeEndpoint, type ProbeReport, type ProbeStage } from "../../lib/ai/endpointProbe";
 import type { ProbeFinding } from "../../lib/ai/probeAnalysis";
 import { routeProvider } from "../../lib/ai/routes";
@@ -115,6 +116,9 @@ export function ModelProbePanel(props: Props) {
         signal: ctrl.signal,
         onProgress: (s, detail) => setStage({ stage: s, detail }),
       });
+      // The endpoint has just been looked at again: what it refused before is
+      // asked afresh rather than held for the rest of the week (learnedForget).
+      forgetOnProbe(provider, props.modelId);
       setReport(result);
       setPhase("done");
     } catch (e) {

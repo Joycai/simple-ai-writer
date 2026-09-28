@@ -2780,7 +2780,7 @@
       "markMore": "+{{n}}",
       "sumEdit": "可修图",
       "translateLabel": "翻译模型格式",
-      "noteSoCeiling": "本会话实测 · 端点拒绝了 {{refused}}，已降为 {{mode}}",
+      "noteSoCeiling": "实测 · 端点拒绝了 {{refused}}，已降为 {{mode}}；改声明或重新探测后再试",
       "serverToolNotSent": "{{platform}} 没有这个工具的拼写：开关保留，但请求里不发送。",
       "serverToolNotForModel": "{{platform}} 有这个工具，但 {{model}} 不跑它：开关保留，请求里不发送。",
       "serverToolUnmeasured": "{{platform}} 上未实测：这是协议自带的工具，取决于上游是否转发，开了可能被拒绝。",
@@ -3009,7 +3009,7 @@
       "thinking": "思考开着时这条线路不收它",
       "upstream": "中转站上游「{{upstream}}」实测如此",
       "condition": "这次请求的条件下不发：带了函数工具，或思考关着",
-      "learned": "本会话实测：端点拒绝过它，之后不再发送；重启应用后再试"
+      "learned": "实测：端点拒绝过它，之后不再发送；7 天后或重新探测后再试"
     },
     "upstream": {
       "label": "上游",

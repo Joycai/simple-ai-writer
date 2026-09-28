@@ -21,6 +21,7 @@ import { getGlobalDb, getGlobalDbPath } from "../lib/project";
 import { backfillUsagePartsQuietly } from "../lib/ai/usageBackfill";
 import { setLearnedSink } from "../lib/ai/capability/learned";
 import { learnedSink, loadLearned } from "../lib/ai/learnedDb";
+import { forgetOnDeclarationChange } from "../lib/ai/learnedForget";
 import { sqlTransaction } from "../lib/sqlTx";
 import { deletePref, readPref, writePref } from "../lib/prefs";
 import {
@@ -478,11 +479,15 @@ export const useAiStore = create<AiState>((set, get) => ({
   },
 
   updateModel: async (m) => {
+    const prev = get().models.find((x) => x.id === m.id);
     if (isTauri) {
       const d = await db();
       await saveModel(d, m);
     }
     set((s) => ({ models: s.models.map((x) => (x.id === m.id ? m : x)) }));
+    // A new structured-output declaration gets one more try at the tier it
+    // names, instead of a week under what the endpoint refused (learnedForget).
+    forgetOnDeclarationChange(prev, m, get().providers);
     // Retyping a row as image / video (or declaring it a translator) can take
     // it out of the chat pickers while it is the chat or summary model — the
     // same stale pick `loadConfig` sweeps, so sweep it here too rather than

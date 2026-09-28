@@ -76,7 +76,7 @@ const TOOL_CAPABILITY_ERROR = new RegExp(
  * `tool_choice` goes out as `auto` — for any of the plan's reasons: the
  * thinking dialect (Qwen's switch with thinking on, MiniMax always), the
  * table's cell (智谱; a relay's Kiro or anti upstream; Azure's Chat route), or
- * the endpoint's own 400 learned this session — **and** the JSON path gets
+ * the endpoint's own 400, learned — **and** the JSON path gets
  * strict `json_schema`. Under `auto` the model may still call the tool, so
  * with only `json_object` to fall back on the attempt is a gamble worth
  * making. With `json_schema` available the JSON path enforces the same schema,

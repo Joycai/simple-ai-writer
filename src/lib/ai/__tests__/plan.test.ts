@@ -118,7 +118,7 @@ describe("a forced tool choice sent as auto", () => {
       .toEqual({ requested: "required", sent: "auto", downgradedBy: "cell" });
   });
 
-  it("names the endpoint's own 400, learned this session", () => {
+  it("names the endpoint's own 400, learned", () => {
     const ds = { standard: "openai_compat" as const, baseUrl: "https://api.deepseek.example", modelId: "deepseek-v4-flash" };
     expect(forced(ds)?.sent).toBe("required");
     noteLearned(ds, "forcedToolChoice", false);

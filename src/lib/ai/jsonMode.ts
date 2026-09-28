@@ -95,7 +95,7 @@ interface JsonModeTarget {
   modelId?: string;
   /** What the catalog is asked about (`ConnOptions.canonicalModelId`); absent = `modelId`. */
   canonicalModelId?: string;
-  /** The endpoint, for the session memo below; absent means "unknown endpoint". */
+  /** The endpoint, for the learned ceilings below; absent means "unknown endpoint". */
   baseUrl?: string;
   /** The author's declaration on the model row; absent = auto. */
   structuredOutput?: StructuredOutputMode;
@@ -360,8 +360,8 @@ function capJsonMode(mode: StructuredOutputMode, ceiling: StructuredOutputMode |
 
 /**
  * The mode a request to this endpoint+model will actually use: what the config
- * says (`resolveStructuredOutput`), capped by what the endpoint has refused this
- * session. The one answer the shaping, the 「将发送」 line and the "is the forced
+ * says (`resolveStructuredOutput`), capped by what the endpoint has refused
+ * (the learned store). The one answer the shaping, the 「将发送」 line and the "is the forced
  * tool attempt worth making" check all read — so they cannot disagree.
  */
 export function effectiveStructuredOutput(t: JsonModeTarget): StructuredOutputMode {
