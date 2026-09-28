@@ -1,12 +1,8 @@
 /**
  * The effective image route has one owner (docs/feature/image-route.md): the
- * derivation per family, the async flag riding only on DashScope, and a source
- * guard that no other file compares a declared route against one of the three
- * derivable values — the shape the drawer once had and the native route broke.
+ * derivation per family and the async flag riding only on DashScope. That no
+ * other file derives it is `src/lib/__tests__/imageRouteOwner.test.ts`.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { defaultImageCaps } from "../configDb";
@@ -97,46 +93,5 @@ describe("「将发送」 lists the effective route", () => {
     expect(wireSummary(image, "openai_compat")[0]).toEqual({ key: "route", value: "images-api" });
     expect(wireSummary({ ...image, caps: { route: "chat" } }, "dashscope_compat")[0])
       .toEqual({ key: "route", value: "chat" });
-  });
-});
-
-// ─── The guard ────────────────────────────────────────────────────────────────
-
-const SRC = fileURLToPath(new URL("../../../", import.meta.url));
-/** A declared route (`caps.route`, the drawer's `capsRoute`, a conn's or draft's `route`) compared to a derivable value. */
-const DECLARED_VS_DERIVABLE =
-  /\b(?:caps\??\.route|capsRoute|conn\.route|draft\.route)\s*[!=]==?\s*["'](?:images-api|gemini|dashscope)["']/g;
-const OWNER = "lib/ai/imageRoute.ts";
-
-function* sources(dir: string): Generator<string> {
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) {
-      if (name !== "__tests__") yield* sources(p);
-    } else if (/\.tsx?$/.test(name) && !name.endsWith(".d.ts")) {
-      yield p;
-    }
-  }
-}
-
-describe("no reader derives the image route on its own", () => {
-  it("the pattern catches what it is for", () => {
-    const hits = (src: string) => src.match(DECLARED_VS_DERIVABLE)?.length ?? 0;
-    expect(hits('open={form.capsRoute === "dashscope"}')).toBe(1);
-    expect(hits('if (m.caps?.route !== "gemini") x();')).toBe(1);
-    expect(hits('model.caps?.route === "comfyui"')).toBe(0);
-  });
-
-  it("only imageRoute.ts compares a declared route with images-api / gemini / dashscope", () => {
-    const offenders: string[] = [];
-    for (const file of sources(SRC)) {
-      const rel = relative(SRC, file).split("\\").join("/");
-      if (rel === OWNER) continue;
-      for (const m of readFileSync(file, "utf8").match(DECLARED_VS_DERIVABLE) ?? []) offenders.push(`${rel}: ${m}`);
-    }
-    // Ask `effectiveImageRoute` (or the drawer's `draftRoute`) instead: 自动
-    // on DashScope's native route *is* dashscope, and a declaration read
-    // doesn't know that.
-    expect(offenders).toEqual([]);
   });
 });

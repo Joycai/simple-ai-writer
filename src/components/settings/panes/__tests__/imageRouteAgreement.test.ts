@@ -10,8 +10,11 @@
  * fed by the real `imageConnOf` on the real `providerFor`, with `fetch`
  * stubbed to record the one request it makes.
  *
- * Both sides are the functions the app calls — `imageCapsDraft.ts` is what the
- * drawer renders from and saves with — so the test cannot pass on a copy.
+ * Every decision is the function the app calls — `imageCapsDraft.ts` is what
+ * the drawer renders from, seeds with and saves with, and each handler below
+ * passes it the same (standard, declared route) pairs the drawer's handler
+ * does. What is mirrored is only the React glue: writing a seed back into
+ * state, and the drawer keeping sizes as one comma-separated field.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -130,24 +133,25 @@ function shown(d: Drawer) {
 /** The endpoint dropdown's onChange (ModelDrawer): seed by the effective route, then set. */
 function pickRoute(d: Drawer, route: ImageRoute | ""): Drawer {
   const std = drawerStandard(d.family);
-  const seed = routeSeed(draftRoute(std, d.draft), draftRoute(std, { route }), d.draft.sizes.join(", "));
+  const seed = routeSeed({ standard: std, route: d.draft.route }, { standard: std, route }, d.draft.sizes.join(", "));
   return { ...d, draft: { ...d.draft, route, ...applySeed(seed) } };
 }
 
 /** `switchRoute` (ModelDrawer): the same seed, from the protocol side. */
 function switchFamily(d: Drawer, family: ProtocolFamily): Drawer {
   const seed = routeSeed(
-    draftRoute(drawerStandard(d.family), d.draft),
-    draftRoute(drawerStandard(family), d.draft),
+    { standard: drawerStandard(d.family), route: d.draft.route },
+    { standard: drawerStandard(family), route: d.draft.route },
     d.draft.sizes.join(", "),
   );
   return { family, draft: { ...d.draft, ...applySeed(seed) } };
 }
 
+/** A seed written back, the way the drawer's comma-separated sizes field parses it. */
 function applySeed(seed: ReturnType<typeof routeSeed>): Partial<ImageCapsDraft> {
   return {
     ...(seed.edit ? { edit: true } : {}),
-    ...(seed.sizes ? { sizes: seed.sizes.split(",").map((x) => x.trim()) } : {}),
+    ...(seed.sizes !== undefined ? { sizes: seed.sizes.split(",").map((x) => x.trim()).filter(Boolean) } : {}),
   };
 }
 
@@ -264,5 +268,42 @@ describe("drawer and client agree on the image route", () => {
       draft: { route: "", dialect: "", edit: false, asyncTask: false, sizes: [], comfyWorkflow: "" },
     }, newRow());
     expect(await observe(row)).toEqual({ route: "dashscope", async: false });
+  });
+});
+
+describe("what a save and a route change carry along", () => {
+  const draft = (over: Partial<ImageCapsDraft>): ImageCapsDraft => ({
+    route: "", dialect: "", edit: true, asyncTask: false, sizes: [], comfyWorkflow: "", ...over,
+  });
+
+  it("keeps a starter row's reference cap only while the effective route and dialect stay put", () => {
+    const ark = { route: "ark" as const, dialect: "seedream-5-lite" as const, edit: true, maxRefs: 14 };
+    const std = drawerStandard("openai");
+    const same = draft({ route: "ark", dialect: "seedream-5-lite" });
+    expect(imageCapsToSave(same, std, { caps: ark, standard: std }).maxRefs).toBe(14);
+    // pro's dialect caps at 10, so lite's 14 would be a wrong limit.
+    expect(imageCapsToSave({ ...same, dialect: "seedream-5-pro" }, std, { caps: ark, standard: std }).maxRefs)
+      .toBeUndefined();
+    expect(imageCapsToSave({ ...same, route: "images-api" }, std, { caps: ark, standard: std }).maxRefs)
+      .toBeUndefined();
+
+    // 自动 on the native route is DashScope, so declaring it is the same endpoint…
+    const auto = { edit: true, maxRefs: 9 };
+    const native = drawerStandard("dashscope");
+    expect(imageCapsToSave(draft({ route: "dashscope" }), native, { caps: auto, standard: native }).maxRefs).toBe(9);
+    // …while moving the model to the Chat route moves 自动 to /images/generations.
+    expect(imageCapsToSave(draft({}), drawerStandard("openai"), { caps: auto, standard: native }).maxRefs)
+      .toBeUndefined();
+  });
+
+  it("takes an untouched DashScope size seed back out when the pictures leave DashScope", () => {
+    const native = { standard: drawerStandard("dashscope"), route: "" as const };
+    const chat = { standard: drawerStandard("openai"), route: "" as const };
+    const seeded = routeSeed(null, native, "").sizes;
+    expect(seeded).toBeTruthy();
+    expect(routeSeed(native, chat, seeded!)).toEqual({ sizes: "" });
+    // An author's own list stays, 宽*高 or not.
+    expect(routeSeed(native, chat, "1024*1024")).toEqual({});
+    expect(routeSeed(chat, native, "1024x1024")).toEqual({ edit: true });
   });
 });

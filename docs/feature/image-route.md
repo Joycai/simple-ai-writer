@@ -38,7 +38,7 @@ routeConventions(route)                   // 某条接口上「所有模型都�
 - **`DerivedImageRoute` 只含 `images-api` / `gemini` / `dashscope`。** `chat` / `comfyui` / `ark` 永远不会被推出来，
   所以对它们「声明值 ≡ 有效路线」由类型保证；`caps.route === "comfyui"` 这种只认声明的写法因此仍然成立，
   不必为了它把渠道一路传到 `imageStore` / `imageTools` 里去。三个可推导的值则**不许**拿声明值直接比——
-  `imageRoute.test.ts` 扫源码守着这一条。
+  `src/lib/__tests__/imageRouteOwner.test.ts` 扫源码守着这一条（正反两种比较、`switch` 声明值都算）。
 - **`standard` 是模型当前线路的标准**（`providerFor(model)` / 抽屉里的 `routeProvider(channel, route)`）。
   抽屉保存时把自己的 `route` 写成 `activeRoute`，所以抽屉问的和客户端问的是同一个 `standard`。
 
@@ -64,7 +64,11 @@ routeConventions(route)                   // 某条接口上「所有模型都�
 | 抽屉：异步开关是否出现 | `form.capsRoute === "dashscope"` | `showsAsyncToggle(standard, draft)` → 有效路线 |
 | 抽屉：保存时留不留 `asyncTask` | `form.capsRoute === "dashscope" && capsAsync` | `imageCapsToSave`：开关在屏上（`showsAsyncToggle`）且开着——存下的就是作者看到的 |
 | 抽屉：保存时留不留 `maxRefs` | 声明值相同 | 有效路线相同（保存前的线路 vs 现在的线路） |
-| 抽屉：改图 / 尺寸预填 | 选中 dashscope / ark 时 | 有效路线**变成** dashscope / ark 时——下拉改了，或模型的线路切了 |
+| 抽屉：改图 / 尺寸预填 | 选中 dashscope / ark 时 | 有效路线**变成** dashscope / ark 时——下拉改了、模型的线路切了，或新模型刚变成图片模型 |
+
+尺寸预填多一条**收回**：作者没动过的 DashScope 预填（`1024*1024, 1328*1328`），在有效路线离开 DashScope 时清掉。
+以前只有作者亲手选「DashScope 原生」才会预填，现在「自动」在原生线路上也会；如果预填留在原处、模型又被切回 Chat 线路，
+`宽*高` 会原样发到 `/images/generations`，换来一个 400。作者自己写的尺寸永远不动。
 | 新图片模型的改图缺省 `defaultImageCaps` | 只看 `standard` | 先看有效路线的 `routeConventions`，再看 `standard` |
 | 「将发送」里的 `route` | 只在声明时列出 | 恒列有效路线——「自动」到底是哪个接口，在这一行看得到 |
 
@@ -82,8 +86,10 @@ routeConventions(route)                   // 某条接口上「所有模型都�
 
 ## 4. 测试
 
-- `src/lib/ai/__tests__/imageRoute.test.ts`：推导表逐族；`effectiveAsyncTask` 只在 dashscope 上为真；
-  源码守卫——`caps.route` / `capsRoute` / `conn.route` / `draft.route` 不许直接和 `images-api` / `gemini` / `dashscope` 比。
+- `src/lib/ai/__tests__/imageRoute.test.ts`：推导表逐族；`effectiveAsyncTask` 只在 dashscope 上为真；`defaultImageCaps`
+  与「将发送」读的是有效路线。
+- `src/lib/__tests__/imageRouteOwner.test.ts`：全库扫描的闸门（登记在 `testPlacement.test.ts`）——除 `imageRoute.ts` 外，
+  `caps.route` / `capsRoute` / `conn.route` / `draft.route` 不许直接和 `images-api` / `gemini` / `dashscope` 比。
 - `src/components/settings/panes/__tests__/imageRouteAgreement.test.ts`：属性测试。随机的
   （协议族，声明值，asyncTask）以及随机的编辑序列（改下拉、拨开关、切线路、保存再打开），每次保存后用真的
   `generateImage`（`fetch` 打桩）看请求打到哪个 URL、带不带 `X-DashScope-Async`，断言与抽屉此刻显示的有效路线
@@ -93,3 +99,7 @@ routeConventions(route)                   // 某条接口上「所有模型都�
   把第 2 轮的写法放回去测试照样全绿。加权后 885 次保存里有 44 次落在那里，放回去就挂。
 - 两边共用同一个主人，所以把推导规则改回旧的，「一致性」那两条仍然绿——它们证明的是一致，不是对错；对错由上面两条钉住的
   用例和 `imageRoute.test.ts` 的逐族推导表负责。
+- 同一文件里还有两条单测：`maxRefs` 只在有效路线与方言都没变时留下（「自动」在原生线路上与声明 DashScope 是同一个
+  端点），以及上面那条尺寸预填的收回。
+- 模拟抽屉的几个处理函数只抄了 React 的「把结果写回状态」那一层；每个判断——有效路线、开关、预填、存什么——
+  调的都是 `imageCapsDraft.ts` 里抽屉自己调的那一个函数，传的也是抽屉传的那一对（标准，声明值）。

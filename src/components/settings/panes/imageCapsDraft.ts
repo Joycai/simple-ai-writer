@@ -58,22 +58,34 @@ export function showsAsyncToggle(standard: ApiStandard | undefined, draft: Pick<
   return draftRoute(standard, draft) === "dashscope";
 }
 
+/** One side of a route change: the standard it is asked on and the declared route. */
+interface RouteSide {
+  standard: ApiStandard | undefined;
+  route: ImageRoute | "";
+}
+
 /**
  * What changing the effective route seeds: the new route's conventions, when
- * it actually changed. Sizes only fill a blank — an author's own list is never
- * overwritten. Either control can move it — the endpoint dropdown or the
- * model's protocol route (auto on native is DashScope, auto on Chat is not).
+ * it actually changed. Either control can move it — the endpoint dropdown or
+ * the model's protocol route (自动 on native is DashScope, 自动 on Chat is
+ * not) — and `from` is null when the model has just become an image model.
+ *
+ * Sizes fill a blank, and an author's own list is never overwritten. A seed the
+ * author never touched follows the route out again: DashScope's 宽*高 left
+ * behind reaches `/images/generations` verbatim, which answers with a 400.
+ * `sizes: ""` means "clear the field".
  */
-export function routeSeed(
-  from: ImageRoute | undefined,
-  to: ImageRoute | undefined,
-  sizesText: string,
-): { edit?: true; sizes?: string } {
-  if (!to || from === to) return {};
-  const c = routeConventions(to);
+export function routeSeed(from: RouteSide | null, to: RouteSide, sizesText: string): { edit?: true; sizes?: string } {
+  const before = from ? draftRoute(from.standard, from) : undefined;
+  const after = draftRoute(to.standard, to);
+  if (!after || before === after) return {};
+  const seeded = before ? routeConventions(before).sizes : undefined;
+  const now = routeConventions(after);
+  const text = sizesText.trim();
+  const sizes = !text ? now.sizes : seeded && text === seeded ? now.sizes ?? "" : undefined;
   return {
-    ...(c.edit ? { edit: true as const } : {}),
-    ...(c.sizes && !sizesText.trim() ? { sizes: c.sizes } : {}),
+    ...(now.edit ? { edit: true as const } : {}),
+    ...(sizes !== undefined ? { sizes } : {}),
   };
 }
 

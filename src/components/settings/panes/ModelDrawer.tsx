@@ -83,7 +83,7 @@ import { CapabilityMatrix } from "./CapabilityMatrix";
 import { ValueFactMatrix } from "./ValueFactMatrix";
 import { UpstreamSection } from "./UpstreamFields";
 import {
-  draftFromCaps, draftRoute, imageCapsToSave, routeSeed, showsAsyncToggle, type ImageCapsDraft,
+  draftFromCaps, imageCapsToSave, routeSeed, showsAsyncToggle, type ImageCapsDraft,
 } from "./imageCapsDraft";
 
 /** i18n key per workflow-import parse failure (lib/comfy/workflow.ts). */
@@ -683,12 +683,12 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     // the same seed the endpoint dropdown gives.
     if (isImageModel) {
       const seed = routeSeed(
-        draftRoute(provider?.apiStandard, imageDraft),
-        draftRoute(nextProvider.apiStandard, imageDraft),
+        { standard: provider?.apiStandard, route: imageDraft.route },
+        { standard: nextProvider.apiStandard, route: imageDraft.route },
         form.capsSizes,
       );
       const seedSizes = seed.sizes;
-      if (seedSizes) setForm((f) => ({ ...f, capsSizes: seedSizes }));
+      if (seedSizes !== undefined) setForm((f) => ({ ...f, capsSizes: seedSizes }));
       if (seed.edit) setCapsEdit(true);
     }
     setRoute(next);
@@ -1223,10 +1223,12 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 if (type === "image" && !existing && provider) {
                   // Both by the route the pictures would actually go to — 自动
                   // on DashScope's native route is DashScope, and edits.
-                  const decl = form.capsRoute ? { route: form.capsRoute as ImageRoute } : undefined;
+                  const decl = imageDraft.route ? { route: imageDraft.route } : undefined;
                   setCapsEdit(defaultImageCaps(provider.apiStandard, decl).edit ?? false);
-                  const seedSizes = routeSeed(undefined, draftRoute(provider.apiStandard, imageDraft), form.capsSizes).sizes;
-                  if (seedSizes) setForm((f) => ({ ...f, capsSizes: seedSizes }));
+                  const seedSizes = routeSeed(
+                    null, { standard: provider.apiStandard, route: imageDraft.route }, form.capsSizes,
+                  ).sizes;
+                  if (seedSizes !== undefined) setForm((f) => ({ ...f, capsSizes: seedSizes }));
                 }
                 // A section swap the author asked for: show the new one.
                 setOpen((o) => ({
@@ -1950,11 +1952,12 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                   // the effective one, so 自动 on the native route counts as
                   // DashScope and picking it explicitly there changes nothing.
                   const seed = routeSeed(
-                    draftRoute(provider?.apiStandard, imageDraft),
-                    draftRoute(provider?.apiStandard, { route: capsRoute as ImageRoute | "" }),
+                    { standard: provider?.apiStandard, route: imageDraft.route },
+                    { standard: provider?.apiStandard, route: capsRoute as ImageRoute | "" },
                     form.capsSizes,
                   );
-                  setForm((f) => ({ ...f, capsRoute, ...(seed.sizes ? { capsSizes: seed.sizes } : {}) }));
+                  const seedSizes = seed.sizes;
+                  setForm((f) => ({ ...f, capsRoute, ...(seedSizes !== undefined ? { capsSizes: seedSizes } : {}) }));
                   if (seed.edit) setCapsEdit(true);
                 }} />
             </Field>
