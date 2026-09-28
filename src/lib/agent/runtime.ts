@@ -605,8 +605,9 @@ export interface AgentRuntimeOptions extends ConnOptions {
    * This run wants JSON back (`StreamOptions.structured`): every round's
    * request is shaped for it, and a refused tier is stepped down inside that
    * round's `streamCompletion`. JSON mode conflicts with tool calling on
-   * several providers, so presets that use it keep `tools: []` — which also
-   * makes the run a single round.
+   * several providers, so presets that use it keep `tools: []`, and they
+   * should be single-round (`maxRounds: 1`, as lore generation's is): a
+   * continuation round would carry the cue and the JSON fields too.
    */
   structured?: StreamOptions["structured"];
 

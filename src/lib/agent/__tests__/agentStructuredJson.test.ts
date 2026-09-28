@@ -106,6 +106,17 @@ describe("the structured task's JSON path", () => {
     expect(format(next[1])?.type).toBe("json_object");
   });
 
+  it("goes straight to strict JSON when forcing is predictably downgraded, and still takes the nulls out", async () => {
+    // Qwen thinking: the forced tool would go out as auto, and json_schema is
+    // in hand — so one request, on the JSON path.
+    const bodies = script([text('{"name":"Ava","note":null}')]);
+    const out = await runStructuredTask(makeArgs({ thinkingCategory: "qwen-budget", reasoningEffort: "high" }));
+    expect(JSON.parse(out)).toEqual({ name: "Ava" });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].tools).toBeUndefined();
+    expect(format(bodies[0])?.type).toBe("json_schema");
+  });
+
   it("sends no JSON field when the model's declaration is off — the cue alone, at the end of the user turn", async () => {
     const bodies = script([refuseChoice, text('{"name":"Ava"}')]);
     await runStructuredTask(makeArgs({ structuredOutput: "off" }));

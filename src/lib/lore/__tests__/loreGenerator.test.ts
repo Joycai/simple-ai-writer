@@ -99,7 +99,10 @@ describe("generateLore", () => {
   it("sends nothing but the cue, at the end of the user turn, when the model's declaration is off", async () => {
     const bodies = script([entity]);
     await generateLore({ ...args, structuredOutput: "off" });
-    expect(format(bodies[0])).toBeUndefined();
+    // No JSON field of any family's spelling.
+    expect(bodies[0]).not.toHaveProperty("response_format");
+    expect(bodies[0]).not.toHaveProperty("text");
+    expect(bodies[0]).not.toHaveProperty("generationConfig.responseMimeType");
     const user = userTurn(bodies[0]);
     expect(user[user.length - 1]?.text).toMatch(/ONLY valid JSON/);
   });
