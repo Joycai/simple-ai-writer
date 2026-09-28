@@ -170,6 +170,8 @@ const DASHSCOPE: PlatformCells = {
       web_extractor: true,
       code_interpreter: "per-model",
       vlHighResolution: true,
+      // A clip read, and `fps` changes the bill (第六个样本「视觉理解」, 第十九个样本).
+      videoInput: true,
       videoFps: true,
       models: DASHSCOPE_CODE_INTERPRETER.openai,
     },
@@ -320,15 +322,18 @@ export const PLATFORM_CELLS: Record<PlatformId, PlatformCells> = {
   // `responseJsonSchema`, Gemini 2.5 on (structured-output-plan.md).
   google: { families: { gemini: { jsonSchema: true } } },
   // Chat Completions: none. Its Anthropic-shaped path stays at the protocol's
-  // `unknown` — unmeasured, not known absent.
-  deepseek: { families: { all: { models: DEEPSEEK_MODELS }, openai: { web_search: false } } },
+  // `unknown` — unmeasured, not known absent. A `video_url` part: 422, the
+  // error naming it as no accepted variant (第十九个样本).
+  deepseek: { families: { all: { models: DEEPSEEK_MODELS }, openai: { web_search: false, videoInput: false } } },
   dashscope: DASHSCOPE,
   "dashscope-intl": DASHSCOPE,
   // json_schema with `strict:true`: 200, output matches (第十一个样本).
   // web_search measured on grok-4.3; web_extractor and the image searches are
   // DashScope's names and are refused (no cell: private, so `no`).
+  // A `video_url` part on Chat Completions: 400 `Empty content block` (第十九个样本).
   xai: {
     families: {
+      openai: { videoInput: false },
       responses: { web_search: true, jsonSchema: true, responsesInclude: ["reasoning.encrypted_content"] },
     },
   },
@@ -347,7 +352,10 @@ export const PLATFORM_CELLS: Record<PlatformId, PlatformCells> = {
         models: DOUBAO.map(([id, maxOutput]) =>
           cal(id, { contextSize: 262_144, maxOutput, thinkingCategory: "doubao" }, MULTIMODAL_PDF)),
       },
-      openai: { jsonSchema: true },
+      // A `video_url` clip read right on doubao-seed-2.0-mini; `fps` left no
+      // mark on a 4-second clip's bill in either spelling, which a clip that
+      // short cannot tell from a frame floor — so no `videoFps` cell (第十九个样本).
+      openai: { jsonSchema: true, videoInput: true },
       responses: { web_search: true, jsonSchema: true },
       anthropic: {
         web_search: true,
@@ -359,7 +367,13 @@ export const PLATFORM_CELLS: Record<PlatformId, PlatformCells> = {
   // Takes `tool_choice: "auto"` only: forcing is ignored on some models and
   // refused on others with an error that never names the parameter (第十四个样本).
   // json_schema: a 200 that ignores it — prose in a code fence, Chinese keys.
-  zhipu: { families: { all: { forcedToolChoice: false, jsonSchema: false, models: ZHIPU_MODELS } } },
+  // A `video_url` clip is read; its `fps` is ignored (same tokens at 0.5 and 2).
+  zhipu: {
+    families: {
+      all: { forcedToolChoice: false, jsonSchema: false, models: ZHIPU_MODELS },
+      openai: { videoInput: true },
+    },
+  },
   // Every cell measured on paid models (landscape.md §7 第十八个样本): a strict
   // schema held against a prompt that contradicted its enum on ①②③④, and the
   // Responses built-in and Anthropic's versioned `web_search` both searched.
@@ -372,11 +386,15 @@ export const PLATFORM_CELLS: Record<PlatformId, PlatformCells> = {
   // gpt-5.6-sol's Responses refuses any temperature (its Chat takes one), and
   // its Chat refuses `max` and `minimal` (its Responses takes `max`).
   // gpt-5.6-luna's temperature is rerouted to the translating layer and echoed.
+  // A `video_url` part on ① (第十九个样本): Gemini drops it in silence — a 200,
+  // a wrong answer, the same input tokens as without it — and GPT is refused
+  // upstream. The silent one is why this cell matters: nothing tells the author.
   orcarouter: {
     families: {
       all: { models: ORCAROUTER_MODELS },
       openai: {
         jsonSchema: true,
+        videoInput: false,
         models: [
           { match: /^openai\/gpt-5\.6-sol$/, set: { effortWithTools: false, effortMax: false, effortMinimal: false } },
           { match: /^openai\/gpt-6-astra$/, set: { reasoningOff: false } },
