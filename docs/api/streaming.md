@@ -104,10 +104,12 @@ data: {"error": {"message": "insufficient credits", "type": "…", "code": "…"
 | DashScope 原生 | 裸 `{code, message, request_id}`；请求带 `X-DashScope-SSE` 时，400 的正文是一帧 SSE（`event:error` + `data:{…}`），不带是 JSON | 实测，第二十一、二十二个样本 |
 | 百炼 ④ 面 | 裸 `{message, type}`（坏 key 403） | 实测，`landscape.md` §7 |
 | OpenRouter 形状的中继 | `{error:{code: <数字>, message:"Provider returned error", metadata:{provider_name, raw}}}`——真正的原因只在 `raw`（上游的原报文，字符串或对象） | 官方文档，未实测 |
+| New API 中继 | 按渠道分两种：**原样透传**上游原文（百炼的 `InternalError.Algo` 打码成 `***.***`，尾部加 ` (request id: …)`，`param` 恒为空串）；或**改写成 500 `Upstream gateway error` / 429 `Upstream rate limit exceeded`**，原文不留——这时状态码不是 4xx，看起来像服务端故障或限流 | 实测 2026-09-28，[`landscape.md`](landscape.md) §7 第二十三个样本 |
 
 **推论：** 形状跟着请求头与厂商走，不跟状态码、也不一定跟 `content-type` 走；一个给人看的读取器要把「整段是 JSON」与「逐行
 `data:`」都试一遍，`message` 之外的 `param` / `code` / `request_id` 也是信息，而读不出时原文就是诊断本身（多半是「回来的不是
-这个 API」）。
+这个 API」）。反过来，**5xx 与 429 也不一定不是拒绝**：经过会改写的中继时，一个被上游 400 的字段每次都回 500 或 429，
+按「服务端故障、可重试」处理只会原样再失败一次。
 
 ## 4. ① 兼容层的其余已知差异
 

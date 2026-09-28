@@ -2454,6 +2454,114 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 > **代价。** 被拒的一次在生成之前，回包不带 usage（厂商是否另计未实测）；学到的上限按「标准 + 地址 + 模型」记一周
 > （`learnedDb` 落盘），这一周里同一端点的强制请求直接以 `auto` 发出。怎么处置见 `dashscope-native-plan.md` §3。
 
+### 第二十三个样本：同一台 New API 上的思考字段、上游 400 与断开后的计费（① ② ④ 三面，2026-09-28 实测）
+
+> **怎么测的**：还是第十、十五至十七个样本那台 `42.240.165.241:3000`，同一把 `CHENMO_KEY`（这把 key 打 `hk.chenmoai.com` 的
+> `/v1/models` 与它逐字节相同，504 个模型）。`python3` 脚本发 curl 形状的请求约 130 次；另用一个媒体整理工具（Jellyfin
+> Media Management Tool）的连接测试驱动它真实的 ① ② ④ 适配器各跑一遍（带一个函数工具、流式），共 12 个模型 × 面。
+> 问的是三件事：④ 面的 `thinking` 到了上游变成什么；上游的 400 回到客户端是什么样；客户端中途断开，上游停不停、钱扣多少。
+> 测的渠道：`[正向量]`（按可观测特征是百炼：400 的原文是百炼的，`InternalError.Algo` 被打码成 `***.***`）上的 glm-5.3、
+> deepseek-v4-pro、qwen3.8-max、kimi-k3；`[Azure]` 上的 gpt-4o、gpt-5.5（这一档最新只到 5.6，没有 gpt-6；gpt-4o 是特意挑的
+> 不推理模型，用来看上游拒收推理字段时回来什么）；`[aistudio]gemini-3.8-flash`；`[次数]grok-4.5`；`[AWSb]gpt-5.6-sol`；
+> 以及 gpt-6-sol 所在的五档（`[官key]` / `[AWSb]` / `[Pro]` / `[Plus]` / `[特价Pro]`），只补测与模型有关的两项。
+
+**④ 面：`thinking` 在翻译时被丢掉**（非流式，「Reply with the single word OK.」，`reasoning_tokens` 读自下文的 `billing_usage`）：
+
+| 模型 | 不发 | `thinking:{type:"disabled"}` | `thinking:{type:"enabled",budget_tokens:1024}` |
+| --- | --- | --- | --- |
+| `[正向量]deepseek-v4-pro` | 9 | **18** | 18 |
+| `[正向量]qwen3.8-max` | 23 | **29** | 24 |
+| `[aistudio]gemini-3.8-flash` | 60 | **77** | 81 |
+| `[次数]grok-4.5` | 90 | **181** | 155 |
+| `[正向量]glm-5.3` | 0 | 13 | 0 |
+| `[正向量]kimi-k3`、`[Azure]gpt-4o` | 0 | 0 | 0 |
+
+- **表里 21 个请求全部 200，没有一个 thinking 块**，答案只有一个 `text` 块。`disabled` 关不掉任何一个会想的模型，`enabled` 也不多想。
+  `[Azure]gpt-5.5`、`[AWSb]gpt-5.6-sol`、`[AWSb]gpt-6-sol` 发不发 `disabled` 也都是 200、只有 `text`。
+- 同样的开关在 **① 面是传到上游的**：`[正向量]deepseek-v4-pro` 发 `thinking:{type:"disabled"}` → 200，`completion_tokens` 1、
+  没有 `reasoning_content`；`[正向量]qwen3.8-max` 发 `enable_thinking:false` → 200，`completion_tokens` 1；`[正向量]glm-5.3` 发
+  `thinking:{type:"disabled"}` → 400 `<400> ***.***.InvalidParameter: The value of the enable_thinking parameter is restricted to True.`
+  （与第六个样本百炼 ④ 面同一句），发 `reasoning_effort:"low"` → 200、`reasoning_tokens` 0。**④ 面同一个 glm-5.3 发 `disabled`
+  是 200**——那句拒绝根本没机会出现。
+- ④ 回包的 `usage` 带 New API 的扩展 `billing_usage:{source:"oai_chat", semantic:"openai", openai_usage:{…}}`，`openai_usage` 是上游
+  ① 的原始 usage（含 `completion_tokens_details.reasoning_tokens`）。`source:"oai_chat"` 说明这台中转站把 ④ 请求翻成 ① 再发；
+  非流式时，这是 ④ 客户端唯一能看出「其实想了」的地方。
+- **流式时 thinking 块又回来了**：带工具的流式请求里，glm-5.3、deepseek-v4-pro 都有 `thinking` 块与 `thinking_delta`（非流式没有）；
+  `[Azure]gpt-5.5` 只有 `tool_use`。与第六个样本百炼 ④ 面「非流式有空块、流式没有块」**方向相反**——流式与非流式的块形状
+  要分开测。
+- **grok-4.5 的思考内联在正文里**：④ 面的 `text`（非流式）与 `text_delta`（流式）以 `<think>…</think>` 开头，① 面的 `content` 同样
+  如此；两面都没有 `reasoning_content` 或 thinking 块。④ 客户端若不切 `<think>`，思考会混进答案，也读不出「想过」。
+- 因此：#119 式的担心——中继把 ④ 的 `thinking` 翻成上游的 `reasoning_effort` / `enable_thinking`、再把上游的 400 用翻译后的名字
+  传回——**在这台 New API 上没有发生**。它不翻译，直接丢。
+
+**上游的 400：按渠道，要么原样透传，要么改写成 500 / 429。**
+
+- `[正向量]`：原样透传，`message` 是上游原文、`InternalError.Algo` 打码成 `***.***`、尾部加 ` (request id: …)`；① 面的形状是
+  `{"error":{"message":"<400> ***.***.InvalidParameter: …","type":"invalid_request_error","param":"","code":"invalid_parameter_error"}}`，
+  ④ 面是 `{"error":{"type":"invalid_parameter_error","message":"<400> ***.***.InvalidParameter: …"},"type":"error"}`。见到的原文：
+  `Temperature should be in [0.0, 2.0]`（deepseek，`temperature:5`；glm-5.3 的同一句是 `[0.0, 2.0)`）、
+  `Parameter 'temperature'=0.2 is not supported for kimi-k3 model.`、
+  `'messages' must contain the word 'json' in some form, to use 'response_format' of type 'json_object'.`、上面那句 `restricted to True`。
+  **`param` 恒为空串**——点名字段只能读 `message`。
+- `[Azure]`：**上游拒绝的请求一律回 500 `Upstream gateway error`（`type` 为 `api_error` 或 `upstream_error`）或 429 `Upstream rate
+  limit exceeded, please retry later`（`rate_limit_error`）**，两种随机出现，`param` 为空串、`code` 为 `null`，上游原文一个字都不剩。
+  同一分钟里不带问题字段的请求全部 200，所以 429 不是限流：
+
+  | 请求 | 结果 |
+  | --- | --- |
+  | ① gpt-4o `reasoning_effort:"low"` | 429、500、429 |
+  | ② gpt-4o `reasoning:{effort:"low"}` | 500、429、500 |
+  | ① gpt-4o `temperature:5` | 429 |
+  | ① gpt-4o / gpt-5.5 `response_format:{type:"json_object"}`，消息里没有「json」 | 4/4 500；3/3 非 200（500、429、500） |
+  | 同上，消息里有「json」 | 2/2 200 |
+  | ② gpt-5.5 `temperature:0.2`（单发，或与 `reasoning:{effort:"none"}`、`include`、`store:false` 同发） | 5/5 非 200（500、500、429、500、500） |
+  | ② gpt-5.5 去掉 `temperature`，其余同上；或只发 `reasoning` / `include` | 全 200 |
+  | ① gpt-5.5 `temperature:0.2` | 2/2 200（① 面收下，与第十七个样本一致） |
+  | ① gpt-4o `thinking:{type:"disabled"}`、未知顶层键；② gpt-4o `include:["reasoning.encrypted_content"]` | 200 |
+
+  第十七个样本里
+  terra 的「② 面 `temperature ≠ 1` 整条 500」是同一件事；新的是 429 这个变体，以及它覆盖所有被拒的字段，不只温度。
+- 别的渠道不这样：② 面带 `temperature:0.2` 的同一个请求，`[AWSb]gpt-5.6-sol` 200；**gpt-6-sol 在 `[AWSb]` / `[Pro]` /
+  `[Plus]` / `[特价Pro]` 四档都 200，回显 `temperature: 1.0`**（静默改写，与第十七个样本三个账号档对 5.6-sol 的做法一致）。
+  `[Azure]` 这一档没有 gpt-6；`[官key]gpt-6-sol` 这次 503（无渠道）。所以「② 面温度整条失败」是 `[Azure]` 渠道的事，
+  不随模型代次走。
+
+**客户端中途断开：流式停、非流式不停**（`[Azure]gpt-4o`，「按顺序写出 1 到 1500 的整数」，`max_tokens:6000`、`temperature:0`；
+每一格读 `GET /api/usage/token/` 的 `data.total_used`，发请求前一次、断开后等 90 s 再一次——整次生成只要 11.5 s，90 s 足够
+上游跑完；空等 90 s 的对照差额为 0）：
+
+| 情形 | 客户端收到 | 扣的配额 |
+| --- | --- | --- |
+| 流式，读完 | 3,501 个输出 token，11.5 s | 21,050 |
+| 流式，2 s 后断开 | 8 个字符 | 1,947 |
+| 流式，2 s 后断开（再一次） | 0 个字符 | 105 |
+| 非流式，3 s 时断开（响应头还没到） | 无 | **21,050**，与读完的一次分毫不差 |
+
+- 流式断开后，扣费约等于断开前上游已经生成的量：中转站停了读取，上游也停了（或至少不再计费）。
+- **非流式断开什么也没省**：中转站没察觉客户端走了，上游照样生成到底、全额计费。等响应头的超时若在非流式请求上中止，
+  钱照付；此时再重发就是付两次。
+- `/api/usage/token/` 用这把 `sk-` key 做 Bearer 就能读（`{code:true,data:{total_used, total_available, unlimited_quota, …}}`），
+  单位是 New API 的配额；`/v1/dashboard/billing/usage` 也能读，但只给一个美元小数 `total_usage`，粒度粗。
+
+**其余**：
+
+- **探测服务端类型时会被网页骗**：`GET /version`、`GET /props`（llama.cpp 的路径）回 200 + New API 管理后台的 HTML；
+  `/api/version`、`/api/ps`、`/api/v0/models`、`POST /api/show`（Ollama、LM Studio 的路径）回 404 `{"error":{"message":"Invalid URL (GET /api/version)",…}}`。
+  靠「200 就算是」判断服务端种类会误判，要看 `content-type` 或能否解析成 JSON。
+- `[官key]gpt-4o` / `[官key]gpt-5.5` 这次都是 503 `No available channel for model gpt-4o under group 【官】openai-原厂key (distributor)`；
+  消息里串着两个 `(request id: …)`，这把 key 所在的分组背后还有一层中转（⚠ 推断）。`[正向量1]minimax-m3` 同样 503。
+
+**结论**：
+
+1. **这台 New API 的 ④ 面对非 Claude 模型不传 `thinking`**：想不想只由上游默认决定，`disabled` 与 `enabled` 都是空操作，请求侧
+   没有任何信号。要关思考，走 ① 面、用上游自己的方言（deepseek `thinking:{type:"disabled"}`、千问 `enable_thinking:false`、
+   glm-5.3 关不掉就 `reasoning_effort:"low"`）。
+2. **读拒绝的逻辑在 `[Azure]` 这类渠道上无从下手**：原文没了，状态码还是 5xx / 429。依赖「400 点名字段 → 去掉它重发」的降级
+   在这里永远不触发；该不发的字段（`[Azure]` 上 ② 面的 `temperature`）只能按渠道事先声明，不能靠学。把 5xx / 429 当成「可能是拒绝」
+   去逐字段排查，只适合连接测试这种一次性场合。
+3. **可中止的请求要用流式**：中转站把客户端断开传给上游的前提是流式；非流式请求被中止，照付全款。
+4. `thinking` 块的有无在流式与非流式之间可能相反（与第六个样本对照），④ 客户端也要切 `<think>`。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**

@@ -159,6 +159,10 @@
   拒绝并说明关不掉——智谱 `1210 该模型始终思考，不支持关闭思考`，百炼则借自家 ① 方言的字段名
   `The value of the enable_thinking parameter is restricted to True.`；**收下但照想**——MiniMax M2.7、
   百炼上的 kimi-k2-thinking。第三种请求侧没有任何信号（200，没有警告字段），只能看回复里还有没有思考内容。
+- **中继还有第四种：根本不传**（实测 2026-09-28，New API）。它把 ④ 请求翻成 ① 发给非 Claude 的上游时丢掉 `thinking`，
+  `disabled`、`enabled` 都是 200、都不起作用；同一个模型在 ① 面用上游方言关得掉（deepseek `thinking:{type:"disabled"}`、
+  千问 `enable_thinking:false`），glm-5.3 在 ① 面才会回那句 `restricted to True`。所以中继上一个 ④ 路线「关不掉」，
+  不说明模型关不掉。见 [`landscape.md`](landscape.md) §7 第二十三个样本。
 - **关不掉时，最接近关的是最低档，但它不是关**（实测 2026-09-28）。智谱 5.3 代拒绝 `disabled` 的那句 1210 自己就指了路
   （`请使用 low、high 或 max`）：① 面发 `reasoning_effort:"low"`，带一个工具时 glm-5.3 的 `reasoning_tokens` 从 232–262
   降到 0，难一点的题从 757–1,476 降到 43–131；智谱自家 ④ 面发 `output_config:{effort:"low"}`，不回 thinking 块。百炼 ④ 面上
@@ -265,6 +269,12 @@ output_config.effort`）——「少想」只能靠低 `effort`，关不掉。
 **同一个请求，流式与非流式回的块可能不一样。** 上表最后一行在流式下**一个 thinking 块都没有**
 （没有这个块的 `content_block_start`），只有 `tool_use`（实测 2026-09-28，两种各连跑 5 轮）。
 用非流式探出来的形状推断流式线路上会收到什么，会猜错；要判的是流式线路，就用流式去测。
+方向也不固定：New API 中继的 ④ 面恰好相反，glm-5.3、deepseek-v4-pro 非流式没有 thinking 块、流式有（实测 2026-09-28，
+[`landscape.md`](landscape.md) §7 第二十三个样本）。
+
+**④ 的 `text` 里也可能夹着 `<think>`。** 同一台中继上 grok-4.5 的思考不走 thinking 块，而是以 `<think>…</think>` 开头写在
+`text` / `text_delta` 里（① 面的 `content` 同样如此）。上表的判据对它不适用：没有块，只有标签。④ 客户端也要像 ① 那样切掉
+开头的 `<think>` 块，否则思考混进答案，「想没想」也判成没想。
 
 ### 2.3 token 计数
 
