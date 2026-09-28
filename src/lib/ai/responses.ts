@@ -60,6 +60,7 @@
  */
 
 import { fetch } from "../http";
+import { refusalText } from "./refusal";
 import { reasoningBody } from "./reasoning";
 import { responsesServerToolEvent, responsesServerTools } from "./serverTools";
 import type { PlatformId } from "./platforms";
@@ -301,7 +302,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
   });
 
   if (!res.ok) {
-    const err = await res.text();
+    const err = refusalText(await res.text());
     throw new Error(`OpenAI Responses API error ${res.status} (${url}): ${err}`);
   }
 

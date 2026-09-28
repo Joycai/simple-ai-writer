@@ -17,6 +17,7 @@ import { geminiAuthHeaders } from "./gemini";
 import { familyOf, isCompatStandard, type ApiStandard, type AuthMode } from "./types";
 import { anthropicUrl, geminiUrl, modelsUrl, nativeUrl, openaiUrl } from "./urls";
 import { NATIVE_CHAT_PATH } from "./dashscope";
+import { refusalText } from "./refusal";
 
 /**
  * Statuses that mean "this server does not serve this path", as opposed to a
@@ -210,7 +211,9 @@ export async function testProviderConnection(
       if (isCompatStandard(standard) && (res.status === 401 || res.status === 403)) {
         return probeCompletionEndpoint(baseUrl, apiKey, standard, authMode);
       }
-      const error = await res.text();
+      // The author reads this one: the vendor's words, not its envelope
+      // (docs/api/refusal-plan.md) — the same reader the adapters use.
+      const error = refusalText(await res.text());
       return { ok: false, error: `API error ${res.status} (${url}): ${error}` };
     }
 
