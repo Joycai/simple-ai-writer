@@ -539,8 +539,10 @@ export function forcesToolChoiceAuto(
   category: ThinkingCategory,
   effort: ReasoningEffort | undefined,
 ): boolean {
-  // An unknown state counts as not thinking: DashScope's switch is off unless
-  // the request turns it on, so only an effort that says "on" downgrades.
+  // An unknown state counts as not thinking, so only an effort that says "on"
+  // downgrades. Qwen 3.7 / 3.8 do think unset and refuse the forcing once per
+  // endpoint before the learned store catches it — kept that way on purpose
+  // (dashscope-native-plan.md §3, landscape.md §7 第二十二个样本).
   return category.forcing === "always"
     || (category.forcing === "while-thinking" && thinkingAs(wireThinks(category, effort), "off") === "on");
 }

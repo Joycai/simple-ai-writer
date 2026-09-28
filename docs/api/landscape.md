@@ -2391,6 +2391,40 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 > 形状 `{output:{total, page_no, page_size, models:[{model, name, description, features}]}}`，当天 `total` 518。条目里没有
 > 上下文 / 输出上限。不存在的模型打生成端点 → 404 `{"code":"InvalidParameter","message":"Model not exist."}`。
 
+### 第二十二个样本：思考不设时的强制 `tool_choice`，原生与 compatible-mode 对照（2026-09-28 实测 qwen3.8-flash / qwen3.8-max，对照 qwen3.7-flash / qwen3.7-plus）
+
+> **问的是什么。** 第二十一个样本测强制工具时显式关了思考。这里什么思考字段都不设（不设类目、不设档位），经真实的
+> `streamCompletion` 发 `tool_choice:"required"`，看首发的状态与报错、有没有重试、最后回来什么。原生线路的类目落在族缺省
+> `qwen-budget`、① 在百炼平台上落在 `openai-generic`——两者不设档位时都不预先降级，所以首发都带 `required`、都不带
+> `enable_thinking` / `reasoning_effort`。探针在 `live.dashscope-native.test.ts`，每次尝试的状态与报错从 `fetch` 旁路取。
+> 两轮，结果一致。
+>
+> | 线路 · 模型 | 首发 | 重试 | 最后 |
+> | --- | --- | --- | --- |
+> | 原生 · qwen3.8-flash | **400** | 有，`auto` | 200，文字作答，无工具调用，有思考 |
+> | 原生 · qwen3.8-max | **400** | 有，`auto` | 同上 |
+> | ① · qwen3.8-flash | **400** | 有，`auto` | 同上 |
+> | ① · qwen3.8-max | **400** | 有，`auto` | 同上 |
+> | 原生 · qwen3.7-plus（对照） | **400** | 有，`auto` | 同上 |
+> | 原生 · qwen3.7-flash（对照） | 200 | 无 | 文字作答，不理 `required`，有思考（733 / 1147 字） |
+>
+> **400 是真的，两条线路同一句。** 原生：真实的 HTTP 400，但因为请求带了 `X-DashScope-SSE: enable`，报文也是 SSE 帧——
+> `id:1` / `event:error` / `:HTTP_STATUS/400` / `data:{"code":"InvalidParameter","message":"<400> InternalError.Algo.InvalidParameter:
+> The tool_choice parameter does not support being set to required or object in thinking mode","request_id":…}`。（第二十一个样本
+> 记的「请求被拒是非 2xx + `{code, message, request_id}`」是不带这个头时的形状；带了头，拒绝也按帧来，状态码照旧非 2xx。）
+> ①：HTTP 400，`data: {"error":{"code":"invalid_parameter_error","param":null,"message":"The tool_choice parameter does not support
+> being set to required or object in thinking mode","type":"invalid_request_error"}}`。两句都点名 `tool_choice`，学到的降级规则
+> （`learned.ts` 的 `/tool[_ ]?choice/i`）两边都认，重试以 `auto` 发出、200 作答。
+>
+> **不设 = 在想，四个模型都是。** qwen3.8 两个此前已知（第二十一个样本）；这次 qwen3.7-flash / -plus 什么都不发也有思考
+> 内容——原生线路服务的四个模型全部默认思考，与 ① 上 qianwen-compat-plan §1.1「3.7/3.8 代全部默认开」一致。
+>
+> **qwen3.7-flash 思考中也不拒 `required`**：200、照常思考、用文字答——与它在思考关闭时不理强制（第二十一个样本）是同一个
+> 性质。所以「思考中拒强制」按模型分，不是这条线路的规则：3.8 两个与 3.7-plus 拒，3.7-flash 收下不理。
+>
+> **代价。** 被拒的一次在生成之前，不计 token；学到的上限按「标准 + 地址 + 模型」记一周（`learnedDb` 落盘），这一周里同一
+> 端点的强制请求直接以 `auto` 发出。怎么处置见 `dashscope-native-plan.md` §3。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
@@ -2407,7 +2441,7 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 - **Ollama `/api/chat`** —— 自有 shape（`messages` + `options`），与它的
   OpenAI 兼容层并存。原生接口能拿到 `num_ctx` 之类的本地参数。
 - **Cohere `/v2/chat`** —— 自有 shape。
-- **阿里 DashScope 原生** —— `input.messages` + `parameters` 两段式；对话面的实测见 §7 第二十一个样本。
+- **阿里 DashScope 原生** —— `input.messages` + `parameters` 两段式；对话面的实测见 §7 第二十一个样本，思考不设时的强制工具见第二十二个样本。
 - **AWS Bedrock Converse `POST /model/{id}/converse`** —— 实际上是又一种独立
   body：`system` 是独立数组、content 恒为 block 数组、camelCase 命名、
   `inferenceConfig` / `toolConfig` 分组、`additionalModelRequestFields` 兜住厂商
