@@ -3,10 +3,12 @@
  * generation) — NOT part of the suite. Runs only when QIANWEN_KEY is set (a
  * pay-as-you-go key). Drives the real `streamCompletion` and the real probes,
  * so what is verified is the app's own request bodies. Results:
- * docs/api/landscape.md §7 第二十一个样本.
+ * docs/api/landscape.md §7 第二十一个样本, and 第二十二个样本 for a forced
+ * `tool_choice` with thinking left unset.
  */
 import { describe, expect, it } from "vitest";
 import { streamCompletion } from "../index";
+import { __resetLearned } from "../capability/learned";
 import { fetchRemoteModels, testProviderConnection } from "../providerProbe";
 import { discPng } from "./liveImageBytes";
 import type { StreamChunk, StreamMessage, StreamOptions } from "../types";
@@ -14,6 +16,7 @@ import type { StreamChunk, StreamMessage, StreamOptions } from "../types";
 const KEY = process.env.QIANWEN_KEY ?? "";
 const BASE = "https://maas.qianwenaiapi.com/api/v1";
 const OLD_BASE = "https://dashscope.aliyuncs.com/api/v1";
+const COMPAT_BASE = "https://maas.qianwenaiapi.com/compatible-mode/v1";
 /** The four the route is for (qwen3.8-plus does not exist, 2026-09-28). */
 const MODELS = ["qwen3.7-flash", "qwen3.7-plus", "qwen3.8-flash", "qwen3.8-max"];
 
@@ -121,6 +124,65 @@ describe.skipIf(!KEY)("LIVE DashScope native", () => {
     expect(params(c).tool_choice).toBe("required");
     expect(c.toolCalls).toHaveLength(1);
   }, 120_000);
+
+  // The plan's boundary (dashscope-native-plan.md §3): with no thinking
+  // category or effort set the family default `qwen-budget` counts as "not
+  // thinking", so a forced choice goes out as asked — while these models think
+  // unprompted. Each attempt's status and error text is teed off `fetch`; a
+  // second body is the learned fallback's retry (第二十二个样本). ① resolves
+  // `openai-generic`, which never pre-downgrades, so it is the same question.
+  it.each([
+    ["native", "qwen3.8-flash"], ["native", "qwen3.8-max"],
+    ["compatible-mode", "qwen3.8-flash"], ["compatible-mode", "qwen3.8-max"],
+    // The control: qwen3.7 under the same family default.
+    ["native", "qwen3.7-flash"], ["native", "qwen3.7-plus"],
+  ] as const)("forced tool choice, thinking left unset: %s %s", async (route, modelId) => {
+    // The first attempt must not be pre-downgraded by an earlier lesson, and
+    // this case's lessons must not pre-downgrade a later test.
+    __resetLearned();
+    const attempts: { status: number; error?: string }[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (...a: Parameters<typeof fetch>) => {
+      const res = await realFetch(...a);
+      attempts.push({ status: res.status, ...(res.ok ? {} : { error: (await res.clone().text()).slice(0, 300) }) });
+      return res;
+    };
+    try {
+      const c = await run(modelId, {
+        messages: [{ role: "user", content: "你好" }], tools: TOOLS, toolChoice: "required",
+        ...(route === "compatible-mode" ? { baseUrl: COMPAT_BASE, standard: "openai_compat" as const } : {}),
+      }).catch((e: unknown) => {
+        // The attempts are the record; keep them when the fallback did not catch it.
+        console.log("forced/unset", route, modelId, JSON.stringify({ attempts, error: String(e) }));
+        throw e;
+      });
+      const sent = c.bodies.map((b) => {
+        const p = (b.parameters ?? b) as Record<string, unknown>;
+        return { tool_choice: p.tool_choice, enable_thinking: p.enable_thinking, reasoning_effort: p.reasoning_effort };
+      });
+      console.log("forced/unset", route, modelId, JSON.stringify({
+        attempts, sent, calls: c.toolCalls.map((t) => t.name), reasoning: c.reasoning.length, text: c.text.slice(0, 80), done: c.done,
+      }));
+      expect(sent[0]).toEqual({ tool_choice: "required" });
+      if (modelId === "qwen3.7-flash") {
+        // Takes the forcing while it thinks, and ignores it. The reasoning is
+        // the only sign it was thinking here.
+        expect(attempts.map((a) => a.status)).toEqual([200]);
+        expect(c.toolCalls).toHaveLength(0);
+        expect(c.reasoning.length).toBeGreaterThan(0);
+      } else {
+        // The refusal "in thinking mode" is the sign; the retry's own reasoning
+        // may be empty (qwen3.8-flash skipped it on a greeting once).
+        expect(attempts[0].status).toBe(400);
+        expect(attempts[0].error).toMatch(/tool_choice.*thinking mode/);
+        expect(sent[1]).toEqual({ tool_choice: "auto" });
+        expect(attempts).toHaveLength(2);
+      }
+    } finally {
+      globalThis.fetch = realFetch;
+      __resetLearned();
+    }
+  }, 180_000);
 
   it("json_object, and whether json_schema is enforced against the prompt", async () => {
     const obj = await run("qwen3.7-flash", {
