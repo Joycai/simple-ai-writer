@@ -97,7 +97,7 @@ data: {"error": {"message": "insufficient credits", "type": "…", "code": "…"
 
 | 谁 | 报文 | 出处 |
 | --- | --- | --- |
-| ① ② OpenAI 与兼容层 | `{error:{message, type, param, code}}`，`code` 可以是 `null`；**`param` 常常是唯一点名字段的地方**（`message` 只说 `Invalid value: 'required'…`） | 官方文档 |
+| ① ② OpenAI 与兼容层 | `{error:{message, type, param, code}}`，`code` 可以是 `null`；**`param` 是点名出错字段的独立位置**，`message` 不保证重复这个字段名 | 官方文档（字段定义）；「message 不点名、只有 `param` 点名」的实例未实测 |
 | 百炼 compatible-mode（①） | 同上的对象，顶层多一个 `request_id`；思考中拒强制 `tool_choice` 时，400 的正文是**一行 SSE**：`data: {"error":{…}}` | 实测，[`landscape.md`](landscape.md) §7 第二十二个样本 |
 | ④ Anthropic | `{type:"error", error:{type, message}}`，顶层 `request_id`；没有 `code`，`type`（`overloaded_error` 等）就是分类 | 官方文档 |
 | ③ Gemini | `{error:{code: <数字>, message, status:"INVALID_ARGUMENT", details:[…]}}`；它的 OpenAI 兼容层把同一个对象包在一元素数组里 `[{error:…}]` | 官方文档；数组包装未实测 |

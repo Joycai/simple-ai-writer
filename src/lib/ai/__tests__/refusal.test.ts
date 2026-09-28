@@ -43,7 +43,7 @@ const ADAPTERS: Adapter[] = [
 ];
 
 /** The error `adapter` throws when the endpoint answers `status` with `body`, and the address it asked. */
-async function refusal(adapter: Adapter, body: string, status = 400): Promise<{ message: string; url: string }> {
+async function refusal(adapter: Adapter, body: string, status = 400): Promise<{ error: Error; message: string; url: string }> {
   let url = "";
   vi.stubGlobal("fetch", vi.fn(async (u: string) => {
     url = String(u);
@@ -54,7 +54,7 @@ async function refusal(adapter: Adapter, body: string, status = 400): Promise<{ 
     messages: [{ role: "user", content: "hi" }], onChunk: () => {},
   }).then(() => undefined, (e: unknown) => e);
   expect(err).toBeInstanceOf(Error);
-  return { message: (err as Error).message, url };
+  return { error: err as Error, message: (err as Error).message, url };
 }
 
 const TOOL_CHOICE_THINKING = "The tool_choice parameter does not support being set to required or object in thinking mode";
@@ -129,16 +129,26 @@ const SHAPES: Shape[] = [
   },
   {
     name: "a relay's placeholder with the upstream's body under metadata.raw",
+    // The relay's own notes sit on its own line, before the upstream's.
     body: JSON.stringify({
       error: {
         message: "Provider returned error", code: 400,
         metadata: {
           provider_name: "Upstream",
-          raw: JSON.stringify({ error: { message: "Thinking mode does not support this tool_choice", type: "invalid_request_error", param: null, code: "invalid_request_error" } }),
+          raw: JSON.stringify({
+            error: { message: "Thinking mode does not support this tool_choice", type: "invalid_request_error", param: "tool_choice", code: "invalid_request_error" },
+          }),
         },
       },
+      request_id: "relay-1",
     }),
-    reads: "Provider returned error — Upstream: invalid_request_error: Thinking mode does not support this tool_choice",
+    reads: "Provider returned error (request_id relay-1) — Upstream: invalid_request_error: Thinking mode does not support this tool_choice (param tool_choice)",
+  },
+  {
+    name: "an upstream body the relay passes as an object, with no message of its own to read",
+    body: JSON.stringify({ error: { message: "Provider returned error", code: 502, metadata: { raw: { status: "overloaded" } } } }),
+    status: 502,
+    reads: "Provider returned error — upstream: {\"status\":\"overloaded\"}",
   },
   {
     name: "a content filter's code",
@@ -149,17 +159,25 @@ const SHAPES: Shape[] = [
   },
 ];
 
+/** A shape by its name — the table's order is free to change. */
+const shape = (name: string): Shape => {
+  const found = SHAPES.find((s) => s.name.startsWith(name));
+  if (!found) throw new Error(`no shape named ${name}`);
+  return found;
+};
+
 describe.each(ADAPTERS)("$name: a refused request's body", (adapter) => {
-  it.each(SHAPES)("reads $name", async ({ body, status = 400, reads }) => {
+  it.each(SHAPES)("reads $name", async ({ name, body, status = 400, reads }) => {
     const { message, url } = await refusal(adapter, body, status);
     expect(message).toBe(`${adapter.label} ${status} (${url}): ${reads}`);
-    // None of the wrapping reaches the author.
-    expect(message).not.toMatch(/data:|event:|HTTP_STATUS|"\w+":/);
+    // None of the wrapping reaches the author — save where the upstream's own body could not be read either.
+    if (!name.startsWith("an upstream body")) expect(message).not.toMatch(/data:|event:|HTTP_STATUS|"\w+":/);
   });
 
   it("reads the same line off a CRLF frame with an indented data line", async () => {
-    const framed = `id:1\r\nevent:error\r\n  data: ${SHAPES[1].body}\r\n\r\n`;
-    expect((await refusal(adapter, framed)).message).toMatch(new RegExp(`\\): ${SHAPES[1].reads.replace(/[()]/g, "\\$&")}$`));
+    const plain = shape("the same object as a plain JSON body");
+    const { message, url } = await refusal(adapter, `id:1\r\nevent:error\r\n  data: ${plain.body}\r\n\r\n`);
+    expect(message).toBe(`${adapter.label} 400 (${url}): ${plain.reads}`);
   });
 
   it.each([
@@ -172,12 +190,14 @@ describe.each(ADAPTERS)("$name: a refused request's body", (adapter) => {
   });
 
   it("leaves the learned fallback and the safety memory reading what they read in the raw body", async () => {
-    // Four refusals of a forced choice: named in the message, in `param` only, and by the upstream behind a relay.
-    for (const shape of [SHAPES[0], SHAPES[1], SHAPES[2], SHAPES[10]]) {
-      const { message } = await refusal(adapter, shape.body);
-      expect(classify(new Error(message), { forcedToolChoice: true })).toEqual({ fact: "forcedToolChoice", ceiling: false });
+    // Refusals of a forced choice: named in the message (framed and plain), in `param` only, and by the upstream behind a relay.
+    for (const name of [
+      "DashScope compatible-mode", "the same object as a plain JSON body", "an OpenAI error whose param", "a relay's placeholder",
+    ]) {
+      const { error } = await refusal(adapter, shape(name).body);
+      expect(classify(error, { forcedToolChoice: true })).toEqual({ fact: "forcedToolChoice", ceiling: false });
     }
-    expect(isSafetyBlockMessage((await refusal(adapter, SHAPES[11].body)).message)).toBe(true);
+    expect(isSafetyBlockMessage((await refusal(adapter, shape("a content filter's code").body)).message)).toBe(true);
   });
 });
 
@@ -191,7 +211,7 @@ describe("Chat Completions on 百炼: the framed forced-choice 400, end to end",
     vi.stubGlobal("fetch", vi.fn(async (_u: string, init: RequestInit) => {
       sent.push((JSON.parse(String(init.body)) as Record<string, unknown>).tool_choice);
       return sent.length === 1
-        ? new Response(SHAPES[0].body, { status: 400, headers: { "content-type": "text/event-stream" } })
+        ? new Response(shape("DashScope compatible-mode").body, { status: 400, headers: { "content-type": "text/event-stream" } })
         : new Response('data: {"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', { status: 200 });
     }));
     await streamCompletion({

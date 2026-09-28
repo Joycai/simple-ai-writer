@@ -41,7 +41,7 @@ function upstreamText(error: Obj): string | undefined {
 }
 
 /**
- * One vendor error object as `label: message — upstream (param …, request_id …)`,
+ * One vendor error object as `label: message (param …, request_id …) — upstream`,
  * or undefined when it carries no message. Also reads a mid-stream error
  * frame, which is the same object on a 200.
  */
@@ -65,7 +65,9 @@ export function vendorErrorText(json: unknown): string | undefined {
   const param = text(error.param);
   const requestId = text(error.request_id) ?? text(outer.request_id);
   const notes = [param && `param ${param}`, requestId && `request_id ${requestId}`].filter(Boolean);
-  return `${label ? `${label}: ` : ""}${message}${upstream ? ` — ${upstream}` : ""}${notes.length ? ` (${notes.join(", ")})` : ""}`;
+  // This object's notes before the upstream's line, which may carry its own:
+  // what is in parentheses belongs to the text just before it.
+  return `${label ? `${label}: ` : ""}${message}${notes.length ? ` (${notes.join(", ")})` : ""}${upstream ? ` — ${upstream}` : ""}`;
 }
 
 /**
