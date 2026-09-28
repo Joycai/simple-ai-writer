@@ -7,7 +7,8 @@
  * category × every stored effort × every family:
  *
  *   - whether a forced `tool_choice` is downgraded (`forcesToolChoiceAuto`);
- *   - whether a temperature is sent (Anthropic refuses one while thinking);
+ *   - whether a temperature is sent (Anthropic refuses one while thinking),
+ *     asked of the planner the adapters read it from, per effort;
  *   - which endpoint-run tools DashScope's two OpenAI wires carry — the
  *     interpreter yields to thinking-off on Responses, and both it and page
  *     reading yield to function tools on Chat Completions.
@@ -18,9 +19,9 @@
  * Above it, the definition itself, against the table it was written from.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { hasCapability } from "../capabilities";
 import { conditionFires, wireThinks, type ThinkingState } from "../capability/conditions";
 import { __resetLearned } from "../capability/learned";
+import { planRequest } from "../capability/plan";
 import { streamCompletion } from "../index";
 import { forcesToolChoiceAuto, THINKING_CATEGORIES, type ReasoningEffort, type ThinkingCategoryId } from "../reasoning";
 import type { ServerToolId } from "../serverTools";
@@ -66,10 +67,18 @@ async function behaviour(): Promise<string> {
   for (const c of CATEGORIES) {
     out.push(`${c} ${EFFORTS.map((e) => `${e ?? "unset"}:${forcesToolChoiceAuto(THINKING_CATEGORIES[c], e) ? "auto" : "-"}`).join(" ")}`);
   }
-  out.push("", "# temperature sent (family · category)");
+  out.push("", "# temperature sent (family · category · effort)");
   for (const [family, standard] of Object.entries(FAMILY_STANDARD)) {
-    const wire = { platform: "custom" as const, standard };
-    out.push(`${family} ${CATEGORIES.map((c) => `${c}:${hasCapability("temperature", wire, { thinkingCategory: c }) ? "yes" : "-"}`).join(" ")}`);
+    for (const c of CATEGORIES) {
+      const cells = EFFORTS.map((e) => {
+        const plan = planRequest({
+          standard, platform: "custom", baseUrl: "https://gateway.example/v1", modelId: "house-model",
+          thinkingCategory: c, reasoningEffort: e, temperature: 0.5,
+        });
+        return `${e ?? "unset"}:${plan.temperature !== undefined ? "yes" : "-"}`;
+      });
+      out.push(`${family} ${c} ${cells.join(" ")}`);
+    }
   }
   for (const standard of ["openai_compat", "openai_responses_compat"] as const) {
     for (const withTools of [false, true]) {
