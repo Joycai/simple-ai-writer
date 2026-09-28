@@ -61,7 +61,7 @@ token（`usage.prompt_tokens_details.video_tokens`）：
 1. **一个答案。** `capability/media.ts` 的 `admittedMedia(wire, model, 声明)` 是「这条线路 × 这个模型收哪几类媒体」的唯一答案：
    三层：协议那一层是适配器有没有拼法（`spelledMedia`：图片五族都有，视频只有 ①，PDF 除原生外都有），总是生效；模型那一层是声明
    （类型看不看图、`videoInput`、`pdfInput`）；平台那一层是能力格（`videoInput` / `pdfInput`，按 id 与中转上游），只对声明发问。
-   `ConnOptions` 带上三项声明，`planRequest` 产出 `RequestPlan.media`；附加门 `canReadVideo`、`readsPdf` 经 `conn.ts` 的
+   `ConnOptions` 带上三项声明，`planRequest` 产出 `RequestPlan.media`；决定建不建 part 的门——输入框的视频门 `canReadVideo`、PDF 子代理的资格 `readsPdf`——经 `conn.ts` 的
    `admittedMediaOf` 读同一个组合，「将发送」的 fps 行读 `plan.media.video`。三处不再各问一遍能力表，`mediaAdmission.test.ts`
    随机走全部平台 × 线路 × 声明 × 中转上游，钉住它们逐格相等。
 2. **投影，不改写。** `streamCompletion` 在一切读 `messages` 的环节（token 估算、图片载荷门、API 日志、适配器）之前调
@@ -87,6 +87,10 @@ token（`usage.prompt_tokens_details.video_tokens`）：
 - **手拼的请求（探针、live 测试）不带声明，发协议拼得出的一切**，不看平台格。平台格是量出来的，而 `live.video-input.test.ts`
   这类探针正是去量它的：若它也受格约束，一个没测过的平台收到的永远是说明句，探针量到的是表而不是平台（片 3 review F1）。
   协议那一层照样生效，适配器的后备报错到不了。
+- **片段的 `fps` 仍在附加时写死，不随换模型重算**（整体 review 第 2 轮 N1，早于本次改动）。在智谱上附的片段不带 `fps`，
+  切到声明 `videoFps: 0.5` 的百炼模型后照样不带（按缺省约 2 帧 / 秒计费，约 4 倍 token），而「将发送」列着 `fps 0.5`；
+  反向则把百炼私有的 `fps` 发给不理它的平台。正确的形状与本节相同：`fps` 是这一次请求的决定，由计划给出、投影时写到片段上，
+  而不是附加时烙进历史——另开任务做，不在本节上再打补丁。
 - **没有给 Gemini / Anthropic / 原生线路加视频拼法。** Gemini 有 inline 视频、原生有 `{video}`，都没实测过；那是「开能力」，要样本，另开任务。
 - 界面上不标「这段视频本轮没发」。说明句是写给模型的，模型会告诉作者；要做界面提示先走 Claude Design。
 

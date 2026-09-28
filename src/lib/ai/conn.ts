@@ -292,10 +292,11 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
 
 /**
  * Which media a request to this model on this route may carry — the plan's
- * {@link RequestPlan.media}, asked before there is a request. The composer's
- * attach gates read it (`canReadVideo`, `readsPdf`), so a part is offered
- * only where it will also go out. Built from the same fields `connOptions()`
- * fills; `aiConn.test.ts` holds the two to one answer.
+ * {@link RequestPlan.media}, asked before there is a request. The gates that
+ * decide whether a part is built read it — the composer's clip gate
+ * (`canReadVideo`) and the PDF subagent's eligibility (`readsPdf`) — so a part
+ * is built only where it will also go out. Built from the same fields
+ * `connOptions()` fills; `mediaAdmission.test.ts` holds the two to one answer.
  */
 export function admittedMediaOf(
   model: Pick<Model, "relayUpstream" | "videoInput" | "pdfInput"> & { modelId?: string; type?: ModelType },

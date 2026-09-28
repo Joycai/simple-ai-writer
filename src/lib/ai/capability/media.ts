@@ -4,8 +4,10 @@
  *
  * The one answer. The request plan holds it (`RequestPlan.media`) and
  * `streamCompletion` projects every message through it before an adapter
- * sees the request; the composer's attach gates (`canReadVideo`, `readsPdf`)
- * and the settings page's 将发送 summary ask the same function. Before, the
+ * sees the request; the gates that decide whether a part is built at all —
+ * the composer's clip gate (`canReadVideo`) and the PDF subagent's
+ * eligibility (`readsPdf`) — and the settings page's 将发送 summary ask the
+ * same function. Before, the
  * attach gates asked the tables on their own and nothing asked again at send
  * time — so a clip attached under one model stayed in the history and went
  * out, every turn, to whatever model the author switched to next.

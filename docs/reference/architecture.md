@@ -448,7 +448,7 @@ A preset carrying lore *write* tools must supply `onLoreChanged`; it stays optio
 
 A picture reaches a model exactly one way: an `image_url` part on a `role: "user"` message (`ContentPart`, `lib/ai/types.ts`). Everything below is about who is allowed to create one and what happens to it afterwards.
 
-**Three entry points**, all gated on `canSeeImages(model)` (type `multimodal` or `vision` — `lib/ai/configDb`) — a *declaration on the model row* in 设置 → 渠道与模型, not a guess from the model name. A text-only model is told the picture could not travel rather than silently losing it:
+**Three entry points**, all gated on `canSeeImages(model)` (type `multimodal` or `vision` — `lib/ai/capability/media`, re-exported by `lib/ai/configDb`) — a *declaration on the model row* in 设置 → 渠道与模型, not a guess from the model name. A text-only model is told the picture could not travel rather than silently losing it:
 
 | Entry | Who chooses the picture | Scope |
 | --- | --- | --- |
