@@ -510,8 +510,8 @@ The pixels are half the trade; the other half is how much of them the *endpoint*
 - **只有一个入口**：对话里的 `@`（`chatRefs.buildChatMessage` 的 `allowVideo`），没有工具。门是 `lib/ai/videoInput.canReadVideo`——模型声明了 `videoInput`、能看图、且能力表对这条线路的 `videoInput` 不是 `no`——只在 **`openai` 族**、且按平台点名：`video_url` 是厂商扩展，百炼、智谱、火山方舟 Coding Plan 实测收，DeepSeek、xAI、OrcaRouter 实测不收（OrcaRouter 上 Gemini 静默丢弃、GPT 报错），没测过的平台不发，中继照发（capability-gating-plan §9）。已经在历史里的视频每一轮再由请求计划问一次（`RequestPlan.media`），收不下就投影成一句说明、历史不动（`docs/feature/video-input.md` §4）；Responses / Gemini / Anthropic / 原生适配器对这个块的具名报错（`unsendablePart`）只是后备，不是门。
 - **一个读取函数**：`lib/fs/video.readVideoForModel`，先 `readFileHead` 查大小（> 15MB 直接拒，因为 DashScope 单个 data URI 上限 20,971,520 字节），再整读、解析 MP4/MOV 头拿时长与尺寸（短于 2 秒拒），最后 base64。视频不压缩、不转码。
 - **每条消息 1 段，历史里 1 段**：`MAX_MESSAGE_VIDEOS` 与 `trimHistory` 的 `MAX_VIDEO_RESULTS`，和图片的 5 / 3 各算各的；天花板那一遍和会话落盘同样把视频数据拿掉、文字留下。
-- **估算不上线**：芯片上的 ≈token（`estimateVideoTokens`）也记进 `tokenEstimate` 的 WeakMap 供预检使用，不写在内容块上——`openai.ts` 原样发送内容块。无估值按 10k 计。
-- `fps` 是模型行上的声明（`Model.videoFps`），放在内容块上而不是请求体上，所以不是 `ConnOptions` 字段；「将发送」里显示为 `video_url.fps`，范围标「消息带视频时」。
+- **估算不上线**：芯片上的 ≈token（`estimateVideoTokens`）以「代价随 fps 的函数」记进 `tokenEstimate` 的 WeakMap 供预检使用（投影出的副本带着它，按实际发出的 fps 计），不写在内容块上——`openai.ts` 原样发送内容块。无估值按 10k 计。
+- `fps` 是模型行上的声明（`Model.videoFps`），放在内容块上而不是请求体上；它随另三项媒体声明进 `ConnOptions`，由计划决定这一次请求的片段带什么（`RequestPlan.clipFps`：写上、删掉，或手拼请求原样），`admitMedia` 投影时写到片段副本上——附加时写进历史的那个值只供运行时估算，线上不认它。「将发送」里显示为 `video_url.fps`（读 `plan.clipFps`），范围标「消息带视频时」（`docs/feature/video-input.md` §4「片段的 fps 也按请求决定」）。
 
 ### RAG (Retrieval-Augmented Generation)
 

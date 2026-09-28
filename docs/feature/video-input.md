@@ -47,7 +47,7 @@ token（`usage.prompt_tokens_details.video_tokens`）：
 3. **每条消息最多 1 段视频**（`MAX_MESSAGE_VIDEOS`）。一段就可能 20MB 请求体、上万 token；多出来的按路径点名、不发。
 4. **请求历史里只留最新 1 段**（`runtime.ts` 的 `MAX_VIDEO_RESULTS`，与图片的 3 张各算各的）。每一轮工具调用都重发整个历史并重新计费，36k token 的视频跑六轮就是六倍。更早的视频块换成一句说明，消息里的文字保留；会话落盘时视频数据全部丢掉（`chatSession.ts`）。
 5. **读字节之前先查大小**：`readFileHead(path, 0)` 一次往返拿到真实大小，超过 15MB（`MAX_VIDEO_BYTES`）直接拒，不把文件读进 webview；已知时长短于 2 秒也在挑选时就拒，而不是等请求 400。
-6. **估算只是估算**：`estimateVideoTokens` 标 ≈；未知时长返回 null，不编一个数。估值记在 `tokenEstimate` 的 WeakMap 里给上下文预检用，**绝不**写到内容块上——`openai.ts` 原样发送内容块，任何附加字段都会上线。无估值的视频按 `VIDEO_TOKENS_UNKNOWN`（10k）计，而不是按一张图的 800。
+6. **估算只是估算**：`estimateVideoTokens` 标 ≈；未知时长返回 null，不编一个数。估值记在 `tokenEstimate` 的 WeakMap 里给上下文预检用，**绝不**写到内容块上——`openai.ts` 原样发送内容块，任何附加字段都会上线。记的是**代价随 fps 的函数**（`noteVideoCost`），不是算好的数：估算按手上那个 part 的 `fps` 算，投影出的副本带着它（`carryVideoCost`，见 §4「片段的 fps 也按请求决定」）。无估值的视频按 `VIDEO_TOKENS_UNKNOWN`（10k）计，而不是按一张图的 800。
 7. **工具在场性**：模型读不了视频时，视频退回成「一个录音文件的路径」，走现有的 `mediaRefs` / `mediaRefsNoTool` 文案——只在本次运行真有 `transcribe_audio` 时才点它的名。
 
 ## 4. 历史里的媒体按请求放行（2026-09-28）
@@ -87,12 +87,46 @@ token（`usage.prompt_tokens_details.video_tokens`）：
 - **手拼的请求（探针、live 测试）不带声明，发协议拼得出的一切**，不看平台格。平台格是量出来的，而 `live.video-input.test.ts`
   这类探针正是去量它的：若它也受格约束，一个没测过的平台收到的永远是说明句，探针量到的是表而不是平台（片 3 review F1）。
   协议那一层照样生效，适配器的后备报错到不了。
-- **片段的 `fps` 仍在附加时写死，不随换模型重算**（整体 review 第 2 轮 N1，早于本次改动）。在智谱上附的片段不带 `fps`，
-  切到声明 `videoFps: 0.5` 的百炼模型后照样不带（按缺省约 2 帧 / 秒计费，约 4 倍 token），而「将发送」列着 `fps 0.5`；
-  反向则把百炼私有的 `fps` 发给不理它的平台。正确的形状与本节相同：`fps` 是这一次请求的决定，由计划给出、投影时写到片段上，
-  而不是附加时烙进历史——另开任务做，不在本节上再打补丁。
+- 片段的 `fps` 原先在附加时写死、不随换模型重算（整体 review 第 2 轮 N1）——已按本节同一个形状改掉，见下面「片段的 fps 也按请求决定」。
 - **没有给 Gemini / Anthropic / 原生线路加视频拼法。** Gemini 有 inline 视频、原生有 `{video}`，都没实测过；那是「开能力」，要样本，另开任务。
 - 界面上不标「这段视频本轮没发」。说明句是写给模型的，模型会告诉作者；要做界面提示先走 Claude Design。
+
+### 片段的 fps 也按请求决定（2026-09-28）
+
+**问题。** `fps` 在附加时由 `sentVideoFps` 算好写进片段，之后没人再问。历史跨模型复用：智谱上附的片段不带 `fps`，
+切到声明 `videoFps: 0.5` 的百炼模型后照样不带——按缺省约 2 帧 / 秒计费，约 4 倍 token——而「将发送」列着 `fps 0.5`；
+反向则把百炼私有的 `fps` 发给不理它的平台。「这条线路读不读 fps」另在将发送里问一遍，两处都不带模型类型与中转上游。
+
+**决定：与媒体放行同一个形状——计划决定，投影写入，历史不改。**
+
+1. **一个答案。** `capability/media.ts` 的 `clipFps` 给出 `RequestPlan.clipFps`：放行了片段、行上声明了 `videoFps`、
+   且这条线路对这个模型（类型 + 中转上游）有 `videoFps` 格，就是那个值；否则 `"none"`；请求不带声明（手拼的探针）则 `"as-built"`。
+   声明经 `mediaDeclarationOf` 进 `ConnOptions.videoFps`，与另三项同一个映射。附加时的 `sentVideoFps`（经 `conn.ts` 的 `clipFpsOf`）、
+   芯片估算、「将发送」的 `video_url.fps` 行都读它；`mediaAdmission.test.ts` 随机走平台 × 线路 × 声明 × 中转上游钉住逐格相等，
+   `capabilityConsistency.test.ts` 的 `request` 提问者经真实 `streamCompletion` 对照能力表。
+2. **投影写入。** `admitMedia` 给每个放行的片段的**副本**设上 `plan.clipFps` 或删掉 `fps`；已经相同的不复制，历史一个字节不动。
+   `clipFps.test.ts` 走真实的 `buildChatMessage`（附加时照 `agentStore` 调）→ `streamCompletion`，随机在两个模型下附、第三个状态下发：
+   线上每个片段的 `fps` 等于芯片的答案；把投影写 fps 那段还原，测试失败。
+3. **估算跟着实际发出的 fps。** WeakMap 里记代价函数而不是数（§3 第 6 条），副本带着它；发送前的上下文闸和首块期限按投影后的
+   `fps` 算。还原「副本带估值」，副本退回 10k 的未知值，测试失败。
+
+**为什么这样。**
+- **手拼的请求原样发**，理由同本节「探针发协议拼得出的一切」：`live.qianwen.test.ts`、`live.video-input.test.ts` 正是去量
+  「这个平台理不理 fps」的，受格约束就只能量到表。它们用 `videoPart(url, fps)` 自己拼，计划不碰。
+- **不在适配器里写 fps**（只有 ① 拼 `video_url`，看似一处就够）：API 日志和 token 估算读的是投影后的 messages，在适配器里改，
+  它们看到的就不是发出去的——与「适配器里丢弃」被拒是同一个理由。
+- **估算提示记函数，不记时长与尺寸**：`tokenEstimate` 是界面到处引用的叶子模块，记函数它就不必 import `videoInput.ts`
+  （后者经 `conn` 连到整个能力层），公式也只留一处。
+- **计划不 clamp**：`plan.ts` import `videoInput.ts` 会成环；`videoFps` 在每个入口（数据库读取、配置导入、抽屉保存）都已 clamp 过。
+
+**已知取舍。**
+- **历史里的片段仍写附加时的 `fps`**（作者 2026-09-28 选定）。线上只认投影，这个值只剩一个用途：运行时那几个按未投影历史估算的读者
+  （`trimHistory`、思考守卫、检查点、上下文条）拿它估。不换模型时它就是计划的答案，估算和以前一样准。
+  另一种做法是附加时不写、投影成为唯一写入方——更干净，但运行时的估算会全部落到缺省 2 帧 / 秒：百炼 0.5 的常规路径上一段 60 秒 720p
+  的片段从 ≈8.9k 变成 ≈35.6k，思考预算被砍、小窗口提早裁剪（裁剪会真的删历史）。那等于把上面「运行时按未投影历史估算」的取舍
+  从「换模型之后」扩大到「每一次」。换模型之后运行时仍按附加时的 fps 估，与图片 / 视频放行的那条取舍同属一类；该做的仍是让运行时读
+  同一个计划，而不是另写一份。
+- 查看完整提示（`PromptViewer`）显示的是运行里的 messages，即投影前的；与说明句一样，那里看到的 `fps` 是附加时的。
 
 ## 5. 有意没做
 
