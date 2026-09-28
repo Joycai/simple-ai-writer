@@ -298,6 +298,15 @@ describe("DashScope native probing", () => {
     expect(models[217]).toEqual({ id: "m-217", name: "Model 217" });
   });
 
+  it("keeps paging while pages are full when the total is missing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const page = Number(new URL(String(url)).searchParams.get("page_no"));
+      const n = page < 3 ? 100 : 7;
+      return new Response(JSON.stringify({ output: { models: Array.from({ length: n }, (_, i) => ({ model: `p${page}-${i}` })) } }), { status: 200 });
+    }));
+    await expect(fetchRemoteModels(BASE, "k", "dashscope_compat")).resolves.toHaveLength(207);
+  });
+
   it("stops on an empty page even if the total says otherwise", async () => {
     vi.stubGlobal("fetch", vi.fn(async () =>
       new Response(JSON.stringify({ output: { total: 9999, models: [] } }), { status: 200 })));

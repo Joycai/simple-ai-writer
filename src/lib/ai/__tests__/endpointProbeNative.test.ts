@@ -44,6 +44,8 @@ describe("probeEndpoint on the DashScope native route", () => {
     // The error probe streams, so an accepted one could be cut at the first byte.
     expect(calls[0].headers["X-DashScope-SSE"]).toBe("enable");
     expect(report.answered).toBe(true);
+    // The error probe's 400 names the output range; its upper end is the cap.
+    expect(report.findings).toContainEqual(expect.objectContaining({ detail: "error.max_tokens", maxOutput: 131072 }));
     expect(report.calibration?.charsPerToken).toBeGreaterThan(0);
     expect(report.warnings.map((w) => w.code)).not.toContain("no-usage-reported");
   });

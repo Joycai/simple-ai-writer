@@ -91,6 +91,12 @@ describe("parseLimitFromMessage", () => {
       .toBe(16384);
   });
 
+  it("reads the upper end of DashScope's allowed range", () => {
+    expect(parseLimitFromMessage("<400> InternalError.Algo.InvalidParameter: Range of max_tokens should be [1, 131072]"))
+      .toBe(131072);
+    expect(parseLimitFromMessage("Range of input length should be [1, 991232]")).toBe(991232);
+  });
+
   it("handles thousands separators", () => {
     expect(parseLimitFromMessage("maximum is 1,048,576")).toBe(1048576);
   });

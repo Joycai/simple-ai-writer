@@ -116,9 +116,11 @@ async function fetchNativeModels(baseUrl: string, apiKey: string, standard: ApiS
     const data = (await res.json()) as NativeModelsPage;
     const models = data.output?.models ?? [];
     for (const m of models) if (m.model) out.push({ id: m.model, name: m.name || m.model });
-    const total = data.output?.total ?? 0;
-    // An empty page ends it too, so a total that lies cannot loop forever.
-    if (models.length === 0 || page * NATIVE_PAGE_SIZE >= total) return out;
+    const total = data.output?.total;
+    // An empty page ends it too, so a total that lies cannot loop forever;
+    // with no total at all, a short page is the last one.
+    const last = typeof total === "number" ? page * NATIVE_PAGE_SIZE >= total : models.length < NATIVE_PAGE_SIZE;
+    if (models.length === 0 || last) return out;
   }
 }
 
