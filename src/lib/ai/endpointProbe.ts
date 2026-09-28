@@ -34,7 +34,8 @@ import {
 import { anthropicHeaders } from "./anthropic";
 import { geminiAuthHeaders } from "./gemini";
 import { familyOf, type ApiStandard, type AuthMode } from "./types";
-import { anthropicUrl, geminiUrl, modelsUrl, openaiUrl, trimBase } from "./urls";
+import { anthropicUrl, geminiUrl, modelsUrl, nativeUrl, openaiUrl, trimBase } from "./urls";
+import { NATIVE_CHAT_PATH } from "./dashscope";
 
 /** Padding sizes for the two-point tokenizer calibration. */
 const CAL_SMALL_CHARS = 600;
@@ -396,6 +397,32 @@ async function chatRequest(
       };
     }
 
+    if (familyOf(t.standard) === "dashscope") {
+      // The native envelope, unstreamed (no `X-DashScope-SSE`): one JSON body
+      // with the turn's usage under DashScope's own names.
+      const res = await fetch(nativeUrl(t.baseUrl, NATIVE_CHAT_PATH), {
+        method: "POST",
+        headers: authHeaders(t),
+        body: JSON.stringify({
+          model: t.modelId,
+          input: { messages: [{ role: "user", content: prompt }] },
+          parameters: { result_format: "message", [outputParam]: maxTokens },
+        }),
+        signal,
+      });
+      if (!res.ok) return { ok: false, status: res.status, body: await res.text() };
+      const json = asObject(await readJson(res));
+      const usage = asObject(json?.usage);
+      return {
+        ok: true,
+        status: res.status,
+        body: "",
+        promptTokens: asCount(usage?.input_tokens),
+        completionTokens: asCount(usage?.output_tokens),
+        finishReason: asText(firstChoice(asObject(json?.output)?.choices)?.finish_reason),
+      };
+    }
+
     const url = openaiUrl(t.baseUrl, "/chat/completions");
     const res = await fetch(url, {
       method: "POST",
@@ -554,6 +581,10 @@ async function discoverFromModelsEndpoint(s: Session): Promise<void> {
       return;
     }
 
+    // 百炼's native list names a model and its features, no limits
+    // (`/api/v1/models`, 2026-09-28): nothing here to read.
+    if (familyOf(t.standard) === "dashscope") return;
+
     const res = await fetch(modelsUrl(t.standard, t.baseUrl), { headers: authHeaders(t), signal });
     if (!res.ok) return warn(s, "models-endpoint-failed", `${res.status}`);
     const json = (await readJson(res)) as { data?: unknown[] } | undefined;
@@ -647,24 +678,37 @@ async function errorProbe(s: Session): Promise<void> {
     try {
       // Streaming either way, so an *accepted* probe can be cut at the first
       // byte instead of billing for however much it decides to write.
-      const res = await fetch(
-        openaiUrl(s.target.baseUrl, family === "responses" ? "/responses" : "/chat/completions"),
-        {
-          method: "POST",
-          headers: authHeaders(s.target),
-          body: JSON.stringify(
-            family === "responses"
-              ? { model: s.target.modelId, input: "hi", max_output_tokens: ABSURD, store: false, stream: true }
-              : {
-                  model: s.target.modelId,
-                  messages: [{ role: "user", content: "hi" }],
-                  [s.outputParam]: ABSURD,
-                  stream: true,
-                },
-          ),
-          signal: ctrl.signal,
-        },
-      );
+      const res = family === "dashscope"
+        // Same probe in the native envelope; the range comes back as a 400
+        // naming it (`Range of max_tokens should be [1, 131072]`, 2026-09-28).
+        ? await fetch(nativeUrl(s.target.baseUrl, NATIVE_CHAT_PATH), {
+            method: "POST",
+            headers: { ...authHeaders(s.target), "X-DashScope-SSE": "enable" },
+            body: JSON.stringify({
+              model: s.target.modelId,
+              input: { messages: [{ role: "user", content: "hi" }] },
+              parameters: { result_format: "message", incremental_output: true, [s.outputParam]: ABSURD },
+            }),
+            signal: ctrl.signal,
+          })
+        : await fetch(
+            openaiUrl(s.target.baseUrl, family === "responses" ? "/responses" : "/chat/completions"),
+            {
+              method: "POST",
+              headers: authHeaders(s.target),
+              body: JSON.stringify(
+                family === "responses"
+                  ? { model: s.target.modelId, input: "hi", max_output_tokens: ABSURD, store: false, stream: true }
+                  : {
+                      model: s.target.modelId,
+                      messages: [{ role: "user", content: "hi" }],
+                      [s.outputParam]: ABSURD,
+                      stream: true,
+                    },
+              ),
+              signal: ctrl.signal,
+            },
+          );
 
       if (res.ok) {
         ctrl.abort();

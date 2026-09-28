@@ -268,3 +268,60 @@ describe("compat endpoints without /models", () => {
     ).rejects.toThrow(/model ID|模型 ID/);
   });
 });
+
+describe("DashScope native probing", () => {
+  const BASE = "https://maas.qianwenaiapi.com/api/v1";
+
+  /** `/models` pages as 百炼 serves them: `total` beside at most `size` rows. */
+  function mockNativeModels(total: number) {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const u = new URL(String(url));
+      urls.push(String(url));
+      const size = Number(u.searchParams.get("page_size"));
+      const page = Number(u.searchParams.get("page_no") ?? "1");
+      const from = (page - 1) * size;
+      const models = Array.from({ length: Math.max(0, Math.min(size, total - from)) }, (_, i) => ({
+        model: `m-${from + i}`, name: i === 0 ? "" : `Model ${from + i}`,
+      }));
+      return new Response(JSON.stringify({ output: { total, page_no: page, page_size: size, models } }), { status: 200 });
+    }));
+    return urls;
+  }
+
+  it("reads every page of the model list", async () => {
+    const urls = mockNativeModels(218);
+    const models = await fetchRemoteModels(BASE, "k", "dashscope_compat");
+    expect(urls).toEqual([1, 2, 3].map((n) => `${BASE}/models?page_size=100&page_no=${n}`));
+    expect(models).toHaveLength(218);
+    expect(models[0]).toEqual({ id: "m-0", name: "m-0" });
+    expect(models[217]).toEqual({ id: "m-217", name: "Model 217" });
+  });
+
+  it("stops on an empty page even if the total says otherwise", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      new Response(JSON.stringify({ output: { total: 9999, models: [] } }), { status: 200 })));
+    await expect(fetchRemoteModels(BASE, "k", "dashscope_compat")).resolves.toEqual([]);
+  });
+
+  it("counts the catalogue from a one-row page", async () => {
+    const urls = mockNativeModels(518);
+    const result = await testProviderConnection(BASE, "k", "dashscope_compat");
+    expect(urls).toEqual([`${BASE}/models?page_size=1`]);
+    expect(result).toMatchObject({ ok: true });
+    expect((result as { message: string }).message).toContain("518");
+  });
+
+  it("falls back to the native endpoint, and reads 百炼's refusal of a made-up model as reachable", async () => {
+    const calls: { url: string; body: unknown }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (String(url).includes("/models")) return new Response("<html>Not Found</html>", { status: 404 });
+      return new Response(JSON.stringify({ code: "InvalidParameter", message: "Model not exist.", request_id: "r" }), { status: 404 });
+    }));
+    const result = await testProviderConnection(BASE, "k", "dashscope_compat");
+    expect(result.ok).toBe(true);
+    expect(calls[1].url).toBe(`${BASE}/services/aigc/multimodal-generation/generation`);
+    expect(calls[1].body).toMatchObject({ input: { messages: [{ role: "user", content: "hi" }] }, parameters: { max_tokens: 1 } });
+  });
+});

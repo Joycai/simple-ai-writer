@@ -137,13 +137,15 @@ export function migrateLegacyStandard(standard: ApiStandard, baseUrl: string): A
   return `${standard}_compat` as ApiStandard;
 }
 
-/** Family-dispatched model list, the one path all three protocols share. */
+/** Family-dispatched model list — every family calls it `/models` below its base. */
 export function modelsUrl(standard: ApiStandard, baseUrl: string, query = ""): string {
   switch (familyOf(standard)) {
     case "gemini":
       return geminiUrl(baseUrl, `/models${query}`);
     case "anthropic":
       return anthropicUrl(baseUrl, `/models${query}`);
+    case "dashscope":
+      return nativeUrl(baseUrl, `/models${query}`);
     default:
       return openaiUrl(baseUrl, `/models${query}`);
   }

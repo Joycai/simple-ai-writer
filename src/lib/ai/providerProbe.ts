@@ -15,7 +15,8 @@ import { anthropicHeaders } from "./anthropic";
 import { fetch } from "../http";
 import { geminiAuthHeaders } from "./gemini";
 import { familyOf, isCompatStandard, type ApiStandard, type AuthMode } from "./types";
-import { anthropicUrl, geminiUrl, modelsUrl, openaiUrl } from "./urls";
+import { anthropicUrl, geminiUrl, modelsUrl, nativeUrl, openaiUrl } from "./urls";
+import { NATIVE_CHAT_PATH } from "./dashscope";
 
 /**
  * Statuses that mean "this server does not serve this path", as opposed to a
@@ -79,6 +80,7 @@ export async function fetchRemoteModels(
         name: m.display_name ?? m.id,
       }));
   }
+  if (family === "dashscope") return fetchNativeModels(baseUrl, apiKey, standard);
   // OpenAI / compatible
   const res = await fetch(modelsUrl(standard, baseUrl), {
     headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
@@ -89,6 +91,35 @@ export async function fetchRemoteModels(
     id: m.id,
     name: m.id,
   }));
+}
+
+/** 百炼's page cap: a larger `page_size` is refused (2026-09-28). */
+const NATIVE_PAGE_SIZE = 100;
+
+/** The shape of one page of `GET /api/v1/models`. */
+interface NativeModelsPage {
+  output?: { total?: number; models?: { model?: string; name?: string }[] };
+}
+
+/**
+ * 百炼's native model list: paged (`page_no` from 1, at most 100 a page, the
+ * total beside it — 518 on 2026-09-28), `model` the id and `name` the label.
+ * Read to the end, so the picker sees the whole catalogue as ① does.
+ */
+async function fetchNativeModels(baseUrl: string, apiKey: string, standard: ApiStandard): Promise<{ id: string; name: string }[]> {
+  const out: { id: string; name: string }[] = [];
+  for (let page = 1; ; page++) {
+    const res = await fetch(modelsUrl(standard, baseUrl, `?page_size=${NATIVE_PAGE_SIZE}&page_no=${page}`), {
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
+    });
+    if (!res.ok) throw modelsFetchError(res.status, standard, "DashScope");
+    const data = (await res.json()) as NativeModelsPage;
+    const models = data.output?.models ?? [];
+    for (const m of models) if (m.model) out.push({ id: m.model, name: m.name || m.model });
+    const total = data.output?.total ?? 0;
+    // An empty page ends it too, so a total that lies cannot loop forever.
+    if (models.length === 0 || page * NATIVE_PAGE_SIZE >= total) return out;
+  }
 }
 
 /**
@@ -161,7 +192,8 @@ export async function testProviderConnection(
 ): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
   try {
     const family = familyOf(standard);
-    const query = family === "gemini" ? "?pageSize=1" : family === "anthropic" ? "?limit=1" : "";
+    const query = family === "gemini" ? "?pageSize=1" : family === "anthropic" ? "?limit=1"
+      : family === "dashscope" ? "?page_size=1" : "";
     const url = modelsUrl(standard, baseUrl, query);
     const res = await fetch(url, { headers: probeHeaders(standard, apiKey, authMode) });
 
@@ -184,6 +216,11 @@ export async function testProviderConnection(
     // families (which share `/models`) return a list worth counting.
     if (family === "gemini" || family === "anthropic") {
       return { ok: true, message: i18n.t("aiConfig.providers.testOk") };
+    }
+    // One item a page, and the catalogue's size beside it.
+    if (family === "dashscope") {
+      const page = (await res.json()) as NativeModelsPage;
+      return { ok: true, message: i18n.t("aiConfig.providers.testOkModels", { count: page.output?.total ?? 0 }) };
     }
     const data = await res.json();
     const models = (data.data ?? []) as Array<{ id?: string }>;
@@ -291,6 +328,13 @@ function completionProbeRequest(
       return {
         url: openaiUrl(baseUrl, "/responses"),
         body: { model: PROBE_MODEL, input: "hi", max_output_tokens: 16, store: false, stream: false },
+      };
+    case "dashscope":
+      // Refused as `{"code":"InvalidParameter","message":"Model not exist."}`
+      // (404, 2026-09-28) — the bare `message` apiErrorMessage accepts.
+      return {
+        url: nativeUrl(baseUrl, NATIVE_CHAT_PATH),
+        body: { model: PROBE_MODEL, input: { messages }, parameters: { result_format: "message", max_tokens: 1 } },
       };
     default:
       return {
