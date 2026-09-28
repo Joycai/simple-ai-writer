@@ -168,8 +168,17 @@ export function setLearnedSink(next: LearnedSink | undefined): void {
   sink = next;
 }
 
+/**
+ * Whether a ceiling learned at `learnedAt` still counts. A time in the future
+ * does not: a clock set back after learning would otherwise keep it for as
+ * long as the clock was wrong, on top of the week.
+ */
+const young = (learnedAt: number): boolean => {
+  const age = now() - learnedAt;
+  return age >= 0 && age < LEARNED_TTL_MS;
+};
 const live = <F extends LearnedFact>(held: Held<F> | undefined): Held<F> | undefined =>
-  held && now() - held.learnedAt < LEARNED_TTL_MS ? held : undefined;
+  held && young(held.learnedAt) ? held : undefined;
 
 /** The ceiling this endpoint+model has taught for one fact, or undefined when it refused nothing (lately). */
 export function learnedCeiling<F extends LearnedFact>(k: EndpointKey, fact: F): Ceilings[F] | undefined {
@@ -178,6 +187,8 @@ export function learnedCeiling<F extends LearnedFact>(k: EndpointKey, fact: F): 
 
 /** Put a ceiling in memory unless a lower one is already held. True when it went in. */
 function hold<F extends LearnedFact>(k: EndpointKey, fact: F, ceiling: Ceilings[F], learnedAt: number): boolean {
+  // A ceiling that no longer counts must not displace one that does.
+  if (!young(learnedAt)) return false;
   const key = keyOf(k);
   const entry = store.get(key) ?? {};
   const current = live(entry[fact] as Held<F> | undefined);
@@ -196,8 +207,13 @@ export function noteLearned<F extends LearnedFact>(k: EndpointKey, fact: F, ceil
 
 /**
  * Take in ceilings read back from disk. The lower of disk and memory wins —
- * a request may have learned something while the table was loading — and an
- * expired row is not taken. Nothing is written back.
+ * a request may have learned something while the table was loading — and a
+ * row that no longer counts is not taken. Nothing is written back.
+ *
+ * The lower one keeps its own time: when it ages out, a weaker lesson learned
+ * later is gone with it, and costs one 400 to learn again. Keeping every tier
+ * with its own time would save that one request at the price of a second
+ * shape for the store.
  */
 export function seedLearned(rows: readonly LearnedRow[]): void {
   for (const r of rows) hold(r, r.fact, r.ceiling, r.learnedAt);

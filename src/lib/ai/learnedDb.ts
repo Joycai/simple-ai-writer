@@ -69,7 +69,8 @@ function parse(s: Stored): LearnedRow | undefined {
 
 /** Delete what has aged out, then hand the rest to the store. */
 export async function loadLearned(db: Db, now = Date.now()): Promise<void> {
-  await db.execute("DELETE FROM learned_ceilings WHERE learned_at <= ?", [now - LEARNED_TTL_MS]);
+  // A time in the future goes too — a clock set back after learning (learned.ts `young`).
+  await db.execute("DELETE FROM learned_ceilings WHERE learned_at <= ? OR learned_at > ?", [now - LEARNED_TTL_MS, now]);
   const rows = await db.select<Stored[]>(
     "SELECT standard, base_url, model_id, fact, ceiling, learned_at FROM learned_ceilings",
   );
@@ -79,27 +80,34 @@ export async function loadLearned(db: Db, now = Date.now()): Promise<void> {
 /**
  * The sink the store writes through. Writes are not awaited by the request
  * that learned — a failed write costs one more 400 after the next restart —
- * so a failure is logged, not thrown.
+ * so a failure is logged, not thrown. They are chained, though: a forget
+ * issued right after a write must not reach the database first and leave the
+ * forgotten row behind.
  */
 export function learnedSink(db: Db): LearnedSink {
   const warn = (e: unknown) => console.warn("[learned] could not update config.db:", e);
+  let tail: Promise<unknown> = Promise.resolve();
+  const inOrder = (run: () => Promise<unknown>) => {
+    tail = tail.then(run).catch(warn);
+  };
   return {
     write(r) {
-      db.execute(
+      inOrder(() => db.execute(
         `INSERT INTO learned_ceilings (standard, base_url, model_id, fact, ceiling, rank, learned_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (standard, base_url, model_id, fact) DO UPDATE SET
            ceiling = excluded.ceiling, rank = excluded.rank, learned_at = excluded.learned_at
-         WHERE excluded.rank < learned_ceilings.rank OR learned_ceilings.learned_at <= ?`,
+         WHERE excluded.rank < learned_ceilings.rank
+            OR learned_ceilings.learned_at <= ? OR learned_ceilings.learned_at > excluded.learned_at`,
         [r.standard, r.baseUrl ?? "", r.modelId ?? "", r.fact, spell(r), rankOf(r), r.learnedAt, r.learnedAt - LEARNED_TTL_MS],
-      ).catch(warn);
+      ));
     },
     forget(k: EndpointKey, facts: readonly LearnedFact[]) {
       if (facts.length === 0) return;
-      db.execute(
+      inOrder(() => db.execute(
         `DELETE FROM learned_ceilings WHERE standard = ? AND base_url = ? AND model_id = ? AND fact IN (${facts.map(() => "?").join(", ")})`,
         [k.standard, k.baseUrl ?? "", k.modelId ?? "", ...facts],
-      ).catch(warn);
+      ));
     },
   };
 }
