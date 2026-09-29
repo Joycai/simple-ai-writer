@@ -107,7 +107,7 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 | 概念 | 英文 | 中文 |
 |---|---|---|
 | 对话主体 | Assistant | 助手 / 对话助手 |
-| AiPanel 的模式名 | Agent mode | Agent 模式（保留英文，它是模式名不是主体名） |
+| AiPanel 的模式名 | Agent mode | Agent 模式（保留英文，它是模式名不是主体名）。任务列表里同一个模式的标签 `ai.tasks.agent` 也只写「Agent」——「Agent 助手」把模式名和主体名拼在一起，两条规则都破 |
 | 被委托的专用模型 | Subagent | 子代理 |
 | 收尾成文的那个 | Writer | 写手 |
 | 扮演里的一个人 | agent → **character / narrator** | **角色**（扮演 / 旁白） |

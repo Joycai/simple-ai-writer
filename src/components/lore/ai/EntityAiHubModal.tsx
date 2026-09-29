@@ -48,7 +48,7 @@ export function EntityAiHubModal({ entityName, imageGenReady = false, dictEntry 
       name: t("lore.aiHub.imageName", { defaultValue: "生成配图" }),
       desc: t("lore.aiHub.imageDesc", { defaultValue: "按正文描述出图 · 存入条目图库" }),
       disabled: !imageGenReady,
-      title: imageGenReady ? undefined : t("lore.detail.aiGenImageNeedModel", { defaultValue: "需要先配置图像模型" }),
+      title: imageGenReady ? undefined : t("lore.detail.aiGenImageNeedModel", { defaultValue: "需要图片模型 — 请在设置中添加「图片生成」类型的模型" }),
     },
     {
       task: "split",

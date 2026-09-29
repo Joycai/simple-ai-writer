@@ -418,7 +418,7 @@ export function LoreReadView({
                 <div className={s.degradedRow}>
                   {t("lore.read.degraded", {
                     category: catLabelText,
-                    defaultValue: `分类「${catLabelText}」所属能力包已停用 · 类型分面不再生效，正文照读`,
+                    defaultValue: `分类「${catLabelText}」所属能力包已停用 · 类型特征不再生效，正文照读`,
                   })}
                   {" · "}
                   <button className={s.inlineLink} onClick={onOpenManage}>

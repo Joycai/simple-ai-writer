@@ -91,7 +91,7 @@ Gemini 的默认值还在 `providerProbe.ts` 和 `endpointProbe.ts` 各抄了一
 | `stores/aiTaskStore.ts` | 默认 baseUrl |
 | `components/settings/panes/ProviderDrawer.tsx` | 端点预设、供应商预设、下拉选项、safetySettings 归属 |
 | `components/onboarding/Onboarding.tsx` | 引导页预设 |
-| `i18n/locales/{en,zh-CN}.json` → `aiConfig.apiStandards` | 显示名 |
+| `i18n/locales/{en,zh-CN}.json` → `aiConfig.platforms` | 显示名（原先的 `aiConfig.apiStandards` 在改成平台模型后已无调用方，已删除） |
 
 ### 1.6 本地服务（Ollama / LM Studio）不是枚举
 

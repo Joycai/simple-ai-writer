@@ -345,7 +345,7 @@ function HitBlock({ row }: { row: HitRow }) {
 /** 三种 kind 用**位置**分——它住在哪，不是又一种色标。 */
 function whereLabel(t: ReturnType<typeof useTranslation>["t"], kind: ResidentRow["kind"]): string {
   return kind === "primary"
-    ? t("roleplay.trace.whereSystem", { defaultValue: "系统提示" })
+    ? t("roleplay.trace.whereSystem", { defaultValue: "系统提示词" })
     : kind === "bound-facet"
       ? t("roleplay.trace.whereBoundFacet", { defaultValue: "绑定块 · 特征" })
       : t("roleplay.trace.whereBound", { defaultValue: "绑定块" });
