@@ -1,6 +1,6 @@
 # Lore 特征（Facet）系统落地方案
 
-> **状态：已实现**（PR-1~4 均已落地：`loreSelect.ts` 分层预算注入 /
+> **状态：`shipped`——已实现**（PR-1~4 均已落地：`loreSelect.ts` 分层预算注入 /
 > `FacetEditModal` 管理 UI / `splitter.ts` + `LoreSplitModal` AI 拆解 /
 > `AiPanel` 的 facet 级 pin）。设计与
 > [`architecture.md`](../../reference/architecture.md)「Facet-aware lore selection」一致，

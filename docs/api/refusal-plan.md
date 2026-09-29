@@ -1,7 +1,7 @@
 # 被拒请求的报文：五个适配器共用一个读取器
 
-状态：`shipped`（2026-09-28）。报文形状的事实在 [`streaming.md`](streaming.md) §3.5 与 [`landscape.md`](landscape.md) §7 第二十二个样本；
-这里写本项目怎么读、为什么。
+> 状态：`shipped`（2026-09-28）。报文形状的事实在 [`streaming.md`](streaming.md) §3.5 与 [`landscape.md`](landscape.md) §7 第二十二个样本；
+> 这里写本项目怎么读、为什么。
 
 ## 1. 问题
 

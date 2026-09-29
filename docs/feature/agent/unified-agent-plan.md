@@ -1,5 +1,7 @@
 # 统一 AI Agent 系统方案（v0.3.0 · feat/unified-agent）
 
+> 状态：`shipped`——v0.3.0 的统一方案，保留为设计记录。runtime 今天的形状以 [`codemap.md`](../../reference/codemap.md) → `src/lib/agent/` 为准。
+>
 > 目标：把目前分散在编辑器侧与 lore 侧的所有 AI 功能，统一到**一套 agent runtime**
 > 上运行 —— 该 runtime 提供 tool loop，模型可以按需发现 lore、阅读章节文本、
 > 更新记忆/知识库，或依据文本与用户输入修改、新增 lore。

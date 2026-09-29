@@ -1,6 +1,6 @@
 # 模块 CSS 引用全局 keyframes 会悬空 —— 大部分 CSS 入场动画从未播放
 
-> **状态：已修复（2026-08-23，切换 LightningCSS）。** 本文记录的是一个曾经
+> **状态：`fixed`——已修复（2026-08-23，切换 LightningCSS）。** 本文记录的是一个曾经
 > **全应用范围**的静默缺陷：`.module.css` 里凡是 `animation: fadeIn / scaleIn /
 > dropIn / riseIn / slideUp / slideInRight …` 这种引用 `global.css` keyframes 的
 > 声明，动画名会被 CSS Modules 哈希化（`fadeIn` → `_fadeIn_<hash>_1`），而

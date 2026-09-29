@@ -1,5 +1,7 @@
 # 流式：四族的机制，以及失败长什么样
 
+> 状态：`living`。
+>
 > 边界见 [`README.md`](README.md)：只写协议事实。族的编号沿用
 > [`landscape.md`](landscape.md)：① Chat Completions ② Responses ③ Google GenAI
 > ④ Anthropic Messages。

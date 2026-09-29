@@ -1,6 +1,6 @@
 # `styles.foo` 指向不存在的类 —— 元素一点样式都没有，三道门禁全绿
 
-> **状态：已修复（2026-09-22）+ 已上门禁。** 本文记录的是第二个**全应用范围**的
+> **状态：`fixed`——已修复（2026-09-22）+ 已上门禁。** 本文记录的是第二个**全应用范围**的
 > 静默 CSS 缺陷（第一个是 [`css-modules-global-keyframes.md`](css-modules-global-keyframes.md)）：
 > `import styles from "./X.module.css"` 得到的是一张普通对象映射，取不存在的键
 > 返回 `undefined`，而 `className={`${styles.a} ${styles.b}`}` 会把它拼成**字面量

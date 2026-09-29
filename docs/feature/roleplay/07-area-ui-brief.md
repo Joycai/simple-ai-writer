@@ -1,5 +1,7 @@
 # 扮演 TURN 2 · 转场与记忆区 —— 给 Claude Design 的任务书
 
+> 状态：`shipped`——TURN 2 设计稿已回并实现（[06-scene-and-memory-area.md](06-scene-and-memory-area.md)）。
+>
 > 这份是自包含的：设计不需要读代码。功能背景见 `06-scene-and-memory-area.md`，
 > 但这里已经把该知道的都写进去了。
 

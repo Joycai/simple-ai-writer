@@ -1,6 +1,6 @@
 # ask_author — agent 向作者提问的通道
 
-> **Status: shipped** · 设计 2026-08-28,同日实现
+> **Status: `shipped`** · 设计 2026-08-28,同日实现
 >
 > 一个新的阻塞式工具:模型出一道 2–4 选项的选择题,作者点一个选项或自由输入,
 > 答案作为 tool result 原文回到运行中。对标 Claude Code 的 AskUserQuestion。

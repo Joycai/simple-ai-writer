@@ -1,6 +1,6 @@
 # Gemini 族接入方案（现状盘点）
 
-> **状态：四刀全部实现。** 目标 **Gemini 3+**。剩下的是 §5 那几条只能靠真实请求定论的验证。
+> **状态：`shipped` `unverified`——四刀全部实现。** 目标 **Gemini 3+**。剩下的是 §5 那几条只能靠真实请求定论的验证。
 >
 > **2026-09 更新**：Gemini 的思考映射现在是具名类目 `gemini3`（`thinkingLevel`
 > 大写枚举 low/medium/high + `includeThoughts`，`off`→`LOW`——2026-09-26 前是 `MINIMAL`，3.8 Flash 对它回 400，见 [`landscape.md`](landscape.md) §7 第十八个样本）。wire 形状不变；

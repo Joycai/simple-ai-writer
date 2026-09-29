@@ -1,5 +1,7 @@
 # 互动式角色扮演创作 — 执行方案
 
+> 状态：`shipped`——执行方案；实际切分与顺序见 [05-implementation-notes.md](05-implementation-notes.md)。
+>
 > 前置：[01-overview.md](01-overview.md)（不变量）、[02-design.md](02-design.md)（怎么做）。
 
 ## 分支与 PR 策略

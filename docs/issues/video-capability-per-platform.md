@@ -1,6 +1,6 @@
 # 视频输入按平台判定（能力判定 C4）
 
-> **状态：fixed（2026-09-28）。** 样本补齐大半后按「做法」落地（能力判定 C4，[`../api/capability-gating-plan.md`](../api/capability-gating-plan.md) §9）：
+> **状态：`fixed`（2026-09-28）。** 样本补齐大半后按「做法」落地（能力判定 C4，[`../api/capability-gating-plan.md`](../api/capability-gating-plan.md) §9）：
 > 实测收的平台点名、拒收的写 `false` 格、没测过的不发、中继照发。只剩 OpenAI 官方与火山方舟按量付费没量，见「遗留」。
 > 以下「现象」「做法」保留为当时的记录。
 

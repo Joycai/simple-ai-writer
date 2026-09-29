@@ -1,5 +1,7 @@
 # 结构化输出：让模型只吐 JSON
 
+> 状态：`living`。
+>
 > 边界见 [`README.md`](README.md)：只写协议事实。族的编号沿用
 > [`landscape.md`](landscape.md)：① Chat Completions ② Responses ③ Google GenAI
 > ④ Anthropic Messages。
