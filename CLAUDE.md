@@ -100,7 +100,7 @@ Components in `src/components/layout/` (TitleBar, IconRail, Sidebar, FileTree, E
 
 Every AI feature runs on the **unified agent runtime** (`src/lib/agent/runtime.ts`): a per-preset tool loop over the registry — read tools, L1 auto+backup write tools (lore / memory), and L2 manuscript tools (`propose_edit` · `rewrite_lines` · `rewrite_document` · `export_pptx` / `export_xlsx` · `convert_document` · `transcribe_audio`) that block on an author-approved proposal card. Lore writes are further gated on an approved **plan** (`plan.ts`). Runs emit `AgentEvent`s into the shared execution log. The chat assistant (`AgentChat.tsx` + `agentStore`) and the AiPanel Agent mode share `AGENT_ASSIST_PRESET`; every mid-run card (round-limit 继续/收尾, `ask_author`, writer handoff) is wired **only** on surfaces that can render it — `routeTools` decides per surface. Long tasks persist to `.ai-writer/tasks/<id>/` and are resumed, not replayed; auxiliary work goes to per-kind subagents; chat history is compacted (`compact.ts`), can be rewound to a turn (`rewind.ts`), or run on structured state behind the 状态记忆 Beta.
 
-> Full picture (multi-chat model, orchestrator pack mode, writer handoff, compaction / rewind / state invariants): `codemap.md` → AI 运行时. RAG assembly, SSE parsing and DB schema: `docs/reference/architecture.md`. Designs: `docs/feature/agent/`.
+> Full picture (multi-chat model, orchestrator pack mode, writer handoff, compaction / rewind / state invariants): `codemap.md` → `src/lib/agent/`. RAG assembly and DB schema: `docs/reference/architecture.md`; SSE adapters: `codemap.md` → `src/lib/ai/`, wire facts in `docs/api/`. Designs: `docs/feature/agent/`.
 
 ### Workspace Packs (能力包)
 
@@ -156,7 +156,7 @@ The UI vocabulary is **app-level and uniform** (`useTerms()`: 文档/分组/知�
 Load the relevant doc **before** working in that area — don't reconstruct it from scratch:
 
 - **[`docs/reference/codemap.md`](docs/reference/codemap.md)** — the per-directory notes that used to live here. **Read the section for any directory before changing it.**
-- **[`docs/reference/architecture.md`](docs/reference/architecture.md)** — subsystem deep-dives: DB schema, prefs, multi-instance, RAG, facet selection, budget planner, endpoint probing, streaming, key storage, images in context, file organising, pptx / xlsx export, transactions, CSP.
+- **[`docs/reference/architecture.md`](docs/reference/architecture.md)** — cross-directory mechanisms: DB schema, prefs, multi-instance, RAG, facet selection, budget planner, endpoint probing, key storage, images in context, file organising, export / backup, transactions, CSP. (Per-directory notes are in `codemap.md`; wire facts in `docs/api/`.)
 - **[`docs/reference/design-system.md`](docs/reference/design-system.md)** — UI/visual spec & theming. **Read before building or restyling any UI.**
 - **[`docs/reference/terminology.md`](docs/reference/terminology.md)** — 词表与措辞校准. **Read before writing any author-facing string.**
 - **[`docs/reference/tool-presence.md`](docs/reference/tool-presence.md)** — 工具在场性契约: a run's words must match what it can do. Read before touching presets, `routeTools`, subagent kinds, or any tool description / result text.

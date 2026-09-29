@@ -62,19 +62,67 @@
 
 ## 模块
 
-| 文件 | 管什么 |
-| --- | --- |
-| `src/lib/ai/feeGroup.ts` | 纯逻辑：三种模式、规格归一化与档位匹配、唯一的 `costOf()`、`priceSpec()` |
-| `src/lib/ai/feeGroupDb.ts` | `fee_groups` 的 CRUD，以及从模型行上的旧价格列**一次性**迁出来的那一步 |
-| `src/lib/ai/feeGroupLabel.ts` | 价格在界面上的说法（摘要 / 标签），纯的，措辞由调用方递进来 |
-| `src/lib/ai/feeGroupList.ts` | 列表怎么分段、怎么过滤，以及两个下拉的选项表。纯的，不碰库也不碰 store |
-| `src/lib/ai/usageSchema.ts` | `token_usage` 的表结构，两个库共用一处定义 |
-| `src/lib/ai/usageRow.ts` | 唯一的写入口 + 两处 sink |
-| `src/lib/ai/reportedCost.ts` | 上游报价的**唯一换算处**：信任的两道门（平台声明 `reportsCost` + 地址也指向它）、各族字段翻成 `done.reportedCost`、`addReportedCost` 全报才加 |
-| `src/lib/ai/usage.ts` | 读那一侧：范围（项目 / 全部）、四种卷法、清除；分项的七条 `SUM` |
-| `src/lib/ai/usageBackfill.ts` | **唯一会改写历史行的地方**：给老行补分项，带对账闸门（重算总额对不上 `cost_usd` 就不写）。分批 + 游标 + 幂等，永不抛错 |
-| `src/lib/ai/usageMeter.ts` | 用量页那根条画成哪几段：三档退化（有费用按费用占比 / 零费用按 token 占比 / 都没有画成一段中性色），段的顺序只在这里定义一次 |
-| `src/components/settings/panes/FeeGroupsPane.tsx` · `FeeGroupDrawer.tsx` | 列表与编辑抽屉 |
+- **价格是一个实体，不是模型上的几列。** `feeGroup.ts` 是纯逻辑：三种计价方式
+  （`token` / `request` / `spec`）、规格归一化（`1k`→`1K`、`1024*1024`→`1024x1024`、
+  `auto`→空，三方都过同一个函数，匹配才敢是纯相等）、档位匹配（**空条件匹配一切，
+  填得最多的行赢，同样多先写的赢，同样多时精确尺寸压过按面积落进来的档位**），
+  以及**全应用唯一的一份** `costOf()`；`priceSpec()`（数出用量行两侧的快照）也在这里。
+- `feeGroupDb.ts` 是行与列：`fee_groups`（和 providers / models 同在全局
+  `config.db`——组是配置，不是某个项目的数据），加上从模型行的旧价格列一次性迁出来
+  的那一步。迁移标记在 `models.fee_migrated` 而不是「表里已有组」或「清零旧列」：
+  前者会让用户删光组之后下次启动又长回来，后者会让同机的旧版本读到一堆零价。
+  这个标记**写模型行的人自己盖**：`configDb.modelUpsert(m, pricing)` 是
+  `INSERT OR REPLACE`，列清单漏了它就每写一次清回 NULL（1.76.1 之前正是如此）。
+  `pricing` 三种——`local`（本机保存，没绑组时沿用原行标记）、`restored`（v3 还原，
+  盖章）、`legacy`（v2 还原，留给迁移）——理由在 `billing/01-fee-groups.md`。迁移
+  也只替 `fee_group_id` 为空的行建组，已绑组的行只盖章。
+  老的 `price_cached_in` 是 `NOT NULL DEFAULT 0`，它的 0 迁成 **null**（= 同输入价）
+  ——照搬成 0 会让所有老配置一夜之间缓存免费，而那笔错账不报错。
+- `feeGroupLabel.ts` 是价格在界面上的**唯一一种写法**（摘要 / 标签），纯的，措辞由
+  调用方经 `panes/feeWords.ts` 递进来，所以它在 node 环境的测试里直接可用。
+- `feeGroupList.ts` 是列表怎么分段、怎么过滤，以及两个下拉的选项表。纯的，不碰库也不碰 store。
+- **一次请求记两处**（`usageRow.ts` 的唯一写入口 `recordUsage`）：项目
+  `.ai-writer/project.db`（跟着项目文件夹走）与 appDataDir 的 `config.db`（多一列
+  `project`，比任何一个项目活得久）。两处各自 try、永不抛错——记账不能把一次
+  已经交付并且上游已经收了钱的请求变成失败。两张表的结构共用 `usageSchema.ts`
+  一处定义（长歪了，用量页在「本项目 / 全部」之间一切就会少掉几列，而那种少法不报错）。
+- **行自带价格**：`buildUsageRow` 把当时的模式 / 单价 / 数量 / 规格抄在行上，
+  `cost_usd` 是 `costOf()` 的结果落了盘。所以改组、删组、换组都动不了历史，
+  而读那一侧 `SUM(cost_usd)` 不是第二套口径——也因此不需要检查点。
+- `usage.ts` 是读那一侧：先选**哪一份账**（`UsageScope`：`project` = 项目库，`global` = `config.db`
+  的总账），再四种 `GROUP BY` 卷法（模型 / 任务 / 计价方式 / 项目），窗口 `today`（按本地午夜切）/
+  `7d` / `30d` / `all`，外加「清空统计」背后的删除；分项是七条 `SUM`。「按计费组」那一维不在 SQL
+  里，由 `groupBuckets` 从按模型的桶折出来，**按模型当前绑的组归并**，不看行上的快照：行上快照的是
+  价，不是归属，重新分组之后历史跟着走是故意的。
+  - `total` 由按模型的桶加总，不另查一次——总数因此永远和下面的行对得上。
+  - 空组上的 `SUM()` 返回 NULL，在行边界上转成 0；放着不管，它会以 `NaN` 传遍之后的每一次加法。
+  - 排序按费用降序、输出 token 次之，所以作者从没标过价的模型也排得有意义，而不是全沉到底。
+- **分项的钱也落盘，跟 `cost_usd` 同一条规矩**（2026-09）：`segmentsOf()` 把
+  `costOf()` 的七项**分流**（不重算）成六段，`recordUsage` 一并抄在行上，读那一侧
+  只 `SUM`。拆分放在**写入时**，是因为 `spec` 那笔钱数的是张还是秒只有
+  `output_unit` 知道，而 `GROUP BY` 之后一个桶里可能混着两种单位——写的那一刻
+  单位是确定的单值，于是读那侧永远解不开的歧义根本不存在。守恒律：
+  **六段 + `cost_unsplit` ≡ `cost_usd`**。
+- `usageBackfill.ts` 是**唯一会改写历史行的地方**：给升级前的老行补分项。
+  它不违反 `usageSchema.ts` 那条「老行不回填价格」——**补的不是价，是同一笔钱的
+  分法**，价全在行上，喂给同一个 `costOf()` 重算，**总额对得上 `cost_usd` 才写，
+  对不上就留白**（留白 ≠ 零，那些钱在用量页里是「未分项」）。
+  每行只看一次（`cost_split_checked`，同构于 `models.fee_migrated`）：1.73.0 之前
+  的行连快照都没有、重算恒为 0、闸门恒不通过，按「有没有分项」来找的话它们每次
+  开库都被重捞一遍却永远补不上。分批 200 是为了缩短持写锁的时间——多开窗口时
+  对面的 `recordUsage` 撞上 locked 只会被自己的 try 吞掉，账少一行不报错。
+- `usageMeter.ts` 决定用量页那根条画成哪几段。**长度回答「用得多不多」
+  （调用次数 / 同批最大值），颜色回答「钱花在哪儿」**，两个问题各占一个视觉通道。
+  三档退化：有费用按费用占比 / 一分钱都没有按 token 占比 / 都没有画成一段中性色。
+  第一档与第二档的分界是 **`costUsd === 0`，不是「六段全 0」**——钱全在
+  `costUnsplit` 里的老行费用是**有**的，只是分不出来，误判成「没花钱」会让它
+  去画 token 占比。段的顺序只在这里定义一次，条与 tooltip 都读它。
+- `reportedCost.ts` 是上游报价的**唯一换算处**：各族回包里的花费字段翻成
+  `done.reportedCost` 只写在这里。报价压过整张计费组表，所以收不收是信任问题——
+  平台声明 `reportsCost`（`platforms.ts`，测过「报的数 = 实扣」才写）**且**请求地址也
+  指向它才收；多次请求记一行时 `addReportedCost` 全报才加，缺一次整行回落计费组
+  （`docs/feature/billing/01-fee-groups.md`「上游报价」）。
+- 界面：`src/components/settings/panes/FeeGroupsPane.tsx`（列表）· `FeeGroupDrawer.tsx`（编辑抽屉）。
 
 ## 迁移
 

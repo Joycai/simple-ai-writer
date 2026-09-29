@@ -13,7 +13,7 @@
 >
 > 相关：[`lore-facet-plan.md`](lore-facet-plan.md)（特征系统本体）·
 > [`lore-granularity-research.md`](lore-granularity-research.md)（粒度调研）·
-> [`architecture.md`](../../reference/architecture.md) → Capability packs / Facet-aware lore selection
+> [`codemap.md`](../../reference/codemap.md#能力包workspace-packs) → 能力包 · [`architecture.md`](../../reference/architecture.md) → Facet-aware lore selection
 
 ---
 

@@ -60,7 +60,7 @@
 
 ### D6 `search_text` 不扫 .pptx
 
-全文搜索要遍历整个项目，解 zip + 解 XML 比读文本贵一个数量级，而这条路径每次搜索都会走。导入后的 markdown 本来就在搜索面里；没导入的 deck 由 `read_slides` 的工具描述引导模型去读。
+全文搜索要遍历整个项目，解 zip + 解 XML 比读文本贵一个数量级，而这条路径每次搜索都会走。导入后的 markdown 本来就在搜索面里——导入把 deck 变成了普通文本，`@` 引用、`search_text`、`read_file` 分页和 RAG 因此都不用为它另写一条路；没导入的 deck 由 `read_slides` 的工具描述引导模型去读。
 
 ### D7 超大文件的最后一道防线是 subagent，不是更大的预算
 
@@ -153,7 +153,7 @@ docx/xlsx/pdf 的转换器都在 `lib/import/`，因为它们只有导入这一�
 
 预览用的是 `blob:` + `sandbox="allow-scripts"`，**不给** `allow-same-origin`（见 `HtmlPreview`）——所以页面的脚本进不了 app，app 也读不到页面的 DOM。后半句正是要处理的：采集脚本被**注入**进去，答案靠 `postMessage` 回来。安全模型一点不动，页面自己的脚本从来没有在 app 上下文里执行过。
 
-消息认两件独立的事：`event.source` 必须是这个 frame 自己的 `contentWindow`，且携带编译进脚本的一次性 nonce。
+消息认两件独立的事：`event.source` 必须是这个 frame 自己的 `contentWindow`，且携带这一轮的一次性 nonce。nonce 挂在注入的 `<script data-nonce="…">` 属性上、脚本自己用 `getAttribute("data-nonce")` 读出来，而不是编译进脚本正文——脚本正文一变，D18 的 `sha256-` 就对不上了。
 
 ### D18 采集脚本靠 CSP `sha256-` 放行（**修 bug 时补的，很重要**）
 

@@ -281,8 +281,9 @@ codesign --verify --deep --strict --verbose=2 "/Applications/Simple AI Writer.ap
 xattr -dr com.apple.quarantine "/Applications/Simple AI Writer.app"
 ```
 
-> 这一条**没有变差**：今天的 ad-hoc 包 `spctl` 报的是
-> `code has no resources but signature indicates they must be present`（bundle 根本没签、资源没封），
+> 这一条**没有变差**：写这段时（整包 ad-hoc 签名之前）的 ad-hoc 包 `spctl` 报的是
+> `code has no resources but signature indicates they must be present`（bundle 根本没签、资源没封）。
+> 1.93.7 起整个 `.app` 已经 ad-hoc 签名、资源已封（见 §0），这句判定**没有重测过**，今天的提示可能已经不同。
 > 这种下载后常见的提示是「已损坏，应移到废纸篓」，比「无法验证开发者」更吓人且更难绕。
 > 自签名之后至少落回正常的「无法验证开发者」。
 > **这一条是从两次 `spctl` 判定推出来的，我没跑过真实的下载—双击流程** —— 你试的时候顺手确认一下。

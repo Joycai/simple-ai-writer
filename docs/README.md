@@ -37,8 +37,8 @@ reaching for is one of the states above, plus a modifier if it needs one.
 
 | Doc | Status | Read when |
 |---|---|---|
-| [codemap.md](reference/codemap.md) | `living` | Changing **any** directory: one section per `src/components/*`, `src/lib/*` and `server/` — module split, invariants, why-not-the-other-way, and each subsystem's design-doc pointer. Moved out of `CLAUDE.md` on 2026-09-07 (it had grown to 73KB); `CLAUDE.md` keeps one line per directory plus the hard rules |
-| [architecture.md](reference/architecture.md) | `living` | Touching any subsystem: DB schema, RAG, SSE, key storage, export, IPC, CodeMirror |
+| [codemap.md](reference/codemap.md) | `living` | Changing **any** directory: one section per `src/components/*`, `src/lib/*`, `src-tauri/` and `server/`, plus 能力包 — module split, invariants, why-not-the-other-way, and each subsystem's design-doc pointer. Moved out of `CLAUDE.md` on 2026-09-07 (it had grown to 73KB); `CLAUDE.md` keeps one line per directory plus the hard rules |
+| [architecture.md](reference/architecture.md) | `living` | Touching a mechanism that spans directories: DB schema, prefs, multi-instance, RAG and the budget planner, images in context, key storage, export / backup, transactions, CSP. Per-directory facts (the SSE adapters, the IPC commands, packs) are in `codemap.md` |
 | [design-system.md](reference/design-system.md) | `living` | Building or restyling **any** UI |
 | [workflows.md](reference/workflows.md) | `living` | Adding an AI task type, a provider (platform or protocol family), a language, a capability pack |
 | [terminology.md](reference/terminology.md) | `living` (词表) · `shipped` (校准批次) | Writing **any** user-facing string, or wondering which of 条目/词条/设定 to use. The 2026-08 sweep found 78 一词多译 / 49 一译多词; all six calibration batches landed (§7), the ten retired words are held shut by `localeTerms.test.ts` (zh-CN values + `defaultValue` literals only — §5 says what it does not cover), and §9 records the full-tree review that followed |
@@ -204,6 +204,18 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [anthropic-temperature-thinking-off.md](issues/anthropic-temperature-thinking-off.md) | `fixed` | 能力解析账本 B6：④ 族上 `minimax` / `doubao-switch` 设为「关闭」时线上真关思考，温度却仍按「类目不是 off 就在想」不发。两家实测结论相反（2026-09-28）：火山方舟关思考时温度生效但 `0` 等于没发，MiniMax 收下但不理会，开思考时两家都 200 而不收敛。按类目落地（LLD §9.11）：只有 `doubao-switch` 关闭时发温度，抽屉说明 0 等于没填 |
 
 ---
+
+### Which doc owns a fact
+
+One topic, one place; everywhere else carries a sentence and a link. Two copies of a fact drift, and the stale one still reads as authoritative — the 2026-09 review of `reference/` found the pack section, the billing modules, pptx/xlsx and the streaming notes each told twice, with the copies already disagreeing (`DEFAULT_TASKS` missing a task, Anthropic's JSON mode, the pptx entry points).
+
+| Where | Holds | Not |
+|---|---|---|
+| `CLAUDE.md` | Commands, hard rules (one line each), the map | Implementation detail, numbers |
+| `reference/codemap.md` | Per-directory: module split, invariants, why-not-the-other-way. Anything true of one directory | Design history |
+| `reference/architecture.md` | Mechanisms that span directories (schema, context assembly, key storage, CSP, …) | A directory's own file list or command list |
+| `api/` | What a wire sends and accepts | This app's file names and choices (its README says so) |
+| `feature/` | Design rationale, measurements, version history — and, for a subsystem with its own dossier (billing, docx), its module table | Restating `reference/` |
 
 ## Adding a doc
 

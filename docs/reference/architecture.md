@@ -74,16 +74,7 @@ opening.
 
 ### Usage accounting (Settings → 用量)
 
-`src/lib/ai/usage.ts` is the read side of `token_usage`: 先选**哪一份账**
-（`UsageScope`：`project` = 项目库，`global` = `config.db` 的总账），再四个
-`GROUP BY` rollups（模型 / 任务 / 计价方式 / 项目）over a 7d / 30d / all
-window, plus the delete behind 清空统计。「按计费组」那一维在 TypeScript 里
-从按模型的桶折出来，按模型**当前**绑的组归并——行上快照的是价，不是归属。 `total` is summed from the by-model buckets rather than
-queried separately, so the headline can never disagree with the rows under it.
-`SUM()` over an empty group returns NULL, which is coerced at the row boundary
-— left alone it propagates as `NaN` through every later addition. Sorting is
-cost-descending with an output-token tiebreak, so models the author never
-priced still order usefully instead of collapsing to the bottom.
+`src/lib/ai/usage.ts` is the read side of `token_usage`: pick a ledger (`project` = the project DB, `global` = `config.db`), then roll up by model / task / billing mode / project over a time window. Every usage row carries its own price snapshot and `cost_usd`, so the read side only ever `SUM`s. The module split, the invariants and their reasons (totals, NULL coercion, sort order, the by-fee-group fold) live in [`docs/feature/billing/01-fee-groups.md`](../feature/billing/01-fee-groups.md) → 模块.
 
 ### Preferences (`src/lib/prefs.ts`)
 
@@ -321,94 +312,7 @@ Asking for N assembles the context **once** and then fires N independent `stream
 
 ### Capability packs (能力包)
 
-- **Location** — `src/lib/profile/` (`model.ts` pack types + built-ins + validation, `resolve.ts` the multi-pack merge, `file.ts` profile.json v1/v2/v3 parsing, `active.ts` singleton holding the merged `ResolvedWorkspace`, `store.ts` persistence)
-- **Stored at** — `.ai-writer/profile.json`, per project. v3 is the current format — `{version: 3, enabled: [ids], packs: [custom], categories: [user-defined]}`; a v2 file (`{version: 2, primary, enabled, packs}`) reads with its retired primary normalised to "first enabled", and a v1 file (the whole object is one profile) still reads as that pack alone. Old files are only rewritten as v3 when the author changes the selection. **Absent means the novel pack alone**, so every project created before profiles existed keeps its categories and task menu.
-
-Packs are **equal, purely additive toggles**: enabling one adds its predefined tasks and its knowledge-base categories, nothing more. There is deliberately no "primary pack" any more — it used to own the non-additive dimensions (UI vocabulary, doc model, the AI's persona), which made packs unequal and made the agent assume a domain role the author never chose. Those dimensions are app-level now: every project's knowledge store is a **知识库**, every file a 文档 (`appTerms`/`useTerms`), the document model is always all-on, and the system prompt is one neutral writing collaborator (see below). A project with **zero packs** is valid and useful: the base task menu, the user's own categories, the `custom` misc bucket.
-
-`resolveWorkspace(enabled, userCategories)` merges: **categories** = every enabled pack's (union, deduped case-insensitively by id — a shared id like `style` is the same directory; first declarer labels it, `packIds` records every declarer) + the project's **user-defined categories** (from profile.json's top-level `categories`; marked `userDefined`, the only ones the settings UI lets the author rename/remove) + the app-level **`custom` bucket, always last** (so `fallbackCategoryId()` always has a misc pile). **Tasks** = the app-level base menu (`DEFAULT_TASKS`: 续写/润色/改写/总结/自定义/agent — always present) + each pack's own tasks; a pack declaring a *base* id **overrides** that base task in place (first enabled pack wins — this is how novel re-points 续写/改写/总结 at fiction wording), any other colliding id is dropped loudly. Each `ResolvedTask` carries the `packId` that `sectionLabel` resolves 【…】 wording against; base tasks nobody overrode carry none and speak the neutral defaults.
-
-Per pack:
-
-| Field | Drives |
-| --- | --- |
-| `categories` | The `.ai-writer/lore/<category>` folders — the knowledge-base layout, the lore scan, the category pickers, and the `category` enum in the agent's lore tools |
-| `sections` | The 【…】 block labels *for this pack's tasks* (`bundleToMessages`), e.g. 【上一场景结尾】 instead of 【上一篇结尾】. `knowledge` is never overridden by built-ins — the knowledge base is called 知识库 everywhere |
-| `tasks` | Base-task overrides and the pack's own tasks — see below |
-
-Built-ins: `novel` (the default), `ttrpg` (跑团模组), `copy` (文案), `wechat` (微信公众号), `weekly` (周报), `feedback` (反馈报告) and `bid` (标书应答). Selection is Settings → 工作台 — each card is one on/off toggle — which calls `projectStore.setPacks(enabledIds)`: persist (v3) → scaffold the union's folders → rescan. The same pane (and the lore wall's 「+ 新建分类」 chip) manages the user-defined categories via `projectStore.setCustomCategories`, with folder ids derived by `suggestCategoryId` so the author only ever types a name. **Non-destructive** — a disabled pack's category folders and entities stay on disk and reappear on re-enabling, and removing a user category only hides its directory. The entries themselves stay *usable* meanwhile, as **orphan categories** (below); the pane's "N 个分类目录仍有内容" note now says which pack would give those categories their names and type schemas back. The AI panel groups the task menu by origin (`visibleTaskGroups`): the base menu flat (`pack: null` — an overridden base task still renders here), each pack's own tasks under a pack-name eyebrow.
-
-#### 孤儿分类 (orphan categories)
-
-`scanLore` 扫的是**磁盘上真实存在的目录**，不只是合并后的分类表：任何已启用包和用户自建分类都不声明、但里面有条目的目录，作为**孤儿分类**进入 `LoreIndex`（空目录不算——没人能往里新建的幽灵分类只会碍事；大小写不同的同一目录也只进一次，因为大小写不敏感的文件系统会把它报成另一个名字）。于是关掉一个能力包是**降级**而不是消失：条目照常出现在知识库墙、命令面板、AI 面板的清单里，照常被注入；失去的是分类的显示名（退回目录名）、类型 schema（`slots`/`imageSlots`，见 [`lore-entry-type-plan.md`](../feature/lore/lore-entry-type-plan.md)），以及作为新建目标的资格。
-
-两个问题必须分开问——`src/lib/lore/categories.ts` 就是为此存在的：
-
-| 问题 | 用什么 | 孤儿算不算 |
-| --- | --- | --- |
-| 「能往哪写」——新建条目、模型给的 `category`、移动目标 | `loreCategories()` / `isKnownCategory()`（也填 `create_lore_entity` 的 enum） | **不算** |
-| 「有些什么」——墙、命令面板、AI 面板清单、详情页翻页 | `indexCategories(loreIndex)` | 算 |
-
-搞混的后果很具体：注入侧走的是 `Object.values(loreIndex)`（`selectLore`/`rag`/`agent/tools` 都是），UI 侧若还枚举 `loreCategories()`，作者看到的条目会**少于**模型看到的——看不见的条目照样进 prompt。
-
-`assignableCategories(current)` 是唯一的例外口子：条目自己正待在某个孤儿分类里时，分类选择器必须把它列出来，否则界面会显示一个它并不在的分类，而下一次保存就按那个值把目录搬走了。反过来「搬进」孤儿分类仍然不可能——从停用包的目录里迁出去是合理操作，往一个应用建不出来的目录里填东西不是。
-
-标签用**目录名**，而不是借那个被停用的包的标签：借来的标签会让人以为 schema 还在，而目录名对手工建的、或者跟着别人项目一起来的文件夹也是唯一诚实的答案。`list_lore_entities` 的输出会在孤儿分类后面缀一句说明，免得模型试一次被拒才知道不能往里建。
-
-#### Tasks (`tasks`)
-
-A task is **a prompt plus a tool set**. The panel renders one segment per entry, so a profile carries however many it needs — 「生成遭遇表」 for a module, 「三版标题」 for copy — instead of the four a hardcoded union allowed.
-
-| Field | Effect |
-| --- | --- |
-| `instructionKey` | The built-in instruction. A prompt template whose `scene` equals the task `id` overrides it; for a `freeform` task it is a *prefix* the author's ask follows (that is how Agent mode gets its briefing) |
-| `tools` | `none` / `read` / `write` / `full`, resolved by `presetForTools` (lib/agent/presets) to no preset / `CONTINUE_PRESET` / `WRITE_PRESET` / `AGENT_ASSIST_PRESET`; `write` reads and authors files and deliverable exports but not the knowledge base, pictures or memory. **Having tools is what makes a run agentic** — `none` maps to null, which is the signal to stream directly |
-| `target` | `append` (splice at the continuation anchor) / `replace` (overwrite the selection) / `detached` (author inserts it if they want it) |
-| `continuation` | Append at an anchor, prior-document context, and the length + 承接/独立 + outline/knowledge controls. One switch because they are one feature; only valid with `target: "append"` |
-| `needsSelection`, `referenceWindow`, `freeform`, `hidden` | The remaining flags the old `TaskKind` branches encoded |
-| `agentTaskId` | Which task the "Agent 模式" toggle switches to. A pointer, so the agent task stays an ordinary entry with its own prompt and toolset |
-
-The task `id` is load-bearing in three places, so renaming one is a breaking change: the `scene` of an overriding prompt template, the `task` column in `token_usage`, and the execution log's label.
-
-`draftCountFor` derives its rule from `tools`, not from a list of task names: **any tool-using task produces a single draft.** Every round of the loop reports into one shared `agentLog`, so parallel runs would interleave into an unreadable log; a `full` toolset additionally can't have concurrent runs touching one lore folder or racing approval cards. Stating it this way covers tasks nobody has written yet.
-
-`DEFAULT_TASKS` is the app-level base menu (续写/改写/润色/总结/自定义/agent) — domain-neutral and present in every project, so a pack declares only its *own* tasks (plus any base-id overrides; novel's three instruction re-points are the only built-in ones). Packs can no longer drop a base task — the menu is uniform, and 续写 in a copy project simply continues the open document. `TTRPG_PROFILE`'s pair shows how `tools` is the load-bearing choice:
-
-| Task | Shape | Why |
-| --- | --- | --- |
-| 遭遇 (`encounter`) | `tools: "read"`, freeform, detached | Must consult the module's own NPCs/locations first — an encounter that invents a rival the module already has is worse than useless at the table. Costs the single-draft limit. |
-| 随机表 (`randomtable`) | `tools: "none"`, freeform, detached | A table of rumours needs the brief and the tone, not a lore sweep — and staying toolless is what lets it fan out, since three tables to choose between is how this gets used. |
-| 标题 (`headlines`, copy) | `tools: "none"`, freeform, detached | Generated from a brief, so no selection. Toolless so it fans out: the drafts give *sets* of angles to compare. |
-| 渠道改写 (`channel`, copy) | `needsSelection`, freeform, detached | Transforms an existing passage, so it needs one — but takes no `referenceWindow`, since the target channel comes from the author's line, not from surrounding text. Detached, because overwriting would lose the source being adapted from. |
-| 汇总 (`digest`, weekly) | `tools: "none"`, freeform | The author brings the week's raw material, so there is nothing to go and find. |
-| 对照上期 (`carryover`, weekly) | `tools: "read"`, **not** freeform | Has to *find* the previous report: prior-document context only reaches `continuation` tasks, and this one appends nothing. Not freeform because it is useful with no input, and a freeform task can't run on an empty box. |
-| 归纳主题 (`themes`, feedback) | `tools: "read"`, freeform | Must actually read the corpus — themes inferred from product intuition are the failure this profile is shaped against. |
-| 溯源核对 (`verify`, feedback) | `tools: "read"`, `needsSelection` | Checks one claim in the draft against the sources. No reference window: what it needs is the material, not the surrounding paragraphs. |
-| 选题 (`topic`, wechat) | `tools: "read"`, freeform, detached | Has to list what the account already published — colliding with a published angle is the failure it exists to avoid. One run already returns a spread, so the lost fan-out costs little. |
-| 标题 / 开头 (`titles`, `hook`, wechat) | `tools: "none"`, **not** freeform | The article is already in 【当前文章】 by the time you need either, and a freeform task can't run on an empty box — it would force the author to retype the gist. Toolless so the drafts give sets of options to compare. |
-| 合规审查 (`compliance`, wechat) | `tools: "read"`, no selection | Reads the account's own 合规红线 entries rather than general impressions of 广告法, and audits the whole article: a red line in the paragraph you didn't select is exactly as fatal. |
-
-**Tool-using tasks are told which file they are on.** `TaskExtras.currentFilePath` becomes a 【当前文件】 block, emitted first. Without it a task that browses the project cannot tell which of the files it lists is the one it was invoked on — 对照上期's "find the report before this one" has no anchor. In testing it happened to work because the draft's own heading said 「第 31 周」; a document that doesn't name its period would have left the model guessing, and picking the wrong file produces output that looks entirely normal. Toolless tasks omit it: they can't look at anything else, so it would only spend tokens.
-
-**The feedback corpus can live anywhere in the workspace.** `list_files` and `search_text` cover the whole project tree (only the app's `.ai-writer` data is excluded), so source material in any folder is discoverable.
-
-`needsSelection` and `referenceWindow` are separate flags answering different questions, and 渠道改写 is the first task to want one without the other. They coincide on every built-in, which is how the panel deriving the selection gate from `referenceWindow` went unnoticed — see the `TaskDef flags` guard in `profileTasks.test.ts`, which fails when a declared field has no consumer.
-
-Both are `freeform`: the author supplies the situation ("下水道，被跟踪") and the built-in text is the briefing on what a usable result contains. **A prompt template whose `scene` matches the task id replaces that briefing while keeping the author's ask** — freeform tasks used to skip the scene lookup entirely, which made a carefully-written domain prompt the one kind nobody could tune.
-
-**Ids can outlive the profile that defined them** (persisted panel selection, a log entry, a prompt template's `scene`), so `findTask()` returns null rather than throwing and every caller decides what to do — the panel falls back to `defaultTask()`, the log shows the raw id, `runTask` reports `ai.errors.taskNotFound`.
-
-#### The document model (`DocModel`)
-
-Three flags — `ordered` (volume/chapter spine + library view), `priorContext` (【前文回顾】 + 【上一篇结尾】 and the 承接/独立 picker), `memory` (per-document rolling summary, 【前情提要】). Since packs became purely additive the model is **app-level and always all-on** (`DEFAULT_DOC_MODEL`): every project gets the machinery and simply doesn't use what it doesn't need. Turning them off per-domain required a primary pack to arbitrate, and hiding working features bought less than the concept cost. The type, `docModel()` and `useDocModel()` survive as the seam a future *per-project* setting would plug into — consumers still read flags instead of assuming them, so re-introducing a switch is one edit, not an archaeology dig.
-
-Details that are easy to get wrong:
-
-- **`active.ts` is a module singleton, not a store.** The lore scanner, the agent's tool-schema builder, and the prompt assembler all need it synchronously from non-React code (mirrors how `i18n` is consumed). `projectStore` mirrors it as `workspace` state *purely so components re-render*, and is the **only** writer of both — syncing them anywhere else lets the UI and the prompt disagree about which packs are in force.
-- **Anything module-level must resolve categories per call.** `registry.ts` is a `const` evaluated once at import, so its lore-tool `enum`s (via `profileCategoryParams`) and the `{{categories}}` placeholder in tool descriptions are both substituted in `getToolDefinitions()`, returning a copy. The same hazard applies to any future top-level constant: use `loreCategories()` at call time, never at module scope.
-- **Never resolve a system prompt with `ai.instructions.system` directly.** The prompt is one neutral collaborator identity now, but `profileSystemPrompt()` (`lib/context/rag`) stays the single seam — it is where a per-project override would land, and history says callers drift: a TTRPG project was once prompted as a novel because `aiTaskStore` reached for the key while the then-per-pack fallback sat unexercised. `profileSystemPrompt.test.ts` still scans the source for the key. The packs' former persona prompts are gone; their domain rules (bid's deviation discipline, wechat's 合规, feedback's anti-overclaiming…) live in the pack tasks' *instructions*, where they only fire on the tasks they belong to.
-
-`profile.json` is hand-editable, and its category ids become **directory names** — so it is parsed defensively (`parseProfile`/`parseCategoryList` drop bad entries, reject case-insensitive duplicates, cap the count; the retired pack fields `terms`/`docModel`/`systemPromptKey` are ignored with a note) and re-validated in Rust (`valid_category` in `commands.rs`, which is the actual boundary). A pack entry is read as a *patch on the built-in it names*: `{"id":"ttrpg"}` resolves back to that pack exactly.
+The pack model — profile.json versions, the multi-pack merge, orphan categories, the task fields, the document model and the singleton's rules — is documented per directory in [`codemap.md` → 能力包](codemap.md#能力包workspace-packs).
 
 ### Agent output: snapshots, not deltas
 
@@ -733,22 +637,14 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 
 ### Streaming (SSE)
 
-- **Location** — `src/lib/ai/` (`index.ts` dispatch + pre-flight checks, five adapters — `openai.ts` (Chat Completions) / `responses.ts` (OpenAI Responses) / `gemini.ts` / `anthropic.ts` / `dashscope.ts` (百炼 native multimodal endpoint, Chat Completions' fields in its own envelope) — `types.ts` shared protocol types)
-- **Providers** — OpenAI + compatible APIs (SSE `data: {...}` lines), OpenAI Responses (typed events, `POST {base}/responses`), DashScope native (`{model, input, parameters}` envelope, read by the same `chatDelta` reader as Chat Completions), Google Gemini (alt=sse format), Anthropic Messages API (typed SSE events: `message_start` → `content_block_delta` → `message_delta` → `message_stop`)
-- **Parsing** — Fetch + ReadableStream, line-by-line JSON parsing
-- **Internal message shape is OpenAI's** (`StreamMessage`, tool calls with a JSON-string `arguments`). The Gemini and Anthropic adapters each own a converter — `convertToGeminiContents` / `convertToAnthropicMessages` — including the tool-call round trip and the data-URL → base64 image conversion. Anthropic additionally enforces two structural rules the others don't: the first message must be `user`, and adjacent same-role turns must be merged
-- **Token Tracking** — OpenAI sends `include_usage: true` in stream_options; Gemini in final `usageMetadata`; Anthropic in `message_start.message.usage` (prompt) plus `message_delta.usage` (output); Responses in the terminal event's `response.usage` (`response.completed` / `response.incomplete`); DashScope native reports `usage` on every frame, so no `stream_options` is sent
-- **Anthropic usage is normalized on the way in.** The app's `cachedTokens` is a *subset* of `inputTokens` (what OpenAI and Gemini report, and what `costFor` bills against). Anthropic instead reports three disjoint buckets, so the adapter sums them: `inputTokens = input_tokens + cache_read_input_tokens + cache_creation_input_tokens`, `cachedTokens = cache_read_input_tokens`. Reading `input_tokens` alone would under-report a cached prompt by however much was cached. Cache *writes* bill above the base input rate and a fee group has no cache-write price (only `input_price` and `cache_input_price`), so they land in the full-price bucket — over-stating rather than under-stating cost
-- **`max_tokens` is required by Anthropic**, with no server-side default to fall back on, so `Model.maxOutput` is threaded into `StreamOptions` and sent on that path (a constant when unset). It stays planning-only for the other families; the only other output cap on the wire is a task's own per-request `StreamOptions.maxTokens`, sent on the Chat Completions path (today only the Sakura translation engine sets one)
-- **Thinking vs forced tools (Anthropic)** — the adapter used to send `thinking: {type: "disabled"}` whenever `tool_choice` forced a tool (forced tool use is incompatible with *manual* extended thinking). That workaround is gone: **adaptive thinking supports forced tool use**, adaptive is the only mode the supported range (Claude 4.6+) uses, and several models in that range reject `thinking: {type: "disabled"}` outright. `agent/structured.ts` now asks for `toolChoice: "required"` (Anthropic `{type:"any"}`) rather than naming the tool; see `thinkingFor` in `anthropic.ts` before changing it
-- **JSON mode** — `ai/jsonMode.ts` owns the per-protocol decision: `response_format` for OpenAI, `responseMimeType` for Gemini, and **nothing** for Anthropic (unknown top-level fields are a 400 there) plus a text cue in the user turn. Callers needing schema enforcement rather than "valid JSON" use `agent/structured.ts`, whose forced pseudo-tool call works on every adapter
+`src/lib/ai/index.ts` dispatches on the protocol family to five adapters (Chat Completions, Responses, Gemini, Anthropic Messages, DashScope native); every adapter speaks the app's one internal message shape and yields the same stream chunks, so nothing above `src/lib/ai/` knows which wire a run is on. What each wire actually sends and accepts is in [`docs/api/`](../api/README.md) (`streaming.md`, `usage.md`, `structured.md`, `reasoning.md`); how the adapters convert, normalise usage, cap output and shape JSON mode is in [`codemap.md` → `src/lib/ai/`](codemap.md#srclibai) → 流式协议层.
 
 ### Secure Key Storage
 
 - **Backend** — OS credential manager via the `keyring` crate (Windows Credential Manager / macOS Keychain / Linux Secret Service), service name `com.simple-ai-writer.app`
 - **Rust commands** — `secret_save` / `secret_load` / `secret_delete` / `secret_clear_all` in `src-tauri/src/secrets.rs`. All four run on the blocking pool (`crate::blocking`, i.e. `async_runtime::spawn_blocking`), not on an async-runtime worker: one call can block for as long as it takes the author to answer a macOS Keychain dialog, and the migration below answers a whole row of them
-- **Storage shape differs by platform.** macOS keeps **every** secret in a *single* keychain item (account `all-secrets`, holding a JSON `{id: secret}` map); Windows and Linux keep one credential per id. Not symmetry for its own sake — keyring's macOS backend writes into the file-based login keychain, where **each item carries its own ACL**, and the trust an ACL records is the requesting binary's *code-signing identity*. Releases are ad-hoc signed — since `bundle.macOS.signingIdentity: "-"` the whole `.app` rather than only the linker-signed executable, but still `Signature=adhoc`, `TeamIdentifier=not set` — so that identity is the binary's hash (`cdhash`) and changes with every build: after every update macOS re-asks for the login password **once per item**, and 「始终允许」 only ever covers the item its dialog was about. One item per provider meant one dialog per configured provider — 18 on the author's machine — on every single update. Off macOS a bundle would buy nothing and cost something: the Windows Credential Manager doesn't prompt and caps one credential's blob at 2560 bytes (a dozen API keys overrun it), and the Secret Service unlocks a whole collection at a time rather than an item at a time. The size asymmetry is in the storage, not in the idea: the Windows cap is a documented field constraint (`CredentialBlobSize` "cannot be larger than CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512)" — Microsoft's `CREDENTIAL` docs), while a login-keychain item's data is a variable-length blob with no equivalent — 2.5 KB / 10 KB / 100 KB / 1 MB / 4 MB / 16 MB all round-tripped through a throwaway item on a real login keychain (16 MB is where the probe stopped, not where it broke). 18 secrets as JSON come to roughly 2–3 KB: over the Windows cap, nowhere near anything on macOS
-- **The bundle is the cheap half of the fix.** Signing the app with a fixed certificate is the real one — the self-signed plan in [`macos-signing.md`](macos-signing.md) (`partial`: not wired into `release.yml` yet), or a paid Developer ID — the ACL would then record a requirement naming the certificate rather than the `cdhash`, which survives a rebuild, and the dialogs stop. Until then the bundle turns N dialogs per update into one, and it also shrinks the single unavoidable prompt *after* such a switch to one item
+- **Storage shape differs by platform.** macOS keeps **every** secret in a *single* keychain item (account `all-secrets`, holding a JSON `{id: secret}` map); Windows and Linux keep one credential per id. Not symmetry for its own sake — keyring's macOS backend writes into the file-based login keychain, where **each item carries its own ACL** keyed to the binary's code-signing identity; an ad-hoc-signed release's identity is its `cdhash`, which changes with every build (why, and the measurements: [`macos-signing.md`](macos-signing.md) §0). So after every update macOS re-asks for the login password **once per item**, and 「始终允许」 only ever covers the item its dialog was about. One item per provider meant one dialog per configured provider — 18 on the author's machine — on every single update. Off macOS a bundle would buy nothing and cost something: the Windows Credential Manager doesn't prompt and caps one credential's blob at 2560 bytes (a dozen API keys overrun it), and the Secret Service unlocks a whole collection at a time rather than an item at a time. The size asymmetry is in the storage, not in the idea: the Windows cap is a documented field constraint (`CredentialBlobSize` "cannot be larger than CRED_MAX_CREDENTIAL_BLOB_SIZE (5*512)" — Microsoft's `CREDENTIAL` docs), while a login-keychain item's data is a variable-length blob with no equivalent — 2.5 KB / 10 KB / 100 KB / 1 MB / 4 MB / 16 MB all round-tripped through a throwaway item on a real login keychain (16 MB is where the probe stopped, not where it broke). 18 secrets as JSON come to roughly 2–3 KB: over the Windows cap, nowhere near anything on macOS
+- **The bundle is the cheap half of the fix.** The real one is a fixed signing certificate (self-signed or a paid Developer ID), which makes the ACL name the certificate instead of the `cdhash` — that plan and its status are [`macos-signing.md`](macos-signing.md)'s. Until then the bundle turns N dialogs per update into one, and it also shrinks the single unavoidable prompt *after* such a switch to one item
 - **Bundle migration (macOS)** — the pre-bundle per-provider items are folded in on first use, inside the same lock that guards the item. It **enumerates** (`keyring_core::Entry::search` by service, which loads attributes only and so is silent) rather than asking the frontend for the ids it knows: a provider the author deleted, or an id one of the three callers forgot to report, would otherwise be a secret left behind in a store nothing reads any more. Reading each item is the one dialog apiece, paid once. Order is write-the-bundle-then-delete-the-items, so an interruption duplicates a secret rather than destroying one; an item whose dialog was dismissed stays where it is and the pass runs again next launch. A bundle that won't parse as JSON is an **error**, not an empty bundle — treating it as empty would let the next save overwrite every key the author has
 - **Wholesale wipe (`secret_clear_all`)** — 重置应用配置 的钥匙串那一半，见下面的「重置应用配置」。参数是前端**叫得出名字**的账户列表；macOS 忽略它、直接清空那一个条目（`with_bundle` 刚把散落的旧条目折进来，所以手上的就是全部），Windows / Linux 按名字逐条删。单条失败不中断也不抛——它记进 `SecretWipe.failed`，因为调用方要拿这个数**做决定**：`failed > 0` 就不许动数据库
 - **No in-process cache.** Every read goes to the keychain and every write is a read-modify-write, guarded by one `Mutex` for the process. The app runs one process per workspace (`instance.rs`), so a cached copy in one instance would silently overwrite what another just saved; the lock is what keeps two parallel writes (several sub-agents resolving keys at once) from losing one
@@ -827,14 +723,8 @@ Because the remaining lazy targets are also imported statically elsewhere (compo
 **The same warning pointing at a `src/lib/**` target is a real defect** — it means someone wrote `await import()` for a module that is statically imported anyway, which buys nothing and only obscures the call site. Those are deliberately left unfiltered; convert them back to a top-level import.
 
 ### Tauri IPC Commands
-- Implemented in `src-tauri/src/` (minimal; most logic in TypeScript)
-- `commands.rs` — `scaffold_project`, `read_dir_recursive`, plus `fs_*` helpers (write text/binary, read text, create/read/remove dir, remove file, exists). All of them are `async` and run on the **blocking pool** (`blocking.rs`, shared with `secrets.rs`): a sync Tauri command runs on the main thread, and a knowledge-base scan issues hundreds of these back to back, each canonicalizing its path in `FsScope::check` before the syscall — on the main thread that was the window's event loop stalling for the whole walk. The scope check rides into the task with the rest, which is why `FsScope` is `Clone` (an `Arc` around one list, so a root allowed later still counts)
-- `secrets.rs` — `secret_save` / `secret_load` / `secret_delete` (OS keyring)
-- `transfer.rs` — export/import: `zip_export_dialog` / `zip_import_dialog` (lore + project bundles) and `save_text_file_dialog` / `open_text_file_dialog` (config backup JSON). Dialogs run Rust-side (same trust rationale as `project_open_dialog`); zip extraction is zip-slip-guarded via `enclosed_name()`. `excludes` prunes whole subtrees at the directory during the walk, matched on **whole path components** (so `.ai-writer/tmp` never swallows `.ai-writer/tmpl`). `require_manifest_kind` reads the manifest in a first pass and returns before extracting anything, which is what lets a restore into a user-picked folder promise "wrong file, nothing happened"
-- `protocol.rs` — custom `ai-writer-asset://` scheme (extension allowlist + `FsScope` containment). The app no longer emits these links — lore and document images render as data URLs (`imageToDataUrl` / `useImageDataUrl`) because Webview2's URL parsing made the scheme unreliable on Windows; it stays only so `ai-writer-asset://` links in documents saved by older versions still render
-- `print.rs` — `print_document` + custom `ai-writer-print://` scheme (macOS PDF export: preview window + native `NSPrintOperation` with real margins — see Export above; other platforms never call it)
-- `cmd.rs` — `cmd_shell_info` / `cmd_run` / `cmd_kill`: one shell command for the agent's `run_command` tool (Beta). PowerShell on Windows (`pwsh` first, 5.1 fallback, `CREATE_NO_WINDOW`, a UTF-8 + exit-code wrapper around `-Command`), `$SHELL -l -c` on unix in its own process group. `cwd` goes through `FsScope::check` like every `fs_*` command; the approval card is frontend state, so what this side guards is the working directory, the timeout, the output cap (1 MB per stream, drained past that) and killing the whole tree. Not `tauri-plugin-shell` — see `docs/feature/agent/shell-command-plan.md` §2.1
-- Plugin permissions in `src-tauri/capabilities/default.json`
+
+Most logic is TypeScript; the Rust side is file I/O behind a path fence, secrets, transactions, transfer, printing and the Office readers/writers. Each file's commands, rules and reasons are in [`codemap.md` → `src-tauri/`](codemap.md#src-tauri); plugin permissions are in `src-tauri/capabilities/default.json` (see Capabilities & Permissions below).
 
 ### File I/O
 - `src/lib/fs/fileio.ts` wraps the app's own `fs_*` Rust commands (`fs_read_text_file`, `fs_write_text_file`, `fs_stat`, `fs_read_dir`, `fs_rename`, … in `src-tauri/src/commands.rs`, behind `FsScope`) via `invoke`; the one exception is `readBinaryFile`, which uses the fs plugin's `readFile` so bytes come back as a `Uint8Array` instead of base64 through JSON
@@ -867,72 +757,9 @@ The workspace is the **whole project directory** — documents live wherever the
 - **第二个入口——文件树右键「发送到助手」**：同一份分类（`classifyProjectFile`，`projectFilesFromTree` 的单文件形态）决定条目是否出现，同一条构造路（`lib/lore/aiTask` 的 `attachProjectFile`——读文本 / `imageForModel` 归一化 + 12MB 上限，`@` 选择也走它）产出同一种附件，挂进 `composerStore.chatRefs` 并照 `@` 的约定在草稿里落 `@[名字]`，然后打开抽屉的 chat 模式。刻意**不**在树上按 `chainCanSeeImages` 过滤图片：树不认识模型、作者发送前还能换模型，而 `buildChatMessage` 对读不了图的模型会点名附件并给出 vision 子代理的读法——降级是诚实的，不值得为它把 AI 配置耦合进文件树。
 - **挑选与排序**（2026-09-26，设计稿 02i）：候选进了选择器之后，作用域、打分、截断都在 `lib/search/mentionSearch`——顶部一行 chip 把候选限到条目 / 文档 / 图片一类（Tab 切档，每次打开回「全部」），排序复用 ⌘K 的 `matchText`（名字 ×1 / 别名 ×0.9 / 分组路径 ×0.6 / 整条路径 ×0.5；分组与路径不认子序列；宿主只送一个词——空格结束提名，一个词可跨 `/`：`@潮汐门篇/第五`），空查询按类交错取十条。此前只 `includes`、不排序、只看名字、条目独占前十，是「文件和条目一多就找不到」的根因。理由与被否方案：`docs/feature/agent/mention-scope-ui-brief.md`。
 
-### 读 .pptx（导入转换 + 按页读）
+### PPTX / XLSX (read and export)
 
-演示文稿是 zip 里的一堆 XML，模型拿到字节等于拿到噪声，所以解析在 Rust：`src-tauri/src/pptx.rs`，前端只有 `src/lib/fs/pptx.ts` 这一跳。两个入口共用一个转换函数：
-
-- **导入**（`pptx_to_markdown`，字节走 IPC）：`CONVERT_EXTENSIONS` 里的第四种，产物是 markdown 文件加 deck 里的光栅图片——media 部件在 Rust 侧抽出、base64 随 IPC 回传，`index.ts` 的导入循环落到 `assets/<文档名>/`，正文的 `_[image: …]_` 占位变成真链接（`docs/feature/import-images-plan.md` §9）。这一步顺带把 `@` 引用、`search_text`、`read_file` 分页、RAG 全部打通——它们面对的已经是普通文本了。
-- **Agent 直读**（`pptx_read_slides` → `read_slides` 工具，走**路径**+`FsScope::check`）：作者从外部拷进项目的 .pptx 不必先导入。分段在 Rust 侧按幻灯片切，整份 deck 从不跨 IPC；这也是为什么它不是"读字节再切"。
-
-设计上要记住的几条：
-
-- **顺序来自 `presentation.xml` 的 `<p:sldIdLst>`，不是文件名。** `slide10.xml` 排在 `slide2.xml` 前面，而且文件名本来就不权威——按目录读会静默打乱整份演示。
-- **分段单位是页，不是行。** 预算（4000 字符）花完就在页边界停下，尾注写明 `slides 8-24 of 30 shown; call read_slides again with start_slide=25`——刻意和 `read_file` 的尾注同形，学会一个就会另一个。一页超预算时仍整页返回（同 `read_file` 对超长行的规则：能返回空的预算等于没有出路）。
-- **只解析范围内的页。** 顺序表和 zip 条目都是按名取的，所以翻一页的成本是一页，不是整份。
-- **`search_text` 不扫 .pptx**，`read_file` 遇到 .pptx 也直接改口指向 `read_slides`（否则模型会花一轮读二进制噪声，然后判定文件是空的）。全文搜索要遍历整个项目，解 zip 比读文本贵一个数量级；导入后的 markdown 本来就在搜索面里。
-- **超大 deck 的最后一道防线是 subagent**：`read_slides` 在 `longread` 的工具集里，几百页丢给它，主上下文只收摘要 + note 路径。
-- **`.ppt`（97-2003）读不了，也不打算读**：OLE 复合二进制，不是 zip。与 `.doc`/`.xls` 同一条判断——半乱码的结果和成功的长得一模一样。导入器不收它，`read_slides` 直接说明要先另存为 .pptx。
-
-设计与被否掉的方案：`docs/feature/pptx-plan.md`。
-
-### HTML → PPTX 导出（Beta）
-
-`.html` 是模型最擅长的排版语言，这个 app 已经能预览它、审批它、让作者改它。所以生成 pptx 这件事被拆成两半：**模型继续写 HTML，转换一步不经过模型**。整条链路是确定性代码，同一份文件每次转出来一样，没有生成的脚本需要谁去审。
-
-```
-.html → 离屏沙箱 iframe 渲染 → 量出每个盒子 → 写成 PowerPoint 形状 → .pptx
-```
-
-- **为什么不重新实现 CSS**：不需要。页面已经在 iframe 里布局完成，`getBoundingClientRect` 会精确说出每个盒子和每一行文字落在哪。flex / grid / 绝对定位用哪种都无所谓，只读最终结果。
-- **怎么读到**：预览 frame 是 `blob:` + `sandbox="allow-scripts"`、**不给** `allow-same-origin`，所以 app 读不到它的 DOM——采集脚本（`lib/pptx/harvester.js`，`?raw` 注进去）在里面量，靠 `postMessage` 把结果送出来。消息认两件事：`event.source` 是这个 frame 的 `contentWindow`，且带着这一轮挂在 `data-nonce` 属性上的一次性 token。**这个 sandbox 参数不能动**：加上 `allow-same-origin` 能省掉注入，代价是把"AI 脚本进不了 app 上下文"这条保证从 sandbox 转嫁给 CSP。
-- **它凭什么能跑**：`blob:` 文档**继承创建它的页面的 CSP**（opaque origin 豁免的是同源访问，不是策略），而 app 的 `script-src` 是 `'self'`——所以一期发出去的版本里这个脚本一行都没执行，每次导出都是 20 秒静默超时。现在 `tauri.conf.json` 的 `script-src` 带一个 `'sha256-'`，精确放行**这一个**脚本；页面自己带的内联脚本仍然全被拦住。两条纪律由 `pptxHarvesterCsp.test.ts` 钉住：**改 `harvester.js` 就必须同步改 conf 里的 hash**（漂了的症状还是那个静默超时），以及**每轮变化的数据只能放属性**，塞进脚本正文会让 hash 每次都不同。
-- **分层**：`harvester.js` 只测量和分类（jsdom 没有布局引擎，它测不了）；`deck.ts` 是纯的——单位换算、幻灯片尺寸、颜色、剪枝、文本余量，测试都在这；`write.ts` 只调 pptxgenjs（lazy import，272KB 独立分片）。切成这样是为了让有 bug 的那层可测。
-- **文字仍是文字**，PowerPoint 里能改——这是产出 .pptx 而不是 PDF 的唯一理由。所以 `pruneBlocks` 必须丢掉没有可见绘制的布局容器：不剪的话视觉上完美，打开一看图层面板三百层，等于交了份不能改的东西。
-- **入口两个**，都要作者点头：`export_pptx` 工具（L2 审批卡，说明「哪个页面 → 哪个文件」；转换在 `applyProposal` 里跑，因为那里才有 DOM）和 `.html` 预览工具栏的导出按钮。
-- **Beta 开关**（Settings → AI 配置 → 实验室，`lib/pptx/flag.ts`）关着时 `routeTools` 把 `export_pptx` 从工具列表里**删掉**而不是让它报错——同 imagegen 未绑定时删掉画图工具。
-- **会降级的**：内联 SVG 和 `<canvas>` 变图片，渐变背景变色标平均色，CSS 滤镜/混合模式/文字阴影/动画丢掉。每次导出把降级项列给作者。
-- **SVG 栅格化前必须内联计算样式**：序列化出来的 `<svg>` 是独立文档，页面样式表一条都不跟着走，靠 CSS 上色的图示和 `currentColor` 会整块变黑——而且栅格化"成功"，没有异常也没有降级提示。见 `docs/feature/pptx-plan.md` D19。
-- **最大的风险不是冷门 CSS，是字体和文本回流**：HTML 的换行引擎不是 PowerPoint 的，web font 也进不了 pptx。对策是按字形而不是容器测量文本框、四周留 6% 对称余量、多行允许自动缩字号，外加工具描述里要求用系统字体。
-
-设计、被否掉的方案（让模型写 Python 转换、slides markdown、模型直接调 pptx 工具、整页截图）、以及验证时抓到的三个 bug：`docs/feature/pptx-plan.md` §4。
-
-### markdown 表格 → XLSX 导出（Beta）
-
-同一条分工的第三次应用：**模型写 markdown 表格，转换一步不经过模型**。一张表格变成一个
-工作表，名字取自它上面最近的那个标题——和导入侧（`xlsx.rs` 把工作簿写成 `## 工作表名` +
-表格）严格对称，所以作者见过这个形状。
-
-- **实质在类型判定**（`lib/xlsx/cells.ts`）：一份所有格子都是文本的 .xlsx 不是电子表格，
-  是表格的截图——求和不出数、排序按字典序。所以数字、百分数、ISO 日期、`=` 开头的公式
-  都写成真类型。**兜底方向永远是「判不出来就留成文本」**：把文本错判成数字是**静默的**
-  数据损坏（`007` → `7`，18 位身份证末三位 → `000`），反过来作者一眼就看见。因此前导零、
-  15 位以上的数字串、带单位的 `12000元` 一律不转；百分数存 `0.12` 而不是 `12`，否则整列
-  求和错一个数量级而单元格显示照常。
-- **生成在 Rust**（`src-tauri/src/xlsx_write.rs`，`rust_xlsxwriter`，此前已作为 dev-dependency
-  给导入侧的往返测试造 fixture）。这和 docx「生成在 TS」是**同一条**规则——跟着已有的那
-  一份走：docx 要生成就得先解析 markdown，而方言在 TS；这里方言一个字都不过界，`sheets.ts`
-  和 `cells.ts` 已经把格子定型，Rust 侧不解析任何 markdown。字节按 base64 回来。
-- **工作簿在提案时就建好**，落盘时不再读源文件——pptx 必须等批准后才能转（它得先有 DOM
-  才能量版面），而这条链上没有这种约束，于是「作者批的」和「写下去的」严格是同一本。
-- **审批卡一行一张工作表**：名字、`行×列`、以及被判成数字/日期/公式的格子数。可审的是
-  **判断**而不是字节：一张报价表写着「数字 0」在卡上一眼可见，所以那一栏为 0 时也照显示。
-- **入口只有 `export_xlsx`**（L2 审批），Beta 关时 `routeTools` 直接把它删掉。导出菜单里
-  没有对应项——同 docx，出口是 agent。
-- **公式不带缓存结果**：Excel / LibreOffice 打开时自己算，只读存储值的预览器在那之前显示
-  空白。这一条报给模型让它转告作者，不绕开——绕开意味着这个 app 自己实现电子表格求值。
-
-设计、五个「看起来对其实是数据损坏」的细节、四条弃案（JSON 网格进工具参数 / HTML 表格 /
-合并成一个 `export_document` / 一期不做的合并单元格与公式块回读）：`docs/feature/xlsx-export-plan.md`。
+Reading `.pptx` (import conversion + `read_slides` paging), HTML → PPTX export and markdown tables → XLSX export are each owned by one directory and one design doc: the code notes are in `codemap.md` → [`src/lib/pptx/`](codemap.md#srclibpptx), [`src/lib/xlsx/`](codemap.md#srclibxlsx), [`src/lib/import/`](codemap.md#srclibimport) and `src-tauri/` → Office 读写器; the decisions and their reasons are in [`pptx-plan.md`](../feature/pptx-plan.md) and [`xlsx-export-plan.md`](../feature/xlsx-export-plan.md). The CSP side of the harvester is under [Content Security Policy](#content-security-policy) below.
 
 ### Export / Import (lore bundles & config backup)
 - **Lore bundle** (`src/lib/lore/transfer.ts`, UI in `LoreWall`): a zip with root `manifest.json` + the whole on-disk `.ai-writer/lore/` tree under `lore/…` — *all* categories on disk, not just the active profile's, so bundles survive profile switches. Import is two-phase: `stageLoreImport` extracts into `.ai-writer/lore-import-tmp` and reports conflicts; `applyLoreImport` moves entity dirs in under a user-chosen strategy (skip / overwrite / keep-both via `uniqueEntityId`), then deletes the staging dir. **Overwrite displaces rather than deletes**: the entity being replaced is renamed into `.ai-writer/backups/replaced-<ts>-<category>-<id>` (the same directory `delete_lore_entity` uses), and if the move-in then fails it is renamed back. The previous `removeDir`-then-`rename` both destroyed an entry — gallery images included — with no undo, and left a window where a failed rename lost the folder from both places. Categories that fail `CATEGORY_ID_RE` are ignored.
