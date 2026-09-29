@@ -181,8 +181,9 @@ export interface ThinkingCategory {
   openaiWire?: "effort" | "effort-or-disable" | "switch-budget" | "switch-effort" | "thinking-type";
   /**
    * When a forced `tool_choice` is illegal on this category's endpoint:
-   * `always` (MiniMax's enum is `auto|none`), or `while-thinking` (DashScope
-   * refuses it once `enable_thinking` is true). Absent = never.
+   * `always` (MiniMax's enum is `auto|none`; Claude's manual thinking, which
+   * never goes out off), or `while-thinking` (DashScope refuses it once
+   * `enable_thinking` is true). Absent = never.
    */
   forcing?: "always" | "while-thinking";
   /**
@@ -367,6 +368,11 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     family: "anthropic", dialect: "extended", shape: "budget",
     menu: [],
     budget: { min: 1024, max: 32768, default: 16384 },
+    // Manual thinking refuses a forced tool_choice (only auto / none), and this
+    // category always thinks on the wire — `off` goes out at the lowest budget —
+    // so the forcing is downgraded every time. Adaptive has no such rule
+    // (docs/api/anthropic-plan.md §3).
+    forcing: "always",
     offSpelling: "lowest", unsetThinks: true,
   },
   minimax: {

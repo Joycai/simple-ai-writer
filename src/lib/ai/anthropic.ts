@@ -310,14 +310,14 @@ function labelAuthorText(blocks: AnthropicBlock[]): AnthropicBlock[] {
 /**
  * The `thinking` field for this request, or undefined to send none.
  *
- * This used to disable thinking whenever `tool_choice` forced a tool, because
- * forced tool use is incompatible with *manual* extended thinking and every
- * structured task (一致性检查, lore improve, the entry splitter) forces exactly
- * one named tool. That workaround is gone: **adaptive thinking supports forced
- * tool use**, and adaptive is the only mode this app's supported range (Claude
- * 4.6+) uses. Keeping the disable would have been worse than useless — several
- * models in that range reject `thinking: {type: "disabled"}` outright, so the
- * guard that existed to prevent a 400 had itself become one.
+ * Thinking is never switched off to make room for a forced `tool_choice`,
+ * although every structured task (一致性检查, lore improve, the entry splitter)
+ * forces exactly one named tool. **Adaptive thinking supports forced tool use**;
+ * manual (`extended`, the `claude-budget` category) does not, and there the
+ * plan downgrades the forcing instead (`forcing` on the category). Disabling
+ * thinking would be worse than useless: several current models reject
+ * `thinking: {type: "disabled"}` outright, so a guard meant to prevent a 400
+ * would itself be one.
  *
  * `budget_tokens` is bounded below `max_tokens` because the API requires it and
  * because the two share one ceiling: a budget at or above the cap leaves the

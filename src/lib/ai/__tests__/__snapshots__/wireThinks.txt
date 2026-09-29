@@ -11,7 +11,7 @@ doubao unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 responses-effort unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 gemini3 unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 claude-adaptive unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
-claude-budget unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+claude-budget unset:auto default:auto off:auto minimal:auto low:auto medium:auto high:auto xhigh:auto max:auto
 minimax unset:auto default:auto off:auto minimal:auto low:auto medium:auto high:auto xhigh:auto max:auto
 doubao-switch unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 
