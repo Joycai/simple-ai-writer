@@ -30,9 +30,9 @@
 `detail` 只有 ① ② 两族有，且**位置不同**：① 是 `image_url` 对象的成员，
 ② 是 `input_image` 的兄弟字段。取值 OpenAI 与 DeepSeek 都认 `low`（端点先缩到
 512×512）/ `high` / `auto`；DeepSeek 另有 `original`，但它自己的表里写明
-`high` 等价于 `original`，所以本项目只发 low/high 两个值就够覆盖。**不发这个
-字段与发 `auto` 是同一个请求**，因此 `lib/ai/imagePart.ts` 的默认是不发——没碰
-过设置的作者，请求与这个字段存在之前逐字节相同。
+`high` 等价于 `original`，所以 low/high 两个值就覆盖了全部实际档位。**不发这个
+字段与发 `auto` 是同一个请求**，所以客户端的默认可以是不发（本项目的做法见
+[`architecture.md`](../reference/architecture.md) 的 Images in context）。
 
 三处最容易在跨族移植时静默出错的地方：
 
@@ -83,7 +83,7 @@ usage 只在开了 `stream_options.include_usage` 时随最后一个 chunk 到�
 
 记在这里而不是马甲层：DeepSeek 是官方端点，且它的图片面**没有任何私有扩展**
 ——本项目发出去的 part 一个字都不用改。实测由
-`src/lib/ai/__tests__/live.deepseek-vision.test.ts` 钉住（`DEEPSEEK_KEY`，走本项目
+`live.deepseek-vision.test.ts` 钉住（`DEEPSEEK_KEY`，走本项目
 自己的适配器，① / ② / ④ 三族各一遍）。
 
 - **模型**：`/models` 只列 `deepseek-flash`（DeepSeek-V4.1-Flash）和
@@ -95,33 +95,25 @@ usage 只在开了 `stream_options.include_usage` 时随最后一个 chunk 到�
 - **三种传法**，都是标准 ① 族 block 数组：base64 `data:` URL、公网 http(s)
   URL、Files API 的 `file_id`。本项目只用第一种。
 - **`detail` 可选**：`low`（推理前缩到 512×512）/ `high` / `original` / `auto`
-  （当前等价 `original`）。本项目经 `lib/ai/imagePart.ts` 只发 `low` / `high`
-  （`high` 在 DeepSeek 表里与 `original` 等价），作者不设置就一个字段都不发。
+  （当前等价 `original`；`high` 在 DeepSeek 自己的表里也与 `original` 等价）。
   实测四个值都收；2000×2000 的图 `low` 计 197 token，不发 / `high` 计 1007。
 - **硬约束：图片只能出现在 `user` 消息里**，`system` / `assistant` 带图 400。
-  实测报错原文 `Image in system message is unsupported`。本项目天然满足——
-  `lib/agent/imageHistory.ts` 的 `ImageMessage` 把 `role: "user"` 写进了类型，工具返回的图也是另起一条 user 消息
-  （`lib/agent/runtime.ts`）。
+  实测报错原文 `Image in system message is unsupported`。工具返回的图要另起一条 user 消息，
+  不能挂在 assistant / tool 消息上（本项目的做法见 [`architecture.md`](../reference/architecture.md) 的 Images in context）。
 - **限额**：格式 JPEG/PNG/GIF/WebP（按字节判定，不看文件名）；单图 32 MiB
   （Files API 64 MiB）、请求体 48 MiB、单请求最多 600 张、单边最长 8192px
   （≥15 张时降到 4096px）。**实测 8192 收、8193 拒**（宽、高两个方向都是），
   但拒绝的报错说的是格式：`You have uploaded an unsupported image. Please make
   sure your image is valid and has one of the following formats: webp, png,
-  jpeg, and gif.`——撞上它的作者会以为是格式问题，这是 `MAX_IMAGE_EDGE` 在作者关掉
-  缩放时也要守住的又一个理由。**没有下限**：9×9 照收（千问要 >10，第六个样本），
-  `MIN_IMAGE_EDGE` 的放大对这里无害。`data:` 头里写错 MIME（PNG 标成 jpeg）也照收，
-  与"按字节判定"一致。本项目对应的三道闸：单图 12 MiB（`MAX_IMAGE_BYTES`）；
-  长边默认 4096、设置项上限 8192，作者关掉缩放时也仍按 8192 缩
-  （`MAX_IMAGE_EDGE`，image-normalize-plan.md §2.2）；**一次请求的图片合计
-  ≤ 24 MiB**（按 data URL 字符数计，`MAX_REQUEST_IMAGE_CHARS`，§2.9）——这一道是
-  为 Anthropic 的 32 MB 请求上限定的，DeepSeek 的 48 MiB 顺带满足。单请求张数
-  到不了 15（对话每条 5 张（2026-09-23 前是 4）、历史留 3 条、看图子代理 8 张，且都先撞上合计上限）。
+  jpeg, and gif.`——撞上它的人会以为是格式问题——客户端即使允许关掉缩放，也该守住 8192 的长边。
+  **没有下限**：9×9 照收（千问要 >10，第六个样本）。`data:` 头里写错 MIME（PNG 标成 jpeg）也照收，
+  与"按字节判定"一致。本项目对应的单图、长边、一次请求合计三道闸见
+  [`image-normalize-plan.md`](../feature/image-normalize-plan.md) §2.2 / §2.9。
 - **计费**：进模型前统一缩放（小于约 544² 放大，更大的缩到约 1300² 的总像素），
-  因此**每张图最多 1024 token**——`lib/ai/tokenEstimate.ts` 的 800/张是同量级。
+  因此**每张图最多 1024 token**。
 - **另外两族同款**：`https://api.deepseek.com/anthropic` 收 ④ 族的
   `{type:"image",source:{type:"base64"|"url"|"file"}}`；Responses 面收
-  `input_image` + `detail`。两条本项目的适配器都已经按这个形状发
-  （`lib/ai/anthropic.ts` 的 `blocksOf`、`lib/ai/responses.ts`），实测三族读图
+  `input_image` + `detail`。三族实测读图
   计费一致（同一张图都是 +~180 token）。④ 族的 base 填
   `https://api.deepseek.com/anthropic`（适配器补 `/v1/messages`）；② 族的 base 填
   `https://api.deepseek.com`，`/responses` 与 `/v1/responses` 实测都通。文档还说
@@ -137,7 +129,7 @@ usage 只在开了 `stream_options.include_usage` 时随最后一个 chunk 到�
     57），不报错。
   - 结论：**不改 file part 的形状**——改成平铺只是把一个 400 换成另一个 400，而
     本项目只有 PDF 子代理造 file part。PDF 子代理本来就只绑模型抽屉里打开了
-    「PDF 文件输入」的模型（`subagent.ts`，没打开直接失败），所以 DeepSeek 的
+    「PDF 文件输入」的模型（[`subagent-lld.md`](../feature/agent/subagent-lld.md)），所以 DeepSeek 的
     模型**不要打开这个开关**；打开了，① 族会报上面那句难懂的 400，② ④ 族会让
     子代理在看不到文件的情况下作答。
 
@@ -320,7 +312,7 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
 | **usage 缺失** | 不认 `stream_options.include_usage`，或返回全零 usage |
 | **`/models` 不可信** | 返回空、返回全量目录、或返回该 key 无权访问的模型 |
 | **工具调用降级** | 声明支持但实际不返回 `tool_calls`，或 `arguments` 不是合法 JSON |
-| **强制 `tool_choice` 被拒** | DeepSeek V4（flash/pro）恒在思考模式，`required` 与具名工具一律 400 `Thinking mode does not support this tool_choice`；请求里**没有任何字段**能提前判断，只能从它自己的 400 学（学到的降级存储 `src/lib/ai/capability/learned.ts`，重试在 `streamCompletion`） |
+| **强制 `tool_choice` 被拒** | DeepSeek V4（flash/pro）恒在思考模式，`required` 与具名工具一律 400 `Thinking mode does not support this tool_choice`；请求里**没有任何字段**能提前判断，只能从它自己的 400 学（本项目怎么学、怎么重试见 [`refusal-plan.md`](refusal-plan.md)） |
 | **HTTP 200 + SSE 内错误** | 余额不足、上游故障、内容审核以 `data: {"error":…}` 事件送达，而非错误状态码 |
 | **静默截断 prompt** | 本地栈（ollama 等）超出上下文时从头部丢弃，system 指令先没 |
 | **`<think>` 内联** | 部分中继把思维链混进正文，用 `<think>…</think>` 包裹 |
@@ -575,7 +567,7 @@ MiniMax 在 ④ 族端点上实现了 Anthropic 的**服务端工具**约定（b
 `dashscope-intl.aliyuncs.com` 是独立 host 与 key。
 
 实测方法：用仓库里的真实 adapter（`streamOpenAI` / `streamAnthropic` / `streamCompletion` /
-`testProviderConnection`）跑 `src/lib/ai/__tests__/live.qianwen.test.ts`（设 `QIANWEN_KEY`
+`testProviderConnection`）跑 `live.qianwen.test.ts`（设 `QIANWEN_KEY`
 才运行），外加 curl 矩阵。模型：qwen3.8-flash、qwen3.7-flash、deepseek-v4-pro-0813、
 kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
 
@@ -693,10 +685,9 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
 #### 联网搜索与网页抓取（`web_search` / `web_extractor`，2026-09-14 实测）
 
 官方文档：`platform.qianwenai.com/docs/developer-guides/tool-calling/web-scraping`。实测用
-`src/lib/ai/__tests__/live.qianwen.test.ts` 的「server tools」组 + curl，提示词统一为
-「用两句话概括 https://www.rust-lang.org/ 首页讲了什么」。本项目的实现在
-`src/lib/ai/serverTools.ts`（`openaiServerToolsBody` / `responsesServerTools` /
-`responsesServerToolEvent`）。
+`live.qianwen.test.ts` 的「server tools」组 + curl，提示词统一为
+「用两句话概括 https://www.rust-lang.org/ 首页讲了什么」。本项目怎么声明、怎么放行见
+[`capability-gating-plan.md`](capability-gating-plan.md)。
 
 - **抓取离不开搜索，三条线都一样**：② 面只声明 `{type:"web_extractor"}` 时，HTTP 200 后
   第一个事件就是 `response.failed`，`error.message` 为
@@ -766,8 +757,7 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
 官方文档：`platform.qianwenai.com/docs/developer-guides/tool-calling/code-interpreter`。实测用 curl
 扫了一遍 `/models` 里的候选 id，再用 `live.qianwen.test.ts` 的「server tools: code_interpreter」组
 走真实 adapter 复核；提示词「请用代码计算 123 的 21 次方」（44 位数，模型背不出来，答对即说明真跑了）。
-本项目的实现在 `src/lib/ai/serverTools.ts` 与 `capabilities.ts`（`code_interpreter` 的模型 id 格 / `openaiServerToolsBody` /
-`responsesServerTools` / `codeInterpreterEvent`）。
+本项目按模型 id 放行的做法见 [`capability-gating-plan.md`](capability-gating-plan.md) §8.7。
 
 - **两个面的拼写和条件都不一样**：
 
@@ -783,7 +773,7 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
   文档说「与 function calling 互斥」，实测只在 ① 面成立。本项目的处理：① 面上**本轮带函数工具就不发**
   `enable_code_interpreter`（agent 的工具不能让），所以 ① 面上它只惠及不带工具的请求；② 面上
   **思考档位为「关闭」就不发**这个工具。两处都是按请求丢掉，而不是发一个必然失败的请求。
-- **支持哪些模型，按 id 判断**（`capabilities.ts` 里 `DASHSCOPE_CODE_INTERPRETER` 的 `runs` / `refuses` 两组正则：`runs` 里的 id 是「能发」，`refuses` 里的 id 没有开关（已开着的显示「不发送」），两组都没有的 id 给开关、标「未实测」、照发——见 [`capability-gating-plan.md`](capability-gating-plan.md) §8.7）：
+- **支持哪些模型，按 id 判断**（不在下表里的 id 没测过）：
 
   | 模型 | ① 面 | ② 面 |
   | --- | --- | --- |
@@ -815,16 +805,14 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
   - 用量：`usage.x_tools.code_interpreter.count`（`x_details[].plugins` 重复同一数字）。
   - 这些 item 不需要回传；多轮里 echo 照旧只收 reasoning / function_call / message，实测第二轮正常。
 - **计费**（文档口径）：限时免费；但一次回答会触发多轮推理，token 用量明显增加
-  （qwen3.8-flash 一问约 1.1k tokens，不开时约 30）。所以本项目自己发起的后台请求——前情摘要
-  （`memoryStore`）、合集摘要（`digestStore`）、Sakura 翻译（`translate/run.ts`）、设定图片描述
-  （`lore/vision.ts`），以及早已如此的结构化任务与历史压缩——一律不带服务端工具：
-  处理的都是手头已有的文本或图片，没什么可查、可算的，带上只会多花钱。
+  （qwen3.8-flash 一问约 1.1k tokens，不开时约 30）。所以处理手头已有文本或图片的后台请求（摘要、翻译、看图描述、结构化任务、历史压缩）
+  不该带服务端工具——没什么可查、可算的，带上只会多花钱。本项目即如此。
 - **官方 api.openai.com 的 `code_interpreter` 不是这个工具**：它要求 `container` 参数，本项目不对 `openai_responses` 提供此开关。
 
 #### 视觉理解（qwen3-vl 系列，另附视频与 ASR 在 ① 面上的样子，2026-09-14 实测）
 
 实测用真实 adapter（`streamCompletion`）走一次性探测，稳定的事实固化进
-`src/lib/ai/__tests__/live.qianwen.test.ts` 的「vision: qwen3-vl-plus」组（夹具在测试里现生成：
+`live.qianwen.test.ts` 的「vision: qwen3-vl-plus」组（夹具在测试里现生成：
 纯色 PNG 编码器 + 两个 16px 的 webp / gif 常量）。主测模型 qwen3-vl-plus，① 面，除注明外都是它。
 
 `/compatible-mode/v1/models` 里的视觉 id：`qwen3-vl-plus` / `qwen3-vl-flash`（各带日期快照）、
@@ -900,8 +888,7 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
 - 默认 fps 约 **2**；token 与 fps 成正比，每帧像素折算（约每 32×32 一个 token）在 720p 附近封顶（每两帧约 594）。
 - 复现以上每个点的规律：帧 = round(时长×fps)，至少 4、取偶；每两帧 min(round(宽/32)×round(高/32), 594)；+2。**这是反推，不是文档**，本项目只把它当估算（≈）。
 
-**音频走 ① 面**（本项目的转写有两条：原生面 filetrans 异步，和这条同步——模型行 `asrFormat: "dashscope-sync"`，
-`lib/asr/sync.ts`；设计与取舍见 [`../feature/asr/00-research.md`](../feature/asr/00-research.md) §1.3 补记。2026-09-14 实测）
+**音频走 ① 面**（本项目的转写有两条：原生面 filetrans 异步，和这条同步；设计与取舍见 [`../feature/asr/00-research.md`](../feature/asr/00-research.md) §1.3 补记。2026-09-14 实测）
 
 | 模型 | 请求 | 结果 |
 | --- | --- | --- |
@@ -924,7 +911,7 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
 下限处理；模型可声明 `vl_high_resolution_images`（v1.57.0 加入；上表说明默认档多数时候已够读小字，开它是按需加钱）。
 视频输入（2026-09-14）：模型可声明「视频输入」与抽帧频率，对话里 `@` 视频作为 `video_url` 发出，只走 ① 面（[`../feature/video-input.md`](../feature/video-input.md)）。
 ① 面同步 ASR（2026-09-14）：`asrFormat` 加 `dashscope-sync`，user 消息只放音频，≤10MB / ≤5 分钟 / 六个格式在批准前拦，
-上面三句 400 原话改口成作者能照做的话（`sync.ts` 的 `syncErrorOf`），日期快照缺 `seconds` 时按 audio_tokens / 25 向上取整。
+上面三句 400 原话改口成作者能照做的话，日期快照缺 `seconds` 时按 audio_tokens / 25 向上取整。
 
 #### 文档与实测不符之处（截至 2026-09-03）
 
@@ -960,8 +947,7 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
 #### DashScope 的图片模型：不在兼容层上，走原生协议（2026-09-04 已实测 qwen-image-3.0-pro 与 wan2.7-image-pro）
 
 qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图走原生
-`/api/v1`（同 host、同 key，只是路径不同；本项目在 `lib/ai/image.ts` 的
-`dashscope` route 里从兼容层 base 推导原生 base）：
+`/api/v1`（同 host、同 key，只是路径不同，原生 base 可由兼容层 base 推出）：
 
 - **同步**（qwen-image-3.0\*、qwen-image-edit\*、z-image-turbo、wan 改图）：
   `POST /api/v1/services/aigc/multimodal-generation/generation`。
@@ -983,7 +969,7 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
   `Throttling`（429）、`DataInspectionFailed`（内容审核拒绝——是"理解了但
   拒绝"，不是"端点不存在"，不能触发降级重生成）。
 
-**2026-09-04 实测**（`src/lib/ai/__tests__/live.dashscope-image.test.ts`，驱动真实的
+**2026-09-04 实测**（`live.dashscope-image.test.ts`，驱动真实的
 `generateImage`，`DASHSCOPE_IMAGE_KEY` 才跑；key 是千问AI平台的 `sk-ws-…` 工作空间 key，
 打的仍是 `dashscope.aliyuncs.com`）——本项目的 body **一个字节没改就通了**，上面的
 协议事实全部成立，另外几条文档没写的：
@@ -1043,9 +1029,8 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
   自己的比例在所选档位重算（`ImageParamOptions.inputSize`，调用点从 data URL 头部
   读尺寸）——「跟随输入」在这个端点上没有不花双倍钱的写法。
 
-本项目把这几套各自封成一个「参数方言」（`lib/ai/imageDialects.ts`，
-`ImageCaps.dialect` 声明），UI 按方言给出画幅/分辨率/质量选项，请求侧由
-方言算出该端点真正认识的字段。
+本项目把这几套各自封成一个「参数方言」，见
+[`image-generation-plan.md`](../feature/image-generation-plan.md) PR6。
 
 #### 输出格式能不能选（2026-09-05 查官方文档）
 
@@ -1135,7 +1120,7 @@ GoogleCloudPlatform/generative-ai 的 `intro_gemini_3_1_flash_image_gen.ipynb`�
   与 Claude 模型有效（后者翻成 Anthropic 的 `web_search` 服务端工具），Gemini
   靠一个**保留函数名** `googleSearch`（还有 `codeExecution` / `urlContext`）
   ——发一个没有 parameters 的 function 工具，网关换成原生内置工具。这三种都
-  是 `serverTools.ts` 那一类"端点自己跑、本地无事可做"的工具。① 上这条保留函数名的路**没有接**；
+  是"端点自己跑、本地无事可做"的服务端工具。① 上这条保留函数名的路**没有接**；
   ③ 线路上用 Gemini 原生的 `tools[]` 写法已接（第十八个样本「再补测」D）。
 - **错误信封是 OpenAI 形态**（`error.{message,type,code}`），`type` 区分网关
   自身（`orcarouter_api_error`）与上游透传（`upstream_error` / `claude_error` /
@@ -1212,9 +1197,8 @@ host 上还挂着 `[Plus]` / `[官key]` / `[次数]` / `[kiro]` 等档位，同�
 ### 第九个样本：同一中转站上的两条生图路由（`[R]gpt-image-2` 经 ①、`[R]gemini-3.1-flash-image-preview` 经 ③，2026-09-04 实测）
 
 生图没有协议——① 族的 Chat Completions 根本没有图片字段，③ 族有（`inlineData`）但
-中转站照样各自发挥。实测工具是 `src/lib/ai/__tests__/live.relay-image.test.ts`（驱动真实的
-`generateImage`，`RELAY_IMAGE_KEY` 才跑），每条用例一张图；结论已回填 `lib/ai/image.ts`
-与 `imageClient.test.ts`。样本仍是 `hk.chenmoai.com`（第八个样本那台）。
+中转站照样各自发挥。实测工具是 `live.relay-image.test.ts`（驱动真实的
+`generateImage`，`RELAY_IMAGE_KEY` 才跑），每条用例一张图。样本仍是 `hk.chenmoai.com`（第八个样本那台）。
 
 **`[R]gpt-image-2` 走 `/chat/completions`（本项目的 `chat` 路由）：**
 
@@ -1482,8 +1466,8 @@ Responses adapter：
 > - **④ 的签名**：2.1-turbo 的 thinking 块带 `signature`（非流式在块上，流式走 `signature_delta`，`dj…` 开头，
 >   与 ① 的 `encrypted_content` 前缀相同，推测是同一种密文）；2.0-mini / 2.0-lite 流式非流式都没有。上文「thinking 块没有
 >   `signature`」只对 2.0 系成立。工具轮把第一轮 content 回传时，**原样、篡改末尾、删掉 `signature` 三种都 200**——
->   与 Anthropic 官方文档的口径（篡改即 400；本次未对官方端点复测）不同，回传错了不会响。`anthropic.ts` 本来就累加 `signature_delta` 并整块回传
->   `_thinkingBlocks`，不用改；删签名是否像 ① 那样让推理变差，未比。
+>   与 Anthropic 官方文档的口径（篡改即 400；本次未对官方端点复测）不同，回传错了不会响。累加 `signature_delta`、整块回传的客户端
+>   不受影响；删签名是否像 ① 那样让推理变差，未比。
 
 > **B6 补测：④ 面的温度（2026-09-28，同一把套餐 key，doubao-seed-2.0-mini；`live.anthropic-temperature.test.ts`）**：
 > 问的是 [`issues/anthropic-temperature-thinking-off.md`](../issues/anthropic-temperature-thinking-off.md)——`doubao-switch` 关思考时，
@@ -1635,8 +1619,8 @@ Responses adapter：
 > - **千问的两个视觉旋钮在这里是空操作**（2026-09-19 补测，glm-5.3-flash）：`vl_high_resolution_images:true` 收下、200，
 >   3000² 的图开与不开都是 **7,938** 输入 token（`detail:"high"` 也一样）——既不报错也不起作用。① `video_url`
 >   **读得出**（data URL mp4，3 秒先红后蓝 → 答「红、紫」/「红、紫、蓝」：看得见、辨色粗），但片段上的 `fps` 被无视：
->   0.5 与 2 都是 **367** token。所以「高分辨率读图」与「抽帧频率」归千问平台，不归 ① 族（`platforms.ts` 的
->   `qwenVisionParams`）；视频输入本身照常可用。
+>   0.5 与 2 都是 **367** token。所以「高分辨率读图」与「抽帧频率」归千问平台，不归 ① 族（本项目的归属见
+>   [`zhipu-plan.md`](zhipu-plan.md)）；视频输入本身照常可用。
 > - **联网搜索（① 面）**：是 `tools[]` 里的一项 `{type:"web_search", web_search:{enable, search_engine, …}}`，
 >   不是顶层字段（千问是）。**默认开着「搜索意图识别」，意图不够就不搜——而模型照样回「根据联网搜索结果……」**
 >   （4.5-air，prompt 22 token、响应无 `web_search` 字段：一次没搜，话术却说搜了）。`search_intent:false`
@@ -2002,8 +1986,8 @@ Responses adapter：
 > 对应三个账号档）与 `azure`（网关）两种，作用域 `/gpt/`，作者在渠道的前缀表里把 `[Plus]` / `[Pro]` / `[特价Pro]` 配成 codex、
 > `[Azure]` 配成 azure 即可：
 >
-> - `[Azure]` 的护栏：新能力 `instructionsField` 在 azure 上判不收，`responses.ts` 把系统提示改成开头的 `developer` 消息、不发
->   `instructions`。其余上游照旧总发 `instructions`（挡 Codex 注入）。
+> - `[Azure]` 的护栏：azure 上不收 `instructions`，系统提示改成开头的 `developer` 消息
+>   （能力名与判定见 [`capability-gating-plan.md`](capability-gating-plan.md)）。其余上游照旧总发 `instructions`（挡 Codex 注入）。
 > - Responses 上的温度在两种上游下都不发（一个改成 1，一个 500）；azure 的联网搜索不发、① 面强制工具改发 `auto`。
 > - `[Pro]` 丢结构化输出**没进格子**（与另两档不一致），只写在模型抽屉的上游说明里；这一档发出去的 JSON 模式
 >   （自动档在中转站上是 `json_object`，作者手选 json_schema 时是 json_schema）会被丢，结构化任务退回提示语。
@@ -2012,7 +1996,7 @@ Responses adapter：
 
 > **怎么测的**：第七个样本那台 `api.orcarouter.ai`，这次是有余额的 key（`ORCA_KEY`）。先 curl 约 120 次看形状
 > （四面各自的非流 / 流、思考档位、工具往返与回灌变体、缓存、服务端工具、结构化输出、图片、计数端点、错误），
-> 再用 `src/lib/ai/__tests__/live.orcarouter.test.ts` 驱动本项目真实的四个适配器（`openai_compat` /
+> 再用 `live.orcarouter.test.ts` 驱动本项目真实的四个适配器（`openai_compat` /
 > `openai_responses_compat` / `anthropic_compat` / `gemini_compat`，即 `orcarouter` preset 的四行）：修复前
 > **28 条过 23 条**，修复后 **28 条全过**。方案与逐项结论在 [`orcarouter-probe-plan.md`](orcarouter-probe-plan.md)。
 > 全程按 `cost_usd` / `GET /v1/generation` 记账，合计不到 1 美元（估算）。
@@ -2125,14 +2109,8 @@ Responses adapter：
   "type":"error"}`——**`type` 是 Go 的 `<nil>`**，字段路径被遮；上游 5xx 变成 `api_error` `The upstream provider is temporarily
   unavailable`。
 
-**对本项目**（同日落地）：
-
-- `GEMINI_LEVEL` 的「关闭」从 `MINIMAL` 改成 `LOW`——前者在 3.8 Flash 上是 400，而这一档是作者要「尽量少想」，报错是最坏的结果
-  （`reasoning.ts`；[`reasoning.md`](reasoning.md) 的 Gemini 一节）。
-- Gemini 适配器回灌模型 parts 时跳过光秃秃的 `{text: ""}`（带签名的保留），否则经这台网关每个流式工具轮的第二轮都 400
-  （`gemini.ts`）。
-- `orcarouter` 的能力格子填上实测：①②③ `jsonSchema` ✓，② / ④ `web_search` ✓；`gpt-6` 进 strict schema 名单与输出上限表
-  （128K），`gemini-3` 进输出上限表（64K）。
+**对本项目**：同日落地的修复（Gemini「关闭」档、回灌跳过空 text part、orcarouter 能力格）见
+[`orcarouter-probe-plan.md`](orcarouter-probe-plan.md) §7。
 
 **补测：④ 的结构化输出（同日，curl 约 25 次 + live 用例 3 条）。** 统一用一个与 prompt 矛盾的 enum
 （prompt 要求 `yellow`，enum 只有 red / green / blue），对照组去掉 enum：
@@ -2193,16 +2171,8 @@ D. **Gemini 内置工具，按适配器会发的形态**（gemini-3.8-flash，�
 回填内容记在 `usageMetadata.toolUsePromptTokenCount`，它**在 `promptTokenCount` 之外**（实测 20 + 65 + 77 = 总数 162）。
 花费都进了带头的 `costUsd`。
 
-**对本项目**（同日落地，方案在 [`orcarouter-probe-plan.md`](orcarouter-probe-plan.md) §「再补测落地」）：
-
-- 上游报价接进用量账：`platforms.ts` 的 `reportsCost` 声明信任（只有 OrcaRouter，四个适配器带上那个头），
-  `reportedCost.ts` 是字段名翻译的唯一一处；多次请求合成一行时「全报才加」。规则写在
-  [`01-fee-groups.md`](../feature/billing/01-fee-groups.md)。
-- 八个付费 id 进 orcarouter 的标定表（目录数值 + 多模态 + PDF），新渠道带三个钉好线路的付费起步模型。
-- 能力格：orcarouter ④③ 与 anthropic 官方 ④ 的 `pdfInput` 打开；官方 google 不动（③ 背后是 Vertex，不是 AI Studio）。
-- Gemini 适配器支持 `web_search` / `web_extractor` / `code_interpreter` → `googleSearch` / `urlContext` / `codeExecution`，
-  执行日志照其他线路显示；`toolUsePromptTokenCount` 计进输入 token（[`tools.md`](tools.md)）。
-- 不调计数端点、不按错误信封的 `type` 判类——写在 `platforms.ts` orcarouter 条目旁。
+**对本项目**：同日落地的改动（上游报价接进用量账、标定表、能力格、Gemini 内置工具、不做的两件）见
+[`orcarouter-probe-plan.md`](orcarouter-probe-plan.md) §8。
 
 **GPT 全家补测（2026-09-27，六个 id × ① ② 两面；curl 约 230 次 + live 用例 90 条，合计约 $0.35）。** 前面只把
 `gpt-6-luna` 测透，另三个 GPT 只各跑过一条冒烟用例，`gpt-5.6-luna` / `-sol` 没测过。这次六个都在两面上跑同一套
@@ -2303,7 +2273,7 @@ curl（effort 全档与乱写值、`mode:"pro"`、`summary`、温度、输出上
 全部 curl 的上游报价合计 $0.25（原样线路那部分不在内），加上 live 用例约 $0.35。
 
 **花费**：OpenRouter 形态层两面都有 `usage.cost`。原样线路上，① 流式末块**只在带 `X-OrcaRouter-Include-Cost: true` 时**有
-`usage.cost_usd`（本项目 `reportedCost.ts` 的 `cost_usd ?? cost` 正好接住）；**② 带了头也没有任何花费字段**——5.6-luna / -sol
+`usage.cost_usd`——读花费要两个名字都认；**② 带了头也没有任何花费字段**——5.6-luna / -sol
 走 Responses 的用量行按计费组定价，这是「没报 = 空」的设计本意，不是缺陷。
 
 **adapter 实测（每个 id 每面同一套）**：文本流 + usage、花费、「关闭」、`max`、图片 + PDF 同一条消息（全部读出 teal 与
@@ -2466,8 +2436,8 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 > 对照：不带这个头是 400 + `application/json` 的 `{code, message, request_id}`（第二十一个样本记的形状）；带了头是 400 +
 > `text/event-stream`，内容就是上面的帧。拒绝跟着头走，状态码两种都是 400。
 > ①：HTTP 400，`data: {"error":{"code":"invalid_parameter_error","param":null,"message":"The tool_choice parameter does not support
-> being set to required or object in thinking mode","type":"invalid_request_error"}}`。两句都点名 `tool_choice`，学到的降级规则
-> （`learned.ts` 的 `/tool[_ ]?choice/i`）两边都认，重试以 `auto` 发出、200 作答。
+> being set to required or object in thinking mode","type":"invalid_request_error"}}`。两句都点名 `tool_choice`，按报错原文学降级的客户端
+> 两边都认得出，重试以 `auto` 发出、200 作答（本项目的规则见 [`refusal-plan.md`](refusal-plan.md)）。
 >
 > **不设 = 在想，四个模型都是。** qwen3.8 两个此前已知（第二十一个样本）；这次 qwen3.7-plus 什么都不发也被以「thinking mode」
 > 拒，qwen3.7-flash 什么都不发也有思考内容——原生线路服务的四个模型全部默认思考，与 ① 上 qianwen-compat-plan §1.1

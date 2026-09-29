@@ -136,9 +136,8 @@ followed by tool messages responding to each tool_call_id"，Gemini 与 Anthropi
 - 计费：搜索按查询条数（约 $0.014 一条），**没有**像 ④ `max_uses` 那样的上限字段；工具回填的内容记在
   `toolUsePromptTokenCount`，它在 `promptTokenCount` 之外。
 
-本项目（`lib/ai/serverTools.ts`）：`web_search` / `web_extractor` / `code_interpreter` 分别拼成这三项；抓取仍依附搜索，
-与其他线路同一个语义。能力格上只有 OrcaRouter 的 ③ 三项都开；`web_search` 是协议自带，官方 google 与中转的 ③ 列按
-规则「未实测、照发」。执行日志的一行 id 加请求级前缀——id 由内容拼成（网址、「这次搜索」），而一份日志装着好几个请求。
+本项目怎么把自己的三个服务端工具映射到这三项、各线路放不放行，见
+[`orcarouter-probe-plan.md`](orcarouter-probe-plan.md) §8。
 
 已知限制：代码执行的 part（以及它可能带回的 `inlineData` 图表）随 `_geminiModelParts` 在之后每一轮回传——和思考签名同一套
 机制，上下文估算不计它们、`trimHistory` 也不裁；图表本身不显示。一次大输出或一张图会让估算偏低。
