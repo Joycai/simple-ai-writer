@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { AnimatePresence, MotionConfig } from "motion/react";
 import "./styles/global.css";
 import { TitleBar } from "./components/layout/TitleBar";
@@ -8,7 +8,6 @@ import { AiRail } from "./components/layout/AiRail";
 import { Sidebar } from "./components/layout/Sidebar";
 import { EditorArea } from "./components/layout/EditorArea";
 import { ResizeHandle } from "./components/layout/ResizeHandle";
-import { SettingsPage } from "./components/settings/SettingsPage";
 import { AiDrawer } from "./components/ai/AiDrawer";
 import { ChatSwitchGuard } from "./components/ai/ChatSwitchGuard";
 import { InlineAiBubble } from "./components/ai/InlineAiBubble";
@@ -39,6 +38,12 @@ import { launchProjectPath } from "./lib/instance";
 import { installCitationNavigation } from "./lib/lore/citations";
 import { installNavigationHistory } from "./stores/navStore";
 import { fillLayer } from "./lib/motion";
+
+// Settings is a full-window page that most sessions never open, and nothing
+// else imports it — so it rides in its own chunk instead of the main one.
+const SettingsPage = lazy(() =>
+  import("./components/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
 
 export default function App() {
   const {
@@ -214,7 +219,9 @@ export default function App() {
 
         <AnimatePresence>
           {showSettings && (
-            <SettingsPage key="settings" initialTab={settingsTab} onClose={closeSettings} />
+            <Suspense key="settings" fallback={null}>
+              <SettingsPage initialTab={settingsTab} onClose={closeSettings} />
+            </Suspense>
           )}
         </AnimatePresence>
       </div>

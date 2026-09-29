@@ -7,7 +7,11 @@ edition = "2021"
 
 [lib]
 name = "simple_ai_writer_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# Desktop only: main.rs links this as an rlib. The scaffold's "staticlib" and
+# "cdylib" exist for the iOS / Android targets, which this app doesn't build —
+# they cost a ~200 MB .lib and a DLL link on every release build. Add them back
+# if `tauri ios` / `tauri android` is ever set up.
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
