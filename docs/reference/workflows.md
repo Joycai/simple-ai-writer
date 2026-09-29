@@ -23,7 +23,7 @@ Task ids are used as prompt `scene` keys and as the `token_usage.task` value, so
 
 ## Add a new capability pack (新的写作类型)
 
-A pack is data — reach for this instead of adding branches for a new kind of writing (文案 / 周报 / 报告 …). See `docs/reference/architecture.md` → Capability packs. A pack is **purely additive**: it contributes tasks and knowledge-base categories, and may reword the 【…】 labels *for its own tasks*. It does not set the UI vocabulary, the document model, or the AI's persona — those are app-level; domain rules belong in the pack tasks' instruction texts (see how `bidRespond` carries the deviation discipline).
+A pack is data — reach for this instead of adding branches for a new kind of writing (文案 / 周报 / 报告 …). See [`codemap.md` → 能力包](codemap.md#能力包workspace-packs). A pack is **purely additive**: it contributes tasks and knowledge-base categories, and may reword the 【…】 labels *for its own tasks*. It does not set the UI vocabulary, the document model, or the AI's persona — those are app-level; domain rules belong in the pack tasks' instruction texts (see how `bidRespond` carries the deviation discipline).
 
 1. Add a `WorkspaceProfile` const in `src/lib/profile/model.ts` and append it to `BUILTIN_PROFILES`:
    - `categories` — knowledge-base folders. Ids must match `[A-Za-z0-9][A-Za-z0-9_-]*` and be ≤40 chars (they become directory names, and `scaffold_project` re-checks the same rule in Rust); order matters, the first is the "new entity" default. Don't declare `custom` — the misc bucket is app-level and always present

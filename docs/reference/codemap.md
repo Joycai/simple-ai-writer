@@ -6,86 +6,108 @@
 >
 > **覆盖面**：`src/components/*`、`src/lib/*`、`src-tauri/`、`server/`——每个目录一节，新建一个目录就在这里加一节（2026-09-12 补齐了 `lib/docx` · `lib/editor` · `lib/format` · `lib/search` · `lib/sync` · `components/roleplay` · `components/sync` 与 `src-tauri/`，此前它们只有 `CLAUDE.md` 里的一行）。两个目录**故意不在这里**，因为别处讲得更全：`src/styles/` 与 `src/i18n/locales/` 看 [`design-system.md`](design-system.md) 与 [`terminology.md`](terminology.md)。（2026-09-16 补上 `src/stores/`，此前它只在 `CLAUDE.md` 的 State Management 一节里。）
 
-## AI 运行时（`src/lib/agent/` 全景）
-
-All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`): a per-preset tool loop dispatched via the tool registry (`registry.ts`, entries in `toolTable/`).
-
-#### 三层工具（读 / L1 / L2）
-- Read tools (`toolTable/read.ts`), including `read_slides`, which pages a deck by slide — a .pptx because `read_file` can only return zip noise for one, an .html because finding slide 7 by paging 4000 characters of source is not a way to edit it; see `docs/feature/pptx-plan.md`.
-- L1 auto+backup write tools for lore/memory, and the L2 manuscript tools that block on user approval — `propose_edit` for a find/replace — the Nth occurrence or all of them, so repeated text in a deck or a table is addressable at all
-  - `rewrite_lines` for a region named by line numbers, which is how a LONG file gets restructured without re-emitting it
-  - `rewrite_document` for a whole short file.
-- All three are one `EditProposal` machinery apart from the last: the proposal records how many times `find` occurred when the author saw the card, and `editApply.ts` refuses to write if that moved.
-
-#### Lore 写入门控与执行日志
-- Lore writes are additionally gated on an author-approved plan (`plan.ts` + `propose_lore_plan` → `components/ai/PlanCard.tsx`): one card of steps per pass, and the write tools refuse any entity/action it doesn't cover.
-- Runs emit structured `AgentEvent`s (`events.ts`) feeding the shared execution-log component (`components/ai/AgentLog.tsx`).
-
-#### 轮次上限卡与作者决策卡
-- Hitting the preset's round cap mid-work doesn't force-end the run: the runtime's `onRoundLimit` callback blocks on a 继续/收尾 card (`RoundLimitCard.tsx`, queued in agentStore like approvals) — wired only where that card can render (chat, AiPanel; not lore modals or batch runs, which keep the hard stop).
-- The agent can also put a decision to the author mid-run: `ask_author` (2–4 options plus the card's own always-present free-text row, `QuestionCard.tsx`) blocks its tool call on the answer, and routing appends the tool only for surfaces that render the card — chat and the non-batch AiPanel; design: `docs/feature/agent/ask-author-plan.md`.
-
-#### 对话式助手与多会话
-- The conversational assistant (AiDrawer "chat" mode → `components/ai/AgentChat.tsx`) and the AiPanel Agent mode both use the full-toolset `AGENT_ASSIST_PRESET` — except that chat behind the 助手工具包模式 Beta swaps to the thin `ORCHESTRATOR_PRESET` (`lib/agent/packs.ts`: reads + memory + notes only, every write dispatched via `run_pack` to a pack sub-run on the parent's own model, with the parent's approval channels and plan gate passed through so cards render where they always do; `chatAgentPreset()` is the one seam every chat-side reader goes through, and the default stays off because dispatch reliability is model-tiered — see `docs/feature/agent/tool-pack-plan.md`).
-- Chat session state lives in `stores/agentStore.ts` — **several conversations at once**: `chats: Record<key, LiveChat>` + `activeChatKey` on one axis, `runningChats` / `chatQueue` (semaphore in `lib/agent/scheduler.ts`, shared with roleplay) on the other
-  - components read the on-screen one through `useActiveChat`, every card a conversation raises is tagged `surface: chat:<key>`, and its 本次都批准 key is `chatAutoApproveKey(key)`, never a shared literal — see `docs/feature/agent/chat-sessions-plan.md`.
-
-#### 结构化输出
-- structured JSON outputs go through `lib/agent/structured.ts` (forced tool_choice + JSON fallback — and the forced attempt is **skipped outright** when the endpoint is known to downgrade a forced `tool_choice` *and* strict `json_schema` is available, because then the fallback enforces the same schema and the attempt only buys an `EMPTY_TOOL_CALL` and a second request; only `json_object` to fall back on and it still tries the tool, since one tool call beats valid JSON whose shape rests on prose). Design & history: `docs/feature/agent/unified-agent-plan.md`.
-- AI-driven lore generation/improvement lives in `src/lib/lore/generator.ts` + `src/components/lore/`.
-
-#### 历史压缩、回溯与状态记忆
-- Chat history is compacted, not just trimmed: folded/summarized old turns plus a per-turn injection ledger live in `lib/agent/compact.ts` + `compactRun.ts`, wired into the chat run (`stores/agent/chatJob.ts`); design: `docs/feature/agent/chat-memory-plan.md`.
-- A question can be rewound to (`lib/agent/rewind.ts` — a *cut* of the wire history at that turn's start, never a re-seed, and never offered for a turn already folded into the summary: what the author still sees above the cut must be what the model still holds; §12 of the same doc).
-- Behind the 状态记忆 Beta (`lib/agent/stateFlag.ts`) a conversation can instead run on a SKILL.state-style **structured execution state** (`skillState.ts` schema/validation/rendering + `skillStateRun.ts`, arXiv:2608.26263): every send folds everything before the last turn into one schema-validated JSON block in the summary's slot — the same `planFold` with `keepTurns: 1`, so the fold invariants are unchanged — and a state the model twice fails to make valid leaves the history alone and falls back to ordinary compaction
-  - the mode is per session (`ChatSessionMeta.stateMode`, the composer chip mirrors it; the Lab sub-option 「新会话默认打开」 only sets where a *new* conversation starts — `freshChat` / `newChatStateMemory`), see `docs/feature/agent/skill-state-memory-plan.md`.
-
-#### 任务工作区
-
-Long tasks persist to a durable workspace instead of just wire history: `.ai-writer/tasks/<taskId>/task.md` (goal + step checklist) and `notes/*.md` (intermediate results), written via scratchpad tools (`lib/agent/scratchpadTools.ts`) and resumed into a fresh context rather than replayed (`components/ai/TaskWorkspaceView.tsx`).
-
-#### 子代理委派
-
-- Auxiliary work (web search, vision, long-document reads, image generation) can be delegated to per-kind subagents, so it doesn't bloat the main run's context.
-  - `lib/agent/subagentModel.ts` holds the kinds, bindings and connection resolution that the tools, `routeTools` and settings panes ask.
-  - `lib/agent/subagent.ts` holds only `executeDelegate`, the half that runs a nested agent and so the only half allowed to import `runtime` — the split is what keeps the image / translate / ASR tools out of the agent import cycle, docs/feature/code-structure-plan.md P1.
-  - The three places a tool starts a nested run — `delegate`, `run_pack`, the writer handoff — never import `runtime`: `runAgent` fills `ToolContext.subRun` (`SubRunner`: itself plus the toolCost ceiling seam) on every context it hands its tools, and passes itself to `runWriterHandoff`; importing it back would close a cycle through the registry, P2.
-  - Configured in Settings → `components/settings/panes/SubAgentsPane.tsx`, session-level toggles in `components/ai/CapabilityMenu.tsx` on the composers and `components/ai/SubAgentChips.tsx` in 一致性检查's pre-run block — two renderings of one control, sharing `components/ai/subagentChipModel.ts`; 设计稿 02g 屏 1c.
-- Design: `docs/feature/agent/subagent-lld.md`.
-
-#### Writer 子代理
-
-- The **writer** subagent (`lib/agent/handoff.ts`) inverts that contract and is therefore not a `delegate` kind: its output *is* the turn's answer rather than a summary, and no model chooses it — with the switch on, the chat assistant's run ends by handing a **work order** to the writer (`finishPolicy: "handoff"`, applied by `routeTools` only for surfaces that opt in), whose text streams straight into the turn.
-- Prose is not an accepted ending on that preset, and the writer never writes to disk: `deliverTo` on the brief makes the *runtime* build the proposal, so the bytes never pass through a second model.
-- Design: `docs/feature/agent/writer-subagent-plan.md`.
-
 ## 能力包（Workspace packs）
 
-The project is not hardcoded to novels — and not to one domain at a time.
+The project is not hardcoded to novels — and not to one domain at a time. Code: `src/lib/profile/` (`model.ts` pack types + built-ins + validation, `resolve.ts` the multi-pack merge, `file.ts` profile.json parsing, `active.ts` the singleton holding the merged `ResolvedWorkspace`, `store.ts` persistence). Recipe: [`workflows.md`](workflows.md) → Add a new capability pack.
 
-#### 能力包（Capability Packs）
+#### 存储与合并
 
-- A project **enables zero or more capability packs** (`.ai-writer/profile.json` v3: `{enabled[], packs[], categories[]}`; v1/v2 files still read; absent = the built-in `novel` pack alone).
-- Packs are **equal, purely additive toggles** — there is no primary pack: each pack (a `WorkspaceProfile` in `model.ts`) contributes knowledge-base categories and a **task list** (each task = a prompt + a tool set), and may reword the 【…】 prompt block labels *for its own tasks*.
+- **Stored at** — `.ai-writer/profile.json`, per project. v3 is the current format — `{version: 3, enabled: [ids], packs: [custom], categories: [user-defined], collections: [names]}` (`collections` absent = none, so a v3 file from a build that predates collections still reads); a v2 file (`{version: 2, primary, enabled, packs}`) reads with its retired primary normalised to "first enabled", and a v1 file (the whole object is one profile) still reads as that pack alone. Old files are only rewritten as v3 when the author changes the selection. **Absent means the novel pack alone**, so every project created before profiles existed keeps its categories and task menu.
 
-#### 合并规则（resolveWorkspace）
+Packs are **equal, purely additive toggles**: enabling one adds its predefined tasks and its knowledge-base categories, nothing more. There is deliberately no "primary pack" any more — it used to own the non-additive dimensions (UI vocabulary, doc model, the AI's persona), which made packs unequal and made the agent assume a domain role the author never chose. Those dimensions are app-level now: every project's knowledge store is a **知识库**, every file a 文档 (`appTerms`/`useTerms`), the document model is always all-on, and the system prompt is one neutral writing collaborator (see below). A project with **zero packs** is valid and useful: the base task menu, the user's own categories, the `custom` misc bucket.
 
-- `resolveWorkspace(enabled, userCategories)` (`lib/profile/resolve.ts`) merges
-  - categories = pack union + the project's **user-defined categories** (author-created, persisted in profile.json) + the always-present app-level `custom` bucket
-  - tasks = the app-level base menu (`DEFAULT_TASKS`: 续写/改写/润色/总结/图示页面/自定义/agent — ids `continue` / `rewrite` / `polish` / `summary` / `htmlArtifact` / `custom` / `agent`) + each pack's own, where a pack declaring a base id *overrides* that base task (first enabled pack wins — how novel keeps its fiction wording).
+`resolveWorkspace(enabled, userCategories)` merges: **categories** = every enabled pack's (union, deduped case-insensitively by id — a shared id like `style` is the same directory; first declarer labels it, `packIds` records every declarer) + the project's **user-defined categories** (from profile.json's top-level `categories`; marked `userDefined`, the only ones the settings UI lets the author rename/remove) + the app-level **`custom` bucket, always last** (so `fallbackCategoryId()` always has a misc pile). **Tasks** = the app-level base menu (`DEFAULT_TASKS`: 续写/改写/润色/总结/图示页面/自定义/agent — ids `continue` / `rewrite` / `polish` / `summary` / `htmlArtifact` / `custom` / `agent`, always present) + each pack's own tasks; a pack declaring a *base* id **overrides** that base task in place (first enabled pack wins — this is how novel re-points 续写/改写/总结 at fiction wording), any other colliding id is dropped loudly. Each `ResolvedTask` carries the `packId` that `sectionLabel` resolves 【…】 wording against; base tasks nobody overrode carry none and speak the neutral defaults.
+
+Per pack:
+
+| Field | Drives |
+| --- | --- |
+| `categories` | The `.ai-writer/lore/<category>` folders — the knowledge-base layout, the lore scan, the category pickers, and the `category` enum in the agent's lore tools |
+| `sections` | The 【…】 block labels *for this pack's tasks* (`bundleToMessages`), e.g. 【上一场景结尾】 instead of 【上一篇结尾】. `knowledge` is never overridden by built-ins — the knowledge base is called 知识库 everywhere |
+| `tasks` | Base-task overrides and the pack's own tasks — see below |
+
+Built-ins: `novel` (the default), `ttrpg` (跑团模组), `copy` (文案), `wechat` (微信公众号), `weekly` (周报), `feedback` (反馈报告) and `bid` (标书应答). Selection is Settings → 工作台 → 能力包 — each card is one on/off toggle — which calls `projectStore.setPacks(enabledIds)`: persist (v3) → scaffold the union's folders → rescan. The same pane (and the lore wall's 「+ 新建分类」 chip) manages the user-defined categories via `projectStore.setCustomCategories`, with folder ids derived by `suggestCategoryId` so the author only ever types a name. **Non-destructive** — a disabled pack's category folders and entities stay on disk and reappear on re-enabling, and removing a user category first asks where its entries go (`CategoryDeleteModal`): move them into another category, or leave them — the folder then stays on disk as an orphan category. The entries themselves stay *usable* meanwhile, as **orphan categories** (below); the pane's "N 个分类目录仍有内容" note now says which pack would give those categories their names and type schemas back. The AI panel groups the task menu by origin (`visibleTaskGroups`): the base menu flat (`pack: null` — an overridden base task still renders here), each pack's own tasks under a pack-name eyebrow.
+
+#### 孤儿分类 (orphan categories)
+
+`scanLore` 扫的是**磁盘上真实存在的目录**，不只是合并后的分类表：任何已启用包和用户自建分类都不声明、但里面有条目的目录，作为**孤儿分类**进入 `LoreIndex`（空目录不算——没人能往里新建的幽灵分类只会碍事；大小写不同的同一目录也只进一次，因为大小写不敏感的文件系统会把它报成另一个名字）。于是关掉一个能力包是**降级**而不是消失：条目照常出现在知识库墙、命令面板、AI 面板的清单里，照常被注入；失去的是分类的显示名（退回目录名）、类型 schema（`slots`/`imageSlots`，见 [`lore-entry-type-plan.md`](../feature/lore/lore-entry-type-plan.md)），以及作为新建目标的资格。
+
+两个问题必须分开问——`src/lib/lore/categories.ts` 就是为此存在的：
+
+| 问题 | 用什么 | 孤儿算不算 |
+| --- | --- | --- |
+| 「能往哪写」——新建条目、模型给的 `category`、移动目标 | `loreCategories()` / `isKnownCategory()`（也填 `create_lore_entity` 的 enum） | **不算** |
+| 「有些什么」——墙、命令面板、AI 面板清单、详情页翻页 | `indexCategories(loreIndex)` | 算 |
+
+搞混的后果很具体：注入侧走的是 `Object.values(loreIndex)`（`selectLore`/`rag`/`agent/tools` 都是），UI 侧若还枚举 `loreCategories()`，作者看到的条目会**少于**模型看到的——看不见的条目照样进 prompt。
+
+`assignableCategories(current)` 是唯一的例外口子：条目自己正待在某个孤儿分类里时，分类选择器必须把它列出来，否则界面会显示一个它并不在的分类，而下一次保存就按那个值把目录搬走了。反过来「搬进」孤儿分类仍然不可能——从停用包的目录里迁出去是合理操作，往一个应用建不出来的目录里填东西不是。
+
+标签用**目录名**，而不是借那个被停用的包的标签：借来的标签会让人以为 schema 还在，而目录名对手工建的、或者跟着别人项目一起来的文件夹也是唯一诚实的答案。`list_lore_entities` 的输出会在孤儿分类后面缀一句说明，免得模型试一次被拒才知道不能往里建。
+
+#### Tasks (`tasks`)
+
+A task is **a prompt plus a tool set**. The panel renders one segment per entry, so a profile carries however many it needs — 「生成遭遇表」 for a module, 「三版标题」 for copy — instead of the four a hardcoded union allowed.
+
+| Field | Effect |
+| --- | --- |
+| `instructionKey` | The built-in instruction. A prompt template whose `scene` equals the task `id` overrides it; for a `freeform` task it is a *prefix* the author's ask follows (that is how Agent mode gets its briefing) |
+| `tools` | `none` / `read` / `write` / `full`, resolved by `presetForTools` (lib/agent/presets) to no preset / `CONTINUE_PRESET` / `WRITE_PRESET` / `AGENT_ASSIST_PRESET`; `write` reads and authors files and deliverable exports but not the knowledge base, pictures or memory. **Having tools is what makes a run agentic** — `none` maps to null, which is the signal to stream directly |
+| `target` | `append` (splice at the continuation anchor) / `replace` (overwrite the selection) / `detached` (author inserts it if they want it) |
+| `continuation` | Append at an anchor, prior-document context, and the length + 承接/独立 + outline/knowledge controls. One switch because they are one feature; only valid with `target: "append"` |
+| `needsSelection`, `referenceWindow`, `freeform`, `hidden` | The remaining flags the old `TaskKind` branches encoded |
+| `agentTaskId` | Which task the "Agent 模式" toggle switches to. A pointer, so the agent task stays an ordinary entry with its own prompt and toolset |
+
+The task `id` is load-bearing in three places, so renaming one is a breaking change: the `scene` of an overriding prompt template, the `task` column in `token_usage`, and the execution log's label.
+
+`draftCountFor` derives its rule from `tools`, not from a list of task names: **any tool-using task produces a single draft.** Every round of the loop reports into one shared `agentLog`, so parallel runs would interleave into an unreadable log; a `full` toolset additionally can't have concurrent runs touching one lore folder or racing approval cards. Stating it this way covers tasks nobody has written yet.
+
+`DEFAULT_TASKS` is the app-level base menu (续写/改写/润色/总结/图示页面/自定义/agent) — domain-neutral and present in every project, so a pack declares only its *own* tasks (plus any base-id overrides; novel's three instruction re-points are the only built-in ones). Packs can no longer drop a base task — the menu is uniform, and 续写 in a copy project simply continues the open document. `TTRPG_PROFILE`'s pair shows how `tools` is the load-bearing choice:
+
+| Task | Shape | Why |
+| --- | --- | --- |
+| 遭遇 (`encounter`) | `tools: "read"`, freeform, detached | Must consult the module's own NPCs/locations first — an encounter that invents a rival the module already has is worse than useless at the table. Costs the single-draft limit. |
+| 随机表 (`randomtable`) | `tools: "none"`, freeform, detached | A table of rumours needs the brief and the tone, not a lore sweep — and staying toolless is what lets it fan out, since three tables to choose between is how this gets used. |
+| 标题 (`headlines`, copy) | `tools: "none"`, freeform, detached | Generated from a brief, so no selection. Toolless so it fans out: the drafts give *sets* of angles to compare. |
+| 渠道改写 (`channel`, copy) | `needsSelection`, freeform, detached | Transforms an existing passage, so it needs one — but takes no `referenceWindow`, since the target channel comes from the author's line, not from surrounding text. Detached, because overwriting would lose the source being adapted from. |
+| 汇总 (`digest`, weekly) | `tools: "none"`, freeform | The author brings the week's raw material, so there is nothing to go and find. |
+| 对照上期 (`carryover`, weekly) | `tools: "read"`, **not** freeform | Has to *find* the previous report: prior-document context only reaches `continuation` tasks, and this one appends nothing. Not freeform because it is useful with no input, and a freeform task can't run on an empty box. |
+| 归纳主题 (`themes`, feedback) | `tools: "read"`, freeform | Must actually read the corpus — themes inferred from product intuition are the failure this profile is shaped against. |
+| 溯源核对 (`verify`, feedback) | `tools: "read"`, `needsSelection` | Checks one claim in the draft against the sources. No reference window: what it needs is the material, not the surrounding paragraphs. |
+| 选题 (`topic`, wechat) | `tools: "read"`, freeform, detached | Has to list what the account already published — colliding with a published angle is the failure it exists to avoid. One run already returns a spread, so the lost fan-out costs little. |
+| 标题 / 开头 (`titles`, `hook`, wechat) | `tools: "none"`, **not** freeform | The article is already in 【当前文章】 by the time you need either, and a freeform task can't run on an empty box — it would force the author to retype the gist. Toolless so the drafts give sets of options to compare. |
+| 合规审查 (`compliance`, wechat) | `tools: "read"`, no selection | Reads the account's own 合规红线 entries rather than general impressions of 广告法, and audits the whole article: a red line in the paragraph you didn't select is exactly as fatal. |
+
+**Tool-using tasks are told which file they are on.** `TaskExtras.currentFilePath` becomes a 【当前文件】 block, emitted first. Without it a task that browses the project cannot tell which of the files it lists is the one it was invoked on — 对照上期's "find the report before this one" has no anchor. In testing it happened to work because the draft's own heading said 「第 31 周」; a document that doesn't name its period would have left the model guessing, and picking the wrong file produces output that looks entirely normal. Toolless tasks omit it: they can't look at anything else, so it would only spend tokens.
+
+**The feedback corpus can live anywhere in the workspace.** `list_files` and `search_text` cover the whole project tree (only the app's `.ai-writer` data is excluded), so source material in any folder is discoverable.
+
+`needsSelection` and `referenceWindow` are separate flags answering different questions, and 渠道改写 is the first task to want one without the other. They coincide on every built-in, which is how the panel deriving the selection gate from `referenceWindow` went unnoticed — see the `TaskDef flags` guard in `profileTasks.test.ts`, which fails when a declared field has no consumer.
+
+Both are `freeform`: the author supplies the situation ("下水道，被跟踪") and the built-in text is the briefing on what a usable result contains. **A prompt template whose `scene` matches the task id replaces that briefing while keeping the author's ask** — freeform tasks used to skip the scene lookup entirely, which made a carefully-written domain prompt the one kind nobody could tune.
+
+**Ids can outlive the profile that defined them** (persisted panel selection, a log entry, a prompt template's `scene`), so `findTask()` returns null rather than throwing and every caller decides what to do — the panel falls back to `defaultTask()`, the log shows the raw id, `runTask` reports `ai.errors.taskNotFound`.
+
+#### The document model (`DocModel`)
+
+Three flags — `ordered` (volume/chapter spine + library view), `priorContext` (【前文回顾】 + 【上一篇结尾】 and the 承接/独立 picker), `memory` (per-document rolling summary, 【前情提要】). Since packs became purely additive the model is **app-level and always all-on** (`DEFAULT_DOC_MODEL`): every project gets the machinery and simply doesn't use what it doesn't need. Turning them off per-domain required a primary pack to arbitrate, and hiding working features bought less than the concept cost. The type, `docModel()` and `useDocModel()` survive as the seam a future *per-project* setting would plug into — consumers still read flags instead of assuming them, so re-introducing a switch is one edit, not an archaeology dig.
+
+Details that are easy to get wrong:
+
+- **`active.ts` is a module singleton, not a store.** The lore scanner, the agent's tool-schema builder, and the prompt assembler all need it synchronously from non-React code (mirrors how `i18n` is consumed). `projectStore` mirrors it as `workspace` state *purely so components re-render*, and is the **only** writer of both — syncing them anywhere else lets the UI and the prompt disagree about which packs are in force.
+- **Anything module-level must resolve categories per call.** `registry.ts` is a `const` evaluated once at import, so its lore-tool `enum`s (via `profileCategoryParams`) and the `{{categories}}` placeholder in tool descriptions are both substituted in `getToolDefinitions()`, returning a copy. The same hazard applies to any future top-level constant: use `loreCategories()` at call time, never at module scope.
+- **Never resolve a system prompt with `ai.instructions.system` directly.** The prompt is one neutral collaborator identity now, but `profileSystemPrompt()` (`lib/context/rag`) stays the single seam — it is where a per-project override would land, and history says callers drift: a TTRPG project was once prompted as a novel because `aiTaskStore` reached for the key while the then-per-pack fallback sat unexercised. `profileSystemPrompt.test.ts` still scans the source for the key. The packs' former persona prompts are gone; their domain rules (bid's deviation discipline, wechat's 合规, feedback's anti-overclaiming…) live in the pack tasks' *instructions*, where they only fire on the tasks they belong to.
+
+`profile.json` is hand-editable, and its category ids become **directory names** — so it is parsed defensively (`parseProfile`/`parseCategoryList` drop bad entries, reject case-insensitive duplicates, cap the count; the retired pack fields `terms`/`docModel`/`systemPromptKey` are ignored with a note) and re-validated in Rust (`valid_category` in `commands.rs`, which is the actual boundary). A pack entry is read as a *patch on the built-in it names*: `{"id":"ttrpg"}` resolves back to that pack exactly.
+
+#### 工具档与预算
+
 - 每条任务声明一个**工具档** `none`/`read`/`write`/`full`（`presetForTools`），而 `write`（产物是一份文档：查 + 写文件 + 验 + 交付，**不碰知识库**）约 4.7k 对 `full` 的约 17k（两档的上限钉在 `agentToolBudget.test.ts` 的 `WRITE_CAP` / `AGENT_ASSIST_CAP`），所以**先考虑 `write` 再考虑 `full`**——schema 每轮重发，32k 的本地模型上 `full` 一档就能把整个输入上限吃光、知识库分到零（`contextForecast.test.ts` 钉着）。
 - 随工具走而不是随档位走的还有两份清单（工作流卡 / docx 格式），见 `docs/feature/agent/edit-loop-plan.md` §7。
-- Supporting another kind of writing (跑团模组, 文案, 周报…) is still a data addition, not new branches.
 
-#### 内置包与配置入口
-
-- Built-ins (`novel`, `ttrpg`, `copy`, `wechat`, `weekly`, `feedback`, `bid`) live in `src/lib/profile/model.ts`
-- toggling is Settings → 工作台 (`projectStore.setPacks`)
-- custom categories via the lore wall's 「+ 新建分类」 or the same pane (`projectStore.setCustomCategories`).
+#### 词汇与提示词措辞
 
 The UI vocabulary is **app-level and uniform** (`appTerms`/`useTerms`: 文档/分组/知识库/条目 — every project's knowledge store is a 知识库; the retired synonyms are ratcheted shut by `localeTerms.test.ts`, and `docs/reference/terminology.md` is the word list), and so are the document model (always all-on; `useDocModel()` is the seam kept for a future per-project setting) and the system prompt (one neutral writing collaborator — packs do not preset the AI's persona; domain rules live in each pack task's *instruction*, e.g. `bidRespond` carries the deviation discipline). Never hardcode 章/卷/设定 in a component or an i18n value — pass `useTerms()` words into parametrized i18n strings. Prompt templates (`ai.instructions.*`) get the same words plus the 【…】 section labels via `promptParams(isZh, packId?)` — pass the running task's `packId` so a pack task speaks its own wording (【应答大纲】, not 【大纲/写作方向】); the resolution chain is task's pack → neutral defaults, and `knowledge` is never renamed. Keep shared instruction text neutral and give novel its own variant (base-task override with a `*Novel` key) when fiction wording matters.
-
-Rules when touching this: components derive the task menu and categories from the subscribed `projectStore.workspace` (the `lib/profile/active` singleton isn't reactive); **never** resolve a system prompt with `ai.instructions.system` directly — call `profileSystemPrompt()` (the seam a per-project override would land in; a source-scanning test enforces this); resolve a task with `findTask()` and handle the null, because a task id can outlive the pack that defined it; and the merged accessors (`loreCategories()`, `profileTasks()`…) are the truth about what is enabled — read them at call time, never at module scope. Recipe: `docs/reference/workflows.md` → Add a new capability pack.
 
 ## `src/components/`
 
@@ -216,6 +238,11 @@ CommandPalette, onboarding flow, library view (文库: only what the author pick
   - slice-by-slice status in `docs/api/qianwen-compat-plan.md` §6 — `types.ts`)
 - a refused request's body (non-2xx) is read by **one** function, `refusal.ts` `refusalText`, in all five adapters: the whole body or each `data:` line, the vendor's `message` verbatim plus the fields a reader of the thrown message matches on (`code`/`status`/`type`, `param`, `request_id`, a relay's `metadata.raw`) — `learned.ts`, `structured.ts` and `modelHealth` regex that message, so stripping a field the raw body carried is a silent regression. The connection test's `/models` refusal reads through it too; kept apart from `providerProbe.apiErrorMessage`, which answers "is this the API at all". `image.ts` / `asr/client.ts` still have their own `parseErrorBody`, because their fallbacks branch on the parsed `code` / `param` (`docs/api/refusal-plan.md` §4)
 
+- **内部消息形状是 OpenAI 的**（`StreamMessage`，工具调用的 `arguments` 是 JSON 字符串）。Gemini 和 Anthropic 适配器各自带一个转换器（`convertToGeminiContents` / `convertToAnthropicMessages`），包括工具调用的往返和 data URL → base64 图片。Anthropic 那边还要守两条结构规矩：丢掉开头的 assistant 轮、合并相邻的同角色轮；合并进 tool_result 的作者文字会加上【作者消息】标签（`labelAuthorText`）。流式读取是 fetch + `ReadableStream` 按行解析。
+- **Anthropic 的用量在进门时归一化**：应用里的 `cachedTokens` 是 `inputTokens` 的**子集**（OpenAI / Gemini 就这么报，`costOf()` 也按这个算），Anthropic 报的是三个互不重叠的桶，所以适配器求和：`inputTokens = input_tokens + cache_read_input_tokens + cache_creation_input_tokens`，`cachedTokens = cache_read_input_tokens`。缓存写入比基础输入价贵，而计费组没有缓存写入价（只有输入价和缓存输入价），所以它落进全价桶——宁可多报，不少报。DashScope 原生每帧都带累计 usage，所以不发 `stream_options`。
+- **`max_tokens`**：Anthropic 必填，`Model.maxOutput` 经能力规划（`capability/plan.ts` 的 `maxTokensOnWire`）进请求，没配时发一个常数；其他族它只用于规划。线上另一种输出上限只有任务自己的 `StreamOptions.maxTokens`，只在 Chat Completions 路径上发（今天只有 Sakura 翻译引擎设它）。
+- **结构化输出与思考**：`agent/structured.ts` 要的是 `toolChoice: "required"`（Anthropic `{type:"any"}`），不点名工具。Anthropic 适配器以前在强制工具时发 `thinking: {type: "disabled"}`，这个绕法已经删了——adaptive 思考（默认方言）支持强制工具，而这一段里有几个模型直接拒绝 `disabled`；改之前看 `anthropic.ts` 的 `thinkingFor`。JSON 模式按协议族在 `jsonMode.ts` 决定：OpenAI 系 `response_format`、Gemini `responseMimeType`、Anthropic 没有 JSON-object 档，只有 `off` 与严格的 `json_schema`（`output_config.format`）。要 schema 保证而不只是「合法 JSON」的调用方走 `agent/structured.ts`。
+
 #### 请求整形与工具选择
 - the config→request seam (`conn.ts` — `ConnOptions` is **the one place** a provider/model transport field is declared; every arg type that carries provider wiring `extends` it, so a new field is one edit, not eighteen. See `docs/api/provider-layering.md`)
 - per-protocol **and per-model** JSON-mode shaping (`jsonMode.ts` — the protocol decides the spelling, `Model.structuredOutput` decides the strength: `off` / `json_object` / `json_schema`, absent = auto → family default lifted to strict `json_schema` for model ids known to take it (OpenAI `response_format.json_schema`, the Responses family's `text.format`, Gemini 2.5+'s `generationConfig.responseJsonSchema` — a **standard** JSON Schema, so the same `strictify` output goes on the wire unchanged, unlike the older OpenAPI-dialect `responseSchema`)
@@ -260,61 +287,8 @@ CommandPalette, onboarding flow, library view (文库: only what the author pick
 - per-reply output caps (`modelLimits.ts` — the built-in table, the app-wide default and the Messages API's own `max_tokens` default; the resolver is `capability/values.ts`, see below; `docs/reference/architecture.md` → Large outputs)
 - multi-draft output vocabulary (`drafts.ts`)
 - the snippet library's pure layer (`snippets.ts` — grouping/search/hit-slicing shared by the picker and Settings → Prompt, so both surfaces section a library the same way; see `docs/feature/prompt-snippets-ui-brief.md`)
-#### 计费与用量（`docs/feature/billing/01-fee-groups.md`）
-- **价格是一个实体，不是模型上的几列。** `feeGroup.ts` 是纯逻辑：三种计价方式
-  （`token` / `request` / `spec`）、规格归一化（`1k`→`1K`、`1024*1024`→`1024x1024`、
-  `auto`→空，三方都过同一个函数，匹配才敢是纯相等）、档位匹配（**空条件匹配一切，
-  填得最多的行赢，同样多先写的赢，同样多时精确尺寸压过按面积落进来的档位**），
-  以及**全应用唯一的一份** `costOf()`。
-- `feeGroupDb.ts` 是行与列：`fee_groups`（和 providers / models 同在全局
-  `config.db`——组是配置，不是某个项目的数据），加上从模型行的旧价格列一次性迁出来
-  的那一步。迁移标记在 `models.fee_migrated` 而不是「表里已有组」或「清零旧列」：
-  前者会让用户删光组之后下次启动又长回来，后者会让同机的旧版本读到一堆零价。
-  这个标记**写模型行的人自己盖**：`configDb.modelUpsert(m, pricing)` 是
-  `INSERT OR REPLACE`，列清单漏了它就每写一次清回 NULL（1.76.1 之前正是如此）。
-  `pricing` 三种——`local`（本机保存，没绑组时沿用原行标记）、`restored`（v3 还原，
-  盖章）、`legacy`（v2 还原，留给迁移）——理由在 `billing/01-fee-groups.md`。迁移
-  也只替 `fee_group_id` 为空的行建组，已绑组的行只盖章。
-  老的 `price_cached_in` 是 `NOT NULL DEFAULT 0`，它的 0 迁成 **null**（= 同输入价）
-  ——照搬成 0 会让所有老配置一夜之间缓存免费，而那笔错账不报错。
-- `feeGroupLabel.ts` 是价格在界面上的**唯一一种写法**（摘要 / 标签），纯的，措辞由
-  调用方经 `panes/feeWords.ts` 递进来，所以它在 node 环境的测试里直接可用。
-- **一次请求记两处**（`usageRow.ts` 的唯一写入口 `recordUsage`）：项目
-  `.ai-writer/project.db`（跟着项目文件夹走）与 appDataDir 的 `config.db`（多一列
-  `project`，比任何一个项目活得久）。两处各自 try、永不抛错——记账不能把一次
-  已经交付并且上游已经收了钱的请求变成失败。两张表的结构共用 `usageSchema.ts`
-  一处定义（长歪了，用量页在「本项目 / 全部」之间一切就会少掉几列，而那种少法不报错）。
-- **行自带价格**：`buildUsageRow` 把当时的模式 / 单价 / 数量 / 规格抄在行上，
-  `cost_usd` 是 `costOf()` 的结果落了盘。所以改组、删组、换组都动不了历史，
-  而读那一侧 `SUM(cost_usd)` 不是第二套口径——也因此不需要检查点。
-- `usage.ts` 是读那一侧：范围（`project` / `global` = 两个库）、四种 `GROUP BY` 卷法
-  （模型 / 任务 / 计价方式 / 项目）、清除；「按计费组」那一维不在 SQL 里，由 `groupBuckets` 从按模型的桶折出来。**「按计费组」按模型当前绑的组归并**，
-  不看行上的快照：行上快照的是价，不是归属，重新分组之后历史跟着走是故意的。
-- **分项的钱也落盘，跟 `cost_usd` 同一条规矩**（2026-09）：`segmentsOf()` 把
-  `costOf()` 的七项**分流**（不重算）成六段，`recordUsage` 一并抄在行上，读那一侧
-  只 `SUM`。拆分放在**写入时**，是因为 `spec` 那笔钱数的是张还是秒只有
-  `output_unit` 知道，而 `GROUP BY` 之后一个桶里可能混着两种单位——写的那一刻
-  单位是确定的单值，于是读那侧永远解不开的歧义根本不存在。守恒律：
-  **六段 + `cost_unsplit` ≡ `cost_usd`**。
-- `usageBackfill.ts` 是**唯一会改写历史行的地方**：给升级前的老行补分项。
-  它不违反 `usageSchema.ts` 那条「老行不回填价格」——**补的不是价，是同一笔钱的
-  分法**，价全在行上，喂给同一个 `costOf()` 重算，**总额对得上 `cost_usd` 才写，
-  对不上就留白**（留白 ≠ 零，那些钱在用量页里是「未分项」）。
-  每行只看一次（`cost_split_checked`，同构于 `models.fee_migrated`）：1.73.0 之前
-  的行连快照都没有、重算恒为 0、闸门恒不通过，按「有没有分项」来找的话它们每次
-  开库都被重捞一遍却永远补不上。分批 200 是为了缩短持写锁的时间——多开窗口时
-  对面的 `recordUsage` 撞上 locked 只会被自己的 try 吞掉，账少一行不报错。
-- `usageMeter.ts` 决定用量页那根条画成哪几段。**长度回答「用得多不多」
-  （调用次数 / 同批最大值），颜色回答「钱花在哪儿」**，两个问题各占一个视觉通道。
-  三档退化：有费用按费用占比 / 一分钱都没有按 token 占比 / 都没有画成一段中性色。
-  第一档与第二档的分界是 **`costUsd === 0`，不是「六段全 0」**——钱全在
-  `costUnsplit` 里的老行费用是**有**的，只是分不出来，误判成「没花钱」会让它
-  去画 token 占比。段的顺序只在这里定义一次，条与 tooltip 都读它。
-- `reportedCost.ts` 是上游报价的**唯一换算处**：各族回包里的花费字段翻成
-  `done.reportedCost` 只写在这里。报价压过整张计费组表，所以收不收是信任问题——
-  平台声明 `reportsCost`（`platforms.ts`，测过「报的数 = 实扣」才写）**且**请求地址也
-  指向它才收；多次请求记一行时 `addReportedCost` 全报才加，缺一次整行回落计费组
-  （`docs/feature/billing/01-fee-groups.md`「上游报价」）。
+#### 计费与用量
+价格在**计费组**上（`feeGroup*`），模型只持有 `feeGroupId`；用量行由 `usageRow.ts` 的 `recordUsage` 唯一入口写两处（项目库 + `config.db`），行上自带当时的价，`costOf()` 是唯一的算式；读那一侧（`usage.ts`）、给老行补分项（`usageBackfill.ts`，唯一改写历史行的地方）、用量条分段（`usageMeter.ts`）、上游报价换算（`reportedCost.ts`）各一个文件。**逐文件的分工、不变量和理由都在 [`docs/feature/billing/01-fee-groups.md`](../feature/billing/01-fee-groups.md) 的「模块」一节**，改这些文件之前读那里；硬规则在 `CLAUDE.md`「计费与用量」。
 
 #### 图片与日志
 - **which endpoint an image model draws through** (`imageRoute.ts` — `effectiveImageRoute`: the declared `ImageCaps.route`, else a `Record<ProtocolFamily, …>` default by the family of the model's *current* route, so 自动 on DashScope's native route is `dashscope`). The only derivation: the client (`generateImage`, fed by the one conn builder `imageConnOf`), the generate modal, 「将发送」, `defaultImageCaps` and the drawer (`panes/imageCapsDraft.ts`) all read it; `asyncTask` only through `effectiveAsyncTask`. `chat` / `comfyui` / `ark` are never derived, so a declaration read is fine for those three and **forbidden** for the other three — `src/lib/__tests__/imageRouteOwner.test.ts` scans for it. See `docs/feature/image-route.md`
@@ -323,6 +297,56 @@ CommandPalette, onboarding flow, library view (文库: only what the author pick
 - `tokenEstimate.ts`
 
 ### `src/lib/agent/`
+
+All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`): a per-preset tool loop dispatched via the tool registry (`registry.ts`, entries in `toolTable/`).
+
+#### 三层工具（读 / L1 / L2）
+- Read tools (`toolTable/read.ts`), including `read_slides`, which pages a deck by slide — a .pptx because `read_file` can only return zip noise for one, an .html because finding slide 7 by paging 4000 characters of source is not a way to edit it; see `docs/feature/pptx-plan.md`.
+- L1 auto+backup write tools for lore/memory, and the L2 manuscript tools that block on user approval — `propose_edit` for a find/replace — the Nth occurrence or all of them, so repeated text in a deck or a table is addressable at all
+  - `rewrite_lines` for a region named by line numbers, which is how a LONG file gets restructured without re-emitting it
+  - `rewrite_document` for a whole short file.
+- All three are one `EditProposal` machinery apart from the last: the proposal records how many times `find` occurred when the author saw the card, and `editApply.ts` refuses to write if that moved.
+
+#### Lore 写入门控与执行日志
+- Lore writes are additionally gated on an author-approved plan (`plan.ts` + `propose_lore_plan` → `components/ai/PlanCard.tsx`): one card of steps per pass, and the write tools refuse any entity/action it doesn't cover.
+- Runs emit structured `AgentEvent`s (`events.ts`) feeding the shared execution-log component (`components/ai/AgentLog.tsx`).
+
+#### 轮次上限卡与作者决策卡
+- Hitting the preset's round cap mid-work doesn't force-end the run: the runtime's `onRoundLimit` callback blocks on a 继续/收尾 card (`RoundLimitCard.tsx`, queued in agentStore like approvals) — wired only where that card can render (chat, AiPanel; not lore modals or batch runs, which keep the hard stop).
+- The agent can also put a decision to the author mid-run: `ask_author` (2–4 options plus the card's own always-present free-text row, `QuestionCard.tsx`) blocks its tool call on the answer, and routing appends the tool only for surfaces that render the card — chat and the non-batch AiPanel; design: `docs/feature/agent/ask-author-plan.md`.
+
+#### 对话式助手与多会话
+- The conversational assistant (AiDrawer "chat" mode → `components/ai/AgentChat.tsx`) and the AiPanel Agent mode both use the full-toolset `AGENT_ASSIST_PRESET` — except that chat behind the 助手工具包模式 Beta swaps to the thin `ORCHESTRATOR_PRESET` (`lib/agent/packs.ts`: reads + memory + notes only, every write dispatched via `run_pack` to a pack sub-run on the parent's own model, with the parent's approval channels and plan gate passed through so cards render where they always do; `chatAgentPreset()` is the one seam every chat-side reader goes through, and the default stays off because dispatch reliability is model-tiered — see `docs/feature/agent/tool-pack-plan.md`).
+- Chat session state lives in `stores/agentStore.ts` — **several conversations at once**: `chats: Record<key, LiveChat>` + `activeChatKey` on one axis, `runningChats` / `chatQueue` (semaphore in `lib/agent/scheduler.ts`, shared with roleplay) on the other
+  - components read the on-screen one through `useActiveChat`, every card a conversation raises is tagged `surface: chat:<key>`, and its 本次都批准 key is `chatAutoApproveKey(key)`, never a shared literal — see `docs/feature/agent/chat-sessions-plan.md`.
+
+#### 结构化输出
+- structured JSON outputs go through `lib/agent/structured.ts` (forced tool_choice + JSON fallback — and the forced attempt is **skipped outright** when the endpoint is known to downgrade a forced `tool_choice` *and* strict `json_schema` is available, because then the fallback enforces the same schema and the attempt only buys an `EMPTY_TOOL_CALL` and a second request; only `json_object` to fall back on and it still tries the tool, since one tool call beats valid JSON whose shape rests on prose). Design & history: `docs/feature/agent/unified-agent-plan.md`.
+
+#### 历史压缩、回溯与状态记忆
+- Chat history is compacted, not just trimmed: folded/summarized old turns plus a per-turn injection ledger live in `lib/agent/compact.ts` + `compactRun.ts`, wired into the chat run (`stores/agent/chatJob.ts`); design: `docs/feature/agent/chat-memory-plan.md`.
+- A question can be rewound to (`lib/agent/rewind.ts` — a *cut* of the wire history at that turn's start, never a re-seed, and never offered for a turn already folded into the summary: what the author still sees above the cut must be what the model still holds; §12 of the same doc).
+- Behind the 状态记忆 Beta (`lib/agent/stateFlag.ts`) a conversation can instead run on a SKILL.state-style **structured execution state** (`skillState.ts` schema/validation/rendering + `skillStateRun.ts`, arXiv:2608.26263): every send folds everything before the last turn into one schema-validated JSON block in the summary's slot — the same `planFold` with `keepTurns: 1`, so the fold invariants are unchanged — and a state the model twice fails to make valid leaves the history alone and falls back to ordinary compaction
+  - the mode is per session (`ChatSessionMeta.stateMode`, the composer chip mirrors it; the Lab sub-option 「新会话默认打开」 only sets where a *new* conversation starts — `freshChat` / `newChatStateMemory`), see `docs/feature/agent/skill-state-memory-plan.md`.
+
+#### 任务工作区
+
+Long tasks persist to a durable workspace instead of just wire history: `.ai-writer/tasks/<taskId>/task.md` (goal + step checklist) and `notes/*.md` (intermediate results), written via scratchpad tools (`lib/agent/scratchpadTools.ts`) and resumed into a fresh context rather than replayed (`components/ai/TaskWorkspaceView.tsx`).
+
+#### 子代理委派
+
+- Auxiliary work (web search, vision, long-document reads, image generation) can be delegated to per-kind subagents, so it doesn't bloat the main run's context.
+  - `lib/agent/subagentModel.ts` holds the kinds, bindings and connection resolution that the tools, `routeTools` and settings panes ask.
+  - `lib/agent/subagent.ts` holds only `executeDelegate`, the half that runs a nested agent and so the only half allowed to import `runtime` — the split is what keeps the image / translate / ASR tools out of the agent import cycle, docs/feature/code-structure-plan.md P1.
+  - The three places a tool starts a nested run — `delegate`, `run_pack`, the writer handoff — never import `runtime`: `runAgent` fills `ToolContext.subRun` (`SubRunner`: itself plus the toolCost ceiling seam) on every context it hands its tools, and passes itself to `runWriterHandoff`; importing it back would close a cycle through the registry, P2.
+  - Configured in Settings → `components/settings/panes/SubAgentsPane.tsx`, session-level toggles in `components/ai/CapabilityMenu.tsx` on the composers and `components/ai/SubAgentChips.tsx` in 一致性检查's pre-run block — two renderings of one control, sharing `components/ai/subagentChipModel.ts`; 设计稿 02g 屏 1c.
+- Design: `docs/feature/agent/subagent-lld.md`.
+
+#### Writer 子代理
+
+- The **writer** subagent (`lib/agent/handoff.ts`) inverts that contract and is therefore not a `delegate` kind: its output *is* the turn's answer rather than a summary, and no model chooses it — with the switch on, the chat assistant's run ends by handing a **work order** to the writer (`finishPolicy: "handoff"`, applied by `routeTools` only for surfaces that opt in), whose text streams straight into the turn.
+- Prose is not an accepted ending on that preset, and the writer never writes to disk: `deliverTo` on the brief makes the *runtime* build the proposal, so the bytes never pass through a second model.
+- Design: `docs/feature/agent/writer-subagent-plan.md`.
 
 **文件怎么分（P6，docs/feature/code-structure-plan.md）。** `registry.ts` 只是入口：工具表的类型在 `toolTypes.ts`（`registry.ts` 用 `export type *` 原样转出，外部照旧 `from "./registry"`），工具条目按领域分在 `toolTable/` 下十个片段里（`read` · `lore` · `collectors` · `manuscript` · `exports` · `image` · `manuscriptDelete` · `scratchpad` · `roleplay` · `subRuns`，共用的参数解析与描述构造在 `toolTable/shared.ts`），`registry.ts` 按固定顺序把它们展开回 `REGISTRY`——**这个顺序就是发给模型的声明顺序**，`search_tools` 的目录和 Anthropic 的缓存前缀都跟着它，`toolDefinitionsSnapshot.test.ts` 逐字节钉住拆分前的输出。加工具放进它领域的片段；`manuscriptDelete` 单列一个片段正是因为那两个删除工具在线上排在图像工具之后。写工具同理：`writeTools.ts` 只做转出，实现按原来的分节在 `write/` 下——`planGate`（方案门与破坏性步骤的暂停）· `loreFiles` · `loreAssets`（图集、头像、跨条目复制、搬移与删除条目）· `memory` · `manuscript`（L2 提案与落点回执），`write/shared.ts` 放它们共用而谁也不拥有的东西（提案 id 计数器，快照上的两个辅助），这样模块之间不绕圈。
 
@@ -371,6 +395,8 @@ unified agent runtime 的各模块：
 - `pasteImages.ts` · `chatStash.ts` 输入框贴图（`docs/feature/agent/chat-image-paste-plan.md`）：**贴图 = 会话暂存区里的一个真文件**（`.ai-writer/tmp/chat/<stashId>/<内容哈希>.<ext>`），之后按 `@` 附图原样走。`pasteImages` 是纯判定（剪贴板有文字就贴文字；四种格式白名单；贴图序号）。`chatStash` 管生死：`stashId` 首次贴图才生成，存进会话 blob 并镜像到 `chat_sessions.stash_id` 一列；作者删会话立即删目录，其余死法（SQL 自动修剪没有回调、没发过的标签页没有行）交给**对账式清扫**——每个项目每次启动一次，不被任何会话认领且超过 24 小时才删（宽限防另一个窗口里已贴未发的会话被误删）。【附图】块（`chatRefs.ts`）因此每行带项目相对路径，暂存图注明随会话删除：像素退场后模型能按路径读回（`read_image`，有看图子代理时委派它），也不会把暂存路径写进正文
 
 ### `src/lib/lore/`
+
+AI-driven lore generation/improvement lives in `generator.ts` (UI in `src/components/lore/`).
 
 lore domain model (`model.ts`), entity scan/CRUD (`entity.ts`), knowledge-base **collections** (`collections.ts` — the second axis, orthogonal to category: which body of work an entry belongs to, multi-membership, stored as a `collections:` frontmatter list rather than a folder level because `dirPath` is already persisted by pins / `[[lore:…]]` / roleplay bindings / sync hashes; plus the **取材范围** fence, whose one rule is that it narrows *automatic discovery* only — pins, `@` refs and citations always pass through. See `docs/feature/lore/lore-collection-plan.md`), gallery/avatar (`gallery.ts`), AI generation (`generator.ts`), `[[lore:…]]` citation resolution/navigation (`citations.ts`), AI-assisted facet splitting (`splitter.ts`), facet **slots** — the authoring side of a category's type schema, i.e. the checklist prompts inject and the defaults a new facet materialises (`slots.ts`, `categories.ts` for the orphan/assignable split); the **category note** (`categoryNote.ts` — `<category>/index.md` in the same folder-note format, summary only, read at `list_lore_entities` call time and never carried on `LoreIndex` — the wall's summary line reads it separately into `loreStore.categoryNotes` — written by `manage_category`'s `describe` under a `category/update` plan step; the cheap half of `folder-note-plan.md` §4.2 — `status` and `title` wait for the entry-status step; **not** hashed by `lorehash.rs` nor bundled by `transfer.ts`, both of which walk entity folders only — the note is local until categories get an identity of their own, plan §8); import via `lib/lore` (index re-exports all but generator). Entities can be split into **facets** (sub-entity granularity — e.g. one outfit of several) so injection isn't all-or-nothing; layered-budget facet selection lives in `lib/context/loreSelect.ts`. See `docs/reference/architecture.md` → Facet-aware lore selection; design: `docs/feature/lore/lore-facet-plan.md`
 
@@ -431,7 +457,7 @@ HTML → PPTX（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`
 - Entry points are the `export_pptx` L2 tool (converted in `applyProposal`, the only place with a DOM), the `.html` preview toolbar, and the file tree's right-click menu — the last two call the same `exportHtmlToPptx(path)` and both flush the editor first, since it reads the file off disk.
 
 #### CSP 安全约束
-- **Never add `allow-same-origin` to that frame, and never edit `harvester.js` without updating BOTH the `sha256-` in `tauri.conf.json`'s `script-src` and `htmlSlides.ts`'s selector list** (a `blob:` document inherits the app's CSP, so that hash is the only reason the script runs at all; `pptxHarvesterCsp.test.ts` guards the drift) — see `docs/reference/architecture.md` → HTML → PPTX 导出; design + rejected alternatives: `docs/feature/pptx-plan.md` §4
+- **Never add `allow-same-origin` to that frame, and never edit `harvester.js` without updating BOTH the `sha256-` in `tauri.conf.json`'s `script-src` and `htmlSlides.ts`'s selector list** (a `blob:` document inherits the app's CSP, so that hash is the only reason the script runs at all; `pptxHarvesterCsp.test.ts` guards the drift) — why: `docs/feature/pptx-plan.md` D13 / D18; design + rejected alternatives: the same doc's §4
 
 ### `src/lib/xlsx/`
 
@@ -544,7 +570,7 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 
 ### `src/lib/profile/`
 
-capability packs: what kinds of writing a project enables (`model.ts` pack types/built-ins/validation, `resolve.ts` multi-pack merge, `file.ts` profile.json v1/v2/v3 parsing, `active.ts` module singleton holding the merged `ResolvedWorkspace`, `store.ts` `.ai-writer/profile.json` IO). Drives the knowledge-base category layout (packs + user-defined + the `custom` bucket), each category's optional **type schema** (`slots`/`imageSlots` — what facets and images entries of that category are expected to have; metadata and prompts only, never injection — see `docs/feature/lore/lore-entry-type-plan.md`), and the per-pack-task 【…】 block labels. **Read `loreCategories()` at call time, never at module scope** — see `docs/reference/architecture.md` → Capability packs
+capability packs: what kinds of writing a project enables (`model.ts` pack types/built-ins/validation, `resolve.ts` multi-pack merge, `file.ts` profile.json v1/v2/v3 parsing, `active.ts` module singleton holding the merged `ResolvedWorkspace`, `store.ts` `.ai-writer/profile.json` IO). Drives the knowledge-base category layout (packs + user-defined + the `custom` bucket), each category's optional **type schema** (`slots`/`imageSlots` — what facets and images entries of that category are expected to have; metadata and prompts only, never injection — see `docs/feature/lore/lore-entry-type-plan.md`), and the per-pack-task 【…】 block labels. The merge rules, orphan categories, the task fields and the rules for reading the singleton are in [能力包](#能力包workspace-packs) above.
 
 ### `src/lib/context/`
 
@@ -768,16 +794,19 @@ Rust 侧。
 
 #### 命令与路径安全
 
-- `commands.rs` 是自建的文件系统命令，全部 `async` 并把活交给 `blocking.rs`——一个不带 `async` 的 Tauri 命令跑在**主线程**上，而一次知识库扫描会连着调几百次 `fs_exists`，每次先 canonicalize，把窗口的事件循环一段段卡住；而光 `async` 也不够，那只是挪到 tokio 的 worker 上（有几个核就有几个），一块慢盘或一次钥匙串弹窗能占住其中一个任意久。
+- `commands.rs` 是自建的文件系统命令，全部 `async` 并把活交给 `blocking.rs`——一个不带 `async` 的 Tauri 命令跑在**主线程**上，而一次知识库扫描会连着调几百次 `fs_exists`，每次先 canonicalize，把窗口的事件循环一段段卡住；而光 `async` 也不够，那只是挪到 tokio 的 worker 上（有几个核就有几个），一块慢盘或一次钥匙串弹窗能占住其中一个任意久。`blocking.rs` 因此也被 `secrets.rs` / `transfer.rs` / `cmd.rs` / `scope.rs` 共用。命令有 `scaffold_project`、`read_dir_recursive` 和 `fs_*` 一族（读写文本、写二进制、追加、建 / 读 / 删目录、删文件、`fs_exists`、`fs_stat`、`fs_rename`……），每条在系统调用之前先过 `FsScope::check` 做 canonicalize；这次检查跟着其余的活一起进阻塞任务，所以 `FsScope` 是 `Clone`（一份根列表外面包一层 `Arc`，之后才允许的根照样算数）。
 - `scope.rs` 是这些命令的运行期路径围栏：否则它们接受任意绝对路径，一个被攻陷的 webview 就能读写删任意文件；根只从可信来源登记（原生文件夹选择器、带 `.ai-writer` 标记的重开项目，而那个标记 webview 在已允许的根之外造不出来）。
-- `protocol.rs` 注册 `ai-writer-asset:` 自定义 scheme，从同一个 `FsScope` 后面把项目文件喂给 webview。
+- `protocol.rs` 注册 `ai-writer-asset:` 自定义 scheme（扩展名白名单 + 同一个 `FsScope`）。**应用已经不再产生这种链接**——知识库和文档里的图都以 data URL 渲染（`imageToDataUrl` / `useImageDataUrl`），因为 Webview2 的 URL 解析让这个 scheme 在 Windows 上不可靠；它留着只是为了让旧版本存下的文档里的 `ai-writer-asset://` 链接还能显示。
 - `fontproto.rs` 注册 `ai-writer-font:`：只服务 `appDataDir/fonts/` 下的 `.woff2`（下载来的字体包），围栏比 `FsScope` 更窄，而且**先按字面判定再碰磁盘**——Windows 上把网页可控的 `//host/share` 交给 canonicalize 会发起 SMB 连接。异步协议，响应带 ACAO `*`（主窗口、沙箱样张、打印窗口都是跨源取字体）。
 
 #### 密钥、事务与传输
 
-- `secrets.rs` 是 API 密钥的 OS 凭据管理器后端（Windows 凭据管理器 / macOS 钥匙串 / Linux Secret Service），取代了早先会在某些 macOS 上死锁的 stronghold 和中途那版明文 SQLite；IPC 面到处一样（按 id 存 / 取 / 删一条），存储形状不一样——macOS 把**所有**密钥折进单个钥匙串项，其余平台一个 id 一条凭据。
+- `secrets.rs` 是 API 密钥的 OS 凭据管理器后端（Windows 凭据管理器 / macOS 钥匙串 / Linux Secret Service），取代了早先会在某些 macOS 上死锁的 stronghold 和中途那版明文 SQLite；IPC 面到处一样（`secret_save` / `secret_load` / `secret_delete` 按 id 存 / 取 / 删一条，`secret_clear_all` 批量擦除、返回 `SecretWipe`），存储形状不一样——macOS 把**所有**密钥折进单个钥匙串项，其余平台一个 id 一条凭据。
 - `sqltx.rs` 是「一个事务跑在一条连接上」的那个命令：`tauri-plugin-sql` 交给前端的是**连接池**，分开发的 `BEGIN` / `COMMIT` 落在不同连接上，根本不构成一个事务（见 `lib/sqlTx.ts` 与 `docs/reference/architecture.md` → Transactions）。
-- `transfer.rs` 是导入导出（知识库 zip 包、配置备份的 JSON），对话框全在 Rust 侧——照 `scope.rs` 立的规矩，webview 从不提供任意目标路径，只接收用户在原生对话框里亲手点的路径；zip-slip 防护也在这里。
+- `transfer.rs` 是导入导出：`zip_export_dialog` / `zip_import_dialog`（知识库包与项目备份）、`save_text_file_dialog` / `open_text_file_dialog`（配置备份的 JSON），对话框全在 Rust 侧——照 `scope.rs` 立的规矩，webview 从不提供任意目标路径，只接收用户在原生对话框里亲手点的路径。
+  - zip-slip 防护靠 `enclosed_name()`。
+  - `excludes` 在遍历时就在目录处剪掉整棵子树，按**完整路径段**匹配（所以 `.ai-writer/tmp` 不会吞掉 `.ai-writer/tmpl`）。
+  - `require_manifest_kind` 先单独读一遍 manifest，不对就在解压任何东西之前返回——恢复到作者选的文件夹时，「文件选错了，什么都没发生」这句承诺靠的就是它。
 - `lorehash.rs` 是条目的内容哈希：一个条目是一个**目录**（`index.md`、特征文件、`images.md`、头像、图集），同步需要一个「任何一样变了它就变、别的时候不变」的值，那也是服务器存的身份和客户端三路比对跑的东西。
 
 #### 多开、窗口与打印
@@ -797,7 +826,9 @@ Rust 侧。
 
 #### Shell 命令与测试
 
-- `cmd.rs` 是 agent 的 `run_command` 的 Rust 一半，**刻意不用** `tauri-plugin-shell`（它唯一的安全机制是静态允许清单，对模型运行时现写的一行只能配成 `cmd: pwsh, args: true`，等于把清单关掉；而这个功能真正需要的超时、杀整棵进程树、输出封顶它都没有）。
+- `cmd.rs` 是 agent 的 `run_command` 的 Rust 一半（`cmd_shell_info` / `cmd_run` / `cmd_kill`），**刻意不用** `tauri-plugin-shell`（它唯一的安全机制是静态允许清单，对模型运行时现写的一行只能配成 `cmd: pwsh, args: true`，等于把清单关掉；而这个功能真正需要的超时、杀整棵进程树、输出封顶它都没有；`docs/feature/agent/shell-command-plan.md` §2.1）。
+  - Windows 用 PowerShell（先 `pwsh`、退回 5.1，`CREATE_NO_WINDOW`，`-Command` 外面包一层 UTF-8 + 退出码）；unix 上是认得的 `$SHELL`（否则平台默认 shell）以 `-l -c` 跑在自己的进程组里。
+  - `cwd` 和每条 `fs_*` 一样过 `FsScope::check`；审批卡是前端状态，所以这边守的是工作目录、超时、输出上限（每路 1 MB，超出后继续读掉丢弃）和杀整棵进程树。
 - 测试内联在 `cmd.rs` / `commands.rs` / `docx.rs` / `fontproto.rs` / `instance.rs` / `lorehash.rs` / `pptx.rs` / `preview.rs` / `print.rs` / `protocol.rs` / `scope.rs` / `secrets.rs` / `sqltx.rs` / `transfer.rs` / `xlsx.rs` / `xlsx_write.rs` 里。
 
 ## `server/`
