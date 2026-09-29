@@ -265,4 +265,20 @@ describe("分层与循环依赖", () => {
       "store 间的 await import 多半是在躲循环依赖。先看能不能拆掉环，再写成静态导入。\n" + problems.join("\n"),
     ).toEqual([]);
   });
+
+  it("设置页只经 App.tsx 的 React.lazy 进来（codemap → 设置页结构）", () => {
+    // 别处一条静态导入就把整棵设置页拉回主包，拆分悄悄失效——构建不报错，只是主包又胖回去。
+    const problems: string[] = [];
+    for (const [f, edges] of graph) {
+      if (f.startsWith("components/settings/")) continue;
+      for (const e of edges) {
+        if (!e.dynamic && e.to.startsWith("components/settings/")) problems.push(`${f} → ${e.to}`);
+      }
+    }
+    expect(
+      problems,
+      "components/settings/ 是单独的懒加载 chunk。要用里面的东西，把它挪到 components/common/ 或 lib/。\n" +
+        problems.join("\n"),
+    ).toEqual([]);
+  });
 });

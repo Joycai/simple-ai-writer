@@ -146,7 +146,7 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 #### 设置页结构
 
 - SettingsPage: the full-window settings surface (shell + left nav) with one file per pane under `panes/`.
-- SettingsPage 由 `App.tsx` 以 `React.lazy` 懒加载，单独成 chunk（约 350 kB）：多数会话不开设置，而它原先占了启动包约三分之一，把 App chunk 顶过了 `chunkSizeWarningLimit`。这条路成立的前提是**除 `App.tsx` 外没人静态 import `components/settings/`**——别处一旦直接引用，它就被拉回主包，拆分悄悄失效。
+- SettingsPage 由 `App.tsx` 以 `React.lazy` 懒加载，单独成 chunk（约 350 kB）：多数会话不开设置，而它原先占了启动包约三分之一，把 App chunk 顶过了 `chunkSizeWarningLimit`。这条路成立的前提是**除 `App.tsx` 外没人静态 import `components/settings/`**——别处一旦直接引用，它就被拉回主包，拆分悄悄失效（`src/lib/__tests__/layering.test.ts` 守着这一条）。
 - Panes are built from the shared row/section/card/chip vocabulary in `settingsUi.module.css` + `panes/bits.tsx`; `settingsCommon.module.css` holds the form controls used inside the edit drawers.
 - 渠道与模型 is a single merged pane (grouped list + right-hand drawer), and Prompt has a drawer of its own.
 - 外观（`AppearancePane`，设计稿 05m）紧跟「通用」：原先是通用里的一节，长到占了那一页
