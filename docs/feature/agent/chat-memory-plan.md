@@ -271,6 +271,11 @@ assistant/tool 配对；`MIN_KEEP_TURNS` 恒成立;插桩后边界仍然正确�
   记录。与之相对，`round-limit` 在 logModel 里上提为手风琴收尾行——它发生在
   两轮**之间**，是对整个手风琴的注脚（见 `docs/reference/design-system.md` → AI 面板
   设计语言）。
+- **摘要与种子两段的颜色一度抄反**（2026-09 从 `design-system.md` 移入）：第一次
+  转写设计稿 2c 时，摘要拿了最深的赭石，种子拿了一个设计稿里根本没有的
+  `--color-ctx-chapter` 棕黄。改成摘要 `--color-accent-mid`、种子
+  `--color-border-accent` 之后，那个 token 只为这个错存在过，已删除。今天的配色
+  规则在 `design-system.md` → AI 面板设计语言 → Chat memory bar segments。
 
 ## 9. 非目标
 

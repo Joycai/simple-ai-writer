@@ -129,7 +129,13 @@ CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, ico
 
 ### `src/components/ai/`
 
-AiPanel (task UI, streaming output)，`PlanLedger.tsx` 是执行日志里的方案账本那一段（在轮次**上方**单独一段而不是塞进批准它的那一轮：结束的轮是折叠的，要从手风琴里挖出来的账没人读），`TurnWrites.tsx` 是执行日志末尾的「本轮写入」带子（设计稿 02h 1j）：「本次都批准」之后审批卡根本不出现，这里就是那张没出现的卡——每次写入一行（动词 · 文件 · +a −b · 自动批准），展开是同一套窗口加「在编辑器里打开」，末行汇总「N 个文档 · M 条条目 · +a −b 字 · 删 k 段」，删掉的段数是任何折叠都不许藏的那个数；运行结束后才出现，方案步骤的写入不重复列行，编辑类审批卡共用的那扇改动窗 `ChangeWindows.tsx`（行号列 40px、符号列 14px、删/加各用 diff 令牌、字级高亮是同色更深一档的 color-mix 而不是第五个令牌；空白只在「整窗差异全是空白」时显形成 ␣ ↵ →。窄栏降级走**容器查询**不是媒体查询——同一张卡在抽屉里 1100、在栏里 240；行号列在 CSS 里也 display:none，它和 JS 那侧的 lineNumbers 不许有分歧，两列网格里多出来的那个格子会把正文挤成一行一个字，那正是 resize 后第一帧的样子；`BlockWindows.tsx` 给重写卡的每扇窗戴上一个头——「删 · § 三 · 码头夜市 · L88–101 · 整段 · 486 字」，因为整篇重写是一次到齐的几件无关的事，每扇窗得自我介绍；窗内每侧只露 2 行，其余折成一行可按的计数；卡宽 < 480 时（设计稿 1k，容器查询 + `useNarrow` 两侧同一个阈值）重写窗每行截成一行、窗头多一个「展开」，头部排两行——标题和唯一要紧的那个数一行，文件名和挪下来的规模一行（`headerScale` 一处算，宽窄两种头部说的是同一组数），页脚排三行——理由框独占、拒绝/批准各半、常设授权降成一行小字，因为在窄处它是最不该误触的那个；方案卡同一套）, ConsistencyCheck, 提示词库 (`SnippetPicker` 取用 + `SnippetSaveMenu` 右键存入 + `snippetTrace` 的确认痕迹)
+AiPanel (task UI, streaming output), ConsistencyCheck, 提示词库 (`SnippetPicker` 取用 + `SnippetSaveMenu` 右键存入 + `snippetTrace` 的确认痕迹)，以及执行日志与审批卡的这几件：
+
+- `PlanLedger.tsx`——执行日志里的方案账本。它在轮次**上方**单独一段，不塞进批准它的那一轮：结束的轮是折叠的，要从手风琴里挖出来的账没人读。
+- `TurnWrites.tsx`——执行日志末尾的「本轮写入」带子（设计稿 02h 1j）。「本次都批准」之后审批卡根本不出现，这里就是那张没出现的卡：每次写入一行（动词 · 文件 · +a −b · 自动批准），展开是同一套窗口加「在编辑器里打开」，末行汇总「N 个文档 · M 条条目 · +a −b 字 · 删 k 段」——删掉的段数是任何折叠都不许藏的那个数。运行结束后才出现；方案步骤的写入不重复列行。
+- `ChangeWindows.tsx`——编辑类审批卡共用的那扇改动窗。行号列 40px、符号列 14px，删/加各用 diff 令牌，字级高亮是同色更深一档的 color-mix 而不是第五个令牌；空白只在「整窗差异全是空白」时显形成 ␣ ↵ →。窄栏降级走**容器查询**不是媒体查询——同一张卡在抽屉里 1100、在栏里 240。行号列在 CSS 里也 `display:none`，它和 JS 那侧的 `lineNumbers` 不许有分歧：两列网格里多出来的那个格子会把正文挤成一行一个字，那正是 resize 后第一帧的样子。
+- `BlockWindows.tsx`——给重写卡的每扇窗戴一个头（「删 · § 三 · 码头夜市 · L88–101 · 整段 · 486 字」），因为整篇重写是一次到齐的几件无关的事，每扇窗得自我介绍。窗内每侧只露 2 行，其余折成一行可按的计数。
+- **窄卡**（卡宽 < 480，设计稿 1k；容器查询与 `useNarrow` 用同一个阈值）：重写窗每行截成一行、窗头多一个「展开」；头部排两行——标题和唯一要紧的那个数一行，文件名和挪下来的规模一行（`headerScale` 一处算，宽窄两种头部说的是同一组数）；页脚排三行——理由框独占、拒绝/批准各半、常设授权降成一行小字，因为在窄处它是最不该误触的那个。方案卡同一套。
 
 ### `src/components/lore/`
 
@@ -191,7 +197,18 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 
 shared primitives, including `Slider` (设计稿 02e: the app's one slider — square 14×14 thumb, 2px track, optional log₂ scale, tick snapping within 4px, full keyboard; the value is the truth and a typed readout beside it mirrors it) and `Highlighted` (the one `MatchRange[]` painter for every list ranked by `lib/search`'s `matchText` — ⌘K and the `@` picker draw the same hit the same way; it only paints, merging stays with the search)
 
-`MentionPicker.tsx` 是三个 `@` 宿主（对话助手、扮演、知识库三个 AI 弹窗）共用的选择器：`useMentionState` 管 @ 检测与落字（`findMention` 是纯函数，node 测试直接 import，所以这个文件**不能** import store——词表走 `appTerms` 而不是 `useTerms`），组件只画。列表顶上一行作用域 chip（设计稿 02i）：「全部」恒在，有条目才有「条目」、有文件就有「文档」、有图才有「图片」（`availableScopes`）；状态是一个对象，`sync` 是纯函数 `syncMention(prev, value, caret)`——新开（含提名开着时另起一个 `@`）把档位重置为「全部」、高亮回第 0 行，同一个 `@` 上继续则保留档位；每个提名有序号，选中那一刻 `claim()` 登记到按 id 记的待落表（`trackClaims` 每次渲染让表项跟着打字、关了保留、同一 `@` 上重开的也跟；一张表就是一份草稿——三个宿主都按草稿重挂，对话助手是 `AiDrawer` 的 `key={activeChatKey}`），读完文件再 `accept(value, item, claim, projectPath, sel)` 落字、返回 `{ text, sel }`（`acceptPick`：只落一次、按表里的当前位置、打长了且 `matchesMention` 仍找得到就整段替换否则退回快照 query、没落上不记账不关提名、落上了平移后面的 claim；`afterAccept`：关掉被 claim 的与同一 `@` 上重开的，后起的 `@夜` 平移 `start`——宿主程序化落字不再 `sync`），落字是纯函数 `spliceMention`，原位已不是 `@query` 就不动正文，`@[名字]` 的形状取自 `lib/agent/mentionText` 的 `mentionToken`——记号只有这一份定义，气泡着色、generator 剥引用、`findMention` 判断「在已落引用里」都按它数括号；程序化落字会把光标甩到末尾，所以 `landSelection` 把作者此刻的整段选区两端各经 `caretThrough` 映射过这次替换，宿主渲染之后由 `useKeptSelection` 在 layout effect 里放回去——别的实例写进同一份草稿时，它在渲染期记下输入框换值之前的文本与选区、经 `selectionThrough`（按 `editRange`）搬过去，三个宿主都不必知道是谁写的；`@` 选中的文件还在读时这份草稿不能发（`useMentionReads(slot)`，按槽位计数，照 `chatStash` 的 `pasting`：发起读取的实例可能已卸载；表本身在 `lib/agent/mentionReads.ts`，好让 `composerStore.resetAll` 清掉失败）；对话助手与扮演的读取失败也按槽位记（同一个 hook 的 `failure` / `fail` / `take`），屏上的实例——或下一个挂上这份草稿的——撤排队、显示拒绝提示，显示过就取走（抽屉退场动画里的实例不取，`useIsPresent`）；知识库弹窗的槽位随弹窗消失，照旧实例内提示；读文件期间切了会话或角色：旧实例照样落进原来那份草稿，正文经 store 的 updater 落进它此刻的值（不用冻结在切走那一刻的 `draftRef`，否则切回来接着打的字会被整段覆盖）；新实例拿 `useOwnDraft`（自己的每次写入都经它，写之前先把没渲染的外来改动平移掉；对话助手与扮演共用）认出这次写不是自己的，按 `editRange` 夹出的改动段平移开着的提名与等着的 claim（`shiftCore` / `shiftClaims`），不按光标找、不重开。自己的写入（落字除外——`acceptPick` 自己平移）之后也按改动段平移等着的 claim（`moveClaims`，经 `mention.edited`）：读的期间关掉的提名不再被 `trackClaims` 带着走。匹配、排序、可用档全在 `lib/search/mentionSearch`，宿主经同文件的 `useMentionSearch(candidates, mention, projectPath)` 跑它（选择器不在屏上时什么都不算——候选每次条目写入、文件树刷新都在变），键盘协议只有 `mentionKeyDown` 这一份（Esc 关、组字期间交还输入法、Tab 切档、↑↓、Enter 选中或在空档吞掉），三个宿主各调一次、只在「选中之后做什么」上不同——第一版三处手抄，一个 PR 里就漂了一次（弹窗漏了 IME 守卫，扮演拿裸 `composing` 当门）。门是 `search.open` = `mention.open && candidates.length > 0`：空档仍渲染（chip 行 + 一行事实），但一个候选都没有时没什么可分档，选择器照旧不出来、键照旧放过。命中高亮用 `common/Highlighted`，与 ⌘K 同一个组件。理由：`docs/feature/agent/mention-scope-ui-brief.md`
+`MentionPicker.tsx` 是三个 `@` 宿主（对话助手、扮演、知识库三个 AI 弹窗）共用的选择器，组件只画，逻辑分在下面几处。理由：`docs/feature/agent/mention-scope-ui-brief.md`。
+
+- **检测与状态**：`useMentionState`。`findMention` 是纯函数，node 测试直接 import，所以这个文件**不能** import store——词表走 `appTerms` 而不是 `useTerms`。状态是一个对象，`sync` 是纯函数 `syncMention(prev, value, caret)`：新开（含提名开着时另起一个 `@`）把档位重置为「全部」、高亮回第 0 行；同一个 `@` 上继续则保留档位。
+- **作用域 chip**（设计稿 02i）：列表顶上一行，「全部」恒在，有条目才有「条目」、有文件就有「文档」、有图才有「图片」（`availableScopes`）。
+- **claim 表**：每个提名有序号，选中那一刻 `claim()` 登记到按 id 记的待落表。`trackClaims` 每次渲染让表项跟着打字；关了保留；同一 `@` 上重开的也跟。一张表就是一份草稿——三个宿主都按草稿重挂，对话助手是 `AiDrawer` 的 `key={activeChatKey}`。
+- **落字**：读完文件再 `accept(value, item, claim, projectPath, sel)`，返回 `{ text, sel }`。`acceptPick` 只落一次、按表里的当前位置；打长了且 `matchesMention` 仍找得到就整段替换，否则退回快照 query；没落上不记账、不关提名；落上了平移后面的 claim。`afterAccept` 关掉被 claim 的与同一 `@` 上重开的，后起的 `@夜` 平移 `start`——宿主程序化落字不再 `sync`。落字本身是纯函数 `spliceMention`，原位已不是 `@query` 就不动正文。
+- **记号只有一份定义**：`@[名字]` 的形状取自 `lib/agent/mentionText` 的 `mentionToken`；气泡着色、generator 剥引用、`findMention` 判断「在已落引用里」都按它数括号。
+- **选区保持**：程序化落字会把光标甩到末尾，所以 `landSelection` 把作者此刻的整段选区两端各经 `caretThrough` 映射过这次替换，宿主渲染之后由 `useKeptSelection` 在 layout effect 里放回去。别的实例写进同一份草稿时，它在渲染期记下输入框换值之前的文本与选区，经 `selectionThrough`（按 `editRange`）搬过去——三个宿主都不必知道是谁写的。
+- **读取中的草稿**：`@` 选中的文件还在读时这份草稿不能发（`useMentionReads(slot)`，按槽位计数，照 `chatStash` 的 `pasting`：发起读取的实例可能已卸载；表本身在 `lib/agent/mentionReads.ts`，好让 `composerStore.resetAll` 清掉失败）。对话助手与扮演的读取失败也按槽位记（同一个 hook 的 `failure` / `fail` / `take`）：屏上的实例——或下一个挂上这份草稿的——撤排队、显示拒绝提示，显示过就取走（抽屉退场动画里的实例不取，`useIsPresent`）。知识库弹窗的槽位随弹窗消失，照旧实例内提示。
+- **读取期间切了会话或角色**：旧实例照样落进原来那份草稿，正文经 store 的 updater 落进它此刻的值（不用冻结在切走那一刻的 `draftRef`，否则切回来接着打的字会被整段覆盖）。新实例拿 `useOwnDraft`（自己的每次写入都经它，写之前先把没渲染的外来改动平移掉；对话助手与扮演共用）认出这次写不是自己的，按 `editRange` 夹出的改动段平移开着的提名与等着的 claim（`shiftCore` / `shiftClaims`），不按光标找、不重开。自己的写入（落字除外——`acceptPick` 自己平移）之后也按改动段平移等着的 claim（`moveClaims`，经 `mention.edited`）：读的期间关掉的提名不再被 `trackClaims` 带着走。
+- **搜索与键盘**：匹配、排序、可用档全在 `lib/search/mentionSearch`，宿主经同文件的 `useMentionSearch(candidates, mention, projectPath)` 跑它（选择器不在屏上时什么都不算——候选每次条目写入、文件树刷新都在变）。键盘协议只有 `mentionKeyDown` 这一份（Esc 关、组字期间交还输入法、Tab 切档、↑↓、Enter 选中或在空档吞掉），三个宿主各调一次、只在「选中之后做什么」上不同——三处手抄的版本一个 PR 里就漂过一次（弹窗漏了 IME 守卫）。
+- **门**：`search.open` = `mention.open && candidates.length > 0`。空档仍渲染（chip 行 + 一行事实），但一个候选都没有时没什么可分档，选择器照旧不出来、键照旧放过。命中高亮用 `common/Highlighted`，与 ⌘K 同一个组件。
 
 ### `src/components/command/`, `onboarding/`, `library/`
 
@@ -406,11 +423,27 @@ clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
 
 ### `src/lib/diff/`
 
-「改了什么」的纯计算层，为审批卡片而建（`docs/feature/agent/approval-card-ui-brief.md`）。`myers.ts` 是**带上限**的 Myers 贪心搜索：先掐掉公共前后缀（一处小改在三千行里就只搜那几行），超过 `MAX_LINE_DISTANCE` 返回 `null` 而不是给一份读不动的答案——两份毫不相干的文档「diff」出来是三千行红压着三千行绿，比一句「整篇替换」说得**更少**，所以算力上限和可读性上限在这里是同一条线。`tokens.ts` 是行内切分，**中日韩逐字、拉丁逐词、空白成串**：通用 diff 库按空白切词，一整段中文只切出一个 token，于是「金发→银发」退化成「整句被替换」，那正是今天卡片给作者的答案。`index.ts` 出 `diffInline`（find/replace 那种短文本）与 `diffDocument`（行级 + hunk + 成对行的行内详情）；**折叠阈值 `context` 是参数不是规矩**——这一层只回答「改了什么」，「显示多少」是卡片的事。两条边界值得记住：行内详情只配给**等长**的删/增行对（跨长度配对是另一个会出错的问题，而它出的错是把两行无关的句子画成一次改写），`stats.whitespaceOnly` 单独一条（只动缩进/换行/行尾的改动要一眼可辨，而「格式整理」里**不是**纯空白的那部分恰恰是这个功能要抓的东西）。行号按 `editApply.countLines` 的算法数：末尾换行不制造一个空的末行。`windows.ts` 是卡片那一层的模型（设计稿 02h 1z A/B）：一处改动一扇窗，窗里前后各两行原文做定位，**删行永远在加行上面**（视线先过要失去的），字级高亮是**有条件的点亮**——改动行 ≤ 3 且 Dice 相似度 ≥ 0.5，低于就写「整段替换」并熄灯（marking 两句不相干的话共有的那几个字，是噪音穿了信息的衣服）；同一种替换重复 ≥ 10 处时只画 2 扇、上下文收成 0 行并报数。宽度相关的数（上下文行数、窗数上限）由调用方传，改动相关的判断在模块里——前者是布局，后者是关于这次改动的判断。`blocks.ts` 是整篇重写那一层（设计稿 02h 1b）：**按空行切段**而不是按行——重排过的段落会散成十几处无关的行改动，而「合并」（两段焊成一段，整理稿最常做的事）**按行根本表达不出来**，只会变成噪音。五类：删 / 改写 / 合并 / 新增 / 标点，排序是 删 → 改写·合并 → 新增 → 标点，标点类只报数不画（它改不了字数，三十七处会把改得了的挤出屏幕），除非整篇只有标点改动。**先分类再合并相邻窗**，且只合并同类：反过来做会凭空造出「合并」——一处删除挨着一处无关改写，正好是「两删一加」的形状，模型会告诉作者两段被焊到了一起。`sections.ts` 是「这一行在哪个小节」的唯一定义，编辑卡与重写卡共用（围栏里的 `#` 不算小节）。
+「改了什么」的纯计算层，为审批卡片而建（`docs/feature/agent/approval-card-ui-brief.md`）。
+
+- `myers.ts`——**带上限**的 Myers 贪心搜索。先掐掉公共前后缀（一处小改在三千行里就只搜那几行），超过 `MAX_LINE_DISTANCE` 返回 `null` 而不是给一份读不动的答案：两份毫不相干的文档「diff」出来是三千行红压着三千行绿，比一句「整篇替换」说得**更少**，所以算力上限和可读性上限是同一条线。
+- `tokens.ts`——行内切分，**中日韩逐字、拉丁逐词、空白成串**。通用 diff 库按空白切词，一整段中文只切出一个 token，「金发→银发」就退化成「整句被替换」。
+- `index.ts`——出 `diffInline`（find/replace 那种短文本）与 `diffDocument`（行级 + hunk + 成对行的行内详情）。**折叠阈值 `context` 是参数不是规矩**：这一层只回答「改了什么」，「显示多少」是卡片的事。两条边界：行内详情只配给**等长**的删/增行对（跨长度配对出的错是把两行无关的句子画成一次改写）；`stats.whitespaceOnly` 单独一条（只动缩进/换行/行尾的改动要一眼可辨，而「格式整理」里**不是**纯空白的那部分恰恰是这个功能要抓的）。行号按 `editApply.countLines` 的算法数：末尾换行不制造一个空的末行。
+- `windows.ts`——卡片那一层的模型（设计稿 02h 1z A/B）。一处改动一扇窗，窗里前后各两行原文做定位，**删行永远在加行上面**（视线先过要失去的）。字级高亮是**有条件的点亮**：改动行 ≤ 3 且 Dice 相似度 ≥ 0.5，低于就写「整段替换」并熄灯（标出两句不相干的话共有的那几个字，是噪音穿了信息的衣服）。同一种替换重复 ≥ 10 处时只画 2 扇、上下文收成 0 行并报数。宽度相关的数（上下文行数、窗数上限）由调用方传，改动相关的判断在模块里——前者是布局，后者是关于这次改动的判断。
+- `blocks.ts`——整篇重写那一层（设计稿 02h 1b）。**按空行切段**而不是按行：重排过的段落会散成十几处无关的行改动，而「合并」（两段焊成一段，整理稿最常做的事）按行根本表达不出来。五类：删 / 改写 / 合并 / 新增 / 标点，排序是 删 → 改写·合并 → 新增 → 标点；标点类只报数不画（它改不了字数，三十七处会把改得了的挤出屏幕），除非整篇只有标点改动。**先分类再合并相邻窗**，且只合并同类：反过来做会凭空造出「合并」——一处删除挨着一处无关改写，正好是「两删一加」的形状，卡片会告诉作者两段被焊到了一起。
+- `sections.ts`——「这一行在哪个小节」的唯一定义，编辑卡与重写卡共用（围栏里的 `#` 不算小节）。
 
 ### `src/lib/editor/`
 
-编辑面的纯逻辑与 CodeMirror 扩展，一个文件一件事——组件里只剩接线，所以这些能在 node 下测。`aiTarget.ts` 是**显式标记的 AI 作用区**：拖一段选区只够「立刻就动它」，撑不住作者真实的动作（点进 AI 面板、滚一页、继续打字）——DOM 选区在第一次点别处就没了，而一对裸偏移在上方任何编辑之后就烂了（旧实现的每个消费方都得切一遍文档再验、验不过就去搜那段文字）。把起止交给编辑器状态，CodeMirror 会替它映射过每一次改动，包括区间内部的改动，于是偏移可以直接信。`aiSelection.ts` 是「把当前选区定成一次 AI 任务」的纯逻辑，InlineAiBubble 和全局 `Mod+Shift+E/L/M` 各调它一次，谁都不用 import 谁。`format.ts`（CodeMirror）与 `textareaFormat.ts`（条目编辑器那种裸 `<textarea>`）是同一套 markdown 命令的两个面：行内标记**开关式**（对已加粗的文字再加粗就是去掉），块级命令作用于选区碰到的每一行；`textareaFormat` 把变换切成纯函数（`*Edit`，算出一段连续替换 + 结果选区，无 DOM 可测）加一层薄的 DOM 应用层，改动靠派发 `input` 事件写回 React。`highlight.ts` 的 `manuscriptHighlight` **只发 `.tok-*` 类名、不带颜色**：CodeMirror 的 `defaultHighlightStyle` 自带一套浅色调色板，而且它是个 JavaScript 对象——没有令牌、读不到 `data-scheme`，主题伸不进去（于是夜间的代码和引用一直是浅色，模块 CSS 里那些**读令牌的** `.tok-*` 规则一个都没匹配上，因为默认样式发的是生成类名）。颜色因此和编辑器画的其他东西一起住在模块样式表里，主题换编辑器配色就和换按钮颜色是同一件事（`docs/feature/theme-system-plan.md` §8）。`insertFlash.ts` 与 `caretFlash.ts` 是两种落点回执，**mark 与 line 装饰的分别**是被逼出来的：插入用 mark 画那段刚落下的文字；而光标跳到 `doc.length`、文档又以换行结尾时落在**空行**上，零宽区间的 mark 什么都画不出来，所以跳转用 line 装饰（它至少还有行高）。`scrollSync.ts` 让分栏两侧**按源行对齐而不是按滚动百分比**：同样的行在两边高度差得远（`# 标题` 变成一个高标题，`![图]` 变成一整块图），等百分比会把不同的段落摆到屏上；每一侧交一份 `ScrollMapping`（视口顶 → 分数源行，以及反向），没有映射时退回旧的等比镜像，两个极端始终吸附。`scrollAnchors.ts` 是那两份具体映射（编辑器侧读 CodeMirror 的块几何，预览侧读 `renderMarkdown` 在分栏下打的 `data-line` 锚点）——纯测量、正是 jsdom 跑不了的那部分，所以插值数学留在 `scrollSync.ts` 里当纯函数测。`previewZoom.ts` 是预览缩放的**定档梯子**：按钮和 ⌘/Ctrl+滚轮必须对「一档是多少」有共识，而一个作者说不出名字的百分比（113%）比稍粗一点的跳档更糟；档位在 100% 附近变密，因为阅读微调都发生在那儿。
+编辑面的纯逻辑与 CodeMirror 扩展，一个文件一件事——组件里只剩接线，所以这些能在 node 下测。
+
+- `aiTarget.ts`——**显式标记的 AI 作用区**。拖一段选区只够「立刻就动它」，撑不住作者真实的动作（点进 AI 面板、滚一页、继续打字）：DOM 选区在第一次点别处就没了，一对裸偏移在上方任何编辑之后就烂了。把起止交给编辑器状态，CodeMirror 会替它映射过每一次改动（包括区间内部的），于是偏移可以直接信。
+- `aiSelection.ts`——「把当前选区定成一次 AI 任务」的纯逻辑，InlineAiBubble 和全局 `Mod+Shift+E/L/M` 各调它一次，谁都不用 import 谁。
+- `format.ts`（CodeMirror）与 `textareaFormat.ts`（条目编辑器那种裸 `<textarea>`）——同一套 markdown 命令的两个面。行内标记**开关式**（对已加粗的文字再加粗就是去掉），块级命令作用于选区碰到的每一行。`textareaFormat` 把变换切成纯函数（`*Edit`，算出一段连续替换 + 结果选区，无 DOM 可测）加一层薄的 DOM 应用层，改动靠派发 `input` 事件写回 React。
+- `highlight.ts`——`manuscriptHighlight` **只发 `.tok-*` 类名、不带颜色**。CodeMirror 的 `defaultHighlightStyle` 自带一套浅色调色板，而且它是个 JavaScript 对象：没有令牌、读不到 `data-scheme`，主题伸不进去（夜间的代码和引用会一直是浅色，模块 CSS 里读令牌的 `.tok-*` 规则也匹配不上，因为默认样式发的是生成类名）。颜色因此和编辑器画的其他东西一起住在模块样式表里，主题换编辑器配色就和换按钮颜色是同一件事（`docs/feature/theme-system-plan.md` §8）。
+- `insertFlash.ts` 与 `caretFlash.ts`——两种落点回执，**mark 与 line 装饰的分别**是被逼出来的：插入用 mark 画那段刚落下的文字；跳转到 `doc.length`、文档又以换行结尾时落在**空行**上，零宽区间的 mark 什么都画不出来，所以跳转用 line 装饰（它至少还有行高）。
+- `scrollSync.ts`——分栏两侧**按源行对齐而不是按滚动百分比**：同样的行在两边高度差得远（`# 标题` 变成一个高标题，`![图]` 变成一整块图），等百分比会把不同的段落摆到屏上。每一侧交一份 `ScrollMapping`（视口顶 → 分数源行，以及反向），没有映射时退回等比镜像，两个极端始终吸附。插值数学是这里的纯函数。
+- `scrollAnchors.ts`——那两份具体映射（编辑器侧读 CodeMirror 的块几何，预览侧读 `renderMarkdown` 在分栏下打的 `data-line` 锚点）。纯测量，正是 jsdom 跑不了的那部分，所以数学留在 `scrollSync.ts`。
+- `previewZoom.ts`——预览缩放的**定档梯子**：按钮和 ⌘/Ctrl+滚轮必须对「一档是多少」有共识，而一个作者说不出名字的百分比（113%）比稍粗一点的跳档更糟；档位在 100% 附近变密，因为阅读微调都发生在那儿。
 
 ### `src/lib/format/`
 
@@ -534,7 +567,22 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 
 ### `src/lib/translate/`
 
-日中翻译（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）：接一个**本地部署的专用翻译模型**（Sakura，走 LM Studio / Ollama 的 OpenAI 兼容端点）。它不是一个小号 LLM，而是一个**翻译函数**——实测问它「你是什么模型」，它把问题改写一遍还回来；给它中译日，输出的还是中文。四条因此成立：`translate` **进 `SUBAGENT_KINDS` 但不进 `DELEGATE_KINDS`**（照 `imagegen` 的先例，助手的接口是工具而不是子对话），`run.ts` **绕开 `runAgent` 直接调 `streamCompletion`**（它没有 tool calling 可循环），带 `translateFormat` 的模型**永不出现在任何非翻译候选列表里**（过滤收在 `components/ai/ModelSelector` 一处 —— 那个组件就是「挑一个模型来对话」这件事；`lib/ai/configDb` 的 `conversationalModels` 是这条不变量的名字），以及**坏译文永不落盘**（阶梯走完仍不合格的块写回原文加一行 HTML 注释）。`sakura.ts` 是训练时固定的提示词模板、采样常量和退化判定 —— 判定顺序 degenerate → truncated → line-mismatch **不能换**，而且**不信「重复整行」**：实测两次退化的重复行计数都是 0，复读发生在一行之内，可靠的信号是 tok/行（正常 19–22，退化 65–120）。`chunk.ts` 按行切块（块大小可调：设置 → 子代理 → 每块行数，`flag.ts` 的 `translateLinesPerChunk`）并让没有日文字符的行（空行、URL、分隔线）根本不进请求、按行号插回，`glossary.ts` 从知识库抽**本块命中**的术语并在译文上做最长词优先的强制替换（术语表只是软提示，实测漏替一半；来源两条——条目别名→条目名，加上勾了「翻译词典」开关（frontmatter `dict: true`，条目编辑表单里设）的条目正文里的 `原文->译文 #备注` 行，同源词词典赢），`context.ts` 把上一块尾部几行的「原文 → 译文」作为一对合成消息前置。`top_p` / `frequency_penalty` 住在 `StreamOptions` 而**不是 `ConnOptions`** —— 后者只收「来自配置」的字段，而 freq 是退化重试阶梯的一环，逐次请求都在变。设计与实测：`docs/feature/translate/`
+日中翻译（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）：接一个**本地部署的专用翻译模型**（Sakura，走 LM Studio / Ollama 的 OpenAI 兼容端点）。它不是一个小号 LLM，而是一个**翻译函数**——实测问它「你是什么模型」，它把问题改写一遍还回来；给它中译日，输出的还是中文。设计与实测：`docs/feature/translate/`。
+
+四条不变量因此成立：
+
+- `translate` **进 `SUBAGENT_KINDS` 但不进 `DELEGATE_KINDS`**（照 `imagegen` 的先例，助手的接口是工具而不是子对话）。
+- `run.ts` **绕开 `runAgent` 直接调 `streamCompletion`**（它没有 tool calling 可循环）。
+- 带 `translateFormat` 的模型**永不出现在任何非翻译候选列表里**。过滤收在 `components/ai/ModelSelector` 一处——那个组件就是「挑一个模型来对话」这件事；`lib/ai/configDb` 的 `conversationalModels` 是这条不变量的名字。
+- **坏译文永不落盘**：阶梯走完仍不合格的块写回原文加一行 HTML 注释。
+
+模块：
+
+- `sakura.ts`——训练时固定的提示词模板、采样常量和退化判定。判定顺序 degenerate → truncated → line-mismatch **不能换**，而且**不信「重复整行」**：实测两次退化的重复行计数都是 0，复读发生在一行之内；可靠的信号是 tok/行（正常 19–22，退化 65–120）。
+- `chunk.ts`——按行切块（块大小可调：设置 → 子代理 → 每块行数，`flag.ts` 的 `translateLinesPerChunk`），没有日文字符的行（空行、URL、分隔线）根本不进请求、按行号插回。
+- `glossary.ts`——从知识库抽**本块命中**的术语，并在译文上做最长词优先的强制替换（术语表只是软提示，实测漏替一半）。来源两条：条目别名 → 条目名，加上勾了「翻译词典」开关（frontmatter `dict: true`，条目编辑表单里设）的条目正文里的 `原文->译文 #备注` 行；同源词词典赢。
+- `context.ts`——把上一块尾部几行的「原文 → 译文」作为一对合成消息前置。
+- `top_p` / `frequency_penalty` 住在 `StreamOptions` 而**不是 `ConnOptions`**：后者只收「来自配置」的字段，而 freq 是退化重试阶梯的一环，逐次请求都在变。
 
 ### `src/lib/asr/`
 
@@ -562,7 +610,13 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 
 ### `src/lib/cli/`
 
-命令行（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）：让助手在这台电脑上跑一条命令——Windows 走 PowerShell（`pwsh` 优先，退 5.1），macOS / Linux 走 `$SHELL` 或系统 shell。Rust 那一半在 `src-tauri/src/cmd.rs`（`cmd_shell_info` / `cmd_run` / `cmd_kill` + 受管的句柄表），**不装** `tauri-plugin-shell`——它唯一的安全机制是静态允许清单，对模型现写的一行只能配成 `args: true`，而超时、杀进程组、输出封顶、编码检测、`FsScope` 的 `cwd` 围栏它一样都没有。前端四个纯模块各答一个问题：`shell.ts` 识别真实 shell 和它所在的系统（`systemLabel`：系统名 + 版本 + 架构）；`command.ts` 以封闭白名单按 POSIX / PowerShell 判 `read | write`（未知、复合、危险参数默认写入；程序必须是裸名——`./cat` 按 basename 命中会跑项目里的文件；参数不许出项目——免审读取的输出不经作者直接进模型），并给审批卡算 `isCompound` / `looksDangerous`；`output.ts` 截出模型读回的头尾；`run.ts` 编排运行、中止、日志。`allowlist.ts` 管作者的**免审批命令**清单（`app:cliAllowlist`，机器本地；程序名规整成 `programNameOf` 的键，shell / 解释器 / 构建工具 / 提权与 `cd` `export` 这类改后续段环境的内建命令永远拒收，包管理器只放行查看类子命令）；`command.ts` 的 `commandCover` 把一行按 `&&` `||` `;` `|` 切段，每段须是只读或被清单覆盖（与只读白名单共用 `plainInvocation` 形状检查，外加按程序的执行钩子表），`allowlistCandidates` 给卡算「始终允许」该列哪些程序——只在加进去之后这一行本身能免审时给，删除 / 移动类程序从不给（只能在设置页加）。`agent/cliTools.ts` 对 `commandCover` 通过的命令直接调用 runner（清单非空时 description 点名这些程序），其余组 `CommandProposal`；`ApprovalCard` 展示写命令原文，「始终允许 <程序>」写清单并批准本张（不要求 `autoApproveKey`——它是设置不是运行授权），单条普通写命令可按 1–5 条连批，复合或危险命令永远逐条审批（危险表不完整，复合是它的兜底）；`agentStore` 用 `commandLeft` + `commandRun` 扣减并在 run 结束清零。路由仍要求 `RouteOptions.commands` + Beta + `IS_TAURI` 三者齐全，description 在交出定义时点名真实系统与 shell（只说 zsh 分不出 BSD 还是 GNU userland）。`isAutoApprovable("command")` 为假，正文的布尔授权永不覆盖 shell。设计：`docs/feature/agent/shell-command-plan.md`
+命令行（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）：让助手在这台电脑上跑一条命令——Windows 走 PowerShell（`pwsh` 优先，退 5.1），macOS / Linux 走 `$SHELL` 或系统 shell。设计：`docs/feature/agent/shell-command-plan.md`。
+
+- **Rust 那一半**在 `src-tauri/src/cmd.rs`（`cmd_shell_info` / `cmd_run` / `cmd_kill` + 受管的句柄表），**不装** `tauri-plugin-shell`：它唯一的安全机制是静态允许清单，对模型现写的一行只能配成 `args: true`，而超时、杀进程组、输出封顶、编码检测、`FsScope` 的 `cwd` 围栏它一样都没有。
+- **前端四个纯模块**各答一个问题：`shell.ts` 识别真实 shell 和它所在的系统（`systemLabel`：系统名 + 版本 + 架构）；`command.ts` 以封闭白名单按 POSIX / PowerShell 判 `read | write`（未知、复合、危险参数默认写入；程序必须是裸名——`./cat` 按 basename 命中会跑项目里的文件；参数不许出项目——免审读取的输出不经作者直接进模型），并给审批卡算 `isCompound` / `looksDangerous`；`output.ts` 截出模型读回的头尾；`run.ts` 编排运行、中止、日志。
+- **免审批清单** `allowlist.ts`（`app:cliAllowlist`，机器本地）：程序名规整成 `programNameOf` 的键；shell / 解释器 / 构建工具 / 提权与 `cd` `export` 这类改后续段环境的内建命令永远拒收，包管理器只放行查看类子命令。`command.ts` 的 `commandCover` 把一行按 `&&` `||` `;` `|` 切段，每段须是只读或被清单覆盖（与只读白名单共用 `plainInvocation` 形状检查，外加按程序的执行钩子表）；`allowlistCandidates` 给卡算「始终允许」该列哪些程序——只在加进去之后这一行本身能免审时给，删除 / 移动类程序从不给（只能在设置页加）。
+- **审批**：`agent/cliTools.ts` 对 `commandCover` 通过的命令直接调用 runner（清单非空时 description 点名这些程序），其余组 `CommandProposal`。`ApprovalCard` 展示写命令原文；「始终允许 <程序>」写清单并批准本张（不要求 `autoApproveKey`——它是设置不是运行授权）；单条普通写命令可按 1–5 条连批，复合或危险命令永远逐条审批（危险表不完整，复合是它的兜底）。`agentStore` 用 `commandLeft` + `commandRun` 扣减并在 run 结束清零。`isAutoApprovable("command")` 为假，正文的布尔授权永不覆盖 shell。
+- **路由**要求 `RouteOptions.commands` + Beta + `IS_TAURI` 三者齐全，description 在交出定义时点名真实系统与 shell（只说 zsh 分不出 BSD 还是 GNU userland）。
 
 ### `src/lib/workflow/`
 

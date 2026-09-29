@@ -556,46 +556,13 @@ Rules the implementation is built around:
 
 ### 小模型 / 本地端点：三处不能靠模型自己推断的地方
 
-Probing above fixes what the *endpoint* misreports. This section is about the other half — what the **request** leaves unsaid, and what a smaller model does not fill in on its own. All three below were found by driving `gemma4:12b` on ollama 0.32 through the real code paths; the protocol itself turned out to be fine (streamed `tool_calls` accumulate correctly, `content: null` + `role: "tool"` pairing is accepted, an echoed `_reasoning` field is ignored on input, `response_format: json_object` works and keeps thinking separate, and ollama loaded the model at its full 262144 `num_ctx` — so none of the usual suspects were the cause).
+Probing above fixes what the *endpoint* misreports. This section is the other half — what the **request** leaves unsaid, and what a smaller model does not fill in on its own. All three were found driving a local model through the real code paths; the protocol itself was fine. Measurements: [`feature/agent/measurements/small-model-gaps-2026-08.md`](../feature/agent/measurements/small-model-gaps-2026-08.md).
 
-**1. A read-tool task never said it had tools** (`toolBriefingFor` in `lib/agent/presets.ts`).
+**1. A read-tool task says it has tools** (`toolBriefingFor` in `lib/agent/presets.ts`). A frontier model infers "these schemas exist, so I should look things up"; a small one doesn't, and fails silently. The briefing goes in the **system** layer, like the chat's (`stores/agent/chatJob.ts`): it is a standing fact about the run, not a step of the task. Only the read tier gets one — `full` tasks already carry theirs in the *task* layer (`ai.instructions.agent`, `ai.instructions.htmlArtifact`), and briefing a `none` task would be paid-for tokens describing tools the request never sends. It is a function of the **tier**, not of a task id, because a pack may declare any number of read-tool tasks and every one of them has the same gap.
 
-For a `tools: "read"` task the system layer was the writing prompt and the task layer was 续写's four lines about how to write. Neither mentions tools; the schemas rode on the wire alone. That works on a frontier model, which infers "these exist, so I should look things up", and fails silently below it. Measured on the real 续写 shape, n=4 each:
+**2. Structured output forces `"required"`, never a named `tool_choice`** (`lib/agent/structured.ts`). It presents one pseudo-tool and forces it. The named spelling is the one ollama **silently ignores**, costing a whole request before the JSON fallback runs. With exactly one tool offered the two are the same instruction, and all three adapters map `"required"` (OpenAI `required`, Anthropic `{type:"any"}`, Gemini mode `ANY` with no `allowedFunctionNames`).
 
-| system prompt | called a lore tool |
-|---|---|
-| before (no briefing) | 6 / 10 |
-| after (`ai.instructions.toolsRead`) | 9 / 10 |
-
-n=10 per cell, pooled over two sittings. Small enough that the *size* of the gap is not worth quoting to a decimal — what it establishes is direction, and that the model was never refusing to look things up, only never being told to.
-
-The briefing goes in the **system** layer, like the chat's (`stores/agent/chatJob.ts`): it is a standing fact about the run, not a step of the task. Only the read tier gets one — `full` tasks already carry theirs in the *task* layer (`ai.instructions.agent`, `ai.instructions.htmlArtifact`), and briefing a `none` task would be paid-for tokens describing tools the request never sends. It is a function of the **tier**, not of a task id, because a pack may declare any number of read-tool tasks and every one of them has the same gap.
-
-**2. A named forced `tool_choice` is not portable** (`lib/agent/structured.ts`).
-
-Structured output presents one pseudo-tool and forces it. `{type:"function",function:{name}}` is the precise spelling and the one ollama **silently ignores** — it answers with prose and no tool call, which reached `EMPTY_TOOL_CALL` and spent a whole request before the JSON fallback ran. `"required"` works there. With exactly one tool offered the two are the same instruction, and all three adapters already map `"required"` (OpenAI `required`, Anthropic `{type:"any"}`, Gemini mode `ANY` with no `allowedFunctionNames`), so the precise form bought nothing and cost a round trip on exactly the endpoints where a round trip is tens of seconds.
-
-**3. Sampling was never configurable** (`Model.temperature` → `ConnOptions` → all three adapters).
-
-The app sent no `temperature` at all, on any protocol, and `extraBody` is an internal escape hatch with no UI — so an ollama model ran at whatever the Modelfile baked in (`temperature 1 / top_k 64 / top_p 0.95` for gemma4) with no way to change it from the app in **either** direction. That is the whole justification, and it is narrower than it first looked.
-
-The original hypothesis — that a temperature of 1 is what makes tool selection erratic — was **measured and rejected**. On `gemma4:12b`, an ambiguous request against the full 39-tool set, 8 runs at each temperature:
-
-| | first tool chosen | malformed arguments |
-|---|---|---|
-| temp 1.0 (ollama default) | `list_lore_entities` 8/8 | 0 |
-| temp 0.2 | `list_lore_entities` 8/8 | 0 |
-
-Where it *did* move something is the under-specified 续写 case — whether the model reaches for a tool at all (n=6 per cell):
-
-| | temp default | temp 0.2 |
-|---|---|---|
-| no briefing | 4/6 | 6/6 |
-| with briefing | 5/6 | 6/6 |
-
-Read that with the briefing row in mind: once §1 is in place the headroom is one run in six at n=6, which is not evidence of anything. **The briefing is the fix; temperature is not.** And it has a cost this app in particular should care about — 5 drafts from one context, mean pairwise trigram overlap: 3% at 1.0, 6% at 0.7, 8% at 0.2. Small, but the wrong direction for a feature whose whole point is N different drafts (`lib/ai/drafts.ts`).
-
-So the setting stays as a **local-endpoint escape hatch**, not as a tuning knob the UI recommends — the hint text says all of the above, including that temperature 0 does not buy reproducibility. Three details hold it in place:
+**3. Temperature is a local-endpoint escape hatch, not a tuning knob** (`Model.temperature` → `ConnOptions` → all three adapters). Without it an ollama model runs at whatever the Modelfile baked in, with no way to change it from the app. It does **not** fix erratic tool use (measured: the briefing is the fix), and lowering it narrows the spread of multi-draft output — so the hint text says so, including that temperature 0 does not buy reproducibility. Three details hold it in place:
 
 - **0 is a value, not "unset".** It is the temperature an author reaches for when a task must stop being creative, so every test on it is `!== undefined`, never truthiness — in the form state, in the save path, and in all three adapters
 - **Absent means absent.** An unconfigured model's request is byte-identical to before the setting existed
