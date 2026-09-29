@@ -1,6 +1,6 @@
 # 对话助手记忆系统方案（chat context compaction）
 
-> **状态：三期全部实现**（PR1 结构 / PR2 压缩 / PR3 每轮注入，见 §7）。
+> **状态：`shipped`——三期全部实现**（PR1 结构 / PR2 压缩 / PR3 每轮注入，见 §7）。
 > 纯逻辑落在 [`lib/agent/compact.ts`](../../../src/lib/agent/compact.ts)，编排落在
 > `compactRun.ts`，接入点是 `agentStore.sendChat`。
 >

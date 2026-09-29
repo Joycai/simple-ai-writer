@@ -70,6 +70,7 @@ const REPO_WIDE_TESTS: Readonly<Record<string, string>> = {
   "cssKeyframeNames.test.ts": "扫 src/ 全部 .css——@keyframes 的命名空间是全局的",
   "cssModuleClassRefs.test.ts": "扫 src/ 全部 .tsx 的 AST 与 .module.css——styles.foo 的 foo 必须真的有",
   "docSourceRefs.test.ts": "扫 docs/ 与源码注释——不许写 `文件:行号`",
+  "docStatus.test.ts": "扫 docs/ 的状态行与 docs/README.md 汇总表——状态以词表里的词开头，两处对得上",
   "exportReach.test.ts": "扫 src/ 全部导出——每个 export 得有第二个文件用它",
   "focusRing.test.ts": "扫 src/styles/——焦点环只能由 token 画",
   "imageRouteOwner.test.ts": "扫 src/ 全部源码——出图路线的声明值不许直接和可推导的三个值比，有效路线只由 imageRoute.ts 给",

@@ -1,6 +1,6 @@
 # 知识库集合（Collections）——第二根轴
 
-> 状态：**已实施**（数据层 + 设计稿 03b 屏 24–31 的全部 UI + agent 的整理工具，见 §8）。设计任务书见
+> 状态：**`shipped`——已实施**（数据层 + 设计稿 03b 屏 24–31 的全部 UI + agent 的整理工具，见 §8）。设计任务书见
 > [`lore-collection-ui-brief.md`](./lore-collection-ui-brief.md)，视觉口径见
 > [`design-system.md`](../../reference/design-system.md) → 知识库设计语言 → 集合。
 > 相关：[`lore-entry-type-plan.md`](./lore-entry-type-plan.md)（分类的类型 schema）、[`lore-facet-plan.md`](./lore-facet-plan.md)（条目内的粒度）。

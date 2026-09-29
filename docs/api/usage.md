@@ -1,5 +1,7 @@
 # 用量与上限：token 怎么算，窗口怎么问
 
+> 状态：`living`。
+>
 > 边界见 [`README.md`](README.md)：只写协议事实。族的编号沿用
 > [`landscape.md`](landscape.md)：① Chat Completions ② Responses ③ Google GenAI
 > ④ Anthropic Messages。

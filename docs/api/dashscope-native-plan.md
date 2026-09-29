@@ -1,6 +1,6 @@
 # 百炼新地址、Token Plan 与 DashScope 原生线路
 
-状态：`shipped`（2026-09-28）。协议事实在 [`landscape.md`](landscape.md) §7 第二十一个样本；这里只写本项目怎么选、为什么。
+> 状态：`shipped`（2026-09-28）。协议事实在 [`landscape.md`](landscape.md) §7 第二十一个样本；这里只写本项目怎么选、为什么。
 
 ## 1. 做了什么
 

@@ -1,6 +1,6 @@
 # 取材范围多选（Multi-collection scope）
 
-> 状态：**已实施**（数据层 + store + 接线 + 切换器多选 UI，切换器视觉按 Claude Design 设计稿
+> 状态：**`shipped`——已实施**（数据层 + store + 接线 + 切换器多选 UI，切换器视觉按 Claude Design 设计稿
 > 03 屏 26 重绘；见 PR #443）。这是 [`lore-collection-plan.md`](./lore-collection-plan.md) 的一个增量：把
 > 「取材范围」从单选一个集合，改成**同时激活多个集合的并集**，且**「未归集」也成为一个
 > 可勾选的范围成员**。视觉口径见 [`design-system.md`](../../reference/design-system.md)

@@ -1,5 +1,7 @@
 # 实现记录（设计稿 04a + 角色记忆）
 
+> 状态：`shipped`。
+>
 > 对应 UI 设计稿 `04a 扮演 · 主界面 Roleplay A.dc.html`（claude.ai/design 项目
 > `17a6a5ce-f60e-4996-8f94-5948958206d0`）的 1a–1i 九屏。
 > 计划见 [03-plan.md](03-plan.md)——这一轮一次做完了原计划的 PR1 / PR2 / PR4 / PR5，

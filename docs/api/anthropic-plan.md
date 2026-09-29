@@ -1,6 +1,6 @@
 # Anthropic 族接入方案（调研与审计）
 
-> **状态：六刀全部实现。** 剩下的是 §7 那几条只能靠真实请求定论的验证。
+> **状态：`shipped` `unverified`——六刀全部实现。** 剩下的是 §7 那几条只能靠真实请求定论的验证。
 >
 > **2026-09 更新**：Anthropic 侧的 `adaptive`/`extended`/`switch` 三种 dialect 现在
 > 各自是一个具名**思考参数类目**——`claude-adaptive`（thinking:adaptive +

@@ -1,5 +1,7 @@
 # ② OpenAI Responses：协议事实（GPT-5.4 / 5.5 / 5.6 实测）
 
+> 状态：`living`。
+>
 > **性质**：与 [`streaming.md`](streaming.md)、[`tools.md`](tools.md) 同类的协议事实页，
 > 不含本项目的取舍（那些在 [`qianwen-compat-plan.md`](qianwen-compat-plan.md) §4）。
 > 写成可以直接搬去别的项目用的形态：每条都附能验证它的请求骨架或字段路径。

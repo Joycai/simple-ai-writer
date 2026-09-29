@@ -1,5 +1,7 @@
 # 给 Claude Design 的 UI 设计任务书
 
+> 状态：`shipped`——设计稿 04a 已回并实现，出入见 [05-implementation-notes.md](05-implementation-notes.md)。
+>
 > 这份文件是**自包含的**——底下 `---` 以后的全部内容可以整段复制丢给 Claude Design，不需要它读代码库。
 > 设计回来之后，实现时对照 [02-design.md](02-design.md) 的状态清单核对每个态是否都有画。
 

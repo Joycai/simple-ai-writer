@@ -1,6 +1,6 @@
 # 分类的管理面——批量移动、删除，以及 agent 那一侧的缺口
 
-> 状态：**已实施**（四片：墙上多选 →「移到分类」+ 置顶重指；「删除分类」的两出口确认；agent 方案卡的分类 target 轴；`manage_category` 的改名与删除——见 §8，它同时更正了 §2 里一条错的前提）。
+> 状态：**`shipped`——已实施**（四片：墙上多选 →「移到分类」+ 置顶重指；「删除分类」的两出口确认；agent 方案卡的分类 target 轴；`manage_category` 的改名与删除——见 §8，它同时更正了 §2 里一条错的前提）。
 > 相关：[`lore-collection-plan.md`](./lore-collection-plan.md)（第二根轴，它的管理面是**做全了**的那一根）、
 > [`lore-entry-type-plan.md`](./lore-entry-type-plan.md)（分类的类型 schema）、
 > [`design-system.md`](../../reference/design-system.md) → 知识库设计语言。

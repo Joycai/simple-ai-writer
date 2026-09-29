@@ -1,6 +1,6 @@
 # 目录说明文件（`index.md`）：读、写、入口
 
-> **状态：`implemented`。** 2026-09-22 与本文档同一个 PR 落地。
+> **状态：`shipped`。** 2026-09-22 与本文档同一个 PR 落地。
 > 上游调研是 [`okf-folder-metadata-research.md`](okf-folder-metadata-research.md)；
 > 本文档只做它 §5「工作区目录说明文件」与 §6.2「分类说明」两项，§6.1 的条目 `status`
 > 与 §6.3 的信任盖章不在这里。

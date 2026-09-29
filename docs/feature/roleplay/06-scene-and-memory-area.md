@@ -1,6 +1,6 @@
 # 转场与记忆区
 
-> **状态：已实现。**（这一行原本写着「设计，未实现」，在 2026-08-22 的文档整理里核对
+> **状态：`shipped`——已实现。**（这一行原本写着「设计，未实现」，在 2026-08-22 的文档整理里核对
 > 代码后更正：分拣在 `lib/roleplay/memory.ts` 的 `takeSinkable`，记忆区在
 > `lib/roleplay/area.ts`，前情在 `recap.ts`，检索在 `run.ts` 的 `injectAreaRecall`，
 > 编排在 `stores/roleplayStore.ts` 的 `newSession` / `previewRecap`。）
