@@ -1,13 +1,15 @@
 # macOS 代码签名（自签名证书）· 操作手册
 
-> Status: **planned** — 手册里的每条命令都在真机上跑过（§附录 A 是实测记录），但仓库还没启用。
-> 启用之后把这行改成 `living`。
+> Status: **`partial`** — **已做**：bundle 整体 ad-hoc 签名（`tauri.conf.json` 的 `bundle.macOS.signingIdentity: "-"`）
+> 和 `src-tauri/Info.plist` 里的 `NSLocalNetworkUsageDescription`，解决的是本地网络权限（下文「已经做了的一半」）。
+> **没做**：固定的自签名证书（§1 起的手册；`release.yml` 没有任何 `APPLE_*` 签名配置），所以钥匙串在每次更新后
+> 仍会索要登录密码。手册里的每条命令都在真机上跑过（§附录 A 是实测记录）；证书接上之后把这行改成 `living`。
 
 ## 0. 这解决的是什么
 
 **一句话：让 macOS 在应用更新之后不再反复索要登录密码。**
 
-钥匙串里每条记录各带一张 ACL，ACL 记的信任是请求方二进制的**代码签名身份**。今天的 release 是 ad-hoc 签名，身份就是二进制的哈希，每次构建都变 —— 于是每次更新在 macOS 眼里都是「另一个程序」，ACL 失效，密码框回来。机制全貌见
+钥匙串里每条记录各带一张 ACL，ACL 记的信任是请求方二进制的**代码签名身份**。今天的 release 只有 ad-hoc 签名（`signingIdentity: "-"`，`release.yml` 不配证书），身份就是二进制的哈希（`cdhash`），每次构建都变 —— 于是每次更新在 macOS 眼里都是「另一个程序」，ACL 失效，密码框回来。机制全貌见
 [architecture.md → Secure Key Storage](architecture.md#secure-key-storage)。
 
 用一张**固定不变**的证书签名，designated requirement 就从「二进制的哈希」变成「证书的哈希」，跨版本稳定，ACL 一直认。

@@ -8,14 +8,14 @@
 
 ## AI 运行时（`src/lib/agent/` 全景）
 
-All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`): a per-preset tool loop dispatched via the tool registry
+All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`): a per-preset tool loop dispatched via the tool registry (`registry.ts`, entries in `toolTable/`).
 
 #### 三层工具（读 / L1 / L2）
-- (`registry.ts`, entries in `toolTable/read.ts` — read tools, including `read_slides`, which pages a deck by slide — a .pptx because `read_file` can only return zip noise for one, an .html because finding slide 7 by paging 4000 characters of source is not a way to edit it; see `docs/feature/pptx-plan.md`
+- Read tools (`toolTable/read.ts`), including `read_slides`, which pages a deck by slide — a .pptx because `read_file` can only return zip noise for one, an .html because finding slide 7 by paging 4000 characters of source is not a way to edit it; see `docs/feature/pptx-plan.md`.
 - L1 auto+backup write tools for lore/memory, and the L2 manuscript tools that block on user approval — `propose_edit` for a find/replace — the Nth occurrence or all of them, so repeated text in a deck or a table is addressable at all
   - `rewrite_lines` for a region named by line numbers, which is how a LONG file gets restructured without re-emitting it
   - `rewrite_document` for a whole short file.
-- All three are one `EditProposal` machinery apart from the last: the proposal records how many times `find` occurred when the author saw the card, and `editApply.ts` refuses to write if that moved).
+- All three are one `EditProposal` machinery apart from the last: the proposal records how many times `find` occurred when the author saw the card, and `editApply.ts` refuses to write if that moved.
 
 #### Lore 写入门控与执行日志
 - Lore writes are additionally gated on an author-approved plan (`plan.ts` + `propose_lore_plan` → `components/ai/PlanCard.tsx`): one card of steps per pass, and the write tools refuse any entity/action it doesn't cover.
@@ -26,15 +26,15 @@ All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`
 - The agent can also put a decision to the author mid-run: `ask_author` (2–4 options plus the card's own always-present free-text row, `QuestionCard.tsx`) blocks its tool call on the answer, and routing appends the tool only for surfaces that render the card — chat and the non-batch AiPanel; design: `docs/feature/agent/ask-author-plan.md`.
 
 #### 对话式助手与多会话
-- The conversational assistant (AiDrawer "chat" mode → `components/ai/AgentChat.tsx`, session state in `stores/agentStore.ts` — **several conversations at once**: `chats: Record<key, LiveChat>` + `activeChatKey` on one axis, `runningChats` / `chatQueue` (semaphore in `lib/agent/scheduler.ts`, shared with roleplay) on the other
-  - components read the on-screen one through `useActiveChat`, every card a conversation raises is tagged `surface: chat:<key>`, and its 本次都批准 key is `chatAutoApproveKey(key)`, never a shared literal — see `docs/feature/agent/chat-sessions-plan.md`) and the AiPanel Agent mode both use the full-toolset `AGENT_ASSIST_PRESET` —
-- except that chat behind the 助手工具包模式 Beta swaps to the thin `ORCHESTRATOR_PRESET` (`lib/agent/packs.ts`: reads + memory + notes only, every write dispatched via `run_pack` to a pack sub-run on the parent's own model, with the parent's approval channels and plan gate passed through so cards render where they always do; `chatAgentPreset()` is the one seam every chat-side reader goes through, and the default stays off because dispatch reliability is model-tiered — see `docs/feature/agent/tool-pack-plan.md`)
+- The conversational assistant (AiDrawer "chat" mode → `components/ai/AgentChat.tsx`) and the AiPanel Agent mode both use the full-toolset `AGENT_ASSIST_PRESET` — except that chat behind the 助手工具包模式 Beta swaps to the thin `ORCHESTRATOR_PRESET` (`lib/agent/packs.ts`: reads + memory + notes only, every write dispatched via `run_pack` to a pack sub-run on the parent's own model, with the parent's approval channels and plan gate passed through so cards render where they always do; `chatAgentPreset()` is the one seam every chat-side reader goes through, and the default stays off because dispatch reliability is model-tiered — see `docs/feature/agent/tool-pack-plan.md`).
+- Chat session state lives in `stores/agentStore.ts` — **several conversations at once**: `chats: Record<key, LiveChat>` + `activeChatKey` on one axis, `runningChats` / `chatQueue` (semaphore in `lib/agent/scheduler.ts`, shared with roleplay) on the other
+  - components read the on-screen one through `useActiveChat`, every card a conversation raises is tagged `surface: chat:<key>`, and its 本次都批准 key is `chatAutoApproveKey(key)`, never a shared literal — see `docs/feature/agent/chat-sessions-plan.md`.
 
 #### 结构化输出
 - structured JSON outputs go through `lib/agent/structured.ts` (forced tool_choice + JSON fallback — and the forced attempt is **skipped outright** when the endpoint is known to downgrade a forced `tool_choice` *and* strict `json_schema` is available, because then the fallback enforces the same schema and the attempt only buys an `EMPTY_TOOL_CALL` and a second request; only `json_object` to fall back on and it still tries the tool, since one tool call beats valid JSON whose shape rests on prose). Design & history: `docs/feature/agent/unified-agent-plan.md`.
+- AI-driven lore generation/improvement lives in `src/lib/lore/generator.ts` + `src/components/lore/`.
 
 #### 历史压缩、回溯与状态记忆
-- AI-driven lore generation/improvement lives in `src/lib/lore/generator.ts` + `src/components/lore/`.
 - Chat history is compacted, not just trimmed: folded/summarized old turns plus a per-turn injection ledger live in `lib/agent/compact.ts` + `compactRun.ts`, wired into the chat run (`stores/agent/chatJob.ts`); design: `docs/feature/agent/chat-memory-plan.md`.
 - A question can be rewound to (`lib/agent/rewind.ts` — a *cut* of the wire history at that turn's start, never a re-seed, and never offered for a turn already folded into the summary: what the author still sees above the cut must be what the model still holds; §12 of the same doc).
 - Behind the 状态记忆 Beta (`lib/agent/stateFlag.ts`) a conversation can instead run on a SKILL.state-style **structured execution state** (`skillState.ts` schema/validation/rendering + `skillStateRun.ts`, arXiv:2608.26263): every send folds everything before the last turn into one schema-validated JSON block in the summary's slot — the same `planFold` with `keepTurns: 1`, so the fold invariants are unchanged — and a state the model twice fails to make valid leaves the history alone and falls back to ordinary compaction
@@ -46,11 +46,11 @@ Long tasks persist to a durable workspace instead of just wire history: `.ai-wri
 
 #### 子代理委派
 
-- Auxiliary work (web search, vision, long-document reads, image generation) can be delegated to per-kind subagents
-  - (`lib/agent/subagentModel.ts` holds the kinds, bindings and connection resolution that the tools, `routeTools` and settings panes ask
+- Auxiliary work (web search, vision, long-document reads, image generation) can be delegated to per-kind subagents, so it doesn't bloat the main run's context.
+  - `lib/agent/subagentModel.ts` holds the kinds, bindings and connection resolution that the tools, `routeTools` and settings panes ask.
   - `lib/agent/subagent.ts` holds only `executeDelegate`, the half that runs a nested agent and so the only half allowed to import `runtime` — the split is what keeps the image / translate / ASR tools out of the agent import cycle, docs/feature/code-structure-plan.md P1.
-  - The three places a tool starts a nested run — `delegate`, `run_pack`, the writer handoff — never import `runtime`: `runAgent` fills `ToolContext.subRun` (`SubRunner`: itself plus the toolCost ceiling seam) on every context it hands its tools, and passes itself to `runWriterHandoff`; importing it back would close a cycle through the registry, P2
-  - configured in Settings → `components/settings/panes/SubAgentsPane.tsx`, session-level toggles in `components/ai/CapabilityMenu.tsx` on the composers and `components/ai/SubAgentChips.tsx` in 一致性检查's pre-run block — two renderings of one control, sharing `components/ai/subagentChipModel.ts`; 设计稿 02g 屏 1c) so it doesn't bloat the main run's context.
+  - The three places a tool starts a nested run — `delegate`, `run_pack`, the writer handoff — never import `runtime`: `runAgent` fills `ToolContext.subRun` (`SubRunner`: itself plus the toolCost ceiling seam) on every context it hands its tools, and passes itself to `runWriterHandoff`; importing it back would close a cycle through the registry, P2.
+  - Configured in Settings → `components/settings/panes/SubAgentsPane.tsx`, session-level toggles in `components/ai/CapabilityMenu.tsx` on the composers and `components/ai/SubAgentChips.tsx` in 一致性检查's pre-run block — two renderings of one control, sharing `components/ai/subagentChipModel.ts`; 设计稿 02g 屏 1c.
 - Design: `docs/feature/agent/subagent-lld.md`.
 
 #### Writer 子代理
@@ -72,9 +72,9 @@ The project is not hardcoded to novels — and not to one domain at a time.
 
 - `resolveWorkspace(enabled, userCategories)` (`lib/profile/resolve.ts`) merges
   - categories = pack union + the project's **user-defined categories** (author-created, persisted in profile.json) + the always-present app-level `custom` bucket
-  - tasks = the app-level base menu (`DEFAULT_TASKS`: 续写/润色/改写/总结/自定义/agent) + each pack's own —
-- 每条任务声明一个**工具档** `none`/`read`/`write`/`full`（`presetForTools`），而 `write`（产物是一份文档：查 + 写文件 + 验 + 交付，**不碰知识库**）实测 4,017 对 `full` 的 15,337，所以**先考虑 `write` 再考虑 `full`**——schema 每轮重发，32k 的本地模型上 `full` 一档就能把整个输入上限吃光、知识库分到零（`contextForecast.test.ts` 钉着）。
-- 随工具走而不是随档位走的还有两份清单（工作流卡 / docx 格式），见 `docs/feature/agent/edit-loop-plan.md` §7, where a pack declaring a base id *overrides* that base task (first enabled pack wins — how novel keeps its fiction wording).
+  - tasks = the app-level base menu (`DEFAULT_TASKS`: 续写/改写/润色/总结/图示页面/自定义/agent — ids `continue` / `rewrite` / `polish` / `summary` / `htmlArtifact` / `custom` / `agent`) + each pack's own, where a pack declaring a base id *overrides* that base task (first enabled pack wins — how novel keeps its fiction wording).
+- 每条任务声明一个**工具档** `none`/`read`/`write`/`full`（`presetForTools`），而 `write`（产物是一份文档：查 + 写文件 + 验 + 交付，**不碰知识库**）约 4.7k 对 `full` 的约 17k（两档的上限钉在 `agentToolBudget.test.ts` 的 `WRITE_CAP` / `AGENT_ASSIST_CAP`），所以**先考虑 `write` 再考虑 `full`**——schema 每轮重发，32k 的本地模型上 `full` 一档就能把整个输入上限吃光、知识库分到零（`contextForecast.test.ts` 钉着）。
+- 随工具走而不是随档位走的还有两份清单（工作流卡 / docx 格式），见 `docs/feature/agent/edit-loop-plan.md` §7。
 - Supporting another kind of writing (跑团模组, 文案, 周报…) is still a data addition, not new branches.
 
 #### 内置包与配置入口
@@ -99,7 +99,7 @@ Main layout structure (TitleBar, IconRail, Sidebar, ProjectRow (项目名那一�
 - **跟着文档走的读数认的是缓冲区，不是 `activeFilePath`。** 打开图片（或任何编辑器读不出来的文件）时缓冲区**故意**停在上一篇文档——AI 那一侧靠 `WritingFocus.settled` 判断"还没就绪"（`stores/openDocument`），所以缓冲区不能清。代价是顶栏自己认路：`ExportMenu` 用 `useWritingFocus()` + `isExportableDocument`，字数 / 保存点 / 面包屑的「已修改」用 `isTextKind(docKindOf(...))`。用 `activeFilePath` 当条件的写法都错，而且错得很安静（图片打开时导出的是上一篇的正文、文件名却取自图片名）。同一条的反面：**一个手势里既打开文件又发一轮对话**（文件树的「新建目录说明并交给助手」）要先 `whenFocusSettles(path)` 等缓冲区追上，否则那一轮取到的焦点是点击前的那一篇——对话输入框没有 `settled` 门，作者在那里打字时本来就看着编辑器。
 - **让位靠容器查询，量的是 `.flow` 的宽度**（顶栏减去平台让位：mac 56px 红绿灯位、无边框 Windows 138px 三键）——按窗口宽判会让两种边框形态在不同窗口宽度上跳档。三档 ≥1160 / 900–1159 / <900，让位顺序在 `TitleBar.module.css` 末尾那一段注释里（＝设计稿表 A，实现逐行照抄）。右侧每一件 `nowrap` + `flex-shrink:0`，整条里唯一让宽的是面包屑：中文标签被压到字宽以下会逐字折行成「编 辑」。两种档位的成色都渲染出来、由 CSS 藏掉一种——查询能换布局，换不了词。
 
-**关闭文档只有一处实现**：`stores/openDocument.ts` 的 `closeDocument()`（面包屑末尾的 ×、⌘W、文件树右键三个入口共用）。**「关闭」是三层，三平台同一套**（`lib/shortcuts.ts` 的 `CLOSE_DOC_COMBOS` 顶上有那张表）：文档 ⌘W · 项目 ⇧⌘W（`ProjectRow`，项目开着时才挂）· 窗口 ⌥⌘W（仅 mac，`windowmenu.rs` 的菜单项）。窗口那一层**不能**用 `PredefinedMenuItem::close_window`：预置项在 macOS 上固定带 ⌘W，而原生菜单先于 webview 收键——一个窗口就是一个工作区，于是「关文档」的 ⌘W 实际关掉的是整个项目窗口。先 flush 再置空，**写盘失败就不关**（缓冲区是那几行字唯一的副本），痕迹是面包屑尾巴两秒的一行；关的是图片时不碰缓冲区里那篇待写的文档。四条都钉在 `editorStoreCloseDocument.test.ts`。设计稿的两张表与出入表在 `docs/feature/topbar-doc-actions-brief.md`。
+**关闭文档只有一处实现**：`stores/openDocument.ts` 的 `closeDocument()`（面包屑末尾的 ×、⌘W、文件树右键三个入口共用）。**「关闭」是三层，三平台同一套**（`lib/shortcuts.ts` 的 `CLOSE_DOC_COMBOS` 顶上有那张表）：文档 ⌘W · 项目 ⇧⌘W（`ProjectRow`，项目开着时才挂）· 窗口 ⌥⌘W（仅 mac，`windowmenu.rs` 的菜单项）。窗口那一层**不能**用 `PredefinedMenuItem::close_window`：预置项在 macOS 上固定带 ⌘W，而原生菜单先于 webview 收键——一个窗口就是一个工作区，于是「关文档」的 ⌘W 实际关掉的是整个项目窗口。先 flush 再置空，**写盘失败就不关**（缓冲区是那几行字唯一的副本），痕迹是面包屑尾巴两秒的一行；关的是图片时不碰缓冲区里那篇待写的文档。四条都钉在 `src/stores/__tests__/openDocumentClose.test.ts`。设计稿的两张表与出入表在 `docs/feature/topbar-doc-actions-brief.md`。
 
 ### `src/components/editor/`
 
@@ -287,8 +287,8 @@ CommandPalette, onboarding flow, library view (文库: only what the author pick
 - **行自带价格**：`buildUsageRow` 把当时的模式 / 单价 / 数量 / 规格抄在行上，
   `cost_usd` 是 `costOf()` 的结果落了盘。所以改组、删组、换组都动不了历史，
   而读那一侧 `SUM(cost_usd)` 不是第二套口径——也因此不需要检查点。
-- `usage.ts` 是读那一侧：范围（`project` / `global` = 两个库）、四种卷法
-  （模型 / 任务 / 计费组 / 项目）、清除。**「按计费组」按模型当前绑的组归并**，
+- `usage.ts` 是读那一侧：范围（`project` / `global` = 两个库）、四种 `GROUP BY` 卷法
+  （模型 / 任务 / 计价方式 / 项目）、清除；「按计费组」那一维不在 SQL 里，由 `groupBuckets` 从按模型的桶折出来。**「按计费组」按模型当前绑的组归并**，
   不看行上的快照：行上快照的是价，不是归属，重新分组之后历史跟着走是故意的。
 - **分项的钱也落盘，跟 `cost_usd` 同一条规矩**（2026-09）：`segmentsOf()` 把
   `costOf()` 的七项**分流**（不重算）成六段，`recordUsage` 一并抄在行上，读那一侧
@@ -326,13 +326,14 @@ CommandPalette, onboarding flow, library view (文库: only what the author pick
 
 **文件怎么分（P6，docs/feature/code-structure-plan.md）。** `registry.ts` 只是入口：工具表的类型在 `toolTypes.ts`（`registry.ts` 用 `export type *` 原样转出，外部照旧 `from "./registry"`），工具条目按领域分在 `toolTable/` 下十个片段里（`read` · `lore` · `collectors` · `manuscript` · `exports` · `image` · `manuscriptDelete` · `scratchpad` · `roleplay` · `subRuns`，共用的参数解析与描述构造在 `toolTable/shared.ts`），`registry.ts` 按固定顺序把它们展开回 `REGISTRY`——**这个顺序就是发给模型的声明顺序**，`search_tools` 的目录和 Anthropic 的缓存前缀都跟着它，`toolDefinitionsSnapshot.test.ts` 逐字节钉住拆分前的输出。加工具放进它领域的片段；`manuscriptDelete` 单列一个片段正是因为那两个删除工具在线上排在图像工具之后。写工具同理：`writeTools.ts` 只做转出，实现按原来的分节在 `write/` 下——`planGate`（方案门与破坏性步骤的暂停）· `loreFiles` · `loreAssets`（图集、头像、跨条目复制、搬移与删除条目）· `memory` · `manuscript`（L2 提案与落点回执），`write/shared.ts` 放它们共用而谁也不拥有的东西（提案 id 计数器，快照上的两个辅助），这样模块之间不绕圈。
 
-unified agent runtime (
+unified agent runtime 的各模块：
 
 #### 运行时核心
 
 - `runtime.ts` loop
 - `registry.ts` tool registry（条目在 `toolTable/`，类型在 `toolTypes.ts`——见上面「文件怎么分」）
 - `presets.ts` per-task config
+- `tools.ts` handlers + path containment
 - `events.ts` execution-log events——其中 `ChangeRecord` 是 L1 写入交回来的**「改成了什么」**：这些写入调用即落盘、作者那一票发生在更早的方案卡上（卡上只有模型自己写的一句打算），所以在此之前没有任何地方给作者看过真正写进去的字，日志那一行只有工具名与截断到 400 字的原始 JSON；记录落在本来就免费的地方——handler 为了备份已经读了旧文（`backup.ts` 的 `snapshotFile` 把它读到的那份顺手交出来）、也握着新文，由 lore 层拼装的那几个则读回盘上的结果（`changeAfterWrite`，理由和写入回执一样：记录该说落了什么而不是打算写什么）
   - 两侧各 4000 字封顶且**超了就一起丢**（只留能装下的那一侧会被读成「整份都是新加的」——那是断言不是省略），字数与 `backupPath` / `path` 照留，完整的旧版新版本来就在盘上
   - 只有产生前后两份**文本**的写入才有它：归集改的是成员、头像改的是字节，那些改动由方案步骤自己说清
@@ -342,7 +343,6 @@ unified agent runtime (
 
 #### 压缩与方案账本
 
-- `tools.ts` handlers + path containment
 - `compact.ts` chat-history compaction planning — its trigger is `compactTriggerFor`, the lowest of three lines (the author's token slider, the author's window-ratio slider × the model's window, and the classic `COMPACT_TRIGGER × message ceiling`, which the sliders can only ever pull *earlier*), read by the store, the context bar and the settings readout so all three name the same number
   - 自动归纳 off skips the automatic fold entirely and leaves 立即归纳 (chat **and** roleplay — `lib/roleplay/run.ts`'s `compactSceneNow`, whose summary-to-disk + memory-block refresh are the same `afterCompaction` step the automatic path runs) — see `docs/feature/agent/compact-threshold-plan.md`
 - `plan.ts` lore-plan gate — whose steps carry a **target** axis (entity / collection / category) so a reorganisation is one step per collection *or category* rather than one per entry, which is the difference between a card the author reads and one they rubber-stamp; that axis also decides which deferred tool group a run loads (`planLoadsEntityWrites` / `planLoadsOrganize` — a `category`+`move` step loads `lore_write`, because `move_lore_entity` is what carries it out)
@@ -562,7 +562,7 @@ RAG assembly (`rag.ts`), the current time as one line (`clock.ts` — a line, no
 
 ### `src/lib/sync/`
 
-知识库同步的客户端一侧（服务端是 `server/`，两者的可行性与线格式在 `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §13–§18，UI 稿在 `sync-lore-ui-brief.md`）。
+知识库同步的客户端一侧（服务端是 `server/`，两者的可行性与线格式在 `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §13–§20，UI 稿在 `sync-lore-ui-brief.md`）。
 
 #### 共同词汇与同步方向（model.ts）
 - `model.ts` 是共同词汇：一个项目可以**绑定**到服务器上一个具名知识库，同步是**单向、整棵树**的——把本地 `.ai-writer/lore/` 推上去，或把远端拉下来，**没有 merge**，作者选方向、另一侧变成它的镜像
@@ -610,7 +610,7 @@ RAG assembly (`rag.ts`), the current time as one line (`clock.ts` — a line, no
 
 #### 侧栏与行判定
 
-- and the sidebar's two pure decision layers: `moveCopy.ts` (drop rejection, copy numbering) and `selection.ts` (visible-row flattening, ⇧-ranges, dropping nested/dead paths).
+- The sidebar's two pure decision layers: `moveCopy.ts` (drop rejection, copy numbering) and `selection.ts` (visible-row flattening, ⇧-ranges, dropping nested/dead paths).
 - `rowMeta.ts` is the third: what one row **is** (设计稿 01b 的七种行，加上目录说明 `note`) —— `rowKind` 只看名字与父级（`assets/<组>` 由**位置**而不由名字决定），`pictureFolders` 再用一次自底向上的走查标出只装图片的目录（**内容优先、名字兜底**：子树里有文件就要求**全部**是图片——「大部分」要数数，而这个模块不数数；一个文件都没有才轮到名单，因为一个叫 `images` 却装章节的目录错标比漏标更糟），`resolveRowKind` 把两半合起来。图片目录**只有外观**：不进失配判定、不进「重新关联到…」，否则作者自建的 `images/` 会被改名并改写一份无关文档的正文（`docs/feature/file-tree-picture-folder-brief.md`）.
 
 #### 文件树整体定位
@@ -705,6 +705,8 @@ document import into the workspace:
 #### 多开与基础模块
 - `project.ts`
 - `keyStore.ts`
+- `recentProjects.ts` (the recent-projects list and its pin set, pure: parsing, the cap that counts only unpinned entries, and the cross-instance merge `prefs.writePrefMerged` applies at persist time; the pinned section renders from the pin row, not the recents; both rows are machine-local)
+- `staleRefs.ts` (清理失效数据 — behind the button of that name in `GeneralPane`: removes only **dead** absolute-path references — pinned-lore rows, roleplay agent bindings, a chat session's injection ledger and turn images — each checked against disk first)
 - `instance.ts` (multi-instance / 多开 — the app runs as several processes, one workspace each, VS Code-style: the advisory `.ai-writer/window.lock` plus the loopback focus channel that brings the *existing* window forward when a folder is opened twice (dialog only as fallback), the CLI workspace argument, and spawning a sibling instance for the 新窗口 buttons
   - paired with `src-tauri/src/instance.rs` and the prefs focus refresh + merged recents write.
   - Separate processes are also why macOS's 「Window」 menu cannot list the siblings on its own — `src-tauri/src/windowmenu.rs` builds that list from a per-pid registry and switches via the same focus channel, and `useWindowTitle` is what gives each window a name to show.
@@ -722,6 +724,7 @@ document import into the workspace:
 - `http.ts`
 - `paths.ts`
 - `platform.ts`
+- `motion.ts` (the shared Motion presets for screen / panel transitions — the one sanctioned exception to pure-CSS motion; the variants animate a raw `transform`, so every consumer goes through `useMotionPreset()`, which is what keeps the reduced-motion promise)
 - `webviewCaps.ts` (渲染引擎的能力底线 — probed by **feature**, never by OS or UA version: the floor the build targets, reported once per missing set under the TitleBar and always in Settings → 关于. Fill where the dependency offers a fill — pdfjs loads its `legacy/build` for exactly this — and probe only what nobody polyfills for us; see `docs/reference/architecture.md` → 渲染引擎的能力底线)
 
 ## `src/stores/`
@@ -795,11 +798,11 @@ Rust 侧。
 #### Shell 命令与测试
 
 - `cmd.rs` 是 agent 的 `run_command` 的 Rust 一半，**刻意不用** `tauri-plugin-shell`（它唯一的安全机制是静态允许清单，对模型运行时现写的一行只能配成 `cmd: pwsh, args: true`，等于把清单关掉；而这个功能真正需要的超时、杀整棵进程树、输出封顶它都没有）。
-- 测试内联在 `commands.rs` / `fontproto.rs` / `lorehash.rs` / `pptx.rs` / `preview.rs` / `protocol.rs` / `scope.rs` / `secrets.rs` / `sqltx.rs` / `transfer.rs` / `xlsx.rs` 里。
+- 测试内联在 `cmd.rs` / `commands.rs` / `docx.rs` / `fontproto.rs` / `instance.rs` / `lorehash.rs` / `pptx.rs` / `preview.rs` / `print.rs` / `protocol.rs` / `scope.rs` / `secrets.rs` / `sqltx.rs` / `transfer.rs` / `xlsx.rs` / `xlsx_write.rs` 里。
 
 ## `server/`
 
-**not part of the app.** A standalone Rust/axum binary holding two unrelated resources that happen to share one host, one set of tokens and one data directory.
+**not part of the app.** A standalone Rust/axum server (`aiw-kb-server`, `src/main.rs`) holding two unrelated resources that happen to share one host, one set of tokens and one data directory.
 
 #### 知识库与配置备份两类资源
 
@@ -819,5 +822,6 @@ Rust 侧。
 
 #### 归属与相关文档
 
-- Its own crate, its own CI job, its own `server/README.md` (what it is + API + the console) and `server/DEPLOY.md` (编译 / 密钥 / systemd / Docker / TLS / 轮换 / 排错); design in `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §13–§19 and `docs/feature/knowledge-base/kb-admin-console.md` (the console's own trade-offs and where it departs from 设计稿 03e).
-- The client side lives in `src/lib/sync/` + `src/components/sync/` + Settings → 知识库同步
+- A second binary, `aiw-kb-tray` (`src/bin/tray.rs`), is a Windows-only tray launcher running the same server in-process (start/stop from the menu, run at login, first-run credentials in a dialog); on other platforms it compiles to a stub that exits, so CI's `clippy --all-targets` still covers it. Design: `docs/feature/knowledge-base/kb-server-tray.md`.
+- Its own crate, its own CI job, its own `server/README.md` (what it is + API + the console) and `server/DEPLOY.md` (编译 / 密钥 / systemd / Docker / TLS / 轮换 / 排错); design in `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §13–§20 and `docs/feature/knowledge-base/kb-admin-console.md` (the console's own trade-offs and where it departs from 设计稿 03e).
+- The client side lives in `src/lib/sync/` + `src/components/sync/` + Settings → 同步与备份

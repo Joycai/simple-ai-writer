@@ -1,12 +1,16 @@
 # CI / PR Quality Gate
 
+> **Status: `living`.** If it disagrees with [`ci.yml`](../../.github/workflows/ci.yml), the doc is the bug.
+
 The [`CI`](../../.github/workflows/ci.yml) workflow runs on every pull request targeting `main`
 (and on pushes to `main`). It is the merge gate: a PR may only be merged once CI is green.
 
 > Release builds (installers for macOS/Windows/Linux) are produced separately by the
 > manually-triggered [`Release`](../../.github/workflows/release.yml) workflow — not by CI.
-> They are **not code-signed** today; [macos-signing.md](macos-signing.md) is the manual for
-> changing that on macOS, and says what it does and doesn't buy.
+> On macOS the bundle is **ad-hoc signed as a whole** (`bundle.macOS.signingIdentity: "-"` in
+> `tauri.conf.json`, since #746 — what macOS's Local Network permission needs), but not signed with
+> a real certificate; [macos-signing.md](macos-signing.md) says what that does and doesn't buy, and
+> is the manual for the fixed self-signed certificate that is still to come.
 >
 > The sync server's prebuilt binaries (Linux x86_64 / arm64, Windows with the tray exe, macOS)
 > come from a third, also manually-triggered workflow,
@@ -17,15 +21,15 @@ The [`CI`](../../.github/workflows/ci.yml) workflow runs on every pull request t
 
 | Job | Steps | Purpose |
 | --- | --- | --- |
-| **Detect changed areas** | `dorny/paths-filter` | Decides whether the Rust job has anything to do |
-| **Frontend** | `pnpm install --frozen-lockfile` → `tsc --noEmit` → `pnpm test` → `pnpm build` | Lockfile integrity, TypeScript type-check (the project's lint gate — strict mode, no unused locals/params), Vitest smoke tests, production bundle builds |
-| **Backend (Rust)** | `cargo fmt --check` → `cargo clippy -- -D warnings` → `cargo test` → `cargo build` | Formatting, lints (warnings fail the build), tests, backend compiles |
+| **Detect changed areas** | `dorny/paths-filter` | Decides whether the Rust and sync-server jobs have anything to do |
+| **Frontend** | `pnpm install --frozen-lockfile` → `tsc --noEmit` → `pnpm test` → `pnpm build` | Lockfile integrity, TypeScript type-check (the project's lint gate — strict mode, no unused locals/params), Vitest suite, production bundle builds |
+| **Backend (Rust)** | `cargo fmt --all -- --check` → `cargo clippy --all-targets --all-features -- -D warnings` → `cargo test --all-features` → `cargo build --locked` | Formatting, lints (warnings fail the build), tests, backend compiles |
 | **Sync server** | the same four cargo steps, in `server/` | The knowledge-base backup server (`server/`) — a plain axum binary, so it needs none of the webview apt packages the Tauri job installs |
 | **CI Success** | aggregates the four jobs | Single status check to require in branch protection |
 
 Notes:
-- Frontend tests run with Vitest (`src/**/*.test.ts`, config in `vitest.config.ts`) — currently smoke tests for RAG context assembly and OpenAI/Gemini SSE parsing.
-- Rust unit tests live inline in `src-tauri/src/secrets.rs` and `protocol.rs`; the sync server's live inline in `server/src/ids.rs`, `store.rs`, `session.rs`, `audit.rs` and `confedit.rs`.
+- Frontend tests run with Vitest (`src/**/*.test.ts`, config in `vitest.config.ts`) — one test file per module in the nearest `__tests__/`, plus the repo-wide source-scanning guards in `src/lib/__tests__/` (the Hard Rules in `CLAUDE.md` are what they enforce).
+- Rust unit tests live inline (`#[cfg(test)] mod tests`) in the modules they test, under `src-tauri/src/` and `server/src/` — there is no separate `tests/` directory in either crate. `grep -l "mod tests" src-tauri/src/*.rs server/src/*.rs` lists them.
 - `clippy` is enforced with `-D warnings`: any new warning fails CI.
 - Both Rust jobs install `dtolnay/rust-toolchain@stable`, i.e. **whatever stable is on the
   day the job runs** — which is often newer than the toolchain on your machine. Clippy gains
@@ -115,13 +119,15 @@ gh api -X PUT repos/Joycai/simple-ai-writer/branches/main/protection \
   -f 'required_pull_request_reviews[required_approving_review_count]=0' \
   -f 'restrictions=' 2>/dev/null
 ```
-(Requiring only `CI Success` is enough — it transitively depends on the `changes`, `frontend` and
-`rust` jobs. Requiring `Backend (fmt, clippy, test, build)` directly would deadlock every
-frontend-only PR, since that job is skipped rather than run.)
+(Requiring only `CI Success` is enough — it transitively depends on the `changes`, `frontend`,
+`rust` and `server` jobs. Requiring `Backend (fmt, clippy, test, build)` or
+`Sync server (fmt, clippy, test, build)` directly would deadlock every PR that doesn't touch
+that area, since the job is skipped rather than run.)
 
 ## Keeping CI green locally
 
-Run the same checks before pushing:
+Run the same checks before pushing (the Rust blocks only matter if you touched `src-tauri/` or
+`server/` respectively — CI skips them otherwise):
 
 ```bash
 pnpm install --frozen-lockfile
@@ -133,4 +139,13 @@ cd src-tauri
 cargo fmt --all -- --check     # or `cargo fmt --all` to auto-fix
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
+cargo build --locked
+cd ..
+
+cd server
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
+cargo build --locked
+cd ..
 ```
