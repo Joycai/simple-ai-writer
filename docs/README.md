@@ -40,11 +40,11 @@ reaching for is one of the states above, plus a modifier if it needs one.
 | [codemap.md](reference/codemap.md) | `living` | Changing **any** directory: one section per `src/components/*`, `src/lib/*` and `server/` — module split, invariants, why-not-the-other-way, and each subsystem's design-doc pointer. Moved out of `CLAUDE.md` on 2026-09-07 (it had grown to 73KB); `CLAUDE.md` keeps one line per directory plus the hard rules |
 | [architecture.md](reference/architecture.md) | `living` | Touching any subsystem: DB schema, RAG, SSE, key storage, export, IPC, CodeMirror |
 | [design-system.md](reference/design-system.md) | `living` | Building or restyling **any** UI |
-| [workflows.md](reference/workflows.md) | `living` | Adding an AI task type, a provider, a language, a capability pack |
-| [terminology.md](reference/terminology.md) | `living` (词表) · `shipped` (校准批次) | Writing **any** user-facing string, or wondering which of 条目/词条/设定 to use. The 2026-08 sweep found 78 一词多译 / 49 一译多词; all six calibration batches landed (§7), the retired words are held shut by `localeTerms.test.ts`, and §9 records the full-tree review that followed |
-| [tool-presence.md](reference/tool-presence.md) | `living` | 改 preset、往 `routeTools` 加分支、加一种子代理，或写任何工具的 description / 结果文本。一次运行说的话必须和它能做的事一致——三种失败形状、判据取哪个变量、九条先例 |
+| [workflows.md](reference/workflows.md) | `living` | Adding an AI task type, a provider (platform or protocol family), a language, a capability pack |
+| [terminology.md](reference/terminology.md) | `living` (词表) · `shipped` (校准批次) | Writing **any** user-facing string, or wondering which of 条目/词条/设定 to use. The 2026-08 sweep found 78 一词多译 / 49 一译多词; all six calibration batches landed (§7), the ten retired words are held shut by `localeTerms.test.ts` (zh-CN values + `defaultValue` literals only — §5 says what it does not cover), and §9 records the full-tree review that followed |
+| [tool-presence.md](reference/tool-presence.md) | `living` | 改 preset、往 `routeTools` 加分支、加一种子代理，或写任何工具的 description / 结果文本。一次运行说的话必须和它能做的事一致——四种失败形状、判据取哪个变量、十四条先例 |
 | [ci.md](reference/ci.md) | `living` | Changing the build, or wondering what the merge gate runs |
-| [macos-signing.md](reference/macos-signing.md) | `planned` | Cutting a macOS release, or the Keychain starts asking for the login password again |
+| [macos-signing.md](reference/macos-signing.md) | `partial` | Cutting a macOS release, or the Keychain starts asking for the login password again. Done: whole-bundle ad-hoc signing + Local Network usage string; not done: the fixed self-signed certificate |
 
 ## api/ — the wire-protocol domain
 

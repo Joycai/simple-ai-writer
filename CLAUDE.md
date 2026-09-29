@@ -17,7 +17,7 @@ pnpm exec tsc --noEmit  # Type-check — this project's lint gate (strict, no un
 pnpm build              # tsc && vite build
 pnpm tauri build        # Release binaries for the current platform
 ```
-From `src-tauri/` (and again in `server/`, its own crate): `cargo fmt --all -- --check` · `cargo clippy --all-targets --all-features -- -D warnings` · `cargo test --all-features` · `cargo build`.
+From `src-tauri/` (and again in `server/`, its own crate): `cargo fmt --all -- --check` · `cargo clippy --all-targets --all-features -- -D warnings` · `cargo test --all-features` · `cargo build --locked`.
 
 The merge gate runs exactly these — [`docs/reference/ci.md`](docs/reference/ci.md) has the copy-paste local run.
 
@@ -171,14 +171,14 @@ Load the relevant doc **before** working in that area — don't reconstruct it f
 - **[`docs/feature/docx/01-agent-design.md`](docs/feature/docx/01-agent-design.md)** — markdown → .docx: the invariants that shape it (the format is a reference not a parameter, three-source pure-function resolve, Beta off = the tool is absent from the run). Read before touching `src/lib/docx/`, `docFormatStore`, or `src-tauri/src/docx.rs`.
 - **[`docs/feature/pptx-plan.md`](docs/feature/pptx-plan.md)** — .pptx read (Rust) and write (HTML → PPTX). Read before touching `src-tauri/src/pptx.rs`, `read_slides` or `src/lib/pptx/`.
 - **[`docs/feature/knowledge-base/kb-admin-console.md`](docs/feature/knowledge-base/kb-admin-console.md)** — the server's admin console. Read before touching `server/src/config.rs`, `server/src/admin.rs` or `server/admin/*`.
-- **[`docs/reference/macos-signing.md`](docs/reference/macos-signing.md)** (`planned`) — self-signed codesigning so updates stop re-asking for the login password. Read when cutting a macOS release, or when the Keychain starts prompting again.
+- **[`docs/reference/macos-signing.md`](docs/reference/macos-signing.md)** (`partial`) — whole-bundle ad-hoc signing is on; the fixed self-signed certificate that stops updates re-asking for the login password is not yet. Read when cutting a macOS release, or when the Keychain starts prompting again.
 
 ## Testing & Type Safety
 
 - TypeScript strict mode enabled (noUnusedLocals, noUnusedParameters, noFallthroughCasesInSwitch)
 - Frontend tests: Vitest (`pnpm test`) — one file per module in the **nearest** `__tests__/`: every `src/lib/<subsystem>/` has one, and the stores tests live in `src/stores/__tests__/`. `src/lib/__tests__/` is *not* the general test dir — it holds only what belongs to no subsystem: the root modules (`prefs`, `project`, `keyStore`, `shortcuts`, `paths`, …) and the repo-wide scanning guards, and `testPlacement.test.ts` gates that (a test whose **subject** is a subsystem module may not be added there; `vi.mock`-ing a subsystem does not make it the subject). Several are **source-scanning guards** (system-prompt seam, retired vocabulary, clock, tool budget ratchet, harvester CSP hash, test placement, layering and import cycles, CSS Module class refs) — when one fails, a Hard Rule above is what it is enforcing
-- Rust tests: `cargo test` (from `src-tauri/`) — inline `mod tests` in `cmd.rs`, `commands.rs`, `docx.rs`, `fontproto.rs`, `instance.rs`, `lorehash.rs`, `pptx.rs`, `preview.rs`, `protocol.rs`, `scope.rs`, `secrets.rs`, `sqltx.rs`, `transfer.rs`, `xlsx.rs`, `xlsx_write.rs`
-- CI gate on PRs to `main` runs frontend (type-check + vitest + build) and Rust (fmt/clippy/test/build) — see [`docs/reference/ci.md`](docs/reference/ci.md)
+- Rust tests: `cargo test` (from `src-tauri/`) — inline `mod tests` in `cmd.rs`, `commands.rs`, `docx.rs`, `fontproto.rs`, `instance.rs`, `lorehash.rs`, `pptx.rs`, `preview.rs`, `print.rs`, `protocol.rs`, `scope.rs`, `secrets.rs`, `sqltx.rs`, `transfer.rs`, `xlsx.rs`, `xlsx_write.rs`
+- CI gate on PRs to `main` runs frontend (type-check + vitest + build) and Rust (fmt/clippy/test/`build --locked`), once for `src-tauri/` and once for `server/` — see [`docs/reference/ci.md`](docs/reference/ci.md)
 
 ## 协作约定
 

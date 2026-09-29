@@ -1,6 +1,9 @@
 # 词表与措辞校准
 
-> 状态：第 1–3 节 `living`（今天要遵守的取词规则和词表，写任何面向作者的字符串之前读它）；第 4 节 `shipped`（**六批全部落地**）；第 5 节 `shipped`（`src/lib/__tests__/localeTerms.test.ts`，`ai.instructions.` 的豁免已随批次 F 撤除）。
+> 状态：**`living`（词表）· `shipped`（校准批次）**，按节分：
+>
+> - `living`——今天要遵守、与代码不符时错的是文档：§1 问题陈述、§2 取词规则、§3 词表（含 `useTerms()` 的应用级词汇与【…】块标签）、§5 护栏的**边界**（`src/lib/__tests__/localeTerms.test.ts` 管什么、不管什么）、§6 明确不改的、§8「三条规则」（按 §9 的复审结论）。写任何面向作者的字符串之前读这些。
+> - `shipped`——设计记录，不随代码再改：§4 六个校准批次（**全部落地**，`ai.instructions.` 的豁免已随批次 F 撤除）、§5 护栏的落地过程、§7 落地记录、§8 各执行表、§9 全库复审。
 >
 > 起因：2026-08 对全量文案做了一次盘点——`en.json` / `zh-CN.json` 共 2775 个键，加上 `lib/profile/model.ts` 的能力包 / 分类 / 特征槽位、`lib/agent/subagent.ts` 的子代理种类。机械比对短标签（≤20 字符、不含插值）后发现 **78 处一词多译**、**49 处一译多词**。本文档是那次盘点的结论 + 收敛计划。
 >
@@ -53,6 +56,38 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 | 自动检索的围栏 | Scope · scope fence | 取材范围 · 取材围栏 |
 | 分类的类型 schema | Slot | 槽位 |
 | 词典条目的一对词 | pair | **词对**（不是「词条」） |
+
+### 应用级词汇（`useTerms()`）与【…】块标签
+
+组件和提示词模板里的「文档 / 分组 / 知识库 / 条目」不写字面量，从这里取——`CLAUDE.md` 说的「word list in terminology.md」就是这一张。两张表都在 `src/lib/profile/model.ts`，**表本身是真相，这里是抄录**，改词先改那里。
+
+`DEFAULT_TERMS`（组件经 `useTerms()`〔`stores/projectStore`〕、模板经 `promptParams()` 拿到，英文复数由 `appTerms()` 补）。应用级、所有项目一致，能力包**不能**覆盖：
+
+| id | 中文 | 英文 | 用在 |
+|---|---|---|---|
+| `doc` | 文档 | document（复数 documents） | 一份文档 |
+| `group` | 分组 | group（groups） | 一个装文档的文件夹 |
+| `kb` | 知识库 | Knowledge Base | 知识库的显示名 |
+| `entry` | 条目 | entry（entries） | 知识库的一条，用于计数与 chip |
+| `filesHeader` | DOCUMENTS · 文档 | DOCUMENTS | 侧栏文档面板的表头 |
+| `emptyEyebrow` | 新篇 · NEW DOCUMENT | NEW DOCUMENT | 空文档上的装饰小标 |
+
+`DEFAULT_SECTION_LABELS`（上下文块的【…】标签，经 `sectionLabel(id, packId)` / `promptParams()` 进提示词）。**只有中文一份**，不随界面语言切换；能力包可以按块覆盖（`pack.sections`），唯独 `knowledge` 是统一的「知识库」、不被覆盖：
+
+| id | 默认标签 | 小说包的覆盖（举例） |
+|---|---|---|
+| `knowledge` | 知识库 | —（不覆盖） |
+| `additionalKnowledge` | 附加知识 | |
+| `outline` | 大纲/写作方向 | |
+| `priorAll` | 前文回顾 | 小说包：全书前情 |
+| `priorRecap` | 前情提要 | |
+| `prevTail` | 上一篇结尾 | 小说包：上一章结尾 |
+| `recent` | 近期内容 | |
+| `selection` | 选中内容 | |
+| `requirement` | 额外要求 | |
+| `currentFile` | 当前文件 | |
+
+其他内置包也各有 `sections` 覆盖（`model.ts` 各包定义里的 `sections: {…}`），这里只抄小说包作例子；要看某个包的全部覆盖读源码。
 
 `Headword / 主条目` 是这一节唯一的新词。现在英文侧同一个东西有三种写法——`lore.detail.colIndex` 写 `Entry`、`lore.meta.*` 写 `Headword`、`roleplay.composer.core` 写 `Core card`——中文侧统一是「主词条」。取 Headword/主条目：`Entry` 会和条目本身撞，`Core card` 是扮演面板独有的说法。
 
@@ -272,6 +307,12 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 1. `zh-CN.json` 的全部值；
 2. 组件里 `t(key, { defaultValue: "…" })` 的字面量——豁免按「调用点前 120 字符里出现豁免键名」判定，因为键就写在同一次调用里。
 
+**护栏的边界**（`living`，照测试本身核过）——它**只**管下面这些，别把它当成 §3 词表的执行者：
+
+- **词**：`RETIRED` 恰好十个——`词条`、`主词条`、`前情记忆`、`前情摘要`、`思维链`、`底稿`、`生成插图`、`修改插图`、`图像生成`、`设定`（后者带三条豁免键）。§3 里其余的「弃」（供应商、正在思考、裸「正文」、「常用」作 Recent、「工作台」作能力包、裸「图像」……）**没有**机器守着，靠写文案的人读 §3。
+- **面**：`zh-CN.json` 的全部值；`src/` 下所有 `.ts` / `.tsx`（跳过 `__tests__/`）里 `defaultValue: "…"` 的**单行双引号**字面量。
+- **不扫**：`en.json`（英文侧的取词——Headword、Channel、APPLIES TO 等——全无守卫）、非 `defaultValue` 的源码字面量、代码注释、`docs/`。
+
 **代码注释故意不扫。** 注释里有设计记录和引用的设计稿屏名（`设计稿 03a · 屏 17「AI 执行进度 · 思维链」`），对散文做禁词就是个误报机器。注释由各批次自己扫干净。
 
 `RETIRED`：`词条`、`主词条`、`前情记忆`、`前情摘要`、`思维链`、`底稿`、`生成插图`、`修改插图`、`图像生成`，加上带三条豁免的 `设定`（`roleplay.persona.none` / `narratorNote` / `empty.body` —— 动词或散文）。原先还有第四条 `ai.instructions.` 的整段豁免，批次 F 落地时撤掉了。
@@ -306,7 +347,7 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 ### 三条规则
 
 1. **`living` 文档与 `CLAUDE.md`：文档和代码不一致，错的是文档。** 立刻改。
-2. **`shipped` / `research` 设计记录：不重写正文，加一行更正。** 那些文档存在的理由是「当时为什么这么选」，把措辞刷成今天的样子会让「后来改过名」这个事实从记录里消失。仓库里已经有这个先例（`web-access-plan.md` 的复核表、`remote-knowledge-base-feasibility.md` 在索引里的那句「the file's own status line predates that」）。
+2. **`shipped` / `research` 设计记录：退役词同样改成今天的词**，只留有名有姓的例外——外部产物的名字（设计稿文件名、屏名）、真实存在的标签、作动词的用法、示例数据、逐字引用的禁令原文、`docs/api/` 协议域的「思维链」（清单见 §9 末段）。*（原先这条写的是「不重写正文，加一行更正」，理由是保住「后来改过名」这个事实；六批落地后的复审里作者推翻了它，决定全部扫干净，见 §9。下面「已按规则 2 加更正的」一节是旧规则下的执行记录。）*
 3. **文档准确描述了今天的 UI，而那个 UI 用的是退役词：不动，等它所属的批次。** 现在改，文档就先于代码错了——这恰好违反规则 1。
 
 规则 3 是这一节的重点：**每个批次的完成定义里必须包含它要同步改的文档**，否则 A 落地当天，`design-system.md` 就开始说假话。A–E 都是这么落的，下表已按实际结果更新。
