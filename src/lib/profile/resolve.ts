@@ -5,7 +5,7 @@
  *
  * Packs are purely **additive** and equal: each contributes knowledge-base
  * categories and tasks, in enabled order. The base task menu
- * (续写/润色/改写/总结/自定义/agent) is app-level — always present, whatever
+ * (续写/改写/润色/总结/图示页面/自定义/agent — `DEFAULT_TASKS`) is app-level — always present, whatever
  * packs are enabled, including none. A pack may *override* a base task by
  * declaring its id (the novel pack re-points instructions at fiction wording);
  * the first enabled pack to do so wins.

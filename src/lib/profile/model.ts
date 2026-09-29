@@ -316,13 +316,14 @@ export const DEFAULT_DOC_MODEL: DocModel = {
 };
 
 /**
- * The tasks every profile starts from — the four the app has always offered plus
- * the two freeform ones.
+ * The base task menu — 续写/改写/润色/总结, 图示页面 (`htmlArtifact`), and the
+ * two freeform ones (自定义, agent).
  *
- * These are shared rather than copied per profile because they are domain-neutral:
- * 续写/润色/改写/总结 mean the same thing for a chapter, a scene and a landing
- * page. A profile adds its own on top (see `COPY_PROFILE`) and can reorder or
- * drop them by declaring its own list.
+ * These are app-level rather than copied per pack because they are
+ * domain-neutral: 续写/改写/润色/总结 mean the same thing for a chapter, a scene
+ * and a landing page. They are always present whatever packs are enabled; a
+ * pack adds its own tasks on top and may *override* a base task by declaring
+ * its id (see `resolve.ts`).
  *
  * `continuation` implies `target: "append"`; `referenceWindow` goes with editing
  * an existing passage. Both mirror exactly what the hardcoded `TaskKind` branches
