@@ -12,6 +12,9 @@
 > 分散在 [`reasoning-plan.md`](../api/reasoning-plan.md)、[`anthropic-plan.md`](../api/anthropic-plan.md)、
 > [`gemini-plan.md`](../api/gemini-plan.md) 三份文档里的实测项汇总在此，因为它们只在
 > 同一次动手时才会被真正执行。**验完请回原文档更新对应结论**，本文只是索引。
+>
+> **接手之前**：新验一个模型，先按 [`api/README.md`](../api/README.md) 开头的三步——查官方文档列出的档位，
+> 只测这几档，回写。本清单不收「某写法在某处关不掉」式的记录；那是跳过第 1 步的产物。
 
 ## OrcaRouter 实测（2026-09-26，[`landscape.md`](../api/landscape.md) §7 第十八个样本）
 
