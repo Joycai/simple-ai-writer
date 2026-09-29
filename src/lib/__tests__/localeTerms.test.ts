@@ -19,7 +19,8 @@
  * Code comments are deliberately *not* scanned. They carry design records and
  * quoted mockup titles (设计稿 03a · 屏 17「AI 执行进度 · 思维链」), and a word
  * ban over prose is a false-positive machine. Each batch sweeps its own
- * comments instead; see terminology.md §4.
+ * comments instead; see terminology.md §4 (and the batch record in
+ * docs/feature/terminology-calibration.md).
  *
  * Adding a word here is how a calibration batch becomes permanent. Adding an
  * exemption is how you say "this one means something else" — and having to name

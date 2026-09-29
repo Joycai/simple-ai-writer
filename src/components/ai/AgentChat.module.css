@@ -472,8 +472,8 @@
 /* Mockup mapping, read off 2c's own segment/legend hexes: 系统+工具 grey ·
    摘要 mid ochre · 种子 deep ochre · 注入设定 green · 对话 sienna ·
    free = the visible track (hexes are the dark mockup's; light follows by
-   token). 摘要 and 种子 were transposed until now — see design-system.md
-   → AI 面板设计语言 → Chat memory bar segments. */
+   token). Rules: design-system.md → AI 面板设计语言 → Chat memory bar
+   segments; the one-time 摘要/种子 swap is in chat-memory-plan.md §8. */
 .ctxSeg_system       { background: var(--color-text-dim); }
 .ctxSeg_summary      { background: var(--color-accent-mid); }
 .ctxSeg_seed         { background: var(--color-border-accent); }
