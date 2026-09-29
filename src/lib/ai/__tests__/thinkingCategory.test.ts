@@ -147,6 +147,20 @@ describe("doubao-switch category", () => {
   });
 });
 
+// Claude's two thinking modes differ on a forced tool: adaptive takes it,
+// manual (budget) accepts only auto / none — and never goes out off, since
+// its `off` is the lowest budget (docs/api/anthropic-plan.md §3).
+describe("claude categories and a forced tool_choice", () => {
+  it("downgrades on claude-budget at every effort, including off and unset", () => {
+    for (const effort of [undefined, "off", "low", "high"] as const) {
+      expect(forcesToolChoiceAuto(THINKING_CATEGORIES["claude-budget"], effort), String(effort)).toBe(true);
+    }
+  });
+  it("keeps it on claude-adaptive", () => {
+    expect(forcesToolChoiceAuto(THINKING_CATEGORIES["claude-adaptive"], "high")).toBe(false);
+  });
+});
+
 // GLM before 5.3 on 智谱's own endpoint (landscape.md §7 第十四个样本): thinks by
 // default, ignores reasoning_effort, so the switch is the whole control.
 describe("glm-switch category", () => {
