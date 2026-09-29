@@ -378,7 +378,7 @@ function ReasoningRow({ event }: { event: Extract<AgentEvent, { kind: "reasoning
         <Marker state={live ? "running" : "done"} />
         <span className={styles.rowName}>
           {live
-            ? t("ai.agent.log.reasoningLive", { defaultValue: "正在思考" })
+            ? t("ai.agent.log.reasoningLive", { defaultValue: "思考中…" })
             : t("ai.agent.log.reasoning", { defaultValue: "思考过程" })}
         </span>
         <span className={styles.rowMetaRight}>
@@ -933,7 +933,7 @@ function useHeadline(model: AgentLogModel): string {
     case "reasoning":
       return current.done
         ? t("ai.agent.log.reasoning", { defaultValue: "思考过程" })
-        : t("ai.agent.log.reasoningLive", { defaultValue: "正在思考" });
+        : t("ai.agent.log.reasoningLive", { defaultValue: "思考中…" });
     case "tool-args":
       return t(current.done ? "ai.agent.log.toolArgsDone" : "ai.agent.log.toolArgs", {
         defaultValue: current.done ? "调用参数 {{tool}} · {{chars}} 字" : "正在写 {{tool}} · {{chars}} 字",
@@ -1115,7 +1115,7 @@ function SubAgentCard({
               doc: terms.doc,
               kb: terms.kb,
             })
-          : t("ai.agent.log.packRun", { defaultValue: "执行代理" })
+          : t("ai.agent.log.packRun", { defaultValue: "能力包子代理" })
         : t(`ai.agent.tool.${run.step.name}`, {
             defaultValue: run.step.name,
             doc: terms.doc,
