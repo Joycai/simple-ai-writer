@@ -96,4 +96,27 @@ describe("doc status vocabulary", () => {
     }
     expect(bad).toEqual([]);
   });
+
+  it("docs/api/README.md's index agrees with the docs it links", () => {
+    // | [`file.md`](file.md) | what it covers | `status` | —— 状态在第三栏。
+    const readme = fs.readFileSync(`${ROOT}/docs/api/README.md`, "utf8");
+    const bad: string[] = [];
+    const listed = new Set<string>();
+    for (const row of readme.split("\n")) {
+      const cells = row.split("|").map((c) => c.trim());
+      const link = cells.length >= 5 ? /^\[`[^`]+`\]\(([^)/]+\.md)\)$/.exec(cells[1]) : null;
+      if (!link) continue;
+      listed.add(link[1]);
+      const t = /^`([a-z]+)`/.exec(cells[3]);
+      const doc = leadToken(`docs/api/${link[1]}`);
+      if (!t) bad.push(`${link[1]}: status cell has no vocabulary token`);
+      else if (t[1] !== doc) bad.push(`${link[1]}: doc says ${doc}, api/README says ${t[1]}`);
+    }
+    // 索引要列全：目录里每份文档（除 README 自己）都得有一行。
+    for (const p of walk("docs/api")) {
+      const name = p.slice("docs/api/".length);
+      if (name !== "README.md" && !listed.has(name)) bad.push(`${name}: missing from docs/api/README.md's index`);
+    }
+    expect(bad).toEqual([]);
+  });
 });
