@@ -23,9 +23,9 @@ import { useEditorStore, type ViewMode } from "../../stores/editorStore";
 import { isTextKind, type DocKind } from "../../lib/fs/docKind";
 import { openWithDefaultApp } from "../../lib/fs/fileio";
 import { printHtmlDocument } from "../../lib/fs/export";
-import { convertProjectFile } from "../../lib/import";
-import { baseName, dirName, isSamePath } from "../../lib/paths";
-import { beginConvert, clearConvertFailure, convertBlocker, endConvert, useConvertJobs } from "./convertJobs";
+import { baseName, dirName } from "../../lib/paths";
+import { clearConvertFailure } from "./convertJobs";
+import { useConvertDoc } from "./useConvertDoc";
 import styles from "./TitleBar.module.css";
 
 const VIEW_MODES: ViewMode[] = ["editor", "split", "preview"];
@@ -206,7 +206,8 @@ function OpenExternalButton({ path }: { path: string }) {
 /**
  * `docx / xlsx / pdf / pptx` 这一类里唯一有产出的动作，所以它是这条上唯一一件
  * 赭石字的文档动作（表 B）。文件树右键里的「转换文档」还在——顶栏是第二个入口，
- * 不是搬家；两边走的是同一个 `convertProjectFile`。
+ * 不是搬家；两边走的是同一个 `convertProjectFile`。编辑区说明页上还有一枚
+ * （`FileNotice`），和这一枚共用 `useConvertDoc`。
  *
  * 进行中与失败按路径记在 `convertJobs` 里，不在这枚按钮上：作者可以在转换途中走开
  * （按钮随之卸载），回来时它得还知道这个文件在转、或刚才转失败了。失败的两秒从作者
@@ -214,38 +215,13 @@ function OpenExternalButton({ path }: { path: string }) {
  */
 function ConvertButton({ path }: { path: string }) {
   const { t } = useTranslation();
-  const refreshFileTree = useProjectStore((s) => s.refreshFileTree);
-  const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
-  const jobs = useConvertJobs();
-  // 同一文件夹里正在转的那一份（可能就是自己）——在就等（见 convertJobs 文首）。
-  const blocker = convertBlocker(jobs, path);
-  const busy = blocker !== null;
-  const waitingOn = blocker !== null && !isSamePath(blocker, path) ? blocker : null;
-  const failed = jobs.failed && isSamePath(jobs.failed.path, path) ? jobs.failed : null;
+  const { run, busy, waitingOn, failed } = useConvertDoc(path);
 
   useEffect(() => {
     if (!failed) return;
     const id = setTimeout(() => clearConvertFailure(failed.seq), FEEDBACK_MS);
     return () => clearTimeout(id);
   }, [failed]);
-
-  const run = async () => {
-    if (!beginConvert(path)) return;
-    const project = useProjectStore.getState().projectPath;
-    let failure: string | undefined;
-    try {
-      const target = await convertProjectFile(path);
-      // 转换途中换了项目：新项目的树不用刷，转出来的那一篇也不属于它，不跳过去。
-      if (useProjectStore.getState().projectPath !== project) return;
-      await refreshFileTree();
-      // 成功不留痕迹：转出来的那一篇立刻成为当前文档，面包屑自己就把话说了。
-      setActiveFilePath(target);
-    } catch (e) {
-      failure = e instanceof Error ? e.message : String(e);
-    } finally {
-      endConvert(path, failure);
-    }
-  };
 
   return (
     <button

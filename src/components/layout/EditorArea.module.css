@@ -55,6 +55,12 @@
   text-align: left;
 }
 
+/* 说明页（FileNotice）上标题直接接正文，中间没有空稿页那一行花饰撑开——
+   44px 斜体的下伸部会压到正文第一行上。 */
+.emptyTitle + .emptyHint {
+  margin-top: 22px;
+}
+
 .emptyCta {
   display: flex;
   align-items: center;
@@ -86,6 +92,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+/* 转换中 / 在等同一文件夹里的另一份：还在，但这会儿点不动。 */
+.emptyCtaBtn:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .tipGrid {

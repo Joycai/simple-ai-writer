@@ -16,7 +16,7 @@ vi.mock("../../lib/fs/fileio", () => ({
 }));
 
 import { useEditorStore } from "../editorStore";
-import { whenFocusSettles } from "../openDocument";
+import { focusBlockOf, getWritingFocus, whenFocusSettles } from "../openDocument";
 import { useProjectStore } from "../projectStore";
 
 const NOTE = "/proj/卷一/index.md";
@@ -83,5 +83,56 @@ describe("whenFocusSettles", () => {
   it("is over before it starts when nobody opened that file", async () => {
     useProjectStore.setState({ activeFilePath: OLD });
     await expect(whenFocusSettles(NOTE)).resolves.toBe(false);
+  });
+
+  it("is over before it starts for a file the editor never loads", async () => {
+    // No timer advance: a .pptx or a picture has no load whose end to wait for.
+    for (const path of ["/proj/卷一/调研.pptx", "/proj/卷一/封面.png"]) {
+      useProjectStore.setState({ activeFilePath: path });
+      await expect(whenFocusSettles(path)).resolves.toBe(false);
+    }
+  });
+});
+
+/**
+ * focusBlockOf() —— 焦点没就绪时，是「还在载入」还是「永远不会载入」。
+ *
+ * AI 面板靠它决定那一行说什么：一份 `.pptx` 底下写着「正在载入…」读起来就是卡死了。
+ */
+describe("focusBlockOf", () => {
+  const open = (path: string | null) => useProjectStore.setState({ activeFilePath: path });
+  const block = () => focusBlockOf(getWritingFocus(), useEditorStore.getState().loadError);
+
+  beforeEach(() => buffer(OLD));
+
+  it("nothing blocks a settled focus, or no document at all", () => {
+    open(OLD);
+    expect(block()).toBeNull();
+    open(null);
+    expect(block()).toBeNull();
+  });
+
+  it("an ordinary load in flight is not a block", () => {
+    open(NOTE);
+    expect(block()).toBeNull();
+  });
+
+  it("a picture is 'image'", () => {
+    open("/proj/卷一/封面.png");
+    expect(block()).toBe("image");
+  });
+
+  it("a convertible file is 'notDocument' without any read having failed", () => {
+    open("/proj/卷一/调研.pptx");
+    expect(block()).toBe("notDocument");
+  });
+
+  it("a file whose read failed is 'notDocument'; someone else's failure is not", () => {
+    open("/proj/卷一/素材.zip");
+    expect(block()).toBeNull();
+    useEditorStore.setState({ loadError: { path: "/proj/卷一/别的.zip", message: "x" } });
+    expect(block()).toBeNull();
+    useEditorStore.setState({ loadError: { path: "/proj/卷一/素材.zip", message: "x" } });
+    expect(block()).toBe("notDocument");
   });
 });
