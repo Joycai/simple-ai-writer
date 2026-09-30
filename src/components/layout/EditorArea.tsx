@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Sparkles } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
@@ -11,13 +11,13 @@ import { Preview } from "../editor/Preview";
 import { ImagePreview } from "../editor/ImagePreview";
 import { HtmlPreview } from "../editor/HtmlPreview";
 import { EditorBottomStrip } from "./EditorBottomStrip";
+import { FileNotice } from "./FileNotice";
 import { MOD_KEY } from "../../lib/platform";
-import { isHtmlPath, isImagePath } from "../../lib/fs/images";
-import { openWithDefaultApp } from "../../lib/fs/fileio";
+import { docKindOf, fileNoticeReason, isViewOnlyKind } from "../../lib/fs/docKind";
 import { linkScrollers } from "../../lib/editor/scrollSync";
 import { editorScrollMap, previewScrollMap } from "../../lib/editor/scrollAnchors";
 import styles from "./EditorArea.module.css";
-import { baseName, dirName, isSamePath } from "../../lib/paths";
+import { dirName, isSamePath } from "../../lib/paths";
 
 export function EditorArea() {
   const { t } = useTranslation();
@@ -26,16 +26,18 @@ export function EditorArea() {
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
   const terms = useTerms();
 
-  const isImage = !!activeFilePath && isImagePath(activeFilePath);
+  // What this pane *is* for the open file is decided by the same classifier
+  // the title bar's document segment uses — by extension, before anything is
+  // read (`lib/fs/docKind`).
+  const kind = activeFilePath ? docKindOf(activeFilePath) : null;
+  const isImage = kind === "image";
   // Third file kind: edited as text like markdown, but previewed in a
   // sandboxed iframe (HtmlPreview) instead of the markdown renderer.
-  const isHtml = !!activeFilePath && isHtmlPath(activeFilePath);
+  const isHtml = kind === "html";
+  // A picture is rendered and a .docx gets a page of its own; neither is read.
+  const viewOnly = isViewOnlyKind(kind);
 
   const previewPaneRef = useRef<HTMLDivElement>(null);
-  // The load-error page's "open with default app" can fail too (no associated
-  // app, file gone, outside the scope fence). Keyed by path so a failure on one
-  // file never shows up on the next file's error page.
-  const [openError, setOpenError] = useState<{ path: string; message: string } | null>(null);
 
   // Split view: keep editor and preview showing the same part of the document,
   // aligned by source line (data-line anchors on the preview side, CodeMirror
@@ -64,14 +66,15 @@ export function EditorArea() {
     });
   }, [viewMode, activeFilePath, isImage, isHtml, editorView]);
 
-  // Load file when active path changes. Images are rendered directly (see below),
-  // so we must NOT read them as text — that would fill the editor with binary
-  // garbage and risk overwriting the image on autosave.
+  // Load file when active path changes. View-only kinds are rendered directly
+  // (see below), so we must NOT read them as text — that would fill the editor
+  // with binary garbage and risk overwriting the file on autosave. The buffer
+  // stays on the previous document meanwhile, on purpose (`WritingFocus`).
   useEffect(() => {
-    if (activeFilePath && !isImage && !isSamePath(activeFilePath, filePath)) {
+    if (activeFilePath && !viewOnly && !isSamePath(activeFilePath, filePath)) {
       void loadIntoEditor(activeFilePath);
     }
-  }, [activeFilePath, isImage, filePath]);
+  }, [activeFilePath, viewOnly, filePath]);
 
   if (!projectPath || !activeFilePath) {
     return (
@@ -129,52 +132,18 @@ export function EditorArea() {
     );
   }
 
-  // The file couldn't be read (non-UTF-8, permissions, a transient I/O
-  // fault). Render a non-editable notice instead of the CodeEditor — showing
-  // it with empty content would let the very next keystroke autosave over
-  // whatever is actually on disk.
-  if (loadError && isSamePath(loadError.path, activeFilePath)) {
+  // The file isn't in the buffer, and won't be. Render a non-editable page
+  // instead of the CodeEditor — showing it with empty content would let the
+  // very next keystroke autosave over whatever is actually on disk. Which page
+  // depends on why (`fileNoticeReason`): a .docx was never read and offers
+  // 转换文档; a binary the decoder refused is not a failure and retrying it is
+  // pointless; permissions or an I/O fault is, and isn't.
+  const failedRead = loadError && isSamePath(loadError.path, activeFilePath) ? loadError.message : null;
+  const notice = kind && fileNoticeReason(kind, failedRead);
+  if (notice) {
     return (
       <div className={styles.area}>
-        <div className={styles.empty}>
-          <div className={styles.emptyInner}>
-            <div className={styles.emptyEyebrow}>{t("editor.loadErrorEyebrow")}</div>
-            <h1 className={styles.emptyTitle}>{t("editor.loadErrorTitle")}</h1>
-            <p className={styles.emptyHint}>{t("editor.loadErrorHint", { message: loadError.message })}</p>
-            <div className={styles.emptyCta}>
-              <button className={styles.emptyCtaBtn} onClick={() => void loadIntoEditor(activeFilePath)}>
-                {t("editor.loadErrorRetry")}
-              </button>
-              {/* The main audience is files this editor will never open (a
-                  .zip, a .psd, a BOM-less UTF-16 doc) — hand them to the OS
-                  instead of making the author dig the file out of a file
-                  manager. No saveNow() first: nothing was loaded, so there
-                  is no buffer that could be dirty. */}
-              <button
-                className={styles.emptyCtaBtn}
-                onClick={() => {
-                  setOpenError(null);
-                  openWithDefaultApp(activeFilePath).catch((e) => {
-                    console.error("[EditorArea] open with default app failed:", e);
-                    setOpenError({
-                      path: activeFilePath,
-                      message: `${t("fileTree.openExternalFailed", { name: baseName(activeFilePath) })} ${e instanceof Error ? e.message : String(e)}`,
-                    });
-                  });
-                }}
-              >
-                {t("editor.loadErrorOpenExternal")}
-              </button>
-            </div>
-            {/* Same register as the page's own hint above: this page already
-                *is* the error notice, so the second failure is one more line
-                of it, not a new surface. Stays until the next attempt — the
-                author came here to act, not to watch a two-second flash. */}
-            {openError && isSamePath(openError.path, activeFilePath) && (
-              <p className={`${styles.emptyHint} ${styles.emptyCtaNote}`} role="alert">{openError.message}</p>
-            )}
-          </div>
-        </div>
+        <FileNotice key={activeFilePath} path={activeFilePath} reason={notice} message={failedRead ?? undefined} />
         <EditorBottomStrip />
       </div>
     );

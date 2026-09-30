@@ -9,7 +9,7 @@
  * neither store imports the other's reader.
  */
 
-import { isImagePath } from "../lib/fs/images";
+import { docKindOf, isViewOnlyKind } from "../lib/fs/docKind";
 import { baseName, isSamePath } from "../lib/paths";
 import { useEditorStore, type CrumbTraceKind } from "./editorStore";
 import { useProjectStore } from "./projectStore";
@@ -189,9 +189,36 @@ export function useWritingFocus(): WritingFocus {
   return deriveFocus(filePath, text, activeFilePath);
 }
 
-/** True when the author has opened something the editor will never load as text. */
-export function focusBlockedByImage(focus: WritingFocus): boolean {
-  return !focus.settled && !!focus.pendingPath && isImagePath(focus.pendingPath);
+/**
+ * Why the focus will never settle on what the author has open — as opposed to
+ * an ordinary load that is merely in flight (`null`, along with "settled").
+ *
+ * - `image`: a picture, rendered instead of loaded.
+ * - `notDocument`: a file that is converted rather than edited (`.docx`, `.pdf`…
+ *   — `isViewOnlyKind`), or one whose read ended in `loadError` (a binary, a
+ *   permissions fault).
+ *
+ * Surfaces that explain a disabled Run need the difference: "正在载入 x.pptx…"
+ * under a file that will never load reads as a hang.
+ */
+type FocusBlock = "image" | "notDocument";
+
+export function focusBlockOf(
+  focus: WritingFocus,
+  loadError: { path: string } | null,
+): FocusBlock | null {
+  if (focus.settled || !focus.pendingPath) return null;
+  const kind = docKindOf(focus.pendingPath);
+  if (kind === "image") return "image";
+  if (isViewOnlyKind(kind)) return "notDocument";
+  return loadError && isSamePath(loadError.path, focus.pendingPath) ? "notDocument" : null;
+}
+
+/** Reactive {@link focusBlockOf}, for components. */
+export function useFocusBlock(): FocusBlock | null {
+  const focus = useWritingFocus();
+  const loadError = useEditorStore((s) => s.loadError);
+  return focusBlockOf(focus, loadError);
 }
 
 /**
@@ -214,6 +241,8 @@ export function whenFocusSettles(path: string, timeoutMs = 5000): Promise<boolea
   // up with what the author opened, so a `path` nobody has opened is over
   // before it starts, not something to sit five seconds on.
   if (!isSamePath(useProjectStore.getState().activeFilePath, path)) return Promise.resolve(false);
+  // Nor is a file the editor never loads: there is no load whose end to wait for.
+  if (isViewOnlyKind(docKindOf(path))) return Promise.resolve(false);
   // Only an error raised by *this* attempt ends the wait — the previous load
   // of the same file may have failed and left its `loadError` behind.
   const staleError = useEditorStore.getState().loadError;

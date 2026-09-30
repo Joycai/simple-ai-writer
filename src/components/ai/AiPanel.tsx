@@ -51,7 +51,7 @@ import {
 } from "../../stores/appStore";
 import { MAX_DRAFTS } from "../../lib/ai/drafts";
 import { useEditorStore } from "../../stores/editorStore";
-import { focusBlockedByImage, useWritingFocus } from "../../stores/openDocument";
+import { useFocusBlock, useWritingFocus } from "../../stores/openDocument";
 import { useLoreStore } from "../../stores/loreStore";
 import { ScopeBand, ScopeMenu, type ScopeMenuAnchor } from "../lore/collections/ScopePicker";
 import { useMemoryStore } from "../../stores/memoryStore";
@@ -810,6 +810,7 @@ export function AiPanel() {
   // The focused document — one atomic read of "which file" + "its text", so the
   // panel can never describe one document while the run targets another.
   const focus = useWritingFocus();
+  const focusBlock = useFocusBlock();
   const content = focus.text;
   const activeFilePath = focus.filePath;
   const { index: loreIndex } = useLoreStore();
@@ -1867,14 +1868,16 @@ export function AiPanel() {
               say what is being waited on rather than silently disabling Run. */}
           {hasConfig && !focus.settled && (
             <div className={styles.focusNotice}>
-              {focusBlockedByImage(focus)
+              {focusBlock === "image"
                 ? t("ai.panel.focusImage", { defaultValue: "当前打开的是图片，请先打开一个文档" })
-                : focus.pendingPath
-                  ? t("ai.panel.focusLoading", {
-                      defaultValue: "正在载入 {{name}}…",
-                      name: basename(focus.pendingPath),
-                    })
-                  : t("ai.panel.focusNone", { defaultValue: "未打开文档" })}
+                : focusBlock === "notDocument"
+                  ? t("ai.panel.focusNotDocument")
+                  : focus.pendingPath
+                    ? t("ai.panel.focusLoading", {
+                        defaultValue: "正在载入 {{name}}…",
+                        name: basename(focus.pendingPath),
+                      })
+                    : t("ai.panel.focusNone", { defaultValue: "未打开文档" })}
             </div>
           )}
 
