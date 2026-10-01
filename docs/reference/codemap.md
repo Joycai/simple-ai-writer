@@ -476,10 +476,10 @@ clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
 
 ### `src/lib/pptx/`
 
-HTML → PPTX（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）: the model keeps writing `.html` and the conversion runs **no model at all** —
+`.slides.json` / HTML → PPTX（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）: deterministic native layout or legacy browser harvesting; neither export runs a model.
 
-#### 原生路线（P1–P3 导出库，应用入口尚未接入）
-- `native/model.ts` / `validate.ts` / `diagnostics.ts` define the closed v1 `.slides.json` semantic contract, pure validation and JSON-pointer diagnostics; `theme.ts` keeps immutable point-based themes with explicit Latin/CJK font candidates. `resources.ts` checks loader observations against byte/pixel ceilings; P2 `environment.ts` performs bounded project-local reads and decoding, `imageHeader.ts` enforces pixel limits before decode. Approval snapshots remain P4. Six-layout example and tests live in `native/__tests__/`; contract and limits: `pptx-plan.md` §8.8.
+#### 原生路线（P1–P4 导出与 Agent 审批，应用预览待 P5）
+- `native/model.ts` / `validate.ts` / `diagnostics.ts` define the closed v1 `.slides.json` semantic contract, pure validation and JSON-pointer diagnostics; `theme.ts` keeps immutable point-based themes with explicit Latin/CJK font candidates. `resources.ts` checks loader observations against byte/pixel ceilings; P2 `environment.ts` performs bounded project-local reads and decoding, `imageHeader.ts` enforces pixel limits before decode. `approval.ts` prepares bounded ephemeral artifacts and hash-bound receipts before approval; stale inputs/destination or a lost cache require fresh review (plan §8.11). Six-layout example and tests live in `native/__tests__/`; contract and limits: `pptx-plan.md` §8.8.
 
 - `native/resolve.ts` owns validated source, selected fonts, media strings and deeply frozen layout; `layout.ts` compiles all six layouts into fixed-size editable lines, rules, images and semantic tables with explicit overflow diagnostics; `write.ts` emits native text/shapes/images/tables/notes. `paragraphs.ts` normalizes PptxGenJS rich-text paragraph properties to one block per paragraph. P2/P3 Office evidence and font tradeoffs: `pptx-plan.md` §8.9–8.10.
 
@@ -495,7 +495,7 @@ HTML → PPTX（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`
   - the rule table is `pptx-plan.md` §7.3.
 
 #### 入口点
-- Entry points are the `export_pptx` L2 tool (converted in `applyProposal`, the only place with a DOM), the `.html` preview toolbar, and the file tree's right-click menu — the last two call the same `exportHtmlToPptx(path)` and both flush the editor first, since it reads the file off disk.
+- The `export_pptx` L2 tool accepts native sources (prepared before approval, exact bytes applied with binary backup and staged replacement) or legacy HTML (converted on approval). Other HTML entry points are the `.html` preview toolbar, and the file tree's right-click menu — the last two call the same `exportHtmlToPptx(path)` and both flush the editor first, since it reads the file off disk.
 
 #### CSP 安全约束
 - **Never add `allow-same-origin` to that frame, and never edit `harvester.js` without updating BOTH the `sha256-` in `tauri.conf.json`'s `script-src` and `htmlSlides.ts`'s selector list** (a `blob:` document inherits the app's CSP, so that hash is the only reason the script runs at all; `pptxHarvesterCsp.test.ts` guards the drift) — why: `docs/feature/pptx-plan.md` D13 / D18; design + rejected alternatives: the same doc's §4

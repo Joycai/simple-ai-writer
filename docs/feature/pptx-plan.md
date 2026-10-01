@@ -1,6 +1,6 @@
 # PPTX 支持计划（读取 + 生成，均已实施）
 
-> 状态：**`partial`——读取端与 HTML 生成端已实施，原生 PPTX 导出库 P1–P3 已实现，应用接入待 P4/P5（§8）**。读取端一期 + 二期见 PR #223；HTML 生成端仍为 Settings → AI 配置 → 实验室里的 Beta 功能（§4）。
+> 状态：**`partial`——读取端与 HTML 生成端已实施，原生 PPTX 导出库及 Agent 审批 P1–P4 已实现，预览与应用入口待 P5（§8）**。读取端一期 + 二期见 PR #223；HTML 生成端仍为 Settings → AI 配置 → 实验室里的 Beta 功能（§4）。
 > 背景：作者需要 AI 助手能读演示文稿（招标材料、路演稿、培训课件常以 .pptx 交付），并且要能处理几百页的大文件。生成是另一件事，成本和风险高一个量级，所以拆开做、拆开记。
 >
 > **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。`registry.ts` 的 `read_slides` 条目现位于 `lib/agent/toolTable/read.ts`、`export_pptx` 现位于 `toolTable/exports.ts`；`subagent.ts` 的 `longread` 档现位于 `lib/agent/subagentModel.ts` 的 `SUB_PRESETS`。完整对照见 [`code-structure-plan.md`](code-structure-plan.md) §9。
@@ -643,7 +643,7 @@ box 本来就是按页面的行数和行距量的。留下的只是"行距相对
 
 ## 8. 原生 PPTX 生成实施计划（2026-10-01）
 
-> 状态：`partial`。P0 回归基础设施已实现，Office 验收待补（§8.7）；P1 数据契约已实现（§8.8），P2 最小原生导出已实现（§8.9），P3 六布局及 macOS 基准验收已完成（§8.10），P4–P5 尚未实现。依据：main `7dd18929` 的代码审阅与作者确认的改进方向。
+> 状态：`partial`。P0 回归基础设施已实现，Office 验收待补（§8.7）；P1 数据契约已实现（§8.8），P2 最小原生导出已实现（§8.9），P3 六布局及 macOS 基准验收已完成（§8.10），P4 Agent 审批闭环已实现（§8.11），P5 尚未实现。依据：main `7dd18929` 的代码审阅与作者确认的改进方向。
 > §1–7 保留为已发布 HTML 路线的设计记录；本节替代“新演示必须先写 HTML”的默认方向，不废除旧文件的导出能力。
 
 ### 8.1 目标与边界
@@ -913,3 +913,24 @@ macOS 27.0.1 / PowerPoint 16.113.3 / Arial + Arial Unicode MS 下打开无修复
 本次 PNG 使用 PDFium，不能与 Poppler 基准直接做像素比较；遇到疑似缺字应回到实际 Office 并交叉验证 PDF 渲染器。
 中性标点随前一字体、Latin run 使用 en-US 的选择用于明确脚本边界；重复 `a:pPr` 的规范化则有独立 XML 结构依据。
 这只验收固定 macOS 基准；Windows、其他候选字体和任意新源仍留在 P5 发布门槛，导出风险提示不撤销。
+
+
+### 8.11 P4 Agent 与审批闭环（2026-10-01）
+
+**入口与兼容。** `export_pptx(source_path)` 显式按 `.slides.json` / `.html` 分流，保留 `html_path` 别名；两者解析到不同路径时拒绝。默认 `name.slides.json` → `name.pptx`。没有 `format` 的旧 `PptxProposal` 仍走 HTML；新增 `format: native` 才消费原生产物。HTML 采集器、selector 和 CSP 未改。
+
+**批准的是已准备的字节。** `native/approval.ts` 在卡片前完成有界读取、schema/资源/字体/几何预检及序列化。失败返回错误码、slide id、JSON pointer 和修复建议，最多列 20 条，其余计数。成功仅把小型 receipt 放进 proposal：随机产物 id、source/theme/images/output 的 SHA-256、原目标摘要、主题、实际字体与页数。图片摘要取自本次真正交给 writer 的字节；源文件 2 MiB 上限在读取前检查。临时 PPTX 字节只在模块私有内存缓存，不进入模型上下文、聊天 JSON 或项目目录。
+
+选择内存缓存而不是持久缓存，是为了拒绝时零文件写入、无需新增缓存迁移和清理协议。最多 8 份待批产物、合计 128 MiB；成功、拒绝和中止均释放引用。重启或缓存丢失后不能直接恢复旧 approval：必须重新调用工具、预检、显示新卡。JSON receipt 在缓存仍存在时可还原使用；不存在则明确过期，绝不按新输入静默重建旧产物。
+
+**应用时的变化检查。** `proposalApply` 在 native 分支确认 Beta 仍开启、项目仍在；若源文件正在编辑，先保存，保存失败不继续。`applyNativePptx` 绑定原项目、源/目标路径和完整 receipt，重读 source/images 并核对摘要、检查内置主题摘要，拒绝已经修改/出现/删除的目标。同一 renderer 对同一目标的 apply 不并发。旧二进制先复制到 `.ai-writer/backups/pptx-<uuid>.pptx`，校验备份和目标；随后将已批准字节写到目标旁的随机临时文件，再次检查目标并 rename 替换，失败清理临时文件。这样写入失败不会先截断已有文件，也不会沿目标文件的符号/硬链接写坏输入。沿用现有 scoped FS IPC，不宣称这是一笔跨进程文件系统事务：最终校验和 rename 间的外部竞争仍有窗口；进程崩溃也可能留下临时文件。已批准的正常覆盖一定先有原字节备份。
+
+共享审批通道把 apply 失败作为 `approved: false, reason: apply failed: …` 返回。native 工具将它与作者主动拒绝区分，允许模型修复后重新提案；主动拒绝仍明确禁止无视意见重试。
+
+**给模型和作者的说明。** `pptx-native` 内置工作流卡按需提供封闭 v1 契约、六布局示例、图片根目录、容量和错误修复规则；常驻工具 schema 只收路径，未提高 token budget 棘轮。`pptx-deck` 保留原 id，明确服务 HTML 兼容路线，并移除“版式一样”的过度承诺。两张内置卡同受 Beta 控制，作者同 id 覆盖保持原规则。P1 的 `documentTools` 回归已证明 `.slides.json` 可通过现有 create/read/edit 工具修改，无需在 P4 提前增加 P5 的文件识别/预览。
+
+原生审批卡用现有卡片样式，双语显示来源/目标、页数、主题、所需字体（未嵌入）、本机预检与 Office 的区别，以及是否覆盖并备份。HTML selector/whole-page/lint 文案只用于 HTML。实验室提示同步说明两种源格式。
+
+**验证。** TypeScript、应用/原型 build、398 个前端测试文件共 6234 个离线测试，以及 Rust fmt/clippy/160 tests/locked build 通过；live provider 测试未运行。自动回归覆盖预检失败、旧参数/旧 payload、两个别名冲突、拒绝/中止/缓存丢失、receipt 篡改、源和图片变化、目标新增/修改/删除、备份失败/期间变化、暂存写入失败/期间变化、Beta 关闭、编辑器保存失败及容量释放。工作流中的六布局 JSON 示例直接送入实际 schema 和布局编译器验证。
+
+`approval-smoke.mjs` 在真实 Chrome 运行工具→resolver/writer→真实审批卡→批准→apply，六页 PPTX 成功写出，已有文件得到二进制备份；模拟的只有文件系统 IPC，未调用模型、未打开 Tauri 窗口。检查中英、明暗、宽卡与 240px 窄卡。截图、PPTX、范围说明与摘要保存在 [`2026-10-01-native-p4/`](pptx-baseline/2026-10-01-native-p4/)。复跑方式见 `scripts/pptx/README.md`。P4 不改 writer/layout，Office 对象与视觉证据继续引用 P3；应用预览、真实模型行为、Windows/其他字体环境验收仍属 P5。

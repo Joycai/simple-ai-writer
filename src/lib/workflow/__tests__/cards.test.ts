@@ -91,11 +91,13 @@ describe("mergeWorkflows", () => {
     expect(merged.some((c) => c.id === "pptx-deck")).toBe(false);
     expect(workflowRoster(merged)).not.toContain("幻灯片 deck");
     expect(findWorkflow(merged, "pptx-deck")).toBeNull();
+    expect(findWorkflow(merged, "pptx-native")).toBeNull();
 
     pptxOn = true;
     const on = mergeWorkflows([]);
     expect(on.some((c) => c.id === "pptx-deck")).toBe(true);
-    expect(findWorkflow(on, "幻灯片 deck（可导出 PPTX）")?.body).toContain("export_pptx");
+    expect(findWorkflow(on, "pptx-native")?.body).toContain("*.slides.json");
+    expect(findWorkflow(on, "HTML 幻灯片（兼容导出 PPTX）")?.body).toContain("export_pptx");
   });
 
   it("作者自己写的同 id 文件不受开关影响 —— 那是他们的卡", () => {

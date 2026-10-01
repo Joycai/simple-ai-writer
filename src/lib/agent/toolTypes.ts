@@ -363,26 +363,9 @@ export interface IllustrateProposal extends ProposalBase {
   keepTransparency?: false;
 }
 
-/**
- * Turn a project `.html` page into a PowerPoint deck beside it.
- *
- * Nothing model-authored lands here: the bytes are a deterministic rendering of
- * a page the author already has (and already approved). What the card is for is
- * that a *new file* appears in their project — the same reason every other
- * manuscript write blocks — so it names both ends and stays out of the way.
- *
- * The conversion runs on approval rather than at proposal time because it needs
- * a DOM to lay the page out in, and that exists in the renderer where proposals
- * are applied — not in the tool loop. See lib/pptx.
- *
- * **The division, though, is knowable now** — it is text-level (`splitHtmlDeck`)
- * — and it is the one thing about this export an author can act on before
- * approving. "12 slides on `section.slide`" and "1 slide, the whole page" are
- * the difference between a deck and a page someone only thinks is a deck, and
- * until these two fields existed the card could not tell them apart: it showed
- * two paths, the author approved, and a squashed one-slide deck appeared.
- */
-export interface PptxProposal extends ProposalBase {
+/** Legacy HTML payloads have no discriminator; preserve them when reading old records. */
+interface HtmlPptxProposal extends ProposalBase {
+  format?: "html";
   kind: "pptx";
   /** The `.html` the deck is rendered from. `path` is where the .pptx lands. */
   sourcePath: string;
@@ -400,6 +383,16 @@ export interface PptxProposal extends ProposalBase {
    */
   lint: LintFinding[];
 }
+
+/** Native proposals carry only a small receipt; prepared bytes never enter chat JSON. */
+interface NativePptxProposal extends ProposalBase {
+  kind: "pptx";
+  format: "native";
+  sourcePath: string;
+  slides: number;
+  native: import("../pptx/native/approval").NativePptxReceipt;
+}
+export type PptxProposal = HtmlPptxProposal | NativePptxProposal;
 
 /**
  * Turn a markdown document into a Word file.

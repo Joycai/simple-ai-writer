@@ -1626,13 +1626,17 @@ exports[`tool definitions on the wire > every definition, widest catalogue 1`] =
   "type": "function",
   "function": {
    "name": "export_pptx",
-   "description": "Turn a project .html page into a PowerPoint file (.pptx) beside it. NOTHING is written until the author approves the card. Write the deck as HTML with create_file first; the conversion is deterministic code, not a model — it lays the page out in a browser and writes every measured box as a PowerPoint shape, so text stays real editable text. Five rules for a page that converts well: (1) ONE \`<section class=\\"slide\\">\` per slide, all the same fixed pixel size (1280x720 for 16:9); inside, any layout works — only the measured result matters. (2) SYSTEM fonts only (PingFang SC / Microsoft YaHei / Arial / Helvetica / Georgia): a web font cannot enter a .pptx, PowerPoint substitutes one and the text reflows. (3) Draw with real elements, never with ::before/::after — a pseudo-element has no box to measure and vanishes. (4) No entrance animations: an element starting at opacity 0 is exported as hidden. (5) Words in HTML, not inside an SVG. Run inspect_html first — it names every construct that will not carry across, with its line. Put \`data-pptx-skip\` on decoration that should not become a shape. The result reports the slide count and everything that degraded — pass that on to the author.",
+   "description": "Export a project .slides.json deck or legacy .html page to editable PowerPoint, after author approval. Read workflow pptx-native for the six-layout JSON contract and examples; create_file writes the source. Native preflight returns slide ids and field paths: fix errors and retry. Approval binds the prepared output; changed inputs/destination or a lost cache need a new review. For HTML, read pptx-deck and run inspect_html first: SYSTEM fonts, real elements instead of ::before/::after, no entrance opacity 0, words outside SVG. Pass font requirements and export limitations to the author.",
    "parameters": {
     "type": "object",
     "properties": {
+     "source_path": {
+      "type": "string",
+      "description": "Project .slides.json or .html source path"
+     },
      "html_path": {
       "type": "string",
-      "description": "Full path of the .html page to convert"
+      "description": "Legacy alias for source_path; omit when source_path is given"
      },
      "out_path": {
       "type": "string",
@@ -1643,9 +1647,7 @@ exports[`tool definitions on the wire > every definition, widest catalogue 1`] =
       "description": "One-line justification shown to the author on the review card"
      }
     },
-    "required": [
-     "html_path"
-    ]
+    "required": []
    }
   }
  },
@@ -4179,13 +4181,17 @@ exports[`tool definitions on the wire > every definition, with page-reading sear
   "type": "function",
   "function": {
    "name": "export_pptx",
-   "description": "Turn a project .html page into a PowerPoint file (.pptx) beside it. NOTHING is written until the author approves the card. Write the deck as HTML with create_file first; the conversion is deterministic code, not a model — it lays the page out in a browser and writes every measured box as a PowerPoint shape, so text stays real editable text. Five rules for a page that converts well: (1) ONE \`<section class=\\"slide\\">\` per slide, all the same fixed pixel size (1280x720 for 16:9); inside, any layout works — only the measured result matters. (2) SYSTEM fonts only (PingFang SC / Microsoft YaHei / Arial / Helvetica / Georgia): a web font cannot enter a .pptx, PowerPoint substitutes one and the text reflows. (3) Draw with real elements, never with ::before/::after — a pseudo-element has no box to measure and vanishes. (4) No entrance animations: an element starting at opacity 0 is exported as hidden. (5) Words in HTML, not inside an SVG. Run inspect_html first — it names every construct that will not carry across, with its line. Put \`data-pptx-skip\` on decoration that should not become a shape. The result reports the slide count and everything that degraded — pass that on to the author.",
+   "description": "Export a project .slides.json deck or legacy .html page to editable PowerPoint, after author approval. Read workflow pptx-native for the six-layout JSON contract and examples; create_file writes the source. Native preflight returns slide ids and field paths: fix errors and retry. Approval binds the prepared output; changed inputs/destination or a lost cache need a new review. For HTML, read pptx-deck and run inspect_html first: SYSTEM fonts, real elements instead of ::before/::after, no entrance opacity 0, words outside SVG. Pass font requirements and export limitations to the author.",
    "parameters": {
     "type": "object",
     "properties": {
+     "source_path": {
+      "type": "string",
+      "description": "Project .slides.json or .html source path"
+     },
      "html_path": {
       "type": "string",
-      "description": "Full path of the .html page to convert"
+      "description": "Legacy alias for source_path; omit when source_path is given"
      },
      "out_path": {
       "type": "string",
@@ -4196,9 +4202,7 @@ exports[`tool definitions on the wire > every definition, with page-reading sear
       "description": "One-line justification shown to the author on the review card"
      }
     },
-    "required": [
-     "html_path"
-    ]
+    "required": []
    }
   }
  },

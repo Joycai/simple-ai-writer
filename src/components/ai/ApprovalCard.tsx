@@ -780,6 +780,24 @@ function PptxBody({ proposal }: { proposal: PptxProposal }) {
   const { t } = useTranslation();
   // 源码里查出来的、导出时会丢或走样的写法（lib/pptx/lint），按规则折叠成一行一
   // 条。和「整页压成一张」一样：不拦着，说清楚——作者可能就是要这份不完美的。
+  if (proposal.format === "native") return (
+    <>
+      <div className={styles.moveBlock}>
+        <span className={styles.movePath}>{projectRelative(proposal.sourcePath)}</span>
+        <ArrowRight size={12} className={styles.moveArrow} />
+        <span className={styles.movePath}>{projectRelative(proposal.path)}</span>
+      </div>
+      <div className={styles.pptxSplit}>
+        <span className={styles.pptxSlides}>{t("ai.approval.pptxSlideCount", { n: proposal.slides })}</span>
+        <span className={styles.pptxTier}>{t("ai.approval.pptxNative")}</span>
+      </div>
+      <div className={styles.emptyNote}>{t("ai.approval.pptxNativeTheme", { theme: proposal.native.theme })}</div>
+      <div className={styles.emptyNote}>{t("ai.approval.pptxNativeFonts", { fonts: [...new Set(Object.values(proposal.native.fonts))].join(", ") })}</div>
+      {proposal.native.targetHash !== null && <div className={styles.pptxWarn}>{t("ai.approval.pptxNativeOverwrite")}</div>}
+      <div className={styles.emptyNote}>{t("ai.approval.pptxNativeRisk")}</div>
+      <div className={styles.emptyNote}>{t("ai.approval.pptxNativeSnapshot")}</div>
+    </>
+  );
   const lint = groupLint(proposal.lint);
   return (
     <>

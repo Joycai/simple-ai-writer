@@ -10,6 +10,7 @@
  * best-effort 的流程指引，必须保证的事（词典强制落实、审批弹卡）都在工具内部。
  */
 
+import { NATIVE_PPTX_WORKFLOW } from "./nativePptx";
 import { isPptxExportEnabled } from "../pptx/flag";
 
 interface BuiltinWorkflow {
@@ -62,11 +63,11 @@ export const BUILTIN_WORKFLOWS: readonly BuiltinWorkflow[] = [
     // 是无谓的束缚（::before 的圆点在网页里好好的），而卡里指名的 export_pptx
     // 那时也不存在。
     id: "pptx-deck",
-    name: "幻灯片 deck（可导出 PPTX）",
-    description: "作者要演示文稿 / 幻灯片 / PPT 时，先按这张卡的骨架和写法写 .html，再导出",
+    name: "HTML 幻灯片（兼容导出 PPTX）",
+    description: "已有 HTML 幻灯片的兼容导出；原生演示文稿请读 pptx-native",
     available: isPptxExportEnabled,
     body: [
-      "目标是一份 .html 的 deck，导出成 .pptx 后**版式一样、文字仍可编辑**。转换不经过模型：页面在浏览器里排好，量到的每个盒子写成 PowerPoint 形状。所以写法决定保真度——转换器只认它量得到、pptx 装得下的东西。",
+      "目标是一份 .html 的 deck，导出成 .pptx 后文字仍可编辑，但 CSS 映射和字体回流可能改变版式。转换不经过模型：页面在浏览器里排好，量到的每个盒子写成 PowerPoint 形状。所以写法决定保真度——转换器只认它量得到、pptx 装得下的东西。",
       "",
       "1. **骨架（照抄，一页一个 `<section class=\"slide\">`，尺寸固定 1280×720）**：",
       "",
@@ -102,5 +103,12 @@ export const BUILTIN_WORKFLOWS: readonly BuiltinWorkflow[] = [
       "",
       "10. **导出**：调 export_pptx（作者会在卡片上批准；工具里没有它而有 run_pack 时，交给导出 pack）。结果里的降级清单原样转告作者——那是事实，不是错误。改版时用 read_slides 按页读回行区间，rewrite_lines 改某一页。",
     ].join("\n"),
+  },
+  {
+    id: "pptx-native",
+    name: "原生幻灯片（pptx-native）",
+    description: "用六种原生布局生成可编辑 PPTX：slides.json 格式、示例与审批流程",
+    available: isPptxExportEnabled,
+    body: NATIVE_PPTX_WORKFLOW,
   },
 ];

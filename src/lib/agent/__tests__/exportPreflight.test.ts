@@ -92,13 +92,13 @@ describe("export_pptx preflight", () => {
     await exportPptxTool("c1", { html_path: `${PROJECT}/deck.html` }, ctx());
 
     const proposal = captured[0];
-    if (proposal.kind !== "pptx") throw new Error("expected a pptx proposal");
+    if (proposal.kind !== "pptx" || proposal.format === "native") throw new Error("expected a pptx proposal");
     expect(proposal.lint.map((f) => [f.rule, f.level, f.line])).toEqual([["P1", "lost", 2]]);
 
     fs.set(`${PROJECT}/clean.html`, page('<section class="slide">一</section>'));
     await exportPptxTool("c2", { html_path: `${PROJECT}/clean.html` }, ctx());
     const clean = captured[1];
-    if (clean.kind !== "pptx") throw new Error("expected a pptx proposal");
+    if (clean.kind !== "pptx" || clean.format === "native") throw new Error("expected a pptx proposal");
     expect(clean.lint).toEqual([]);
   });
 
