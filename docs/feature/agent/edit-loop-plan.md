@@ -221,7 +221,7 @@
 
 ### D12 新增的是**档位**，不是「给 htmlArtifact 开个特例」
 
-`presetForTools` 存在的理由就是让 `lib/profile` 不依赖 agent 层：能力包只写 `tools: "write"`，preset 是什么由 agent 层自己决定。所以收窄工具集只能是**加一档**，不能是按 task id 分支——那正是 CLAUDE.md 明令禁止的那件事，而且能力包也就没法用上这一档。
+`presetForTools` 存在的理由就是让 `lib/profile` 不依赖 agent 层：能力包只写 `tools: "write"`，preset 是什么由 agent 层自己决定。所以收窄工具集只能是**加一档**，不能是按 task id 分支——那正是 AGENTS.md 明令禁止的那件事，而且能力包也就没法用上这一档。
 
 - 弃用【给 `TaskPreset` 加一个 `preset` 字段让任务直接指定】：那会把 agent 层的类型漏进 pack schema，也让「一个包能声明什么」变成开放集合。
 

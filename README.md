@@ -285,7 +285,7 @@ The pull-request gate runs the same checks. See [`docs/reference/ci.md`](docs/re
 
 ### Documentation for contributors
 
-- [`AGENTS.md`](AGENTS.md) — repository rules, architecture overview, and required reading before changing a subsystem
+- [`AGENTS.md`](AGENTS.md) — authoritative project guide; edit it directly for repository rules, architecture overview, and required reading before changing a subsystem. `CLAUDE.md` imports it for compatibility; no regeneration is needed
 - [`docs/reference/architecture.md`](docs/reference/architecture.md) — storage, RAG, providers, streaming, exports, IPC, and security details
 - [`docs/reference/design-system.md`](docs/reference/design-system.md) — UI and theme contract
 - [`docs/reference/terminology.md`](docs/reference/terminology.md) — author-facing vocabulary

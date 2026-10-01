@@ -2,7 +2,7 @@
 
 This file provides guidance to AI coding agents (Codex, Claude Code, Cursor, …) when working with code in this repository.
 
-> **GENERATED from [`CLAUDE.md`](CLAUDE.md) by `scripts/gen-agents-md.ts` — do not edit by hand.** `CLAUDE.md` is the source; this file is its body under an agent-neutral head, so agents that follow the `AGENTS.md` convention read the same map. Edit `CLAUDE.md`, then run `node scripts/gen-agents-md.ts`; `agentsMdSync.test.ts` fails when the two drift.
+> **Authoritative project guide — edit this file directly.** `CLAUDE.md` imports it for Claude Code compatibility; there is no generated mirror or regeneration step. See [agent-instructions.md](docs/reference/agent-instructions.md) for the maintenance contract and migration rationale.
 
 > **Progressive disclosure** — This file is the always-loaded high-level map: commands, the hard rules, the shape of the app, and where to read next. Per-directory notes (module split, invariants, why-not-the-other-way) live in [`docs/reference/codemap.md`](docs/reference/codemap.md); subsystem deep-dives, the UI/design spec and recipes are under `docs/` (see [Detailed References](#detailed-references)). **Keep this file lean: add new detail to `codemap.md` or the relevant `docs/` file, not here.**
 
@@ -186,7 +186,7 @@ Load the relevant doc **before** working in that area — don't reconstruct it f
 - **commit message 是英文类型前缀 + 中文正文**（`fix: 收紧 shell 只读免审白名单并禁止复合命令连批`）。写改了什么、为什么这么改，不写文件清单。
 - **版本号跟着功能 PR 一起走**，不单开 chore 分支。用 `bump-version` skill，别手改任何一处版本字符串——四份 Tauri 清单必须同步移动。
 - **PR 由作者本人合并。** 做到「PR 已开、CI 已绿」为止就停。
-- **决策落进文档，并写明理由。** commit message 和代码注释都不算——它们不在下次有人会去问的地方。理由写进 `docs/` 对应的那一份（`reference/` 活的真相 · `feature/` 子系统档案 · `issues/` 未决），新增文档在 `docs/README.md` 登记状态。改完 `CLAUDE.md` 记得 `node scripts/gen-agents-md.ts`。
+- **决策落进文档，并写明理由。** commit message 和代码注释都不算——它们不在下次有人会去问的地方。理由写进 `docs/` 对应的那一份（`reference/` 活的真相 · `feature/` 子系统档案 · `issues/` 未决），新增文档在 `docs/README.md` 登记状态。项目级约定直接编辑 `AGENTS.md`；`CLAUDE.md` 只保留导入入口，不复制规则。
 
 ## Local Skills
 

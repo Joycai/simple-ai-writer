@@ -28,7 +28,7 @@ The [`CI`](../../.github/workflows/ci.yml) workflow runs on every pull request t
 | **CI Success** | aggregates the four jobs | Single status check to require in branch protection |
 
 Notes:
-- Frontend tests run with Vitest (`src/**/*.test.ts`, config in `vitest.config.ts`) — one test file per module in the nearest `__tests__/`, plus the repo-wide source-scanning guards in `src/lib/__tests__/` (the Hard Rules in `CLAUDE.md` are what they enforce).
+- Frontend tests run with Vitest (`src/**/*.test.ts`, config in `vitest.config.ts`) — one test file per module in the nearest `__tests__/`, plus the repo-wide source-scanning guards in `src/lib/__tests__/` (the Hard Rules in `AGENTS.md` are what they enforce).
 - Rust unit tests live inline (`#[cfg(test)] mod tests`) in the modules they test, under `src-tauri/src/` and `server/src/` — there is no separate `tests/` directory in either crate. `grep -l "mod tests" src-tauri/src/*.rs server/src/*.rs` lists them.
 - `clippy` is enforced with `-D warnings`: any new warning fails CI.
 - Both Rust jobs install `dtolnay/rust-toolchain@stable`, i.e. **whatever stable is on the

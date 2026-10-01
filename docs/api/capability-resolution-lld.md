@@ -643,7 +643,7 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
   - 在本文末尾加「§9 实施记录」小节；
   - 更新 `docs/reference/codemap.md` 的 `src/lib/ai/` 一节（服务端工具、能力表两段的措辞）；
   - P6 更新 `provider-layering.md` 偏离三（被动的探测维有了位置）；
-  - 若改了 `CLAUDE.md` 的 Hard Rules（例如加一条「判定只经 `resolve` / `planRequest`」），运行 `node scripts/gen-agents-md.ts`。
+  - 若需修改项目级 Hard Rules（例如加一条「判定只经 `resolve` / `planRequest`」），直接编辑 `AGENTS.md`；不再生成镜像。
 
 ## 9. 实施记录
 

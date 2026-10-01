@@ -1,6 +1,6 @@
 # MCP 工具 · 让助手调用外部 MCP 服务的工具
 
-> 状态：`proposal`（2026-09-17 起草，未拍板、未实施）。拍板后改 `planned`，并在 `CLAUDE.md` 的 Detailed References 挂指针。
+> 状态：`proposal`（2026-09-17 起草，未拍板、未实施）。拍板后改 `planned`，并在 `AGENTS.md` 的 Detailed References 挂指针。
 > 一句话：应用作为 **MCP 客户端**，连接作者自己配置的 MCP 服务（本机 stdio 进程或远程 Streamable HTTP），把它们的工具**按需**交给助手；每次调用默认过审批卡，作者亲手列入信任清单的工具才免审。
 > 前置阅读：[`../../reference/tool-presence.md`](../../reference/tool-presence.md)（在场性契约）· [`agent-tool-context-lld.md`](agent-tool-context-lld.md) §5–§6（延迟组与 `search_tools`）· [`shell-command-plan.md`](shell-command-plan.md)（外部进程 + 审批卡 + 免审清单，本方案的直接样板）· [`tool-pack-plan.md`](tool-pack-plan.md) §5（台架闸门的写法）· [`../../api/tool-search.md`](../../api/tool-search.md)（各族原生按需加载，本方案**不**依赖它）
 
@@ -57,7 +57,7 @@
 | 11 | 一个服务暴露几十个工具怎么办 | **设置页按工具逐个开关**；一个组装载后的 schema 超过 **4,000 token** 或超过当前模型上下文的 **15%**，装载被拒并给模型一句「这个服务的工具太多，请作者在设置中精简」；新发现的工具默认关（见 #16） | GitHub 这类服务一次给 40+ 工具，全装等于把常驻预算翻倍。拒绝时的文字点名的是作者能做的事，不是一个模型能调的工具——不制造死指针 |
 | 12 | 审批卡 | 新 kind `mcp`：服务名 + 工具名（有 `title` 用 `title`）+ **参数 JSON 原文**（等宽、格式化、不省略）+ 注解给出的风险提示 + 数据去向（本机进程 / 远程域名） | 同 shell 不变量 2：作者批的必须是实际发出去的东西。MCP schema 里没有 `reason` 参数，**不注入**——改写第三方 schema 的语义、每个工具都多付一段 token，而卡上已有模型本轮的文字可读 |
 | 13 | 免审怎么给 | 卡上两个按钮：「本次连批 N 次」（1–5，同一工具，绑 run）；「始终允许此工具」（写进 `app:mcpTrust`，机器本地，键为 `serverId + 工具名 + 定义指纹`）。`destructiveHint: true` 的工具卡上不给「始终允许」，只能在设置页加 | 与 `commandLeft` / 免审批命令同形，作者已经学会了这套。按工具而不是按服务：一个服务里「搜索」与「删除页面」并存是常态 |
-| 14 | 结果里的图片、资源 | `text` → 正文；`image` → `imageDataUrls`（模型不识图时换成一句「返回了一张图，本次模型读不了」）；`resource` / `resource_link` → URI + 标题 + 文本内容（有则截断附上）；`audio` → 说明不支持；`structuredContent` 在没有 `text` 时序列化为 JSON；`isError: true` → 以 `Error:` 开头 | 与现有 `ToolResult` 对齐，不新增字段。图片经 `imageForModel` 的同一条路（CLAUDE.md 硬规则：读图方由字节去向决定） |
+| 14 | 结果里的图片、资源 | `text` → 正文；`image` → `imageDataUrls`（模型不识图时换成一句「返回了一张图，本次模型读不了」）；`resource` / `resource_link` → URI + 标题 + 文本内容（有则截断附上）；`audio` → 说明不支持；`structuredContent` 在没有 `text` 时序列化为 JSON；`isError: true` → 以 `Error:` 开头 | 与现有 `ToolResult` 对齐，不新增字段。图片经 `imageForModel` 的同一条路（AGENTS.md 硬规则：读图方由字节去向决定） |
 | 15 | 谁来决定一次调用算只读 | **没有人，第一期全部按写处理**：`isParallelSafeTool` 对 MCP 名字返回 false，同一轮串行执行 | 注解不可信（不变量 3），作者的信任清单说的是「不用问我」，不是「没有副作用」。并行只省几秒，错了是两张叠在一起的卡 |
 | 16 | 服务的工具列表变了 | 缓存上次**作者看过**的列表（名字 + 指纹）；实时列表里的新工具默认关、需作者在设置页打开；已有工具指纹变了 → 该工具从本次运行中缺席，信任清单里对应条目失效，设置页标「定义已变更，需重新确认」 | 「先批准一个无害的工具，再悄悄改它的说明」是 MCP 已知的攻击形状（tool poisoning / rug pull）。缺席而不是拒绝：模型读不到被改过的说明，本身就是防线 |
 | 17 | 进不进 orchestrator 与 pack | **orchestrator 主控与 assist 同样经 routing 追加；pack 子运行第一期不给** | tool-pack D4 的边界是「主控不持有项目写工具」，MCP 调用的副作用在项目之外，且每次都过卡。pack 是否需要它，等真实用法出现再议 |
@@ -290,7 +290,7 @@ export interface McpProposal extends ProposalBase {
 1. **台架与探测**（§6 三项，不进代码库，结果回填本文）。
 2. **Rust 客户端**：`mcp.rs` + 测试服务 + 退出钩子；不接任何 UI。
 3. **配置与设置页**：`mcp_servers` 表、keyring 对账与 `appReset`、`McpPane`、JSON 导入、测试连接、日志查看；Beta 开关（默认关）。
-4. **接入 agent**：运行级动态表、`resolveTool`、routing opt-in、`search_tools` 的 MCP 组、`McpProposal` 与卡、`result.ts`、计量。`tool-presence.md` 先例表加一行，`codemap.md` 加 `src/lib/mcp/` 一节，`CLAUDE.md` 的代码清单加一行（改完跑 `node scripts/gen-agents-md.ts`）。
+4. **接入 agent**：运行级动态表、`resolveTool`、routing opt-in、`search_tools` 的 MCP 组、`McpProposal` 与卡、`result.ts`、计量。`tool-presence.md` 先例表加一行，`codemap.md` 加 `src/lib/mcp/` 一节，`AGENTS.md` 的代码清单加一行（直接维护，无生成步骤）。
 5. **加固**：定义漂移与信任清单、空闲回收、会话级开关、上下文条里的 MCP 段；真机验收（Windows 无黑窗、杀进程树；macOS 从 Finder 启动时能找到 `npx` / `uvx`）。
 
 每一片单独一个 PR、各自从 `main` 切（不叠 PR）；版本号随第 4 片走。

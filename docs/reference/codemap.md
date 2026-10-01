@@ -1,8 +1,8 @@
 # 源码地图 · 分模块笔记
 
 > **状态：`living`。** 与代码不符时，是文档的 bug。
-> 这里是 `CLAUDE.md` 目录地图的**展开版**：每个目录一节，写的是那个目录的模块分工、不变量和「为什么不是另一种做法」，以及各自设计文档的落点。`CLAUDE.md` 只保留一句话和硬规则；**改某个目录之前，先读它在这里的那一节。**
-> 2026-09-07 从 `CLAUDE.md` 原样搬出（那份文件曾长到 73KB，每次会话都整份进上下文）。往这里加细节，不往 `CLAUDE.md` 加。
+> 这里是 `AGENTS.md` 目录地图的**展开版**：每个目录一节，写的是那个目录的模块分工、不变量和「为什么不是另一种做法」，以及各自设计文档的落点。`AGENTS.md` 只保留一句话和硬规则；**改某个目录之前，先读它在这里的那一节。**
+> 2026-09-07 从 `CLAUDE.md` 原样搬出（那份文件曾长到 73KB，每次会话都整份进上下文）。往这里加细节，不往 `AGENTS.md` 加。
 >
 > **覆盖面**：`src/components/*`、`src/lib/*`、`src-tauri/`、`server/`——每个目录一节，新建一个目录就在这里加一节（2026-09-12 补齐了 `lib/docx` · `lib/editor` · `lib/format` · `lib/search` · `lib/sync` · `components/roleplay` · `components/sync` 与 `src-tauri/`，此前它们只有 `CLAUDE.md` 里的一行）。两个目录**故意不在这里**，因为别处讲得更全：`src/styles/` 与 `src/i18n/locales/` 看 [`design-system.md`](design-system.md) 与 [`terminology.md`](terminology.md)。（2026-09-16 补上 `src/stores/`，此前它只在 `CLAUDE.md` 的 State Management 一节里。）
 
@@ -307,7 +307,7 @@ CommandPalette, onboarding flow, library view (文库: only what the author pick
 - multi-draft output vocabulary (`drafts.ts`)
 - the snippet library's pure layer (`snippets.ts` — grouping/search/hit-slicing shared by the picker and Settings → Prompt, so both surfaces section a library the same way; see `docs/feature/prompt-snippets-ui-brief.md`)
 #### 计费与用量
-价格在**计费组**上（`feeGroup*`），模型只持有 `feeGroupId`；用量行由 `usageRow.ts` 的 `recordUsage` 唯一入口写两处（项目库 + `config.db`），行上自带当时的价，`costOf()` 是唯一的算式；读那一侧（`usage.ts`）、给老行补分项（`usageBackfill.ts`，唯一改写历史行的地方）、用量条分段（`usageMeter.ts`）、上游报价换算（`reportedCost.ts`）各一个文件。**逐文件的分工、不变量和理由都在 [`docs/feature/billing/01-fee-groups.md`](../feature/billing/01-fee-groups.md) 的「模块」一节**，改这些文件之前读那里；硬规则在 `CLAUDE.md`「计费与用量」。
+价格在**计费组**上（`feeGroup*`），模型只持有 `feeGroupId`；用量行由 `usageRow.ts` 的 `recordUsage` 唯一入口写两处（项目库 + `config.db`），行上自带当时的价，`costOf()` 是唯一的算式；读那一侧（`usage.ts`）、给老行补分项（`usageBackfill.ts`，唯一改写历史行的地方）、用量条分段（`usageMeter.ts`）、上游报价换算（`reportedCost.ts`）各一个文件。**逐文件的分工、不变量和理由都在 [`docs/feature/billing/01-fee-groups.md`](../feature/billing/01-fee-groups.md) 的「模块」一节**，改这些文件之前读那里；硬规则在 `AGENTS.md`「计费与用量」。
 
 #### 图片与日志
 - **which endpoint an image model draws through** (`imageRoute.ts` — `effectiveImageRoute`: the declared `ImageCaps.route`, else a `Record<ProtocolFamily, …>` default by the family of the model's *current* route, so 自动 on DashScope's native route is `dashscope`). The only derivation: the client (`generateImage`, fed by the one conn builder `imageConnOf`), the generate modal, 「将发送」, `defaultImageCaps` and the drawer (`panes/imageCapsDraft.ts`) all read it; `asyncTask` only through `effectiveAsyncTask`. `chat` / `comfyui` / `ark` are never derived, so a declaration read is fine for those three and **forbidden** for the other three — `src/lib/__tests__/imageRouteOwner.test.ts` scans for it. See `docs/feature/image-route.md`
@@ -811,7 +811,7 @@ document import into the workspace:
 
 ## `src/stores/`
 
-Zustand stores。一个 store 一个关注点，**存的是「现在是什么」，不是「怎么做」**：决策形状的东西住在对应的 `lib/` 子系统里，store 只做时序、订阅和缓存。从 `CLAUDE.md` 搬来（2026-09-16），那边只留一份名字索引。
+Zustand stores。一个 store 一个关注点，**存的是「现在是什么」，不是「怎么做」**：决策形状的东西住在对应的 `lib/` 子系统里，store 只做时序、订阅和缓存。从 `CLAUDE.md` 搬来（2026-09-16），今天 `AGENTS.md` 只留一份名字索引。
 
 - **`appStore`** — 主题、语言（i18n）、侧栏 / 面板折叠、活动标签页。持久化的字段经 `lib/prefs` 的 `prefBackedState()` 拿初值；配置导入之后由 `reloadFromPrefs()` 重新派生，因为那些字段只在启动时读过一次偏好。
 - **`projectStore`** — 当前项目路径、文件树、活动文件，以及解析好的 `workspace`（启用了哪些能力包）。**组件订阅的是这里的 `workspace`**，不是 `lib/profile/active` 那个单例——单例不是响应式的。
