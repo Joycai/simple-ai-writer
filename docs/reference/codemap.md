@@ -485,6 +485,7 @@ HTML → PPTX（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`
 - and `htmlSlides.ts` reads a page **by structure** — by slide for `read_slides` (its selector list **must** stay in step with `harvester.js`'s or "slide 7" means two different things), and by landmark (`landmarkIndex`: headings, `id`s, and the tags that are a place on their own) for the pages those selectors cannot divide, which is the map `read_file` puts in front of a long landing page or report. Pure text, one tag scanner, one offset-to-line map — see `docs/feature/agent/html-read-edit-plan.md`.
 
 #### 生成侧保真度检查
+- `inspect.ts` reports harvested HTML geometry/degradation only, never PowerPoint fidelity; empty/unmeasured slides cannot count as passing. `scripts/pptx/` and the fixed fixture in the subsystem tests provide repeatable browser export and same-renderer image comparison; baseline evidence and remaining Office verification are in `pptx-plan.md` §8.7.
 - `lint.ts` is the generation-side half of fidelity: a text-level scan of the page for what the harvester **can never see** (a `::before` has no box to measure; an entrance animation starting at `opacity: 0` is measured as hidden) or is known to approximate, appended to `inspect_html`'s report with a line per finding, carried on the `export_pptx` card (folded by rule, the sentences in both locale files) and repeated in the apply report beside what the conversion measured, saying nothing on a clean page — never a reason to refuse an export, and never a `harvester.js` edit
   - the rule table is `pptx-plan.md` §7.3.
 

@@ -1,0 +1,287 @@
+{
+  "beforePath": "lo-4.png",
+  "afterPath": "missing-4.png",
+  "width": 1280,
+  "height": 720,
+  "channelTolerance": 24,
+  "tileSize": 128,
+  "tileFractionLimit": 0.05,
+  "passed": false,
+  "failedTiles": [
+    {
+      "left": 0,
+      "top": 128,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.36944580078125
+    },
+    {
+      "left": 128,
+      "top": 128,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.8125
+    },
+    {
+      "left": 256,
+      "top": 128,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.8125
+    },
+    {
+      "left": 384,
+      "top": 128,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.8125
+    },
+    {
+      "left": 512,
+      "top": 128,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.166259765625
+    },
+    {
+      "left": 0,
+      "top": 256,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.49993896484375
+    },
+    {
+      "left": 128,
+      "top": 256,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 1
+    },
+    {
+      "left": 256,
+      "top": 256,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 1
+    },
+    {
+      "left": 384,
+      "top": 256,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 1
+    },
+    {
+      "left": 512,
+      "top": 256,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.25
+    },
+    {
+      "left": 0,
+      "top": 384,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.48944091796875
+    },
+    {
+      "left": 128,
+      "top": 384,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.9998779296875
+    },
+    {
+      "left": 256,
+      "top": 384,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.9998779296875
+    },
+    {
+      "left": 384,
+      "top": 384,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.9996337890625
+    },
+    {
+      "left": 512,
+      "top": 384,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.24066162109375
+    },
+    {
+      "left": 0,
+      "top": 512,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.076416015625
+    },
+    {
+      "left": 128,
+      "top": 512,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.3197021484375
+    },
+    {
+      "left": 256,
+      "top": 512,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.319580078125
+    },
+    {
+      "left": 384,
+      "top": 512,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.301513671875
+    }
+  ],
+  "changedTiles": [
+    {
+      "left": 0,
+      "top": 128,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.36944580078125
+    },
+    {
+      "left": 128,
+      "top": 128,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.8125
+    },
+    {
+      "left": 256,
+      "top": 128,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.8125
+    },
+    {
+      "left": 384,
+      "top": 128,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.8125
+    },
+    {
+      "left": 512,
+      "top": 128,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.166259765625
+    },
+    {
+      "left": 0,
+      "top": 256,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.49993896484375
+    },
+    {
+      "left": 128,
+      "top": 256,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 1
+    },
+    {
+      "left": 256,
+      "top": 256,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 1
+    },
+    {
+      "left": 384,
+      "top": 256,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 1
+    },
+    {
+      "left": 512,
+      "top": 256,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.25
+    },
+    {
+      "left": 0,
+      "top": 384,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.48944091796875
+    },
+    {
+      "left": 128,
+      "top": 384,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.9998779296875
+    },
+    {
+      "left": 256,
+      "top": 384,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.9998779296875
+    },
+    {
+      "left": 384,
+      "top": 384,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.9996337890625
+    },
+    {
+      "left": 512,
+      "top": 384,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.24066162109375
+    },
+    {
+      "left": 0,
+      "top": 512,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.076416015625
+    },
+    {
+      "left": 128,
+      "top": 512,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.3197021484375
+    },
+    {
+      "left": 256,
+      "top": 512,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.319580078125
+    },
+    {
+      "left": 384,
+      "top": 512,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.301513671875
+    },
+    {
+      "left": 512,
+      "top": 512,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.01513671875
+    }
+  ]
+}

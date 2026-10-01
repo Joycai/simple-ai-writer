@@ -98,7 +98,9 @@ describe("formatDeckReport", () => {
 
     expect(out).toContain("3 slide(s) at 1280×720px");
     expect(out).toContain("`section.slide`");
-    expect(out).toContain("Nothing is outside its slide");
+    expect(out).toContain("No overflow or degradation was detected in the measured HTML.");
+    expect(out).toContain("PowerPoint rendering and font substitution are not verified.");
+    expect(out).not.toContain("converts as it looks");
     // No per-slide noise for slides with nothing to say.
     expect(out).not.toContain("Slide 2");
   });
@@ -114,7 +116,7 @@ describe("formatDeckReport", () => {
 
     expect(out).toContain("Slide 2");
     expect(out).toContain("40px below the bottom edge");
-    expect(out).toContain("The other 2 slide(s) are clean.");
+    expect(out).toContain("2 slide(s) have no detected HTML findings.");
     expect(out).not.toContain("Slide 1 (");
   });
 
@@ -134,6 +136,23 @@ describe("formatDeckReport", () => {
 
     expect(out).toContain("Slide(s) 1 measured as EMPTY");
     expect(out).toContain("wrong class name");
+    expect(out).toContain("1 slide(s) have no detected HTML findings.");
+    expect(out).not.toContain("No overflow or degradation was detected");
+  });
+
+  it("does not report an unmeasured deck as passing", () => {
+    const out = formatDeckReport(inspectDeck(deckOf([])), "/p/d.html", "body");
+    expect(out).toContain("No slides were measured.");
+    expect(out).not.toContain("No overflow or degradation was detected");
+  });
+
+  it("does not double-count an empty slide with a degradation note", () => {
+    const out = formatDeckReport(
+      inspectDeck(deckOf([slide([], ["a picture could not be embedded"]), slide([text("OK")])])),
+      "/p/d.html", "section",
+    );
+    expect(out).toContain("1 slide(s) have no detected HTML findings.");
+    expect(out).toContain("PowerPoint rendering and font substitution are not verified.");
   });
 
   // What turns a finding into an actionable one. `label()` gives a

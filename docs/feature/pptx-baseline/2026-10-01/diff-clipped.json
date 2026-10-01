@@ -1,0 +1,210 @@
+{
+  "beforePath": "lo-2.png",
+  "afterPath": "clipped-2.png",
+  "width": 1280,
+  "height": 720,
+  "channelTolerance": 24,
+  "tileSize": 128,
+  "tileFractionLimit": 0.05,
+  "passed": false,
+  "failedTiles": [
+    {
+      "left": 0,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.08355712890625
+    },
+    {
+      "left": 128,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.13690185546875
+    },
+    {
+      "left": 256,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.07806396484375
+    },
+    {
+      "left": 384,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.10467529296875
+    },
+    {
+      "left": 512,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.1083984375
+    },
+    {
+      "left": 640,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.08746337890625
+    },
+    {
+      "left": 768,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.11053466796875
+    },
+    {
+      "left": 896,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.09515380859375
+    },
+    {
+      "left": 1024,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.12457275390625
+    }
+  ],
+  "changedTiles": [
+    {
+      "left": 0,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.08355712890625
+    },
+    {
+      "left": 128,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.13690185546875
+    },
+    {
+      "left": 256,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.07806396484375
+    },
+    {
+      "left": 384,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.10467529296875
+    },
+    {
+      "left": 512,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.1083984375
+    },
+    {
+      "left": 640,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.08746337890625
+    },
+    {
+      "left": 768,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.11053466796875
+    },
+    {
+      "left": 896,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.09515380859375
+    },
+    {
+      "left": 1024,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.12457275390625
+    },
+    {
+      "left": 1152,
+      "top": 0,
+      "width": 128,
+      "height": 128,
+      "changedFraction": 0.00506591796875
+    },
+    {
+      "left": 0,
+      "top": 640,
+      "width": 128,
+      "height": 80,
+      "changedFraction": 0.00771484375
+    },
+    {
+      "left": 128,
+      "top": 640,
+      "width": 128,
+      "height": 80,
+      "changedFraction": 0.0140625
+    },
+    {
+      "left": 256,
+      "top": 640,
+      "width": 128,
+      "height": 80,
+      "changedFraction": 0.00927734375
+    },
+    {
+      "left": 384,
+      "top": 640,
+      "width": 128,
+      "height": 80,
+      "changedFraction": 0.010546875
+    },
+    {
+      "left": 512,
+      "top": 640,
+      "width": 128,
+      "height": 80,
+      "changedFraction": 0.01123046875
+    },
+    {
+      "left": 640,
+      "top": 640,
+      "width": 128,
+      "height": 80,
+      "changedFraction": 0.01123046875
+    },
+    {
+      "left": 768,
+      "top": 640,
+      "width": 128,
+      "height": 80,
+      "changedFraction": 0.00380859375
+    },
+    {
+      "left": 896,
+      "top": 640,
+      "width": 128,
+      "height": 80,
+      "changedFraction": 0.00029296875
+    },
+    {
+      "left": 1024,
+      "top": 640,
+      "width": 128,
+      "height": 80,
+      "changedFraction": 0.001171875
+    }
+  ]
+}
