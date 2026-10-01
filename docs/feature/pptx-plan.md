@@ -1,6 +1,6 @@
 # PPTX 支持计划（读取 + 生成，均已实施）
 
-> 状态：**`partial`——读取端与 HTML 生成端已实施，原生 PPTX 生成路线待实施（§8）**。读取端一期 + 二期见 PR #223；HTML 生成端仍为 Settings → AI 配置 → 实验室里的 Beta 功能（§4）。
+> 状态：**`partial`——读取端与 HTML 生成端已实施，原生 PPTX 导出库 P1–P3 已实现，应用接入待 P4/P5（§8）**。读取端一期 + 二期见 PR #223；HTML 生成端仍为 Settings → AI 配置 → 实验室里的 Beta 功能（§4）。
 > 背景：作者需要 AI 助手能读演示文稿（招标材料、路演稿、培训课件常以 .pptx 交付），并且要能处理几百页的大文件。生成是另一件事，成本和风险高一个量级，所以拆开做、拆开记。
 >
 > **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。`registry.ts` 的 `read_slides` 条目现位于 `lib/agent/toolTable/read.ts`、`export_pptx` 现位于 `toolTable/exports.ts`；`subagent.ts` 的 `longread` 档现位于 `lib/agent/subagentModel.ts` 的 `SUB_PRESETS`。完整对照见 [`code-structure-plan.md`](code-structure-plan.md) §9。
@@ -643,7 +643,7 @@ box 本来就是按页面的行数和行距量的。留下的只是"行距相对
 
 ## 8. 原生 PPTX 生成实施计划（2026-10-01）
 
-> 状态：`partial`。P0 回归基础设施已实现，Office 验收待补（§8.7）；P1 数据契约已实现（§8.8），P2 最小原生导出已实现（§8.9），P3–P5 尚未实现。依据：main `7dd18929` 的代码审阅与作者确认的改进方向。
+> 状态：`partial`。P0 回归基础设施已实现，Office 验收待补（§8.7）；P1 数据契约已实现（§8.8），P2 最小原生导出已实现（§8.9），P3 六布局及 macOS 基准验收已完成（§8.10），P4–P5 尚未实现。依据：main `7dd18929` 的代码审阅与作者确认的改进方向。
 > §1–7 保留为已发布 HTML 路线的设计记录；本节替代“新演示必须先写 HTML”的默认方向，不废除旧文件的导出能力。
 
 ### 8.1 目标与边界
@@ -854,7 +854,7 @@ P2 实现了封面、要点和图片配文字的独立导出库；`export_pptx` 
 长英文单词才按 grapheme 拆开。不做中文禁则/孤行优化，也不保证超出中英范围的复杂文字/emoji 字形支持。
 封面标题最多两行、subtitle 在独立 150 pt 区域；内容页标题最多两行；要点最多六项，在 336 pt 内容区等分，每项留 12 pt 间隔。
 图片正文占 384×330 pt，图片框 444×330 pt；contain 居中保持比例，cover 按源中的 x/y 锚点生成原生裁剪。
-超容量返回 `text_overflow`（slideId + 字段路径），测量不可用返回 `measurement_failed`；P3 三种布局返回 `unsupported_layout`，不会静默跳页。
+超容量返回 `text_overflow`（slideId + 字段路径），测量不可用返回 `measurement_failed`；P2 当时对另外三种布局返回 `unsupported_layout`，P3 在 §8.10 补齐。
 每一行是独立可编辑文本框，保证确定性位置的代价是 PowerPoint 内编辑时不会自动跨行框重排；修改长文应回到源文件重新导出。
 
 **字体实测改变了 P1 候选。** PptxGenJS 4.0.1 的每个 run 会把同一个 fontFace 写入 `a:latin` / `a:ea` / `a:cs`，
@@ -876,3 +876,40 @@ EXIF orientation 不是 1 的 JPEG 被拒绝（包括不改变宽高的镜像/18
 `native-baseline.mjs` 在 Chrome 运行生产 resolver/writer（只以固定 fixture 替代 Tauri 文件 I/O），Office 打开、放映、导出通过 GUI 完成。
 三布局无修复提示，逐页检查没有缺字、漏图、裁切或重叠；真实 ZIP 测试验证文本仍是原生对象、坐标、媒体字节/关系、裁剪和备注。
 PowerPoint Windows、其他 CJK 候选和复杂字体覆盖仍未实测，不能据此提前宣布 P5 跨平台发布门槛完成。
+
+
+### 8.10 P3：六布局与可编辑表格
+
+实现六种语义布局，仍是独立导出库；工具审批与应用入口继续留在 P4/P5。
+新增对象保留 `table` 的行、列、单元格/行内 font runs、列宽、行高和 padding，writer 调用 `addTable`，
+不把表格拆成文本框网格或整页图片。所有元素仍使用 pt，库边界换算 inches。
+
+**容量与排版决策。** 继续使用 960×540 pt 画布、48 pt 水平边距与至少 18 pt 字号。
+
+| 布局 | 固定规则 | 超限路径 |
+|---|---|---|
+| 双栏 | 两栏各 408 pt、栏间 48 pt；24 pt 小标题最多两行；每栏最多四条，252 pt 区域等分、条间留 12 pt；正文 24 pt | `left/right/heading`、`left/right/bullets` 或具体条目 |
+| 指标 | 1–3 项一行、4–6 项两行；最多三列、24 pt 间距；36 pt 数值一行、24 pt 标签一行、18 pt 说明；两行时每项说明最多一行 | `metrics/i/value`、`label`、`detail` |
+| 表格 | 最多六列、七个正文行加表头；864 pt 等宽列，18 pt 字、25.2 pt 固定行距、四边 8 pt padding；行高取最高单元格行数×25.2+16 pt；总高不超过 330 pt | `columns`、`rows`、`columns/c`、`rows/r/c` |
+
+六列/七行是上限，不是任意内容都能容纳的保证：换行会增加行高，总高超限要求作者拆页。
+`text_overflow` 始终带 slideId/JSON pointer；不自动生成额外页，不缩小字号、不截断。
+表格数值按原字符串写入，保留 `007`、空单元格和显式空行；不推断电子表格类型。
+
+**OOXML 边界。** PptxGenJS 4.0.1 的 rich text 会在每个 run 前重复写 `a:pPr`，
+DrawingML 段落只能在开头有一个。本 writer 在 ZIP 序列化后对自己产生的 slide XML 保留第一份段落属性，
+不改字体、正文、备注或媒体；首 run 的 bullet/固定行距因此保留。只处理受信任序列化输出，不作为任意 XML 清理器。
+表格行按显式 `breakLine` 编排，避免直接在中英分字体 run 中塞换行导致库错误拆段。
+
+**验证状态。** 纯布局与真实 ZIP 回归覆盖全部六布局、固定字号/尺寸、容量边界、溢出字段、原生表格、
+空行/空格/空单元格、备注和媒体。88 项原生 PPTX 测试、全量离线 6,201 项测试、类型检查、应用/原型构建及 Rust 门禁通过。
+
+**Office 证据。** [`2026-10-01-native-p3/`](pptx-baseline/2026-10-01-native-p3/) 保存两套源、原生 PPTX、PowerPoint 本机打印 PDF、十页 PNG 和环境/哈希。
+macOS 27.0.1 / PowerPoint 16.113.3 / Arial + Arial Unicode MS 下打开无修复提示；六布局与四页容量/换行基准的 PDF 逐页检查通过，
+容量页还检查了实际放映。六列七行没有丢失末行，双语单元格、空行、空单元格与 `007` 保留；对象/备注/媒体完整性另由真实 ZIP 回归核验。
+
+**渲染器差异。** 本次 bundled Poppler 把 PowerPoint PDF 的部分 `/` 漏画；同一 PDF 用 PDFium 5.13.0 渲染正常，
+与稳定后的 PowerPoint 放映一致。旧版字体调整前的 PDF 也复现该差异，因此不能把字体边界/语言调整宣称为已证实的缺字修复。
+本次 PNG 使用 PDFium，不能与 Poppler 基准直接做像素比较；遇到疑似缺字应回到实际 Office 并交叉验证 PDF 渲染器。
+中性标点随前一字体、Latin run 使用 en-US 的选择用于明确脚本边界；重复 `a:pPr` 的规范化则有独立 XML 结构依据。
+这只验收固定 macOS 基准；Windows、其他候选字体和任意新源仍留在 P5 发布门槛，导出风险提示不撤销。

@@ -478,10 +478,10 @@ clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
 
 HTML → PPTX（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）: the model keeps writing `.html` and the conversion runs **no model at all** —
 
-#### 原生路线（P1/P2 导出库，应用入口尚未接入）
+#### 原生路线（P1–P3 导出库，应用入口尚未接入）
 - `native/model.ts` / `validate.ts` / `diagnostics.ts` define the closed v1 `.slides.json` semantic contract, pure validation and JSON-pointer diagnostics; `theme.ts` keeps immutable point-based themes with explicit Latin/CJK font candidates. `resources.ts` checks loader observations against byte/pixel ceilings; P2 `environment.ts` performs bounded project-local reads and decoding, `imageHeader.ts` enforces pixel limits before decode. Approval snapshots remain P4. Six-layout example and tests live in `native/__tests__/`; contract and limits: `pptx-plan.md` §8.8.
 
-- `native/resolve.ts` owns validated source, selected fonts, media strings and deeply frozen layout; `layout.ts` compiles title/bullets/image-text into fixed-size editable lines with explicit overflow diagnostics; `write.ts` emits native text/shapes/images/notes. P2 Office evidence and font tradeoffs: `pptx-plan.md` §8.9.
+- `native/resolve.ts` owns validated source, selected fonts, media strings and deeply frozen layout; `layout.ts` compiles all six layouts into fixed-size editable lines, rules, images and semantic tables with explicit overflow diagnostics; `write.ts` emits native text/shapes/images/tables/notes. `paragraphs.ts` normalizes PptxGenJS rich-text paragraph properties to one block per paragraph. P2/P3 Office evidence and font tradeoffs: `pptx-plan.md` §8.9–8.10.
 
 #### 转换管线（无模型参与）
 - `harvest.ts` renders the page in an offscreen sandboxed iframe and `harvester.js` (injected `?raw`, answers by `postMessage`) reports what the browser measured
