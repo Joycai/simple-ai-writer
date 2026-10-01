@@ -1,0 +1,29 @@
+{
+  "browser": "154.0.8037.58",
+  "fonts": {
+    "latin": "Arial",
+    "cjk": "Arial Unicode MS"
+  },
+  "risks": [
+    "office_metrics_unverified",
+    "recipient_fonts_required"
+  ],
+  "office": "PowerPoint macOS 16.113.3; opened without repair; local Best for printing PDF exported; every PDF page visually inspected",
+  "codeCommit": "3259303e",
+  "pptxgenjs": "4.0.1",
+  "pdfRenderer": "pypdfium2 5.13.0; scale 4/3; 1280 x 720",
+  "windows": "unverified",
+  "renderCaveat": "Bundled Poppler omitted some slash glyphs from the same Office PDF. PDFium preserves them, consistent with settled PowerPoint slideshow checks. This also reproduces on the pre-font-adjustment PDF, so those adjustments are not established as a missing-glyph fix.",
+  "sha256": {
+    "native.pdf": "f276d81c0afcbd77585b73001e355599af4c640e6a42576607f90b2da333b41e",
+    "native.pptx": "48e9c586039da7e9949cc47842063620efaeeb3fe021ed4e9fa78e031e8ebffa",
+    "powerpoint-1.png": "5c2a44de2570fb7dd19e8fd6e9c73159af24dec3b10d744ba0c48ccd49279904",
+    "powerpoint-2.png": "9fa47e04ed303c00d877def78aa02089827a795b50bcb25db3dee70eb4dba2cc",
+    "powerpoint-3.png": "39fe70026f20d9d373e0aa39a8b6a5b45d53a2bb2daa05510e431ccaf8553cc4",
+    "powerpoint-4.png": "5f65a75ab2cd110383c29e9ee4e542a2bc66a359425b7ca021248d0e189b4f10",
+    "powerpoint-5.png": "87b8b1351c39144adbc78c7221225ce83dcbb753b3fed9befd736691fbfe95b8",
+    "powerpoint-6.png": "6dc28c30c3219e092c0eea8289d7aca5af789a99ef8cde627574df5cdf9becf4",
+    "source.slides.json": "abc596326ccffee14511f39e0631a2a97b846a549c910c122bcfbb6c2658e7d3"
+  },
+  "os": "macOS 27.0.1"
+}

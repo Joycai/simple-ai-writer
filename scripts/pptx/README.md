@@ -55,7 +55,9 @@ The harness uses the complete six-layout source by default and calls the product
 native resolver/writer; only the fixed logo read replaces Tauri IPC. It records selected fonts
 and leaves Office validation pending. Open `native.pptx` in PowerPoint, inspect each slide in
 slide show mode, then export PDF with **Best for printing** (local). Render that PDF with
-bundled `pdftoppm -scale-to 1280 -png native.pdf powerpoint` and inspect all pages.
+PDFium and inspect all pages. P3 found that bundled Poppler omitted some slash glyphs
+from the same PowerPoint PDF; cross-check suspected missing glyphs in Office and a second
+PDF renderer before changing layout code. Never compare baselines across PDF renderers.
 The accepted macOS evidence is in `docs/feature/pptx-baseline/2026-10-01-native/`.
 Chrome measurements alone cannot catch the PingFang missing-glyph failure recorded there.
 
@@ -63,3 +65,17 @@ For capacity coverage, pass `src/lib/pptx/native/__tests__/fixtures/capacity.sli
 as the optional source. This midnight-theme deck covers four bullets per comparison column,
 six metrics, six columns/seven body rows, and bilingual table paragraphs with blank cells/lines.
 The original P2 evidence remains a three-layout snapshot; it is not overwritten by this harness.
+
+P3 evidence is in `docs/feature/pptx-baseline/2026-10-01-native-p3/` (six standard
+slides and four capacity slides). Render the local Office PDF at 1280 × 720 using a
+Python runtime providing `pypdfium2` (5.13.0 for this baseline):
+
+```python
+from pathlib import Path
+import pypdfium2 as pdfium
+
+output = Path("/tmp/pptx-native")
+pdf = pdfium.PdfDocument(output / "native.pdf")
+for i in range(len(pdf)):
+    pdf[i].render(scale=4 / 3).to_pil().save(output / f"powerpoint-{i + 1}.png")
+```
