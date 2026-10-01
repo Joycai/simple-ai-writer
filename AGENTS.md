@@ -158,6 +158,7 @@ Load the relevant doc **before** working in that area — don't reconstruct it f
 - **[`docs/reference/codemap.md`](docs/reference/codemap.md)** — the per-directory notes that used to live here. **Read the section for any directory before changing it.**
 - **[`docs/reference/architecture.md`](docs/reference/architecture.md)** — cross-directory mechanisms: DB schema, prefs, multi-instance, RAG, facet selection, budget planner, endpoint probing, key storage, images in context, file organising, export / backup, transactions, CSP. (Per-directory notes are in `codemap.md`; wire facts in `docs/api/`.)
 - **[`docs/reference/design-system.md`](docs/reference/design-system.md)** — UI/visual spec & theming. **Read before building or restyling any UI.**
+- **[`docs/reference/prototyping.md`](docs/reference/prototyping.md)** — local React design studio (`pnpm prototypes:dev`), interactive token/component reference and UX review workflow. Read before adding prototypes; fixtures stay separate from author data and the app runtime.
 - **[`docs/reference/terminology.md`](docs/reference/terminology.md)** — 词表与措辞校准. **Read before writing any author-facing string.**
 - **[`docs/reference/tool-presence.md`](docs/reference/tool-presence.md)** — 工具在场性契约: a run's words must match what it can do. Read before touching presets, `routeTools`, subagent kinds, or any tool description / result text.
 - **[`docs/reference/workflows.md`](docs/reference/workflows.md)** — recipes: add an AI task type / provider / language / capability pack; modify lore format.

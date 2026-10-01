@@ -3,6 +3,11 @@
 > **Status: `living`.** If it disagrees with the code, the doc is the bug.
 > Read this before building or restyling **any** UI. `src/styles/tokens.css` is the implementation of these rules.
 
+> **Interactive reference:** run `pnpm prototypes:dev` for the local design studio
+> (foundations, component states, and a writing-flow prototype). It consumes this
+> system's existing tokens rather than maintaining another palette. Workflow and
+> scope: [prototyping.md](prototyping.md).
+
 ## Theming
 
 - **Two attributes on `<html>`** (`lib/theme/scheme.ts`): `data-theme` = a built-in id (`paper` / `night` / `stone` / `ink` / `frost` / `indigo`) or an installed theme file's id is the **cascade key**; `data-scheme` = `light` | `dark` is the **polarity**, and `color-scheme` follows it. Anything that needs "is this dark?" — Mermaid, an image's fallback border — reads `data-scheme` via `useScheme()` (the module's only exported reader; `currentScheme()` is its private helper); **nothing reads `data-theme`'s value** (`themeContract.test.ts` guards it), because with theme files installed it is an arbitrary id.

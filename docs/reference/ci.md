@@ -29,6 +29,7 @@ The [`CI`](../../.github/workflows/ci.yml) workflow runs on every pull request t
 
 Notes:
 - Frontend tests run with Vitest (`src/**/*.test.ts`, config in `vitest.config.ts`) — one test file per module in the nearest `__tests__/`, plus the repo-wide source-scanning guards in `src/lib/__tests__/` (the Hard Rules in `AGENTS.md` are what they enforce).
+- `pnpm build` also runs `prototypes:build`: a strict check of the local design studio and a separate Vite bundle into `prototypes/dist/`. The app bundle remains in the root `dist/`, which is the only frontend directory Tauri packages. See [prototyping.md](prototyping.md).
 - Rust unit tests live inline (`#[cfg(test)] mod tests`) in the modules they test, under `src-tauri/src/` and `server/src/` — there is no separate `tests/` directory in either crate. `grep -l "mod tests" src-tauri/src/*.rs server/src/*.rs` lists them.
 - `clippy` is enforced with `-D warnings`: any new warning fails CI.
 - Both Rust jobs install `dtolnay/rust-toolchain@stable`, i.e. **whatever stable is on the

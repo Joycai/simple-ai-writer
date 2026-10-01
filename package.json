@@ -5,10 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && pnpm prototypes:build",
     "preview": "vite preview",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "prototypes:dev": "vite --config prototypes/vite.config.mjs",
+    "prototypes:check": "tsc --project prototypes/tsconfig.json --noEmit",
+    "prototypes:build": "pnpm prototypes:check && vite build --config prototypes/vite.config.mjs",
+    "prototypes:preview": "vite preview --config prototypes/vite.config.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",

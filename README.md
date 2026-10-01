@@ -285,6 +285,13 @@ The pull-request gate runs the same checks. See [`docs/reference/ci.md`](docs/re
 
 ### Documentation for contributors
 
+For UX/UI design reviews, run `pnpm prototypes:dev` and open
+[the local design studio](http://127.0.0.1:1430). It includes live design tokens,
+interactive controls, and a fictional writing/approval flow. The
+[prototype guide](prototypes/README.md) explains how to add and review screens;
+[the design system](docs/reference/design-system.md) remains authoritative.
+
+
 - [`AGENTS.md`](AGENTS.md) — authoritative project guide; edit it directly for repository rules, architecture overview, and required reading before changing a subsystem. `CLAUDE.md` imports it for compatibility; no regeneration is needed
 - [`docs/reference/architecture.md`](docs/reference/architecture.md) — storage, RAG, providers, streaming, exports, IPC, and security details
 - [`docs/reference/design-system.md`](docs/reference/design-system.md) — UI and theme contract
