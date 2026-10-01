@@ -240,17 +240,38 @@ fn read_head_bytes(path: &Path, max_bytes: u64) -> std::io::Result<(u64, Vec<u8>
     Ok((size, buf))
 }
 
+/// Optional narrower fence for consumers whose resources belong to one project.
+/// The ordinary application scope still applies; this can only remove access.
+fn project_read_path(
+    path: &Path,
+    project_root: Option<&str>,
+) -> Result<std::path::PathBuf, String> {
+    let Some(root) = project_root else {
+        return Ok(path.to_path_buf());
+    };
+    let root = fs::canonicalize(root).map_err(|e| e.to_string())?;
+    let file = fs::canonicalize(path).map_err(|e| e.to_string())?;
+    if !file.starts_with(&root) || !file.is_file() {
+        return Err("Resource is outside the project".into());
+    }
+    Ok(file)
+}
+
 #[command]
 pub async fn fs_read_head(
     path: String,
     max_bytes: u64,
+    project_root: Option<String>,
     scope: State<'_, FsScope>,
 ) -> Result<FileHead, String> {
     let scope = scope.inner().clone();
     blocking(move || {
         scope.check(&path)?;
-        let (size, buf) =
-            read_head_bytes(Path::new(&path), max_bytes).map_err(|e| e.to_string())?;
+        if let Some(root) = project_root.as_deref() {
+            scope.check(root)?;
+        }
+        let path = project_read_path(Path::new(&path), project_root.as_deref())?;
+        let (size, buf) = read_head_bytes(&path, max_bytes).map_err(|e| e.to_string())?;
         Ok(FileHead {
             size,
             head: BASE64.encode(&buf),
@@ -309,13 +330,17 @@ pub async fn fs_read_range(
     path: String,
     offset: u64,
     max_bytes: u64,
+    project_root: Option<String>,
     scope: State<'_, FsScope>,
 ) -> Result<FileRange, String> {
     let scope = scope.inner().clone();
     blocking(move || {
         scope.check(&path)?;
-        let (size, buf) =
-            read_range_bytes(Path::new(&path), offset, max_bytes).map_err(|e| e.to_string())?;
+        if let Some(root) = project_root.as_deref() {
+            scope.check(root)?;
+        }
+        let path = project_read_path(Path::new(&path), project_root.as_deref())?;
+        let (size, buf) = read_range_bytes(&path, offset, max_bytes).map_err(|e| e.to_string())?;
         Ok(FileRange {
             size,
             bytes: BASE64.encode(&buf),
@@ -647,7 +672,8 @@ pub fn open_with_default_app(
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_text, is_within, read_head_bytes, read_range_bytes, valid_category, MAX_RANGE_BYTES,
+        decode_text, is_within, project_read_path, read_head_bytes, read_range_bytes,
+        valid_category, MAX_RANGE_BYTES,
     };
     use std::path::Path;
 
@@ -829,6 +855,31 @@ mod tests {
         }
         assert!(valid_category("npcs_2"));
         assert!(valid_category("side-quests"));
+    }
+    #[test]
+    fn project_reads_reject_other_roots_and_allow_local_assets() {
+        let project = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let local = project.path().join("image.png");
+        let outside = other.path().join("image.png");
+        std::fs::write(&local, b"image").unwrap();
+        std::fs::write(&outside, b"image").unwrap();
+        let root = project.path().to_str();
+        assert_eq!(
+            project_read_path(&local, root).unwrap(),
+            local.canonicalize().unwrap()
+        );
+        assert!(project_read_path(&outside, root).is_err());
+        assert!(project_read_path(project.path(), root).is_err());
+        #[cfg(unix)]
+        {
+            let link = project.path().join("escape.png");
+            std::os::unix::fs::symlink(&outside, &link).unwrap();
+            assert!(project_read_path(&link, root).is_err());
+            let good_link = project.path().join("local.png");
+            std::os::unix::fs::symlink(&local, &good_link).unwrap();
+            assert!(project_read_path(&good_link, root).is_ok());
+        }
     }
 }
 

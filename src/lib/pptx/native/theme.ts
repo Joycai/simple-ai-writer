@@ -15,7 +15,7 @@ export type ThemeId = "paper" | "midnight";
 // Candidate order is explicit; these are requirements, not detected installed fonts.
 const fonts = Object.freeze({
   latin: Object.freeze(["Arial", "Aptos"]),
-  cjk: Object.freeze(["PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC"]),
+  cjk: Object.freeze(["Microsoft YaHei", "Noto Sans CJK SC", "Arial Unicode MS"]),
   onMissing: "error" as const,
 });
 const canvas = Object.freeze({ widthPt: 960, heightPt: 540 });

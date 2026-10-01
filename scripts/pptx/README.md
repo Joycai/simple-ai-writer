@@ -46,3 +46,15 @@ The initial threshold is a maximum RGB-channel difference of 24, with more than 
 For a new baseline, render the unchanged PPTX twice independently (expect no flagged tiles), then render the two injected defects (expect nonzero flagged tiles on slides 4 and 2 respectively). Inspect every page and the difference images before accepting. Never regenerate an accepted baseline automatically in CI. The committed legacy baseline records existing failures; it is not an approved visual target for the future native exporter.
 
 Current evidence and remaining verification: `docs/feature/pptx-plan.md` §8.7.
+
+## Native P2 fixture
+
+Run `node scripts/pptx/native-baseline.mjs NEW_OUTPUT_DIR EXTERNAL_NODE_MODULES`
+with the bundled Node package path from `load_workspace_dependencies` (Playwright + Chrome).
+The harness selects title/bullets/image-text from the six-layout source and calls the production
+native resolver/writer; only the fixed logo read replaces Tauri IPC. It records selected fonts
+and leaves Office validation pending. Open `native.pptx` in PowerPoint, inspect each slide in
+slide show mode, then export PDF with **Best for printing** (local). Render that PDF with
+bundled `pdftoppm -scale-to 1280 -png native.pdf powerpoint` and inspect all pages.
+The accepted macOS evidence is in `docs/feature/pptx-baseline/2026-10-01-native/`.
+Chrome measurements alone cannot catch the PingFang missing-glyph failure recorded there.

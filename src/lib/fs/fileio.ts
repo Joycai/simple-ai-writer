@@ -59,19 +59,21 @@ interface FileHead {
  * whose duration lives past the first 64 KB (`lib/asr/duration.ts`). Empty when
  * `offset` is at or past the end.
  */
-export async function readFileRange(path: string, offset: number, maxBytes: number): Promise<Uint8Array> {
+export async function readFileRange(path: string, offset: number, maxBytes: number, projectRoot?: string): Promise<Uint8Array> {
   const res = await invoke<{ size: number; bytes: string }>("fs_read_range", {
     path,
     offset: Math.max(0, Math.floor(offset)),
     maxBytes: Math.max(0, Math.floor(maxBytes)),
+    ...(projectRoot === undefined ? {} : { projectRoot }),
   });
   return fromBase64(res.bytes);
 }
 
-export async function readFileHead(path: string, maxBytes: number): Promise<FileHead> {
+export async function readFileHead(path: string, maxBytes: number, projectRoot?: string): Promise<FileHead> {
   const res = await invoke<{ size: number; head: string }>("fs_read_head", {
     path,
     maxBytes: Math.max(0, Math.floor(maxBytes)),
+    ...(projectRoot === undefined ? {} : { projectRoot }),
   });
   return { size: res.size, head: fromBase64(res.head) };
 }

@@ -478,8 +478,10 @@ clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
 
 HTML → PPTX（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）: the model keeps writing `.html` and the conversion runs **no model at all** —
 
-#### 原生路线（P1 数据契约，尚未接入导出）
-- `native/model.ts` / `validate.ts` / `diagnostics.ts` define the closed v1 `.slides.json` semantic contract, pure validation and JSON-pointer diagnostics; `theme.ts` keeps immutable point-based themes with explicit Latin/CJK font candidates. `resources.ts` checks loader observations against byte/pixel ceilings; actual image reads, decoding, layout and immutable approval snapshots are later phases. Six-layout example and tests live in `native/__tests__/`; contract and limits: `pptx-plan.md` §8.8.
+#### 原生路线（P1/P2 导出库，应用入口尚未接入）
+- `native/model.ts` / `validate.ts` / `diagnostics.ts` define the closed v1 `.slides.json` semantic contract, pure validation and JSON-pointer diagnostics; `theme.ts` keeps immutable point-based themes with explicit Latin/CJK font candidates. `resources.ts` checks loader observations against byte/pixel ceilings; P2 `environment.ts` performs bounded project-local reads and decoding, `imageHeader.ts` enforces pixel limits before decode. Approval snapshots remain P4. Six-layout example and tests live in `native/__tests__/`; contract and limits: `pptx-plan.md` §8.8.
+
+- `native/resolve.ts` owns validated source, selected fonts, media strings and deeply frozen layout; `layout.ts` compiles title/bullets/image-text into fixed-size editable lines with explicit overflow diagnostics; `write.ts` emits native text/shapes/images/notes. P2 Office evidence and font tradeoffs: `pptx-plan.md` §8.9.
 
 #### 转换管线（无模型参与）
 - `harvest.ts` renders the page in an offscreen sandboxed iframe and `harvester.js` (injected `?raw`, answers by `postMessage`) reports what the browser measured
@@ -681,7 +683,7 @@ RAG assembly (`rag.ts`), the current time as one line (`clock.ts` — a line, no
 
 #### 文件工具与反向链接
 
-- Tauri file I/O wrappers (`fileio.ts`)
+- Tauri file I/O wrappers (`fileio.ts`); bounded head/range reads accept an optional `projectRoot` that narrows the existing Rust scope to canonical paths within that project (native PPTX assets).
 - backlinks (`links.ts` 是「哪些文档链接到这个文件」——删除卡上**唯一一件删完就问不出来的事**：正文在备份里、大小在日志里，而文件一没，指向它的链接就只是断了，没人记得它们曾经是通的。只认真链接（markdown 的 `](path)` 与 `[[wiki]]`），不认光提到名字：一份叫 `序.md` 的稿子会让「被 12 个文档引用」变成没人再读第二遍的一行）
 - markdown render/frontmatter (`markdown.ts`)
 - the folder note (`folderNote.ts` — a directory's own `index.md`: `status` is the one machine-read key, the first prose paragraph is the summary, HTML comments are skipped so the unfilled template says nothing; `nearestFolderNote` walks up to the project root for the 【当前文件】 brief. Consumed by `list_files` / `search_text` under the 取材范围 fence's two invariants — automatic discovery only, hidden counts reported — and by nothing that is an explicit reference. `docs/feature/lore/folder-note-plan.md`)
