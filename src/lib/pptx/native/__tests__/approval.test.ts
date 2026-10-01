@@ -152,3 +152,12 @@ it('rejects an on-disk source that differs from the UI buffer before serializati
   expect(nativeDeckToPptx).not.toHaveBeenCalled();
   expect(write).not.toHaveBeenCalled();
 });
+
+it('returns the same frozen deck used to serialize the prepared bytes for UI review', async () => {
+  const result = await prepareNativePptx('/p', source, target, JSON.stringify(spec()));
+  expect(result.ok).toBe(true); if (!result.ok) return;
+  receipts.push(result.receipt);
+  expect(vi.mocked(nativeDeckToPptx).mock.calls[0][0]).toBe(result.deck);
+  expect(Object.isFrozen(result.deck)).toBe(true);
+  expect(result.receipt.fonts).toEqual(result.deck.fonts);
+});

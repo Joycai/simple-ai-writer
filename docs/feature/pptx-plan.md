@@ -942,10 +942,10 @@ macOS 27.0.1 / PowerPoint 16.113.3 / Arial + Arial Unicode MS 下打开无修复
 
 **预览不是第二套排版器。** `SlidesPreview` 懒加载，用当前缓冲区在 250ms 停顿后执行 schema、资源、字体及布局解析。`NativeSlideView` 只消费 `ResolvedDeck`：SVG viewBox 与点坐标等比对应，使用已分好的行和字体 runs、裁剪 anchor、表格列宽/行高/padding；一次仅呈现一页，支持前后导航和折叠演讲备注。SVG 字形基线和 Office 不完全相同，界面始终注明「近似预览」与未嵌入的实际字体。预览不回采 HTML，不改变原生 writer。刷新重读图片资源；源文本变化立即隐藏旧结果，过期异步结果不回填。切项目/文件卸载旧实例，缓冲区未追上活动路径时不展示前一份幻灯片。
 
-**导出复用审批产物。** 作者先点导出，保存当前脏缓冲区，执行 P4 `prepareNativePptx`；准备成功后显示目标、页数、主题、字体及覆盖/备份提示，再显式「写入 PPTX」。使用 `applyNativePptx` 的摘要复核、二进制备份与暂存替换，不另造 UI 写盘路径。准备时额外要求磁盘文本与作者看到的缓冲区一致，外部修改不能在预览未更新时被导出。编辑、刷新、取消、卸载均释放待写产物；准备过程中切走也释放迟到结果，卸载时 abort 阻止尚未提交的写入。UI 事件互斥避免重复准备；源/项目变化及 Beta 关闭在动作时复核。P4 对最终校验与 rename 间外部竞争的限制仍适用。
+**导出复用审批产物。** 作者先点导出，保存当前脏缓冲区，执行 P4 `prepareNativePptx`；准备成功后将预览切换为本次实际序列化的不可变 ResolvedDeck（包括刚从磁盘读取的图片），显示目标、页数、主题、字体及覆盖/备份提示，再显式「写入 PPTX」。使用 `applyNativePptx` 的摘要复核、二进制备份与暂存替换，不另造 UI 写盘路径。准备时额外要求磁盘文本与作者看到的缓冲区一致，外部修改不能在预览未更新时被导出。编辑、刷新、取消、卸载均释放待写产物；准备过程中切走也释放迟到结果，卸载时 abort 阻止尚未提交的写入。UI 事件互斥避免重复准备；源/项目变化及 Beta 关闭在动作时复核。P4 对最终校验与 rename 间外部竞争的限制仍适用。
 
 **语言与推荐。** 新控件和 schema/布局修复建议均有中英文，诊断保留机器错误码、slide id 与 JSON pointer；底层 I/O 错误保留原始信息。内置工作流卡将 `pptx-native` 放在 HTML 兼容卡之前，并明确标记新演示首选；保持两个 id 和作者覆盖合并规则。
 
-**验证与发布限制。** 类型检查、应用/原型 build、399 文件/6237 离线测试及 Rust fmt/clippy/160 tests/locked build 通过。默认测试命令也触发本机配置的 live provider 测试，受 DNS 限制失败；离线套件单独通过，本次没有真实模型验收。`scripts/pptx/preview-smoke.mjs` 用真实 Chrome/React/字体/布局/writer，模拟文件系统 IPC，验证六布局、中英明暗宽窄视图、无效 JSON 禁止导出、编辑撤销待写方案、导出前显式确认与原字节备份。证据见 [`2026-10-01-native-p5/`](pptx-baseline/2026-10-01-native-p5/)。
+**验证与发布限制。** 类型检查、应用/原型 build、399 文件/6238 离线测试及 Rust fmt/clippy/160 tests/locked build 通过。默认测试命令也触发本机配置的 live provider 测试，受 DNS 限制失败；离线套件单独通过，本次没有真实模型验收。`scripts/pptx/preview-smoke.mjs` 用真实 Chrome/React/字体/布局/writer，模拟文件系统 IPC，验证六布局、中英明暗宽窄视图、无效 JSON 禁止导出、编辑撤销待写方案、导出前显式确认与原字节备份。证据见 [`2026-10-01-native-p5/`](pptx-baseline/2026-10-01-native-p5/)。
 
 本次 UI 生成的 PPTX 已在 macOS PowerPoint 16.113.3 打开，无修复提示，编辑视图逐页检查六布局通过。没有 Windows 主机，Windows PowerPoint、其他候选字体、完整 Tauri 窗口集成与真实模型生成仍未验收。**不把本次 PR 宣称为跨平台首版发布通过，也不开启默认 Beta。** 发布前应在 Windows 用 Microsoft YaHei 与另一候选字体复跑六布局/容量源，检查无缺字、裁切、非预期重叠及原生表格可编辑，并把环境、源、PPTX 和真实渲染证据补入本节。

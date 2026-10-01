@@ -3,7 +3,7 @@ import { copyPath, fileExists, fromBase64, makeDir, readFileHead, readFileRange,
 import { resolveWorkspacePath } from '../../paths';
 import { DECK_LIMITS } from './model';
 import { parseDeckSpec } from './validate';
-import { resolveDeck } from './resolve';
+import { resolveDeck, type ResolvedDeck } from './resolve';
 import { nativeEnvironment } from './environment';
 import { nativeDeckToPptx } from './write';
 import { DECK_THEMES, type ThemeId } from './theme';
@@ -72,7 +72,7 @@ export function formatNativeDiagnostics(diagnostics: DeckDiagnostic[]): string {
 }
 
 export async function prepareNativePptx(project: string, source: string, target: string, expectedSource?: string): Promise<
-  { ok: true; receipt: NativePptxReceipt } | { ok: false; diagnostics: DeckDiagnostic[] }
+  { ok: true; receipt: NativePptxReceipt; deck: ResolvedDeck } | { ok: false; diagnostics: DeckDiagnostic[] }
 > {
   if (resolveWorkspacePath(project, source) !== source || resolveWorkspacePath(project, target) !== target)
     throw new Error('PPTX paths must be inside the project.');
@@ -103,7 +103,7 @@ export async function prepareNativePptx(project: string, source: string, target:
   if (artifacts.size >= MAX_PENDING || bytes.length + [...artifacts.values()].reduce((n, a) => n + a.bytes.length, 0) > MAX_BYTES)
     throw new Error('Too many pending PPTX exports. Finish a pending approval and export again.');
   artifacts.set(receipt.artifactId, { project, source, target, receipt: JSON.stringify(receipt), bytes: bytes.slice() });
-  return { ok: true, receipt };
+  return { ok: true, receipt, deck: resolved.value };
 }
 
 export function releaseNativePptx(artifactId: string): void { artifacts.delete(artifactId); }

@@ -80,6 +80,9 @@ export default function SlidesPreview({ source, filePath, projectPath }: { sourc
         if (!prepared.ok) throw new Error(describe(prepared.diagnostics));
         try { check(); } catch (error) { releaseNativePptx(prepared.receipt.artifactId); throw error; }
         pending.current = prepared.receipt; setReceipt(prepared.receipt);
+        // External image edits may have happened since the last preview. Review
+        // the exact immutable graph serialized into these prepared bytes.
+        setResult({ source, revision, deck: prepared.deck });
       }
     } catch (error) {
       discard(); if (!signal.aborted) setMessage(String(error));

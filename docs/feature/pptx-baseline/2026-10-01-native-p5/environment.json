@@ -39,11 +39,12 @@
     ]
   },
   "validation": {
-    "offlineTests": 6237,
+    "offlineTests": 6238,
     "offlineFiles": 399,
     "rustTests": 160,
     "frontendBuild": "passed",
-    "rust": "fmt/clippy/test/build passed"
+    "rust": "fmt/clippy/test/build passed",
+    "preparedSnapshot": "Final review uses the exact frozen ResolvedDeck passed to the writer; identity regression and browser smoke passed."
   },
   "sha256": {
     "review.png": "4ed603ecb9c66d640e2474782d0f18f85a709137b1099725f05cca1e297cea4f",
