@@ -1,0 +1,13 @@
+{
+  "report": "baseline.html: 7 slide(s) at 1280×720px, split on `section.slide`.\nNo overflow or degradation was detected in the measured HTML.\nThis checks HTML geometry only; PowerPoint rendering and font substitution are not verified.",
+  "lint": [
+    {
+      "rule": "P1",
+      "level": "lost",
+      "line": 23,
+      "what": "`.effects::before` draws pseudo-element content — a pseudo-element has no box the exporter can measure, so it vanishes",
+      "fix": "draw it with a real element (<span class=\"dot\">, <i>) or use native list-style for bullets"
+    }
+  ],
+  "clippedReport": "clipped.html: 7 slide(s) at 1280×720px, split on `section.slide`.\nSlide 2 (5 boxes): \"跨环境排版验证：较长的中文标题与 Englis…\" is 35px below the bottom edge.\n6 slide(s) have no detected HTML findings.\nThis checks HTML geometry only; PowerPoint rendering and font substitution are not verified."
+}

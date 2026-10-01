@@ -9,6 +9,8 @@
  * in the slide part that claims to carry it.
  */
 import { describe, expect, it } from "vitest";
+import JSZip from "jszip";
+import { readFileSync } from "node:fs";
 import { deckToPptx } from "../write";
 import type { HarvestedDeck } from "../deck";
 
@@ -41,20 +43,48 @@ const DECK: HarvestedDeck = {
   ],
 };
 
-/** Slide parts, in the package. A .pptx is a zip; entry names are plain text. */
-function slidePartCount(bytes: Uint8Array): number {
-  const text = new TextDecoder("latin1").decode(bytes);
-  return (text.match(/ppt\/slides\/slide\d+\.xml/g) ?? []).length;
-}
-
 describe("deckToPptx", () => {
   it("writes a real package with one part per slide", async () => {
     const bytes = await deckToPptx(DECK);
 
     // "PK\x03\x04" — anything else is not a zip and will not open anywhere.
     expect(Array.from(bytes.slice(0, 4))).toEqual([0x50, 0x4b, 0x03, 0x04]);
-    // Names appear in both the local header and the central directory.
-    expect(slidePartCount(bytes)).toBeGreaterThanOrEqual(2);
+    const zip = await JSZip.loadAsync(bytes);
+    expect(Object.keys(zip.files).filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name)))
+      .toHaveLength(2);
+    const first = await zip.file("ppt/slides/slide1.xml")!.async("string");
+    const second = await zip.file("ppt/slides/slide2.xml")!.async("string");
+    expect(first).toContain("量化做市方案");
+    expect(second).toContain("• 一期：接入行情");
+    expect(first).toContain('typeface="PingFang SC"');
+    // 64 CSS px at the wide layout scale becomes approximately 48 pt.
+    expect(first).toMatch(/sz="4800"/);
+    // The legacy writer expands text boxes for font-metric slack. Pin its
+    // current placement here, so migration cannot silently move old HTML decks.
+    expect(first).toContain('<a:off x="645566" y="1117397"/>');
+    expect(first).toContain('<a:srgbClr val="F8FAFC"');
+    expect(first).not.toContain("<p:pic>");
+  });
+
+  it("embeds image bytes and connects the picture to its media part", async () => {
+    const png = readFileSync(new URL("../../../../src-tauri/icons/32x32.png", import.meta.url));
+    const withImage: HarvestedDeck = {
+      canvas: DECK.canvas,
+      slides: [{ blocks: [{ kind: "image", x: 96, y: 96, w: 192, h: 192,
+        data: `data:image/png;base64,${png.toString("base64")}` }], degraded: [] }],
+    };
+    const zip = await JSZip.loadAsync(await deckToPptx(withImage));
+    const slide = await zip.file("ppt/slides/slide1.xml")!.async("string");
+    const rels = await zip.file("ppt/slides/_rels/slide1.xml.rels")!.async("string");
+    const id = slide.match(/r:embed="([^"]+)"/)?.[1];
+    expect(id).toBeTruthy();
+    const relationship = rels.match(new RegExp(`<Relationship[^>]*Id="${id}"[^>]*/>`))?.[0];
+    expect(relationship).toContain("/image");
+    const target = relationship?.match(/Target="([^"]+)"/)?.[1];
+    expect(target).toMatch(/^\.\.\/media\//);
+    const media = await zip.file(`ppt/${target!.slice(3)}`)!.async("uint8array");
+    expect(media).toEqual(new Uint8Array(png));
+    expect(slide.match(/<p:pic>/g)).toHaveLength(1);
   });
 
   it("writes an empty deck rather than throwing on one", async () => {

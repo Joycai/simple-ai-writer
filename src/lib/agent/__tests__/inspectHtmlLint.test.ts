@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 describe("inspect_html + source check", () => {
-  it("adds nothing for a page that converts as it looks", async () => {
+  it("adds no source findings for supported HTML", async () => {
     fs.set(PAGE, `<style>.slide{font-family:Arial}</style><section class="slide"><p>hi</p></section>`);
     const { content } = await inspectHtmlTool("c1", { path: PAGE }, ctx());
     expect(content).toMatch(measuredHeader);
@@ -48,7 +48,8 @@ describe("inspect_html + source check", () => {
     const { content } = await inspectHtmlTool("c1", { path: PAGE }, ctx());
     const [measured, source] = content.split("\n\n");
     expect(measured).toMatch(measuredHeader);
-    expect(measured).toContain("Nothing is outside its slide");
+    expect(measured).toContain("measured as EMPTY");
+    expect(measured).toContain("PowerPoint rendering and font substitution are not verified.");
     expect(source).toMatch(/^Found in the SOURCE/);
     expect(source).toContain("LOST line 2: `li::before`");
   });

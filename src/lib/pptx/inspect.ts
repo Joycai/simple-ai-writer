@@ -210,11 +210,14 @@ export function formatDeckReport(
     out.push(`Slide ${slide.index} (${at ? `${at}, ` : ""}${slide.blocks} boxes): ${parts.join("; ")}.`);
   }
 
-  const clean = total - flagged.length;
+  const clean = report.slides.filter((slide) => slide.blocks > 0 && !hasFinding(slide)).length;
   out.push(
-    flagged.length === 0
-      ? "Nothing is outside its slide and nothing degraded — the page converts as it looks."
-      : `The other ${clean} slide(s) are clean.`,
+    total === 0
+      ? "No slides were measured."
+      : clean === total
+        ? "No overflow or degradation was detected in the measured HTML."
+        : `${clean} slide(s) have no detected HTML findings.`,
   );
+  out.push("This checks HTML geometry only; PowerPoint rendering and font substitution are not verified.");
   return out.join("\n");
 }

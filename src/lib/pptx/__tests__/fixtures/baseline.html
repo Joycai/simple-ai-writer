@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>PPTX regression baseline</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #e2e8f0; color: #172554; font-family: Arial, "PingFang SC", sans-serif; }
+.slide { width: 1280px; height: 720px; padding: 64px; position: relative; background: white; overflow: hidden; }
+h1 { font-size: 64px; line-height: 1.2; margin: 80px 0 32px; }
+h2 { font-size: 42px; line-height: 1.25; margin: 0 0 36px; }
+h3 { font-size: 30px; margin: 0 0 24px; }
+p, li, td, th { font-size: 28px; line-height: 1.5; }
+p { margin: 0 0 24px; }
+li { margin-bottom: 24px; }
+.columns { display: flex; gap: 48px; }
+.columns > div { flex: 1; min-width: 0; }
+.metric { border-top: 6px solid #2563eb; padding-top: 24px; }
+.metric strong { font-size: 64px; }
+img { width: 480px; height: 400px; object-fit: cover; object-position: center; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+th, td { text-align: left; border: 2px solid #64748b; padding: 12px 20px; }
+th { background: #dbeafe; }
+.effects { background: linear-gradient(120deg, #dbeafe, #fce7f3); border-radius: 48px; padding: 48px; box-shadow: 12px 16px 24px #17255433; }
+.effects::before { content: "PSEUDO LABEL / 伪元素"; display: block; color: #be123c; font-size: 28px; }
+</style></head>
+<body>
+<section class="slide" data-case="title"><h1>原生演示文稿<br>Native presentation</h1><p>中英混排 · Fonts &amp; positioning</p><p>Regression fixture — synthetic content</p></section>
+<section class="slide" data-case="bullets"><h2>跨环境排版验证：较长的中文标题与 English text wrapping</h2><ul><li>第一段保留中文标点、数字 2026 和 English words。</li><li>第二段包含 <strong>加粗 emphasis</strong> 与 <em>斜体 italic</em>，检查文字是否完整。</li><li>第三段用于确认段落间距与换行位置。<br>Second line must remain visible.</li></ul></section>
+<section class="slide" data-case="comparison"><h2>双栏对比 / Comparison</h2><div class="columns"><div><h3>HTML source</h3><p>浏览器负责 CSS 布局。</p><p>检查字体、间距与文本换行。</p></div><div><h3>PowerPoint output</h3><p>Office 重新排版文字。</p><p>对象可编辑不等于外观一致。</p></div></div></section>
+<section class="slide" data-case="image"><h2>图片裁剪 / Image crop</h2><div class="columns"><div><img alt="Application logo, intentionally cropped" src="__BASELINE_IMAGE__"></div><div><h3>Object-fit: cover</h3><p>固定 480 × 400 区域。</p><p>检查图片是否存在、是否变形、裁剪范围是否一致。</p></div></div></section>
+<section class="slide" data-case="metrics"><h2>指标卡 / Metrics</h2><div class="columns"><div class="metric"><strong>128</strong><p>样例数量 / Samples</p></div><div class="metric"><strong>92%</strong><p>样例比例 / Ratio</p></div><div class="metric"><strong>3.5</strong><p>样例时长 / Hours</p></div></div><p style="margin-top:64px">Synthetic values for layout testing only.</p></section>
+<section class="slide" data-case="table"><h2>表格边界 / Table boundaries</h2><table><thead><tr><th>项目 / Item</th><th>数量 / Count</th><th>说明 / Notes</th></tr></thead><tbody><tr><td>中文条目</td><td>128</td><td>第一行</td></tr><tr><td>English row</td><td>007</td><td>Leading zero</td></tr><tr><td>混排 Mixed</td><td>92%</td><td>第三行</td></tr><tr><td>最后一行 / Last</td><td>3.5</td><td>底部文字必须完整</td></tr></tbody></table></section>
+<section class="slide" data-case="effects"><h2>旧 HTML 特效 / Legacy effects</h2><div class="effects"><h3>Gradient, radius, shadow</h3><p>伪元素标签应出现在浏览器图中。</p><p>Compare the label, background, corners and shadow.</p></div></section>
+</body></html>

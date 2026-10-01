@@ -1,0 +1,48 @@
+{
+  "generatedAt": "2026-10-01T08:08:02.186Z",
+  "platform": "darwin",
+  "arch": "arm64",
+  "node": "v24.13.0",
+  "browser": "154.0.8037.58",
+  "pptxgenjs": "4.0.1",
+  "sourceSha256": "7a95c564ffd6e8e6e97eb7adea4eea91310fd0bea1f92f172eb568fa5b32cc76",
+  "fonts": {
+    "requested": [
+      "Arial",
+      "PingFang SC"
+    ],
+    "browserCheck": {
+      "latin": true,
+      "cjk": true
+    },
+    "actualTitleFonts": [
+      {
+        "familyName": "Arial",
+        "postScriptName": "Arial-BoldMT",
+        "isCustomFont": false,
+        "glyphCount": 19
+      },
+      {
+        "familyName": "PingFang SC",
+        "postScriptName": "PingFangSC-Semibold",
+        "isCustomFont": false,
+        "glyphCount": 6
+      }
+    ]
+  },
+  "renderer": {
+    "name": "LibreOfficeDev",
+    "version": "26.8.0.0.alpha0",
+    "build": "2c87e51eeaa2b413ff4ae097b2705eea1995d8e5",
+    "resolution": [
+      1280,
+      720
+    ],
+    "powerpoint": "UNVERIFIED: PowerPoint 16.113.3 automation timed out at file-access dialog; no Office render captured",
+    "fontConfiguration": "Explicit system Fonts, Library/Fonts and PingFang asset directories; writable temporary cache. Office CJK fallback differs from Chrome."
+  },
+  "fontFileSha256": {
+    "Arial": "525979822591a3447cfc49d943d6f7683508e25543407871c0ed8fed05fd2bd9",
+    "PingFang": "9ff3ce9439fe285cdabb46f9ceb46b1ac58f1ca07e6f4a764e8286db621a0af9"
+  }
+}
