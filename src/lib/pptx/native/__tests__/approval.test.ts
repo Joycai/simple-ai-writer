@@ -146,3 +146,9 @@ describe('native PPTX approval artifact', () => {
     releaseNativePptx(receipts[0].artifactId); await expect(prepare()).resolves.toHaveProperty('artifactId');
   });
 });
+
+it('rejects an on-disk source that differs from the UI buffer before serialization', async () => {
+  await expect(prepareNativePptx('/p', source, target, JSON.stringify({ ...spec(), theme: 'midnight' }))).rejects.toThrow('changed on disk');
+  expect(nativeDeckToPptx).not.toHaveBeenCalled();
+  expect(write).not.toHaveBeenCalled();
+});

@@ -71,7 +71,7 @@ export function formatNativeDiagnostics(diagnostics: DeckDiagnostic[]): string {
     + (diagnostics.length > 20 ? `\n${diagnostics.length - 20} more diagnostic(s).` : '');
 }
 
-export async function prepareNativePptx(project: string, source: string, target: string): Promise<
+export async function prepareNativePptx(project: string, source: string, target: string, expectedSource?: string): Promise<
   { ok: true; receipt: NativePptxReceipt } | { ok: false; diagnostics: DeckDiagnostic[] }
 > {
   if (resolveWorkspacePath(project, source) !== source || resolveWorkspacePath(project, target) !== target)
@@ -79,7 +79,10 @@ export async function prepareNativePptx(project: string, source: string, target:
   if ((await readFileHead(source, 0, project)).size > DECK_LIMITS.sourceBytes)
     return { ok: false, diagnostics: [{ code: 'source_limit', path: '' }] };
   const sourceBytes = await boundedRead(project, source, DECK_LIMITS.sourceBytes);
-  const parsed = parseDeckSpec(new TextDecoder('utf-8', { fatal: true }).decode(sourceBytes));
+  const text = new TextDecoder('utf-8', { fatal: true }).decode(sourceBytes);
+  if (expectedSource !== undefined && text !== expectedSource)
+    throw new Error('PPTX source changed on disk. Reload the source and review again.');
+  const parsed = parseDeckSpec(text);
   if (!parsed.ok) return parsed;
   const unsafe = parsed.value.assets.flatMap((asset, i) => resolveWorkspacePath(project, asset.path)
     ? [] : [{ code: 'unsafe_path' as const, path: `/assets/${i}/path` }]);

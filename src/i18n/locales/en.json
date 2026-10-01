@@ -1037,6 +1037,42 @@
       "bulletList": "Bullet List",
       "tidyParagraphs": "Tidy paragraphs",
       "tidyParagraphsN": "Tidy paragraphs ({{n}})"
+    },
+    "nativeSlides": {
+      "approximate": "Approximate preview. PowerPoint may use different text metrics. Check the exported file in PowerPoint before sharing.",
+      "fonts": "Required fonts (not embedded): {{latin}} / {{cjk}}",
+      "disabled": "Enable PPTX export in Settings → AI configuration → Labs to export.",
+      "changed": "The source or project changed. Prepare the export again.",
+      "done": "Exported: {{path}}",
+      "backup": "Original backed up: {{path}}",
+      "review": "{{count}} slides · {{theme}} → {{path}}",
+      "create": "A new PPTX file will be created.",
+      "overwrite": "This replaces an existing PPTX. Its original bytes will be backed up first.",
+      "confirm": "Write PPTX",
+      "loading": "Preparing preview…",
+      "navigation": "Slide navigation",
+      "previous": "Previous slide",
+      "next": "Next slide",
+      "notes": "Speaker notes",
+      "diagnostics": {
+        "invalid_json": "Use valid JSON without Markdown fences.",
+        "source_limit": "Split the source into smaller decks.",
+        "unsupported_version": "Use version 1.",
+        "invalid_type": "Check the field type in the native slide workflow card.",
+        "unknown_field": "Remove this unsupported field.",
+        "invalid_value": "Use an allowed value from the workflow card.",
+        "limit_exceeded": "Reduce this field or split the content across slides.",
+        "duplicate_id": "Give each item a unique id.",
+        "unsafe_path": "Use a project-relative PNG/JPEG path without traversal.",
+        "missing_asset": "Declare the referenced image asset.",
+        "table_width": "Give every row exactly as many cells as columns.",
+        "invalid_image": "Use a readable local PNG/JPEG.",
+        "image_limit": "Reduce image dimensions or file size.",
+        "unsupported_layout": "Choose one of the six supported layouts.",
+        "text_overflow": "Shorten the text or split the slide. Tables allow six columns and seven body rows.",
+        "measurement_failed": "Retry after fonts load; simplify the text if this persists.",
+        "missing_font": "Install a supported theme font: Arial/Aptos and Microsoft YaHei/Noto Sans CJK SC/Arial Unicode MS."
+      }
     }
   },
   "ai": {

@@ -67,6 +67,8 @@ export function isImagePath(path: string): boolean {
   return IMAGE_EXTS.has(ext);
 }
 
+export function isSlidesPath(path: string): boolean { return /\.slides\.json$/i.test(path); }
+
 const HTML_EXTS = new Set(["html", "htm"]);
 
 /**
@@ -145,7 +147,7 @@ export function projectFilesFromTree(nodes: FileNode[]): ProjectFile[] {
 export function classifyProjectFile(name: string, path: string): ProjectFile | null {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (IMAGE_EXTS.has(ext)) return { name, path, kind: "image" };
-  if (TEXT_EXTS.has(ext)) return { name, path, kind: "text" };
+  if (TEXT_EXTS.has(ext) || isSlidesPath(name)) return { name, path, kind: "text" };
   if (transcribeExtOf(name)) return { name, path, kind: "media" };
   return null;
 }

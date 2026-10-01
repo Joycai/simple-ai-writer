@@ -6,8 +6,10 @@
  * on the read-failure page with a retry button — an outcome that is certain by
  * design, worded as a fault.
  */
+import { classifyProjectFile } from "../images";
+import { rowKind } from "../rowMeta";
 import { describe, expect, it } from "vitest";
-import { docKindOf, fileNoticeReason, isViewOnlyKind } from "../docKind";
+import { docKindOf, fileNoticeReason, isTextKind, isViewOnlyKind } from "../docKind";
 
 // 按 sourceNulBytes.test.ts 的先例就地声明 fs：tsconfig 没有 `@types/node`。
 declare const require: (m: string) => { readFileSync(p: string, enc: string): string };
@@ -63,4 +65,16 @@ describe("fileNoticeReason — which page a file that isn't in the buffer gets",
     expect(fileNoticeReason(docKindOf("/p/素材.zip"), null)).toBeNull();
     expect(fileNoticeReason(docKindOf("/p/封面.png"), "stale error from elsewhere")).toBeNull();
   });
+});
+
+it('native slide sources are editable text without classifying arbitrary JSON as slides', () => {
+  for (const path of ['/p/deck.slides.json', 'C:\\project\\DECK.SLIDES.JSON']) {
+    expect(docKindOf(path)).toBe('slides');
+    expect(classifyProjectFile(path, path)?.kind).toBe('text');
+    expect(rowKind(path, false, null)).toBe('doc');
+    expect(isTextKind(docKindOf(path))).toBe(true);
+    expect(isViewOnlyKind(docKindOf(path))).toBe(false);
+  }
+  expect(docKindOf('settings.json')).toBe('opaque');
+  expect(docKindOf('deck.slides.json.bak')).toBe('opaque');
 });

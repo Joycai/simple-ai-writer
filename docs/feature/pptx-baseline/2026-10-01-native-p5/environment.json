@@ -1,0 +1,62 @@
+{
+  "backups": [
+    {
+      "path": "/fixture/.ai-writer/backups/pptx-71a38558-663c-4e0f-add4-b6518ecdfaca.pptx",
+      "bytes": [
+        80,
+        75,
+        1,
+        2,
+        3
+      ]
+    }
+  ],
+  "text": "Refresh\nExport PPTX\n\nApproximate preview. PowerPoint may use different text metrics. Check the exported file in PowerPoint before sharing.\n\nRequired fonts (not embedded): Arial / Arial Unicode MS\n\nExported: /fixture/deck.pptx\nOriginal backed up: /fixture/.ai-writer/backups/pptx-71a38558-663c-4e0f-add4-b6518ecdfaca.pptx\n\n←\n6 / 6\n→\n实施阶段\n阶段\n结果\nP1\n数据契约\nP2\n最小原生导出\nP3\n六种布局",
+  "browser": "154.0.8037.58",
+  "scope": "Real Chrome resolver/writer and native preview/export UI, mocked filesystem IPC; no live model or Tauri window.",
+  "checks": [
+    "six layouts rendered",
+    "English/Chinese light/dark narrow/wide",
+    "source edits invalidate review",
+    "invalid source blocks export",
+    "explicit export writes PPTX and backs up original bytes"
+  ],
+  "appVersion": "1.93.13",
+  "sourceFixture": "src/lib/pptx/native/__tests__/fixtures/six-layouts.slides.json",
+  "office": {
+    "platform": "macOS 27.0.1",
+    "version": "PowerPoint 16.113.3",
+    "fonts": [
+      "Arial",
+      "Arial Unicode MS"
+    ],
+    "verified": "Opened this native.pptx without repair prompt; inspected all six slides in PowerPoint editing view via native UI. Screenshots were inspected in the task conversation, not saved here.",
+    "pending": [
+      "Windows PowerPoint",
+      "other candidate fonts",
+      "full Tauri window integration",
+      "live model authoring"
+    ]
+  },
+  "validation": {
+    "offlineTests": 6237,
+    "offlineFiles": 399,
+    "rustTests": 160,
+    "frontendBuild": "passed",
+    "rust": "fmt/clippy/test/build passed"
+  },
+  "sha256": {
+    "review.png": "4ed603ecb9c66d640e2474782d0f18f85a709137b1099725f05cca1e297cea4f",
+    "preview-320-zh-CN-light.png": "a014de68c53c2c80841fe9d2aa649731d7ca188369d090af2aa9bf5fbff2923d",
+    "native.pptx": "eb00dba70753e8fc8cd09ecd480fff0e3af1ca49d74796792d32441dd6cbef1f",
+    "~$native.pptx": "d04d332c2d5609ca4415d0135cb829adff933d37e99d167c31a62fc8cdf43c24",
+    "slide-2.png": "fc5bdf540a70ac18a1acf5abc808158a0a9e69823e04e433ff0cc89d1fe64c3f",
+    "slide-3.png": "7b089cc75a5ee1528972f8d010203570e563e05a9a37918f77a64871b6b69d29",
+    "slide-1.png": "15e8057900db1739a855b471e809b63ae0790ef75695585dc5e6530dc614078e",
+    "slide-4.png": "f3d889ee9a98900e4000438f8f5db27b73159d76e74df86d00d51b75b185019a",
+    "slide-5.png": "0c88be088f1aa6b85203c44ca58a13180052bb80715d015ea313a49a1605d741",
+    "preview-900-zh-CN-dark.png": "ddf12d6447073bb13b883fd0dbc224adbaec44a850e9ecb0a894b2f38cf46db6",
+    "preview-320-en-dark.png": "89c27b53a33ea990ab91f4693a1f0e1f2891910300f72d0c3aaf6a9c0f69f672",
+    "slide-6.png": "528d13c877e21dcadd27694f5d8beaa087d07a70d1c9892e3912076bec1aa50e"
+  }
+}
