@@ -20,7 +20,7 @@ Two axes, encoded differently on purpose.
 | `shipped` | Built. Kept as the design record — the "why not the other way" that is not in the code. |
 | `partial` | Some phases built, some deliberately not. The doc says which. |
 | `planned` | Decided, not built. |
-| `proposal` | Not decided. Deliberately not linked from `CLAUDE.md`. |
+| `proposal` | Not decided. Deliberately not linked from `AGENTS.md`. |
 | `research` | An investigation, not a commitment. |
 | `open` | `issues/` only: the claim stands and nothing has been done about it. |
 | `fixed` · `clarified` | `issues/` only: the claim is closed — fixed, or shown not to be a defect. The file stays because the code cites it; see that section. |
@@ -37,12 +37,13 @@ reaching for is one of the states above, plus a modifier if it needs one.
 
 | Doc | Status | Read when |
 |---|---|---|
-| [codemap.md](reference/codemap.md) | `living` | Changing **any** directory: one section per `src/components/*`, `src/lib/*`, `src-tauri/` and `server/`, plus 能力包 — module split, invariants, why-not-the-other-way, and each subsystem's design-doc pointer. Moved out of `CLAUDE.md` on 2026-09-07 (it had grown to 73KB); `CLAUDE.md` keeps one line per directory plus the hard rules |
+| [codemap.md](reference/codemap.md) | `living` | Changing **any** directory: one section per `src/components/*`, `src/lib/*`, `src-tauri/` and `server/`, plus 能力包 — module split, invariants, why-not-the-other-way, and each subsystem's design-doc pointer. Moved out of `CLAUDE.md` on 2026-09-07 (it had grown to 73KB); `AGENTS.md` keeps one line per directory plus the hard rules |
 | [architecture.md](reference/architecture.md) | `living` | Touching a mechanism that spans directories: DB schema, prefs, multi-instance, RAG and the budget planner, images in context, key storage, export / backup, transactions, CSP. Per-directory facts (the SSE adapters, the IPC commands, packs) are in `codemap.md` |
 | [design-system.md](reference/design-system.md) | `living` | Building or restyling **any** UI |
 | [workflows.md](reference/workflows.md) | `living` | Adding an AI task type, a provider (platform or protocol family), a language, a capability pack |
 | [terminology.md](reference/terminology.md) | `living` | Writing **any** user-facing string, or wondering which of 条目/词条/设定 to use. §2 rules, §3 word list, §4 what `localeTerms.test.ts` guards (the ten retired words, zh-CN values + `defaultValue` literals only) and what it does not, §6 how docs handle retired words. How the 2026-08 calibration got there is in `feature/terminology-calibration.md` |
 | [tool-presence.md](reference/tool-presence.md) | `living` | 改 preset、往 `routeTools` 加分支、加一种子代理，或写任何工具的 description / 结果文本。一次运行说的话必须和它能做的事一致——四种失败形状、判据取哪个变量、十四条先例 |
+| [agent-instructions.md](reference/agent-instructions.md) | `living` | Maintaining project instructions: `AGENTS.md` is authoritative, `CLAUDE.md` imports it, and no generation step is needed; includes the 2026-10-01 migration rationale |
 | [ci.md](reference/ci.md) | `living` | Changing the build, or wondering what the merge gate runs |
 | [macos-signing.md](reference/macos-signing.md) | `partial` | Cutting a macOS release, or the Keychain starts asking for the login password again. Done: whole-bundle ad-hoc signing + Local Network usage string; not done: the fixed self-signed certificate |
 
@@ -214,7 +215,7 @@ One topic, one place; everywhere else carries a sentence and a link. Two copies 
 
 | Where | Holds | Not |
 |---|---|---|
-| `CLAUDE.md` | Commands, hard rules (one line each), the map | Implementation detail, numbers |
+| `AGENTS.md` | Commands, hard rules (one line each), the map | Implementation detail, numbers |
 | `reference/codemap.md` | Per-directory: module split, invariants, why-not-the-other-way. Anything true of one directory | Design history |
 | `reference/architecture.md` | Mechanisms that span directories (schema, context assembly, key storage, CSP, …) | A directory's own file list or command list |
 | `api/` | What a wire sends and accepts | This app's file names and choices (its README says so) |
@@ -225,6 +226,6 @@ One topic, one place; everywhere else carries a sentence and a link. Two copies 
 1. **Pick the folder by kind**, not by how finished it is. A plan that has shipped stays in `feature/`; it does not migrate.
 2. **State the status in a blockquote under the title**, opening with a token from the table above (`> 状态：\`shipped\`——…`), then the nuance a token cannot carry — which phases, which PRs, what is still open. `src/lib/__tests__/docStatus.test.ts` holds the opening token to the vocabulary, keeps `open` / `fixed` / `clarified` inside `issues/`, and checks that this file's status column starts with the same token as the doc it links.
 3. **Add a row here.** This file is the only place a reader can see everything at once.
-4. **Link it from `CLAUDE.md`'s Detailed References only if it must be read before touching code.** `CLAUDE.md` enters context every session; a `proposal` does not earn that seat.
+4. **Link it from `AGENTS.md`'s Detailed References only if it must be read before touching code.** `AGENTS.md` is the shared project instruction entry point; a `proposal` does not earn that seat.
 5. **Cite it from the code** where the reasoning matters — `see docs/feature/lore/lore-facet-plan.md`. Those citations are the reason paths here are treated as an interface, not as filing.
 6. **Cite source by name, never by line number.** `configDb.ts` 的 `defaultImageCaps`, never that path with a line number stuck on the end. Line numbers rot silently and keep looking valid: of the 346 `文件:行号` citations this tree carried in 2026-09, only 80 still landed on the right line. `src/lib/__tests__/docSourceRefs.test.ts` holds the line shut for `docs/` and for source comments; `design/` and `plans/` are outside it on purpose — they are dated records, and the coordinates in them were the scene at the time.

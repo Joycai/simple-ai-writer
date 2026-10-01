@@ -138,7 +138,7 @@ interface ServerToolSpelling {
 3. **画像是代码，不进配置备份。** 渠道只存 `platform` 这个 id。画像随版本更新（新实测、新闸门）时，所有渠道自动得到新知识，不需要迁移——这是它相对今天「预设填完就忘」的全部收益。
    代价：旧版本 app 读到一个不认识的 `platform` id 时按 `custom` 处理（向前兼容写进 `parsePlatform`）。
 
-`ConnOptions` 仍是唯一的接缝（CLAUDE.md 硬规则），只加**一个**字段 `platform: PlatformId`；`standard` 由线路的 `family + official` 派生，四个 adapter 的签名不变。
+`ConnOptions` 仍是唯一的接缝（AGENTS.md 硬规则），只加**一个**字段 `platform: PlatformId`；`standard` 由线路的 `family + official` 派生，四个 adapter 的签名不变。
 `connOptions()` 的输入从 `{provider, model, apiKey}` 变成 `{channel, endpoint, model, route, apiKey}`，由新的 `resolveConn` 一次解析出来（渠道没了 / 线路没了 / 模型没这条线路，三种失败各自有文案，沿用今天「三种失败分开说」的做法）。
 
 ## 5. 存储与迁移

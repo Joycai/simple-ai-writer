@@ -1,7 +1,7 @@
 /**
  * 测试住在被测模块最近的 `__tests__/` 里。
  *
- * 「最近的那个 `__tests__/`」一直是本项目的约定（CLAUDE.md · Testing & Type
+ * 「最近的那个 `__tests__/`」一直是本项目的约定（AGENTS.md · Testing & Type
  * Safety），但没人守着，于是 `src/lib/__tests__/` 变成了唯一的测试目录：到
  * 2026-09-16 它装着 236 个文件，覆盖 25 个子系统，而同期只有 9 个子系统自己开了
  * `__tests__/`。代价不是好看不好看——是「`lib/lore/` 有哪些测试」这个问题没有
@@ -65,7 +65,7 @@ const ROOT_MODULE_TESTS: Readonly<Record<string, string>> = {
 
 /** 全库扫描的闸门：没有单一被测模块，被测对象是整个仓库。值是它扫什么。 */
 const REPO_WIDE_TESTS: Readonly<Record<string, string>> = {
-  "agentsMdSync.test.ts": "扫仓库根的 CLAUDE.md 与 AGENTS.md——后者是前者换头生成的镜像，不许漂开",
+  "agentInstructions.test.ts": "扫仓库根的 AGENTS.md 与 CLAUDE.md——项目指南直接维护，Claude 入口只导入，不复制规则",
   "capabilityFamilyRatchet.test.ts": "扫 src/ 全部源码——能力有无不许在调用点按协议族判断（棘轮）",
   "cssKeyframeNames.test.ts": "扫 src/ 全部 .css——@keyframes 的命名空间是全局的",
   "cssModuleClassRefs.test.ts": "扫 src/ 全部 .tsx 的 AST 与 .module.css——styles.foo 的 foo 必须真的有",

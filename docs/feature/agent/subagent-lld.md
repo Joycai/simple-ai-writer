@@ -548,7 +548,7 @@ export async function buildResumeSeed(
 
 > **这正面解掉了 `【作者消息】` 那一层兜底所治标的病**：恢复的是**任务状态**而非**对话记录**，作者三周前那句 `continue` 根本不会出现在新上下文里。
 >
-> 系统提示词必须走 `profileSystemPrompt()`，不能用 `ai.instructions.system` —— 否则非小说项目会拿到小说指令（CLAUDE.md 明令）。
+> 系统提示词必须走 `profileSystemPrompt()`，不能用 `ai.instructions.system` —— 否则非小说项目会拿到小说指令（AGENTS.md 明令）。
 
 ### 4.5 会话与工作区的绑定跨重启（2026-08-15，原 PR-B 遗留）
 
@@ -598,7 +598,7 @@ ai:subagent:pdf:modelId       ai:subagent:pdf:enabled
 
 `aiStore` 提供 `subAgents: Record<SubAgentKind, SubAgentConfig>` 与 `setSubAgent(kind, patch)`，并**必须**接进既有的两处清理逻辑（`aiStore.ts` 模型表刷新、`aiStore.ts` 单个模型删除）—— 否则删掉一个模型后，子代理会指向一个不存在的行。`aiStoreRemoval.test.ts` 已经为 `memoryModelId` 立过这个规矩。
 
-> **绝不要用 `localStorage`**：加键到 `PREF_KEYS`（CLAUDE.md 明令）。
+> **绝不要用 `localStorage`**：加键到 `PREF_KEYS`（AGENTS.md 明令）。
 
 ### 5.2 内置种类规范
 
@@ -831,7 +831,7 @@ delegate: {
 },
 ```
 
-> 描述里刻意用 `documents` 而不是「章节」：工具描述对所有 workspace profile 通用，硬编码 `章/卷/设定` 会让跑团/文案项目读到错的词（CLAUDE.md 的 `terms` 约束）。需要 profile 词汇的地方走 `getToolDefinitions` 的占位符替换机制（`registry.ts` 的 `CATEGORY_PLACEHOLDER`）。
+> 描述里刻意用 `documents` 而不是「章节」：工具描述对所有 workspace profile 通用，硬编码 `章/卷/设定` 会让跑团/文案项目读到错的词（AGENTS.md 的 `terms` 约束）。需要 profile 词汇的地方走 `getToolDefinitions` 的占位符替换机制（`registry.ts` 的 `CATEGORY_PLACEHOLDER`）。
 
 #### 5.3.3 执行器
 
@@ -1346,7 +1346,7 @@ src/
 ## 10. i18n 与 profile 约束
 
 - 提示词一律走 i18n，**不硬编码中文**：`ai.instructions.subagent.{search,vision,longread}`、`subagentTask`、`scratchpadCheckpoint`、`taskResume`、`taskResumeNoNotes`；
-- 需要 profile 词汇的提示词在解析处传 `promptParams(isZh)`（CLAUDE.md：绝不在组件或 i18n 值里硬编码 章/卷/设定）；
+- 需要 profile 词汇的提示词在解析处传 `promptParams(isZh)`（AGENTS.md：绝不在组件或 i18n 值里硬编码 章/卷/设定）；
 - 子代理的 system prompt 属于「通用助手」语域，用中性词（文档 / 知识库），novel 需要小说措辞时另开 `*Novel` 键；
 - 工具 `description` 保持英文（与注册表其余工具一致），但同样避开 章节/设定 这类 profile 专属词；
 - 恢复任务的 system prompt **必须** `profileSystemPrompt()`，不得用 `ai.instructions.system`。
