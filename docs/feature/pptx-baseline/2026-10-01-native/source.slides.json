@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "language": "zh-CN",
+  "theme": "paper",
+  "assets": [
+    {
+      "id": "logo",
+      "path": "public/logo.png"
+    }
+  ],
+  "slides": [
+    {
+      "id": "intro",
+      "layout": "title",
+      "title": "原生演示 / Native slides",
+      "subtitle": "内容与排版分离",
+      "notes": "示例内容；图片路径相对于项目根目录。"
+    },
+    {
+      "id": "outline",
+      "layout": "bullets",
+      "title": "目标 / Goals",
+      "bullets": [
+        "可编辑文字",
+        "明确的字体要求",
+        "可定位的校验错误"
+      ]
+    },
+    {
+      "id": "picture",
+      "layout": "image-text",
+      "title": "图片与说明",
+      "body": "保留原始比例，显式选择裁剪位置。",
+      "image": {
+        "assetId": "logo",
+        "alt": "应用标志",
+        "fit": "cover",
+        "anchor": {
+          "x": 0.5,
+          "y": 0.5
+        }
+      }
+    }
+  ]
+}

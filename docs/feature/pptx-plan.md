@@ -643,7 +643,7 @@ box 本来就是按页面的行数和行距量的。留下的只是"行距相对
 
 ## 8. 原生 PPTX 生成实施计划（2026-10-01）
 
-> 状态：`partial`。P0 回归基础设施已实现，Office 验收待补（§8.7）；P1 数据契约已实现（§8.8），P2–P5 尚未实现。依据：main `7dd18929` 的代码审阅与作者确认的改进方向。
+> 状态：`partial`。P0 回归基础设施已实现，Office 验收待补（§8.7）；P1 数据契约已实现（§8.8），P2 最小原生导出已实现（§8.9），P3–P5 尚未实现。依据：main `7dd18929` 的代码审阅与作者确认的改进方向。
 > §1–7 保留为已发布 HTML 路线的设计记录；本节替代“新演示必须先写 HTML”的默认方向，不废除旧文件的导出能力。
 
 ### 8.1 目标与边界
@@ -841,3 +841,38 @@ P4 接入工具时再添加双语提示，不提前把大 schema 加进常驻工
 
 验证：Node 环境覆盖六布局、未知字段/版本、数值/文字合法性、重复 id、资源引用与路径越界、表格宽度、源字节/图片大小上限和主题不变性。
 本阶段不产生新的 PPTX，完整 Office 验收仍待 P2/P3/P5。
+
+### 8.9 P2 最小原生导出（2026-10-01）
+
+P2 实现了封面、要点和图片配文字的独立导出库；`export_pptx` 和应用入口仍按 P4/P5 接入。
+`resolveDeck` 先校验并复制源，选择字体、测量布局、加载全部资产，成功后深度冻结 `ResolvedDeck`；
+`nativeDeckToPptx` 只消费该结果，不回读磁盘。媒体用不可变 data URL 保存，pt → inches 只在 writer 边界发生。
+这不是审批缓存：摘要、产物持久化、恢复和覆盖纪律仍属 P4。
+
+**排版约束。** 标题 36 pt、正文 24 pt，固定 1.4 倍行盒，保留 10% 宽度余量；不启用 shrink、自动扩框或截断。
+按 grapheme 测量并显式生成可编辑行，英文优先在空格断行，中文可按字断行；原始换行保留。
+长英文单词才按 grapheme 拆开。不做中文禁则/孤行优化，也不保证超出中英范围的复杂文字/emoji 字形支持。
+封面标题最多两行、subtitle 在独立 150 pt 区域；内容页标题最多两行；要点最多六项，在 336 pt 内容区等分，每项留 12 pt 间隔。
+图片正文占 384×330 pt，图片框 444×330 pt；contain 居中保持比例，cover 按源中的 x/y 锚点生成原生裁剪。
+超容量返回 `text_overflow`（slideId + 字段路径），测量不可用返回 `measurement_failed`；P3 三种布局返回 `unsupported_layout`，不会静默跳页。
+每一行是独立可编辑文本框，保证确定性位置的代价是 PowerPoint 内编辑时不会自动跨行框重排；修改长文应回到源文件重新导出。
+
+**字体实测改变了 P1 候选。** PptxGenJS 4.0.1 的每个 run 会把同一个 fontFace 写入 `a:latin` / `a:ea` / `a:cs`，
+所以按文字脚本拆 run，分别写 Latin/CJK 字体。浏览器用两个 fallback 的混合文字宽度探测候选，不把 `document.fonts.check` 当作存在证明。
+初始 PingFang SC 在 Chrome 正常，但 PowerPoint macOS 16.113.3 的编辑视图部分缺字、放映视图整段出现方框；因此从原生主题候选中移除。
+CJK 新顺序是 Microsoft YaHei → Noto Sans CJK SC → Arial Unicode MS；本机实际选择 Arial / Arial Unicode MS，三页放映及本机打印 PDF 均检查通过。
+缺少候选直接返回 `missing_font`。浏览器探测仍是启发式，既不保证完整 Unicode 覆盖，也不证明收件人安装了字体。
+成功结果始终携带 `office_metrics_unverified` / `recipient_fonts_required`，后续审批必须展示这两个限制；本次基准验收不能抹去任意新源的风险。
+备注内容写入原生 notes，PptxGenJS 没有单独的 notes CJK 字体配置，本阶段只验证备注文本和关系完整。
+
+**资源读取。** `nativeEnvironment` 先读长度，再按最多 1 MiB 的 bounded range 读取，逐图/累计字节预算在分配前执行。
+PNG IHDR / JPEG SOF 的像素上限在浏览器解码前检查，再用实际解码拒绝损坏图；解码后释放 Image 引用。
+EXIF orientation 不是 1 的 JPEG 被拒绝（包括不改变宽高的镜像/180°），需预先正规化；不会悄悄拉伸或反转它。
+`fs_read_head` / `fs_read_range` 新增可选 `projectRoot`，在原有 FsScope 之外检查真实资源路径位于指定项目内，
+返回 canonical 路径给读取函数：应用允许过另一个项目，也不能借 symlink 跨过去。旧调用省略该参数，行为不变；无需新增权限。
+纯 `ResolveEnvironment` 是受信任的宿主边界，模型不提供字体探测、测量结果或资源观测值。
+
+**验收证据。** [`2026-10-01-native/`](pptx-baseline/2026-10-01-native/) 保存源、原生 PPTX、PowerPoint 本机打印 PDF、三页 PNG 和环境/哈希。
+`native-baseline.mjs` 在 Chrome 运行生产 resolver/writer（只以固定 fixture 替代 Tauri 文件 I/O），Office 打开、放映、导出通过 GUI 完成。
+三布局无修复提示，逐页检查没有缺字、漏图、裁切或重叠；真实 ZIP 测试验证文本仍是原生对象、坐标、媒体字节/关系、裁剪和备注。
+PowerPoint Windows、其他 CJK 候选和复杂字体覆盖仍未实测，不能据此提前宣布 P5 跨平台发布门槛完成。

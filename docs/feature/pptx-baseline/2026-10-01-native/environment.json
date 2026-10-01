@@ -1,0 +1,27 @@
+{
+  "browser": "154.0.8037.58",
+  "fonts": {
+    "latin": "Arial",
+    "cjk": "Arial Unicode MS"
+  },
+  "risks": [
+    "office_metrics_unverified",
+    "recipient_fonts_required"
+  ],
+  "office": "PowerPoint macOS 16.113.3; opened without repair; all three slides inspected in slide show; local print PDF exported and all three PNG pages inspected",
+  "windows": "unverified",
+  "pptxgenjs": "4.0.1",
+  "pdfFonts": [
+    "ArialUnicodeMS",
+    "Arial-BoldMT"
+  ],
+  "fontFinding": "PingFang SC produced missing-glyph boxes in slide show; removed from native candidates. Arial Unicode MS passed this fixture.",
+  "sha256": {
+    "native.pdf": "dca866e5ee266bff599585bd364d3401998720105367edf110e77d41c441d318",
+    "native.pptx": "576a505b2829213fd6262ea97bafa80f13e0529d91d986c8834b7471ab113eec",
+    "powerpoint-1.png": "573dae0fb1b3e1eaf73cd95c5497b90d398ad54bf08de6a8ec000e323522a9b3",
+    "powerpoint-2.png": "130cbd7468912c575c74ca3a1987d115a5fcadf9a4ec43d71ba81ac80f18d04c",
+    "powerpoint-3.png": "4163df4ad5cb5c9ec50e6e01a777a8fefbf10a539f7362d6bbedb400497dc446",
+    "source.slides.json": "4f1b676e8c573de0258ac94b5944655a6968b6465326d59efd14b305411790cb"
+  }
+}
