@@ -478,6 +478,9 @@ clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
 
 HTML → PPTX（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）: the model keeps writing `.html` and the conversion runs **no model at all** —
 
+#### 原生路线（P1 数据契约，尚未接入导出）
+- `native/model.ts` / `validate.ts` / `diagnostics.ts` define the closed v1 `.slides.json` semantic contract, pure validation and JSON-pointer diagnostics; `theme.ts` keeps immutable point-based themes with explicit Latin/CJK font candidates. `resources.ts` checks loader observations against byte/pixel ceilings; actual image reads, decoding, layout and immutable approval snapshots are later phases. Six-layout example and tests live in `native/__tests__/`; contract and limits: `pptx-plan.md` §8.8.
+
 #### 转换管线（无模型参与）
 - `harvest.ts` renders the page in an offscreen sandboxed iframe and `harvester.js` (injected `?raw`, answers by `postMessage`) reports what the browser measured
 - `deck.ts` is the pure layer (units, slide size, colours, pruning, text slack — where the tests are)

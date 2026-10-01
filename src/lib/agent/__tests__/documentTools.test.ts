@@ -29,6 +29,7 @@ vi.mock("../../import/cachedConvert", () => ({
   convertCached: (...args: unknown[]) => convertCached(...args),
 }));
 
+import { createFileTool, proposeEditTool } from "../write/manuscript";
 import { readDocumentFile } from "../documentTools";
 import { readSlidesFile, readWritingFile } from "../tools";
 
@@ -152,5 +153,24 @@ describe("the other readers redirect here", () => {
   it("read_slides names read_document in its refusal", async () => {
     const out = await readSlidesFile("t", "/proj/a.docx", PROJECT);
     expect(out.content).toMatch(/read_document for Word \/ Excel \/ PDF/);
+  });
+});
+
+
+describe("native slide source uses existing text tools", () => {
+  it("creates, reads and proposes edits for .slides.json without converting it", async () => {
+    const path = "/proj/deck.slides.json";
+    const content = '{"version":1,"theme":"paper"}';
+    const requestApproval = vi.fn(async () => ({ approved: false as const }));
+    const ctx = { projectPath: PROJECT, loreIndex: {}, multimodal: false, requestApproval };
+    await createFileTool("create", { path: "deck.slides.json", content }, ctx);
+    expect(requestApproval).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "create", path, content }));
+    // Simulate an existing source; neither rejected proposal writes a file.
+    files.set(path, content);
+    expect((await readWritingFile("read", "deck.slides.json", PROJECT)).content).toContain(content);
+    await proposeEditTool("edit", { path, find: '"paper"', replace: '"midnight"' }, ctx);
+    expect(requestApproval).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "edit", path, find: '"paper"', replace: '"midnight"' }));
+    expect(files.get(path)).toBe(content);
+    expect(convertCached).not.toHaveBeenCalled();
   });
 });

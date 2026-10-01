@@ -643,7 +643,7 @@ box 本来就是按页面的行数和行距量的。留下的只是"行距相对
 
 ## 8. 原生 PPTX 生成实施计划（2026-10-01）
 
-> 状态：`partial`。P0 回归基础设施已实现，Office 验收待补（§8.7）；P1–P5 尚未实现。依据：main `7dd18929` 的代码审阅与作者确认的改进方向。
+> 状态：`partial`。P0 回归基础设施已实现，Office 验收待补（§8.7）；P1 数据契约已实现（§8.8），P2–P5 尚未实现。依据：main `7dd18929` 的代码审阅与作者确认的改进方向。
 > §1–7 保留为已发布 HTML 路线的设计记录；本节替代“新演示必须先写 HTML”的默认方向，不废除旧文件的导出能力。
 
 ### 8.1 目标与边界
@@ -754,7 +754,7 @@ DOCX/XLSX 将来只共享主题 token、资源加载与诊断等确有共同语�
 
 ### 8.7 P0 执行记录（2026-10-01）
 
-状态：`partial`。回归基础设施和 HTML 检查措辞已落地；PowerPoint 实测仍待完成，P1–P5 尚未实施。
+状态：`partial`。回归基础设施和 HTML 检查措辞已落地；PowerPoint 完整实测仍待完成；P1 进展见 §8.8。
 不把辅助渲染结果记成 PowerPoint 验收，不提前宣称原生路线可用。
 
 - `src/lib/pptx/__tests__/fixtures/baseline.html`：七页固定源，覆盖六布局、中英混排、长标题、多段文本、图片裁剪、表格末行及伪元素/渐变/单边框。
@@ -775,7 +775,69 @@ DOCX/XLSX 将来只共享主题 token、资源加载与诊断等确有共同语�
 | 同环境重复渲染 | 独立重新打开 PPTX 并导出，七页均 0 个变化区域 |
 | 故障注入 | 移除第 4 页图片：19 个区域报警；第 2 页标题移出画布：9 个区域报警。两者退出码均 1 |
 | 字体环境 | 初次 headless 渲染找不到中文字体，不能作为证据；显式配置系统字体目录、PingFang 资源目录及临时缓存后重新生成。最终字体/环境信息写入 environment.json |
-| PowerPoint macOS | 本机 16.113.3；文件授权弹窗后自动化超时，未取得渲染产物；仍为未验证 |
+| PowerPoint macOS | 本机 16.113.3；重试后成功打开七页基准，第一页已目视检查；尚未完成全部页面与字体对照，也未保存 Office 渲染产物 |
 | PowerPoint Windows | 未验证 |
 
-下一步先补 PowerPoint 输出与字体对照，确认 P0 的 Office 门槛；随后按独立 PR 顺序实施 P1 数据契约。P2 必须显式处理 Latin/CJK 字体，避免再次把 CSS 字体栈的第一个名字当作全部文字的实际字体。
+作者确认 P0 合并后继续 P1 数据契约；P0 的完整 PowerPoint 输出与字体对照仍需补齐，不能以 P1 纯校验通过代替 Office 门槛。P2 必须显式处理 Latin/CJK 字体，避免再次把 CSS 字体栈的第一个名字当作全部文字的实际字体。
+
+
+### 8.8 P1 数据契约（2026-10-01）
+
+P1 已实现，尚未接入导出工具或应用预览。代码在 `src/lib/pptx/native/`，不会改变已发布的 HTML 路线。
+六布局可复制示例：[`six-layouts.slides.json`](../../src/lib/pptx/native/__tests__/fixtures/six-layouts.slides.json)。
+示例图片 `public/logo.png` 相对于本仓库根目录；复制到作者项目时需同步图片并改路径。
+
+**源文件契约。** 文件名为 `*.slides.json`；`parseDeckSpec` 先按 UTF-8 限制为 2 MiB，再解析 JSON。
+`validateDeckSpec` 接受已经解析的 JSON 值，纯校验，不使用 DOM、文件系统或 Office。
+只有成功结果含 `value`，失败仅含 `diagnostics`，不能用部分成功内容继续导出。
+不强制 source 成为不可变审批快照；快照及摘要绑定仍归 P4。
+
+| 字段 | v1 约束 |
+|---|---|
+| `version` | 数字 `1`；未知版本直接拒绝，不猜测兼容 |
+| `language` | `zh-CN` 或 `en-US`；表述整份演示的默认语言，不禁止中英混排 |
+| `theme` | `paper` / `midnight` 内置引用；首版不允许源文件直接注入任意字体、CSS 或坐标 |
+| `assets` | 必填数组，可空，最多 100 项；每项只有 `id`、`path` |
+| `slides` | 必填，1–100 页；公共字段为 `id`、`layout`、`title`，可选 `notes` |
+| `id` | 以 ASCII 字母开头，后接字母、数字、下划线或短横线，最多 64 字符；slide 和 asset 分别唯一 |
+| `path` | 项目根目录相对的 PNG/JPEG 路径，最多 1024 UTF-16 单元；禁止绝对路径、URL、反斜线、冒号、百分号编码、查询/片段、空段、`.`/`..` 段及控制字符 |
+
+六个判别分支都是闭合对象，未知字段在任何层级报错，防止模型以为 CSS/坐标已经被应用：
+
+| `layout` | 内容字段 |
+|---|---|
+| `title` | 可选 `subtitle` |
+| `bullets` | `bullets: string[]`，1–20 条 |
+| `comparison` | `left` / `right`，各为 `{heading, bullets}` |
+| `image-text` | `body` 和 `image: {assetId, alt, fit, anchor: {x,y}}`；`fit` 为 `contain`/`cover`，anchor 为有限数字 0–1，表示左/上到右/下的裁剪对齐；contain 保留 anchor 但不裁剪 |
+| `metrics` | `metrics: {label, value, detail?}[]`，1–6 项；value 是显示字符串，保留单位及前导零 |
+| `table` | `columns: string[]`，1–12 列；`rows: string[][]`，1–100 行；每行格数必须与列数相等，不允许静默补齐或截断 |
+
+title / heading / label / value / 列标题最多 300 UTF-16 单元，正文 / 要点 / subtitle / alt / detail / 单元格最多 4000，notes 最多 20000。
+正文为纯文本；不解析 Markdown/HTML。只有 notes 与表格单元格允许空白内容；全部文字拒绝 XML 非法控制字符和孤立 surrogate，保留中文、emoji 和换行。
+这些是**输入安全上限，不是单页可容纳量**：P2/P3 仍需测量、容量约束、字号下限和明确的拆页错误。
+
+**主题和单位。** `theme.ts` 内置深度冻结的两套主题，共用 960×540 pt（16:9）画布、36 pt 标题 / 24 pt 正文 / 18 pt 下限。
+颜色为六位 RGB；Latin 候选依次 Arial / Aptos，CJK 为 PingFang SC / Microsoft YaHei / Noto Sans CJK SC。
+候选顺序是明确的替代策略；P2 必须按环境选择并记录实际字体，所有候选缺失时失败。
+P1 不检测字体，不宣称字体已安装或接收端可用。writer 边界才把 pt 除以 72 转为 inches。
+
+**资源边界。** `resources.ts` 对资源加载器提供的观测值做纯校验，每个声明资产恰好一个记录；未知、缺失或重复记录报错。
+观测字段为 assetId / byteLength / width / height / mime，不能由模型自报代替解码。
+每图 ≤10 MiB、≤4000 万解码像素；全部声明图片合计 ≤50 MiB；尺寸和字节数必须为正安全整数。
+P2 仍须在读取/解码前执行大小保护、经现有项目 scope 验证真实路径（含 symlink）、核验真实格式、拒绝损坏图片；纯路径和观测值校验不是完整资源安全检查。
+首版限定 PNG/JPEG，避开 SVG 外部资源和不同 Office 对其他格式的解释差异。
+
+**诊断。** `{code, path, slideId?}` 使用 RFC 6901 JSON pointer；整个文件的 path 为 `""`。
+slide 内错误带稳定 slideId（若可读取），数组索引定位当前文件；不会静默清理未知字段或超限内容。
+错误码与修复方向：invalid_json → 修复 JSON；unsupported_version → 使用 v1；invalid_type / invalid_value / unknown_field → 按契约修改字段；
+source_limit / limit_exceeded → 缩小源文件或拆分内容；duplicate_id → 改为唯一 id；unsafe_path → 改为项目相对 PNG/JPEG；
+missing_asset → 补资源或修正引用；table_width → 修复格数；invalid_image / image_limit → 修复、缩小或替换图片。
+P4 接入工具时再添加双语提示，不提前把大 schema 加进常驻工具上下文。
+
+**现有文本工具核实。** `createFileTool` 只要求可见文件名有扩展名，`readWritingFile` 按路径读文本，`proposeEditTool` 不限制文本扩展名，均仍经项目路径围栏。
+`documentTools.test.ts` 覆盖 `.slides.json` 创建方案、按路径读取和编辑方案，保持审批纪律；无需放宽生产工具权限。
+文件发现、编辑器识别和预览仍在 P5；当前 `export_pptx` 仍只接受 HTML，不承诺已能导出新源。
+
+验证：Node 环境覆盖六布局、未知字段/版本、数值/文字合法性、重复 id、资源引用与路径越界、表格宽度、源字节/图片大小上限和主题不变性。
+本阶段不产生新的 PPTX，完整 Office 验收仍待 P2/P3/P5。
