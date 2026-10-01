@@ -47,14 +47,19 @@ For a new baseline, render the unchanged PPTX twice independently (expect no fla
 
 Current evidence and remaining verification: `docs/feature/pptx-plan.md` §8.7.
 
-## Native P2 fixture
+## Native layout fixtures
 
-Run `node scripts/pptx/native-baseline.mjs NEW_OUTPUT_DIR EXTERNAL_NODE_MODULES`
+Run `node scripts/pptx/native-baseline.mjs NEW_OUTPUT_DIR EXTERNAL_NODE_MODULES [SOURCE_JSON]`
 with the bundled Node package path from `load_workspace_dependencies` (Playwright + Chrome).
-The harness selects title/bullets/image-text from the six-layout source and calls the production
+The harness uses the complete six-layout source by default and calls the production
 native resolver/writer; only the fixed logo read replaces Tauri IPC. It records selected fonts
 and leaves Office validation pending. Open `native.pptx` in PowerPoint, inspect each slide in
 slide show mode, then export PDF with **Best for printing** (local). Render that PDF with
 bundled `pdftoppm -scale-to 1280 -png native.pdf powerpoint` and inspect all pages.
 The accepted macOS evidence is in `docs/feature/pptx-baseline/2026-10-01-native/`.
 Chrome measurements alone cannot catch the PingFang missing-glyph failure recorded there.
+
+For capacity coverage, pass `src/lib/pptx/native/__tests__/fixtures/capacity.slides.json`
+as the optional source. This midnight-theme deck covers four bullets per comparison column,
+six metrics, six columns/seven body rows, and bilingual table paragraphs with blank cells/lines.
+The original P2 evidence remains a three-layout snapshot; it is not overwritten by this harness.
