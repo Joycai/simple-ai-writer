@@ -11,7 +11,7 @@ import { AudioLines,
   Monitor, Presentation, X, NotebookPen, NotebookText, ExternalLink,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs/images";
+import { classifyProjectFile, isImagePath, isSlidesPath, type ProjectFile } from "../../lib/fs/images";
 import { FOLDER_NOTE_FILE, folderNoteTemplate, isFolderNoteFile } from "../../lib/fs/folderNote";
 import { fileExists, openWithDefaultApp, previewHtmlWindow, readFileHead, readFileRange } from "../../lib/fs/fileio";
 import { beginConvert, convertBlocker, endConvert, getConvertJobs } from "./convertJobs";
@@ -1743,6 +1743,12 @@ export function FileTree() {
           label: t("fileTree.convertDoc"),
           disabled: busy !== null,
           action: () => void handleConvert(node),
+        });
+      }
+      if (isSlidesPath(node.name) && isPptxExportEnabled()) {
+        items.push({
+          kind: "item", icon: <Presentation size={13} />, label: t("fileTree.exportPptx"),
+          action: () => { setActiveFilePath(node.path); useEditorStore.getState().setViewMode("preview"); },
         });
       }
       // Beta 关着时**不是禁用而是不存在**（与 `export_pptx` 工具同一条规矩）：

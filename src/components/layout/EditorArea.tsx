@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Sparkles } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
@@ -19,6 +19,8 @@ import { editorScrollMap, previewScrollMap } from "../../lib/editor/scrollAnchor
 import styles from "./EditorArea.module.css";
 import { dirName, isSamePath } from "../../lib/paths";
 
+const SlidesPreview = lazy(() => import("../editor/SlidesPreview"));
+
 export function EditorArea() {
   const { t } = useTranslation();
   const { projectPath, activeFilePath } = useProjectStore();
@@ -34,6 +36,7 @@ export function EditorArea() {
   // Third file kind: edited as text like markdown, but previewed in a
   // sandboxed iframe (HtmlPreview) instead of the markdown renderer.
   const isHtml = kind === "html";
+  const isSlides = kind === "slides";
   // A picture is rendered and a .docx gets a page of its own; neither is read.
   const viewOnly = isViewOnlyKind(kind);
 
@@ -56,7 +59,7 @@ export function EditorArea() {
   useEffect(() => {
     // isHtml excluded: the preview there is an iframe whose inner scroll
     // position is out of the parent's reach — there is nothing to link.
-    if (viewMode !== "split" || !activeFilePath || isImage || isHtml) return;
+    if (viewMode !== "split" || !activeFilePath || isImage || isHtml || isSlides) return;
     const editor = editorView?.scrollDOM;
     const preview = previewPaneRef.current?.querySelector<HTMLElement>("[data-preview-scroller]");
     if (!editorView || !editor || !preview) return;
@@ -64,7 +67,7 @@ export function EditorArea() {
       mapA: editorScrollMap(editorView),
       mapB: previewScrollMap(preview),
     });
-  }, [viewMode, activeFilePath, isImage, isHtml, editorView]);
+  }, [viewMode, activeFilePath, isImage, isHtml, isSlides, editorView]);
 
   // Load file when active path changes. View-only kinds are rendered directly
   // (see below), so we must NOT read them as text — that would fill the editor
@@ -157,13 +160,15 @@ export function EditorArea() {
       <div className={styles.panes}>
         {showEditor && (
           <div className={styles.editorPane}>
-            <CodeEditor value={content} onChange={setContent} toolbar={!isHtml} />
+            <CodeEditor value={content} onChange={setContent} toolbar={!isHtml && !isSlides} />
             <EditorScrollNav />
           </div>
         )}
         {showPreview && (
           <div className={styles.previewPane} ref={previewPaneRef}>
-            {isHtml
+            {isSlides
+              ? <Suspense fallback={null}>{isSamePath(activeFilePath, filePath) && <SlidesPreview key={`${projectPath}:${activeFilePath}`} source={content} filePath={activeFilePath} projectPath={projectPath} />}</Suspense>
+              : isHtml
               ? <HtmlPreview source={content} filePath={filePath} />
               : <Preview source={content} basePath={filePath ? dirName(filePath) : null} />}
           </div>

@@ -43,7 +43,7 @@ export function DocActions({ kind, path }: { kind: DocKind; path: string }) {
   const imageSize = useProjectStore((s) => s.imageSize);
   const [viewMenuAt, setViewMenuAt] = useState<{ x: number; y: number } | null>(null);
 
-  const editable = kind === "markdown" || kind === "html";
+  const editable = isTextKind(kind);
   // The size belongs to this picture only — ImagePreview reports it with the
   // path it decoded, and a mismatch means the new file hasn't decoded yet.
   const dims = imageSize && imageSize.path === path ? imageSize : null;
@@ -113,11 +113,11 @@ export function DocActions({ kind, path }: { kind: DocKind; path: string }) {
           <span className={styles.wordCount}>
             {/* HTML 报的是源码字符数——它没有「正文」，但这个数说的确实是屏幕上
                 那份文件（表 B）。窄档去掉单位只留 mono 数字（表 A ⑦）。 */}
-            <strong>{(kind === "html" ? charCount : wordCount).toLocaleString()}</strong>
+            <strong>{(kind !== "markdown" ? charCount : wordCount).toLocaleString()}</strong>
             {/* 单位词而不是 `statusBar.words`（那是「字数」/「Words」，一个**栏目
                 名**）——顶栏这里读的是「3,124 字」。 */}
             <span className={styles.notNarrow}>
-              {" "}{kind === "html" ? t("titleBar.chars") : t("titleBar.words")}
+              {" "}{kind !== "markdown" ? t("titleBar.chars") : t("titleBar.words")}
             </span>
           </span>
           <span className={styles.saveState} title={isDirty ? t("titleBar.saving") : t("titleBar.saved")}>

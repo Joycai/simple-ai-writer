@@ -117,7 +117,7 @@ Main layout structure (TitleBar, IconRail, Sidebar, ProjectRow (项目名那一�
 
 **顶栏右半段分两截，各有各的规矩（设计稿 `01e`，`TitleBar.tsx` + `DocActions.tsx`）。** 文档段跟着当前文档来去，全局段（主题 / 语言 / AI）右锚不动。三条：
 
-- **谁在场由扩展名决定，不在场就不渲染**——一张名单一类文件，`lib/fs/docKind.ts` 的 `DocKind` 五个值就是设计稿表 B 的五行（`markdown` / `html` / `image` / `convertible` / `opaque`）。`.html` 的导出只剩「打印 · PDF」（三条导出都先 `renderMarkdown`，把页面源码再渲染一遍不是导出，见 `printHtmlDocument`）；图片与读不出来的没有视图切换、没有字数，空位换成「用默认应用打开」/「转换文档」。
+- **谁在场由扩展名决定，不在场就不渲染**——一张名单一类文件，`lib/fs/docKind.ts` 的 `DocKind` 六个值就是设计稿表 B 的五行（`markdown` / `html` / `slides` / `image` / `convertible` / `opaque`）。`.html` 的导出只剩「打印 · PDF」（三条导出都先 `renderMarkdown`，把页面源码再渲染一遍不是导出，见 `printHtmlDocument`）；图片与读不出来的没有视图切换、没有字数，空位换成「用默认应用打开」/「转换文档」。
 - **跟着文档走的读数认的是缓冲区，不是 `activeFilePath`。** 打开图片或可转换的 `docx / xlsx / pdf / pptx`（`isViewOnlyKind`——按扩展名就知道，`EditorArea` 根本不去读）时缓冲区**故意**停在上一篇文档——AI 那一侧靠 `WritingFocus.settled` 判断"还没就绪"（`stores/openDocument`），所以缓冲区不能清。代价是顶栏自己认路：`ExportMenu` 用 `useWritingFocus()` + `isExportableDocument`，字数 / 保存点 / 面包屑的「已修改」用 `isTextKind(docKindOf(...))`。用 `activeFilePath` 当条件的写法都错，而且错得很安静（图片打开时导出的是上一篇的正文、文件名却取自图片名）。同一条的反面：**一个手势里既打开文件又发一轮对话**（文件树的「新建目录说明并交给助手」）要先 `whenFocusSettles(path)` 等缓冲区追上，否则那一轮取到的焦点是点击前的那一篇——对话输入框没有 `settled` 门，作者在那里打字时本来就看着编辑器。
 - **让位靠容器查询，量的是 `.flow` 的宽度**（顶栏减去平台让位：mac 56px 红绿灯位、无边框 Windows 138px 三键）——按窗口宽判会让两种边框形态在不同窗口宽度上跳档。三档 ≥1160 / 900–1159 / <900，让位顺序在 `TitleBar.module.css` 末尾那一段注释里（＝设计稿表 A，实现逐行照抄）。右侧每一件 `nowrap` + `flex-shrink:0`，整条里唯一让宽的是面包屑：中文标签被压到字宽以下会逐字折行成「编 辑」。两种档位的成色都渲染出来、由 CSS 藏掉一种——查询能换布局，换不了词。
 - **没进编辑器的文件在编辑区有一页，三种原因三种说法**（`FileNotice.tsx`，由 `docKind.ts` 的 `fileNoticeReason` 判）：`convertible` 不读、给「转换文档」；`notText` 是读了才知道的二进制，只给「用默认应用打开」；只有 `error`（权限、I/O）才叫「失败」并带「重试」。前两种不是故障，不许用故障的措辞——理由与那张表在 `docs/feature/topbar-doc-actions-brief.md` 出入 5。
@@ -125,6 +125,8 @@ Main layout structure (TitleBar, IconRail, Sidebar, ProjectRow (项目名那一�
 **关闭文档只有一处实现**：`stores/openDocument.ts` 的 `closeDocument()`（面包屑末尾的 ×、⌘W、文件树右键三个入口共用）。**「关闭」是三层，三平台同一套**（`lib/shortcuts.ts` 的 `CLOSE_DOC_COMBOS` 顶上有那张表）：文档 ⌘W · 项目 ⇧⌘W（`ProjectRow`，项目开着时才挂）· 窗口 ⌥⌘W（仅 mac，`windowmenu.rs` 的菜单项）。窗口那一层**不能**用 `PredefinedMenuItem::close_window`：预置项在 macOS 上固定带 ⌘W，而原生菜单先于 webview 收键——一个窗口就是一个工作区，于是「关文档」的 ⌘W 实际关掉的是整个项目窗口。先 flush 再置空，**写盘失败就不关**（缓冲区是那几行字唯一的副本），痕迹是面包屑尾巴两秒的一行；关的是图片时不碰缓冲区里那篇待写的文档。四条都钉在 `src/stores/__tests__/openDocumentClose.test.ts`。设计稿的两张表与出入表在 `docs/feature/topbar-doc-actions-brief.md`。
 
 ### `src/components/editor/`
+
+`SlidesPreview` / `NativeSlideView` provide the lazy `.slides.json` preview from the export resolver, page navigation/notes, and prepare→review→write export using the P4 artifact cache. Source edits invalidate the review; unmount aborts work. Preview stays approximate and names unembedded fonts (pptx-plan §8.12).
 
 CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, icon-only and stateless on purpose — reflecting the caret's formatting would cost a store write per keystroke, so only the heading dropdown reads state, and only when it opens), preview renderer + its zoom control
 
@@ -478,7 +480,7 @@ clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
 
 `.slides.json` / HTML → PPTX（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）: deterministic native layout or legacy browser harvesting; neither export runs a model.
 
-#### 原生路线（P1–P4 导出与 Agent 审批，应用预览待 P5）
+#### 原生路线（P1–P5 导出、Agent 审批与应用预览）
 - `native/model.ts` / `validate.ts` / `diagnostics.ts` define the closed v1 `.slides.json` semantic contract, pure validation and JSON-pointer diagnostics; `theme.ts` keeps immutable point-based themes with explicit Latin/CJK font candidates. `resources.ts` checks loader observations against byte/pixel ceilings; P2 `environment.ts` performs bounded project-local reads and decoding, `imageHeader.ts` enforces pixel limits before decode. `approval.ts` prepares bounded ephemeral artifacts and hash-bound receipts before approval; stale inputs/destination or a lost cache require fresh review (plan §8.11). Six-layout example and tests live in `native/__tests__/`; contract and limits: `pptx-plan.md` §8.8.
 
 - `native/resolve.ts` owns validated source, selected fonts, media strings and deeply frozen layout; `layout.ts` compiles all six layouts into fixed-size editable lines, rules, images and semantic tables with explicit overflow diagnostics; `write.ts` emits native text/shapes/images/tables/notes. `paragraphs.ts` normalizes PptxGenJS rich-text paragraph properties to one block per paragraph. P2/P3 Office evidence and font tradeoffs: `pptx-plan.md` §8.9–8.10.
@@ -495,6 +497,7 @@ clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
   - the rule table is `pptx-plan.md` §7.3.
 
 #### 入口点
+- Native `.slides.json` sources are editable `slides` documents, attachable as text, and styled as author documents in the tree. Its Beta export menu opens the shared preview/export controls; ordinary JSON is unchanged.
 - The `export_pptx` L2 tool accepts native sources (prepared before approval, exact bytes applied with binary backup and staged replacement) or legacy HTML (converted on approval). Other HTML entry points are the `.html` preview toolbar, and the file tree's right-click menu — the last two call the same `exportHtmlToPptx(path)` and both flush the editor first, since it reads the file off disk.
 
 #### CSP 安全约束

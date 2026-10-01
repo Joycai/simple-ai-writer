@@ -93,3 +93,12 @@ files through mocked Tauri IPC. Captures English/Chinese, light/dark, wide/240px
 clicks Approve and saves the six-slide PPTX plus a report showing the previous-file backup.
 This verifies browser integration; it does not exercise a live model, Tauri filesystem permissions or Office rendering.
 The P3 evidence remains the unchanged writer/layout's PowerPoint baseline.
+
+
+## Native preview and UI export smoke test (P5)
+
+```sh
+node scripts/pptx/preview-smoke.mjs NEW_OUTPUT_DIR EXTERNAL_NODE_MODULES
+```
+
+Uses installed Chrome and Playwright from the given modules directory. Renders all six layouts through the actual native preview, checks English/Chinese and light/dark at wide/narrow widths, verifies invalid-source blocking and review invalidation after edits, then explicitly writes the PPTX and checks the previous binary backup. Filesystem IPC and project/editor state are fictional; this does not validate a live model, Tauri window, Windows or PowerPoint. Open the emitted PPTX in Office separately. Baseline and remaining release checks: `docs/feature/pptx-plan.md` §8.12.

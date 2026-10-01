@@ -3,7 +3,7 @@
  *
  * One classifier, by extension only — no sniffing, which is also why the answer
  * is available the instant a file is clicked, before anything is read. The
- * five kinds are exactly the five rows of that table, and each one is a
+ * original five kinds follow that table; native slide sources add a sixth. Each is a
  * different *name list*: what a `.docx` gets is not a greyed-out version of
  * what a chapter gets, it is 转换文档 and nothing else.
  *
@@ -16,7 +16,7 @@
  * silently hand a file an export button.
  */
 
-import { isHtmlPath, isImagePath } from "./images";
+import { isHtmlPath, isImagePath, isSlidesPath } from "./images";
 import { isExportableDocument } from "./export";
 import { convertExtOf } from "../import";
 
@@ -25,6 +25,8 @@ export type DocKind =
   | "markdown"
   /** html / htm — editor + sandboxed iframe preview; only 打印 · PDF applies. */
   | "html"
+  /** Native slide source: text editing and resolved slide preview. */
+  | "slides"
   /** A picture the editor renders instead of editing. */
   | "image"
   /** docx / xlsx / pdf / pptx — nothing to edit, but 转换文档 has an outcome. */
@@ -33,6 +35,7 @@ export type DocKind =
   | "opaque";
 
 export function docKindOf(path: string): DocKind {
+  if (isSlidesPath(path)) return "slides";
   if (isImagePath(path)) return "image";
   if (isHtmlPath(path)) return "html";
   if (isExportableDocument(path)) return "markdown";
@@ -49,7 +52,7 @@ export function docKindOf(path: string): DocKind {
  * readouts would be reporting another file's numbers under this file's name.
  */
 export function isTextKind(kind: DocKind | null): boolean {
-  return kind === "markdown" || kind === "html";
+  return kind === "markdown" || kind === "html" || kind === "slides";
 }
 
 /**

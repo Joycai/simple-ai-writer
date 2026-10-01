@@ -55,6 +55,13 @@ export const BUILTIN_WORKFLOWS: readonly BuiltinWorkflow[] = [
     ].join("\n"),
   },
   {
+    id: "pptx-native",
+    name: "原生幻灯片（pptx-native）",
+    description: "新演示文稿首选：用六种原生布局生成可编辑 PPTX：slides.json 格式、示例与审批流程",
+    available: isPptxExportEnabled,
+    body: NATIVE_PPTX_WORKFLOW,
+  },
+  {
     // 生成端契约的第三层（docs/feature/pptx-plan.md §7 D20）：完整的写法契约和
     // 骨架，只在模型**开始写 deck**时进上下文。export_pptx 的描述里只有五条规则，
     // inspect_html 的预检只在写错之后点名；这张卡是写之前的那份。
@@ -103,12 +110,5 @@ export const BUILTIN_WORKFLOWS: readonly BuiltinWorkflow[] = [
       "",
       "10. **导出**：调 export_pptx（作者会在卡片上批准；工具里没有它而有 run_pack 时，交给导出 pack）。结果里的降级清单原样转告作者——那是事实，不是错误。改版时用 read_slides 按页读回行区间，rewrite_lines 改某一页。",
     ].join("\n"),
-  },
-  {
-    id: "pptx-native",
-    name: "原生幻灯片（pptx-native）",
-    description: "用六种原生布局生成可编辑 PPTX：slides.json 格式、示例与审批流程",
-    available: isPptxExportEnabled,
-    body: NATIVE_PPTX_WORKFLOW,
   },
 ];

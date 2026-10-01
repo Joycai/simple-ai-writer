@@ -1034,6 +1034,42 @@
       "bulletList": "无序列表",
       "tidyParagraphs": "整理段落",
       "tidyParagraphsN": "整理段落（{{n}} 处）"
+    },
+    "nativeSlides": {
+      "approximate": "近似预览。PowerPoint 的文字度量可能不同，分享前请在 PowerPoint 中检查导出文件。",
+      "fonts": "所需字体（未嵌入）：{{latin}} / {{cjk}}",
+      "disabled": "在设置 → AI 配置 → 实验室中开启 PPTX 导出。",
+      "changed": "源文件或项目已变化，请重新准备导出。",
+      "done": "已导出：{{path}}",
+      "backup": "原文件已备份：{{path}}",
+      "review": "{{count}} 页 · {{theme}} → {{path}}",
+      "create": "将创建新的 PPTX 文件。",
+      "overwrite": "将覆盖已有 PPTX，覆盖前会备份原文件。",
+      "confirm": "写入 PPTX",
+      "loading": "正在准备预览…",
+      "navigation": "幻灯片导航",
+      "previous": "上一页",
+      "next": "下一页",
+      "notes": "演讲备注",
+      "diagnostics": {
+        "invalid_json": "请使用合法 JSON，不要加 Markdown 代码围栏。",
+        "source_limit": "请拆分为更小的演示文稿。",
+        "unsupported_version": "请使用版本 1。",
+        "invalid_type": "请按原生幻灯片工作流卡检查字段类型。",
+        "unknown_field": "请移除不支持的字段。",
+        "invalid_value": "请使用工作流卡中允许的值。",
+        "limit_exceeded": "请减少内容或拆分到多页。",
+        "duplicate_id": "请为每项使用不同的 id。",
+        "unsafe_path": "请使用项目内的 PNG/JPEG 相对路径，不要跳出目录。",
+        "missing_asset": "请声明引用的图片资源。",
+        "table_width": "每行单元格数量必须与列数一致。",
+        "invalid_image": "请使用可读取的本地 PNG/JPEG。",
+        "image_limit": "请减小图片尺寸或文件大小。",
+        "unsupported_layout": "请选择六种支持的布局之一。",
+        "text_overflow": "请缩短文字或拆页，表格最多六列、七行正文。",
+        "measurement_failed": "请在字体加载后重试，若仍失败请简化文字。",
+        "missing_font": "请安装主题支持的字体：Arial/Aptos，以及 Microsoft YaHei/Noto Sans CJK SC/Arial Unicode MS。"
+      }
     }
   },
   "ai": {

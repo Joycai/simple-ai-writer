@@ -11,6 +11,7 @@
  * measures.
  */
 
+import { isSlidesPath } from "./images";
 import { ASSETS_DIR, safeAssetName } from "../image/assets";
 import { isFolderNoteFile } from "./folderNote";
 
@@ -61,7 +62,7 @@ export function rowKind(name: string, isDir: boolean, parentName: string | null)
   // wherever it sits, so the author can tell it from a chapter at a glance.
   if (isFolderNoteFile(name)) return "note";
   const ext = extOf(name);
-  if (DOC_EXTS.has(ext)) return "doc";
+  if (DOC_EXTS.has(ext) || isSlidesPath(name)) return "doc";
   if (HTML_EXTS.has(ext)) return "deliverable";
   if (IMAGE_EXTS.has(ext)) return "image";
   return "original";
