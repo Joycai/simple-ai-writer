@@ -1,0 +1,32 @@
+{
+  "done": {
+    "toolCallId": "browser",
+    "content": "Exported 6 native slide(s) to /fixture/deck.pptx.\nTheme: paper. Required fonts: Arial, Arial Unicode MS.\nTell the author: fonts are not embedded; recipient fonts and PowerPoint layout may differ. Browser preflight does not verify Office rendering.\nPrevious file backed up to /fixture/.ai-writer/backups/pptx-b6bc0586-ee4f-4b7d-ac8f-a2cecdcecb66.pptx."
+  },
+  "outcome": {
+    "resultPath": "/fixture/deck.pptx",
+    "report": "Exported 6 native slide(s) to /fixture/deck.pptx.\nTheme: paper. Required fonts: Arial, Arial Unicode MS.\nTell the author: fonts are not embedded; recipient fonts and PowerPoint layout may differ. Browser preflight does not verify Office rendering.\nPrevious file backed up to /fixture/.ai-writer/backups/pptx-b6bc0586-ee4f-4b7d-ac8f-a2cecdcecb66.pptx."
+  },
+  "backups": [
+    "/fixture/.ai-writer/backups/pptx-b6bc0586-ee4f-4b7d-ac8f-a2cecdcecb66.pptx"
+  ],
+  "browser": "154.0.8037.58",
+  "scope": "Real browser fonts/layout/writer and UI; filesystem IPC simulated; no live model or Tauri window.",
+  "appVersion": "1.93.12",
+  "sourceFixture": "src/lib/pptx/native/__tests__/fixtures/six-layouts.slides.json",
+  "sourceSha256": "693aae6130e4679a6c21ba8114ce5aca1fb6f4526aa7dcd05306cbf8623c8334",
+  "checks": [
+    "Actual approval button clicked; exact prepared six-slide output written",
+    "Existing binary backed up before replacement",
+    "ZIP CRC verified; six slide XML parts parsed; native table present",
+    "English/Chinese and light/dark cards visually inspected at 608px / 240px card width"
+  ],
+  "office": "Not repeated in P4; unchanged writer/layout covered by P3 evidence",
+  "sha256": {
+    "card-272-en-dark.png": "16b5366147220314e0892393f92546f2b7a5d49a0ed26174606b8fae445ff102",
+    "native.pptx": "c13dde532e2fd664f2ddc5a905e679b06f0edde7e661d0cca620bc9b7655eb7c",
+    "card-640-zh-CN-dark.png": "706ae6608515c6eeb996244f1316a1a0e9a1a33343897efe050331cc2e01db6b",
+    "card-272-zh-CN-light.png": "d0d739cbf622f775b9584c4bbeb78a1d313e31f6aacfd41086674288efc3393b",
+    "card-640-en-light.png": "e7c4f3ab2c50c7439cac71dcfada7fc2d99dca085e08bf56b338de56be12c7ba"
+  }
+}

@@ -79,3 +79,17 @@ pdf = pdfium.PdfDocument(output / "native.pdf")
 for i in range(len(pdf)):
     pdf[i].render(scale=4 / 3).to_pil().save(output / f"powerpoint-{i + 1}.png")
 ```
+
+
+## Native agent approval smoke test (P4)
+
+```sh
+node scripts/pptx/approval-smoke.mjs /tmp/pptx-approval-new /path/to/runtime/node_modules
+```
+
+Requires local Chrome and Playwright, like the native baseline runner. The output directory must be new.
+Runs production `export_pptx`, native font/layout/writer, `ApprovalCard` and `applyProposal` against fictional
+files through mocked Tauri IPC. Captures English/Chinese, light/dark, wide/240px approval cards, then
+clicks Approve and saves the six-slide PPTX plus a report showing the previous-file backup.
+This verifies browser integration; it does not exercise a live model, Tauri filesystem permissions or Office rendering.
+The P3 evidence remains the unchanged writer/layout's PowerPoint baseline.

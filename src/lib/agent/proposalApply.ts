@@ -400,6 +400,22 @@ export async function applyProposal(
     }
 
     case "pptx": {
+      if (proposal.format === "native") {
+        const { isPptxExportEnabled } = await import("../pptx/flag");
+        if (!isPptxExportEnabled()) throw new Error("PPTX export is disabled. Enable it and request a new export.");
+        const project = deps.projectPath();
+        if (!project) throw new Error("Open the original project before exporting.");
+        if (isSamePath(deps.activeFilePath(), proposal.sourcePath)) await deps.editor().saveNow();
+        const { applyNativePptx } = await import("../pptx/native/approval");
+        const backup = await applyNativePptx(project, proposal.sourcePath, proposal.path, proposal.native, signal);
+        await deps.refreshFileTree();
+        return { resultPath: proposal.path, report: [
+          `Exported ${proposal.slides} native slide(s) to ${proposal.path}.`,
+          `Theme: ${proposal.native.theme}. Required fonts: ${proposal.native.fonts.latin}, ${proposal.native.fonts.cjk}.`,
+          "Tell the author: fonts are not embedded; recipient fonts and PowerPoint layout may differ. Browser preflight does not verify Office rendering.",
+          backup ? `Previous file backed up to ${backup}.` : "",
+        ].filter(Boolean).join("\n") };
+      }
       // Applied here rather than in the tool for the same reason `illustrate`
       // is: the work needs something the tool loop does not have. There it was
       // the author's money; here it is a DOM — the page has to be laid out by

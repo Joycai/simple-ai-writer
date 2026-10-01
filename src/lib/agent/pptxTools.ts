@@ -1,20 +1,4 @@
-/**
- * `export_pptx` — turn a project `.html` page into a PowerPoint deck.
- *
- * The division of labour is the whole point: the model writes HTML, which is
- * the layout language it is actually good at and which this app already
- * previews, reviews and lets the author edit. The conversion itself runs no
- * model at all — it renders the page and reads the browser's own layout (see
- * lib/pptx). So the tool's job here is only to check the paths and put a card
- * in front of the author; the work happens on approval, in `applyProposal`,
- * because that is where a renderer (and therefore a DOM to lay the page out
- * in) exists.
- *
- * Gated by the Beta switch — `routeTools` strips this tool entirely when the
- * author has not turned it on, so the model never proposes a feature that is
- * off (lib/agent/routing.ts).
- */
-
+/** Native exports prepare an immutable artifact before approval; legacy HTML stays compatible. */
 import { fileExists, readFile } from "../fs/fileio";
 import { resolveWorkspacePath } from "../paths";
 import { pptxPathFor } from "../pptx";
@@ -27,7 +11,7 @@ let proposalCounter = 0;
 
 export async function exportPptxTool(
   toolCallId: string,
-  args: { html_path?: string; out_path?: string; reason?: string },
+  args: { source_path?: string; html_path?: string; out_path?: string; reason?: string },
   ctx: ToolContext,
 ): Promise<ToolResult> {
   if (!ctx.requestApproval) {
@@ -37,18 +21,23 @@ export async function exportPptxTool(
     };
   }
 
-  const rawSource = args.html_path?.trim();
+  if (args.source_path?.trim() && args.html_path?.trim() &&
+      resolveWorkspacePath(ctx.projectPath, args.source_path.trim()) !== resolveWorkspacePath(ctx.projectPath, args.html_path.trim())) {
+    return { toolCallId, content: "Error: source_path and html_path disagree. Supply one source." };
+  }
+  const rawSource = args.source_path?.trim() || args.html_path?.trim();
   if (!rawSource) {
-    return { toolCallId, content: "Error: 'html_path' is required — the .html page to convert." };
+    return { toolCallId, content: "Error: 'source_path' is required — a .slides.json or .html file (html_path is a legacy alias)." };
   }
   const source = resolveWorkspacePath(ctx.projectPath, rawSource);
   if (!source) {
     return { toolCallId, content: "Error: Path is outside the project (the app's .ai-writer data is off-limits)." };
   }
-  if (!/\.html?$/i.test(source)) {
+  const native = /\.slides\.json$/i.test(source);
+  if (!native && !/\.html?$/i.test(source)) {
     return {
       toolCallId,
-      content: `Error: "${source}" is not an .html file. Write the deck as HTML with create_file first, then export it.`,
+      content: `Error: "${source}" is not an .html file or .slides.json deck. Read the PPTX workflow and create the source first.`,
     };
   }
   if (!(await fileExists(source))) {
@@ -58,12 +47,37 @@ export async function exportPptxTool(
     };
   }
 
-  const target = resolveWorkspacePath(ctx.projectPath, args.out_path?.trim() || pptxPathFor(source));
+  const target = resolveWorkspacePath(ctx.projectPath, args.out_path?.trim() || (native ? source.replace(/\.slides\.json$/i, ".pptx") : pptxPathFor(source)));
   if (!target) {
     return { toolCallId, content: "Error: the destination is outside the project." };
   }
   if (!/\.pptx$/i.test(target)) {
     return { toolCallId, content: `Error: "${target}" does not end in .pptx.` };
+  }
+
+  if (native) {
+    const { prepareNativePptx, formatNativeDiagnostics, releaseNativePptx } = await import("../pptx/native/approval");
+    let artifactId: string | undefined;
+    try {
+      const prepared = await prepareNativePptx(ctx.projectPath, source, target);
+      if (!prepared.ok) return { toolCallId, content: `Error: native PPTX preflight failed. Fix these fields and export again:\n${formatNativeDiagnostics(prepared.diagnostics)}` };
+      artifactId = prepared.receipt.artifactId;
+      const decision = await ctx.requestApproval({
+        kind: "pptx", format: "native", id: `pptx-${artifactId}`, path: target,
+        sourcePath: source, slides: prepared.receipt.slides, native: prepared.receipt, reason: args.reason,
+      });
+      // The shared approval channel reports apply errors as rejected decisions.
+      // Keep those distinct from the author's refusal so stale-input recovery can proceed.
+      if (!decision.approved && decision.reason?.startsWith("apply failed:"))
+        return { toolCallId, content: `Error: ${decision.reason}. Prepare a fresh export for review if still requested.` };
+      return { toolCallId, content: decision.approved
+        ? decision.backupPath ?? `Exported to ${target}.`
+        : `The user REJECTED this export${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not retry without addressing their feedback.` };
+    } catch (error) {
+      return { toolCallId, content: `Error: ${String(error)}` };
+    } finally {
+      if (artifactId) releaseNativePptx(artifactId);
+    }
   }
 
   // The division is text-level, so it costs one read and is knowable before

@@ -44,6 +44,11 @@ vi.mock("../../asr", () => ({
   speakersMissing: () => false,
 }));
 
+const nativeApply = vi.fn(async () => "/p/.ai-writer/backups/old.pptx");
+let pptxEnabled = true;
+vi.mock("../../pptx/flag", () => ({ isPptxExportEnabled: () => pptxEnabled }));
+vi.mock("../../pptx/native/approval", () => ({ applyNativePptx: (...a: unknown[]) => nativeApply(...(a as [])) }));
+
 import { applyProposal, type ProposalApplyDeps } from "../proposalApply";
 import type { Proposal } from "../registry";
 
@@ -214,5 +219,33 @@ describe("applyProposal — kinds whose approval is the work", () => {
     }, deps);
     expect(writeWorkbook).toHaveBeenCalled();
     expect(out.resultPath).toBe("/p/t.xlsx");
+  });
+});
+
+
+describe("native PPTX apply integration", () => {
+  const proposal = { kind: "pptx", format: "native", sourcePath: "/p/deck.slides.json", path: "/p/deck.pptx", slides: 2,
+    native: { theme: "paper", fonts: { latin: "Arial", cjk: "Microsoft YaHei" } } };
+  it("writes the prepared artifact and reports fonts, risks and backup", async () => {
+    pptxEnabled = true;
+    const { deps, buffer } = makeDeps(proposal.sourcePath);
+    const result = await apply(proposal, deps);
+    expect(buffer.saveNow).toHaveBeenCalled();
+    expect(nativeApply).toHaveBeenCalledWith("/p", proposal.sourcePath, proposal.path, proposal.native, undefined);
+    expect(deps.refreshFileTree).toHaveBeenCalled();
+    expect(result.report).toContain("fonts are not embedded");
+    expect(result.report).toContain("backups/old.pptx");
+    expect(result.resultPath).toBe(proposal.path);
+  });
+  it("Beta disabled while the card waited prevents writing", async () => {
+    pptxEnabled = false;
+    await expect(apply(proposal, makeDeps().deps)).rejects.toThrow("disabled");
+    expect(nativeApply).not.toHaveBeenCalled(); pptxEnabled = true;
+  });
+  it("failed editor save cannot export stale on-disk content", async () => {
+    const { deps, buffer } = makeDeps(proposal.sourcePath);
+    buffer.saveNow.mockRejectedValueOnce(new Error("save failed"));
+    await expect(apply(proposal, deps)).rejects.toThrow("save failed");
+    expect(nativeApply).not.toHaveBeenCalled();
   });
 });
