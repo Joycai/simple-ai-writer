@@ -181,8 +181,8 @@ export function ConfigRestoreModal() {
         {phase === "done" && (
           <>
             <div className={s.centered}>
-              <div className={s.centeredTitle}>{t("sync.cfgRestoreDone")}</div>
-              <div className={s.footNote} style={{ marginTop: 10 }}>
+              <div className={`${s.centeredTitle} ${s.restoreReceiptEnter}`}>{t("sync.cfgRestoreDone")}</div>
+              <div className={`${s.footNote} ${s.restoreReceiptEnter}`} style={{ marginTop: 10 }}>
                 {t("sync.cfgRestoreDoneNote")}
               </div>
               {errorText && (

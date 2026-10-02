@@ -453,6 +453,9 @@
 .btnLink:hover { color: var(--stg-text-warm); }
 
 /* ── Empty / progress / result ───────────────────────────────────────────── */
+.restoreReceiptEnter {
+  animation: fadeIn 200ms var(--ease-out);
+}
 .centered { padding: 34px 40px 30px; text-align: center; }
 .centeredPath { font: 400 13px var(--font-mono); color: var(--stg-text-faint); }
 .centeredTitle { margin-top: 16px; font: 600 17px/1.4 var(--font-serif-settings, var(--font-serif)); }

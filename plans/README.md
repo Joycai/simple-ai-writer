@@ -5,8 +5,8 @@
 
 ## 方案一览
 
-> 本表覆盖全部十一批（001–054）。状态与严重度以各批表格为准，两处不一致时改这里。
-> **唯一仍未执行的是 017**；其余 53 份均已落地。
+> 本表覆盖全部十二批（001–056；017 于第十二批刷新）。状态与严重度以各批表格为准，两处不一致时改这里。
+> **017、055、056 已实施，真实 Tauri 目检待验**；001–054 中其余 53 份均已落地。
 >
 > **2026-09-12：38 份方案文件已删，本表与各批记录原样保留。**
 > 方案文件是一次性的施工单（改哪几行、怎么验），执行完就没有读者；真正留得住的
@@ -41,7 +41,7 @@
 | 014 | ⌘K 命令面板去动画（决策变更） | MEDIUM | DONE |
 | 015 | 右键菜单入场（006 的漏网之鱼） | MEDIUM | DONE（阻断 A 已解除） |
 | 016 | 审批卡入场 | MEDIUM | DONE（阻断 A 已解除） |
-| 017 | [首次运行向导换步 enter-only](017-onboarding-step-enter-only.md) | LOW | TODO（阻断 B 已澄清解除） |
+| 017 | [首次运行向导换步 enter-only](017-onboarding-step-enter-only.md) | LOW | IMPLEMENTED（纯淡入、键盘即时；Tauri 目检待验） |
 | 018 | 导出按钮回执淡入 | LOW | DONE（阻断 A 已解除） |
 | 019 | 模块内 @keyframes 的全局唯一性守卫 | LOW | DONE |
 | 020 | [集合/装订子系统补齐悬停过渡](020-collections-transitions.md) | MEDIUM | DONE |
@@ -79,6 +79,8 @@
 | 052 | [滑杆吸附仍在动 left/width（050 的漏网）](052-slider-snap-composite.md) | LOW | DONE（像素等价已实测） |
 | 053 | [标签闪线改走合成层（box-shadow → 伪元素 scaleY）](053-tabflash-composite.md) | LOW | DONE（目检待作者） |
 | 054 | App.tsx 一段注释仍在描述 031 删掉的 320ms 过渡 | LOW | DONE |
+| 055 | [生成完成结果卡淡入](055-lore-result-fade.md) | LOW | IMPLEMENTED（Tauri 目检待验） |
+| 056 | [恢复配置完成回执淡入](056-config-restore-receipt-fade.md) | LOW | IMPLEMENTED（Tauri 目检待验） |
 
 > 001–005 已随 [PR #273](https://github.com/Joycai/simple-ai-writer/pull/273) 合入 main（基准 0f49132）。
 > 006–012（backlog 第二批，基准 9e16885）已于 2026-08-22 执行完毕，`pnpm tsc --noEmit` 与 `pnpm build` 通过。
@@ -934,3 +936,22 @@ animation-duration:1.6s!important      → 12（048 +1）
 1. **051** 打开系统「减弱动态效果」后：设置 → 上下文与记忆点「硬上限」指路应一帧到位；扮演对话用回退条跳轮同样一帧到位。关掉减动效则两处都应与改动前一样平滑。
 2. **053** AI 面板会话标签条：当前标签顶部那条 2px 赭线仍在、切换标签跟着走；已有空标签时按「新会话」，顶线闪一次的观感与改动前相同；标签最上沿 1–2px 处点击仍能切换会话（验 `pointer-events: none`）。
 3. **052** 三个滑杆的吸附手感、拖拽跟手、焦点环与禁用态。
+
+
+## 第十二批（055–056 + 刷新 017，2026-10-03，基准 1e0e0d22）
+
+用户已选中本轮机会筛查的全部 3 项。它们均为 LOW 加法项；三项现已实施并通过代码审查；真实 Tauri 运行界面验收尚未完成。
+
+| 推荐顺序 | 方案 | 状态 | 实施文件 | 依赖 |
+| --- | --- | --- | --- | --- |
+| 1 | [055 — 生成结果卡 160ms 淡入](055-lore-result-fade.md) | IMPLEMENTED（Tauri 目检待验） | LoreGenerator.module.css | 无 |
+| 2 | [056 — 恢复完成回执 200ms 淡入](056-config-restore-receipt-fade.md) | IMPLEMENTED（Tauri 目检待验） | ConfigRestoreModal.tsx、sync.module.css | 无 |
+| 3 | [017 — 向导换步，鼠标淡入、键盘即时](017-onboarding-step-enter-only.md) | IMPLEMENTED（Tauri 目检待验） | Onboarding.tsx | 无 |
+
+三份互不依赖，按上表由简单到复杂执行。前两份复用全局 fadeIn；017 在原 DOM 上使用一次性 WAAPI 透明度入场，避免 keyed 容器重置输入/焦点，并明确捕获异步动作的输入方式。
+
+017 复用原编号，旧阻断澄清结论保持不变。其旧施工细节由本次选定的纯淡入、键盘即时要求替代；历史版本仍在 Git 中。原批次记录保留，用本节与方案文件判断当前执行内容。
+
+全批曲线为项目现有 `--ease-out = cubic-bezier(0.32, 0.72, 0, 1)`。减动效保留轻淡入，不新增位置变化；高频导航、命令面板、文档拖放、知识库卡片 stagger 与重置确认均未纳入。
+
+实施验收（2026-10-03）：类型检查、完整生产构建（含 prototypes）及 CSS keyframe/class 引用守卫（2 文件、5 测试）通过。审查修正了恢复完成 class 曾误应用到其他阶段的范围问题，最终只落在 done 标题和说明。未通过真实生成/恢复操作验动画，未覆盖真实配置；当前无这三个流程的隔离 Tauri fixture，视觉手感与系统减动效实测仍待验。离线全套测试通过（排除 `**/live.*.test.ts`，399 文件、6,238 测试）。首次默认测试意外继承环境中的 `ORCA_KEY`，启用了可选在线测试；已终止全部相关进程。其日志只有启动信息，无法确认外部请求是否成功或计费；之后的离线测试清除了凭据环境。
