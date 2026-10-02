@@ -1,0 +1,188 @@
+/*
+ * 莫兰迪花园 — 排版主题 / Morandi Garden — typography
+ *
+ * 参考 Kitsunee-CN/MorandiGarden（README 声明 MIT）：分色标题、豆绿竖条、
+ * 列表引导线、圆角引文、轻盈表格和玫瑰色链接。本文件为重新编写的适配。
+ * Inspired by https://github.com/Kitsunee-CN/MorandiGarden (README: MIT).
+ * Independently written adaptation of its coloured headings, sage heading rule,
+ * list guides, rounded quotes, airy tables and rose links.
+ *
+ * 颜色全部读应用令牌：配 morandi-garden-light.css 最接近原作，也随深色外观变化。
+ * All colours follow app tokens; pair with morandi-garden-light.css for the
+ * source palette. Purple / blue / rose use the app's readable semantic hues.
+ *
+ * 使用：设置 → 外观 → 打开主题文件夹，复制本文件，在 Markdown 排版主题中选中。
+ * 也可放入项目的 .ai-writer/themes/，用于该项目。字体使用本机已安装字体并回退
+ * 到应用字体方案；不随主题分发原作字体。可调整下面的 --md-* 旋钮。
+ * Install via Settings → Appearance → Open themes folder, then select it under
+ * Markdown Theme. A project's .ai-writer/themes/ also accepts this file.
+ * Fonts use installed faces with app fallbacks; upstream fonts are not bundled.
+ * Adjust the --md-* knobs below to customise spacing and heading sizes.
+ */
+
+:root {
+  --theme-name: 莫兰迪花园 · 排版;
+  --theme-kind: markdown;
+  --theme-extends: clean;
+  --theme-version: 1;
+  --theme-author: Codex / Kitsunee-CN (design inspiration);
+}
+
+.md-body {
+  --md-font-body: "Alibaba PuHuiTi 3.0", "PuHuiTi", var(--font-sans);
+  --md-font-heading: var(--md-font-body);
+  --md-font-mono: "JetBrains Mono NL", var(--font-mono);
+  --md-scale: 1;
+  --md-line: 1.8;
+  --md-letter: normal;
+  --md-para-gap: 1.1em;
+  --md-para-indent: 0;
+  --md-h-weight: 700;
+  --md-h-space-top: 1.8em;
+  --md-h-space-bottom: 0.65em;
+  --md-h1-size: 2.2em;
+  --md-h1-weight: 700;
+  --md-h1-letter: 0.055em;
+  --md-h1-align: left;
+  --md-h2-size: 1.8em;
+  --md-h2-align: left;
+  --md-h3-size: 1.5em;
+  --md-h4-size: 1.3em;
+  --md-list-indent: 1.8em;
+  --md-quote-style: italic;
+  --md-quote-border: 0.25em solid var(--color-amber);
+  --md-quote-bg: color-mix(in srgb, var(--md-color-accent) 7%, var(--color-bg-base));
+  --md-hr-line: none;
+  --md-hr-mark: "";
+  --md-hr-height: 0.125em;
+  --md-color-border: var(--color-border);
+  --morandi-purple: color-mix(in oklab, var(--color-type-image-fg) 65%, var(--md-color-dim));
+  --morandi-blue: color-mix(in oklab, var(--color-type-video-fg) 60%, var(--md-color-dim));
+  --morandi-rose: var(--color-type-asr-fg);
+  --morandi-table-rule: color-mix(in srgb, var(--md-color-accent) 45%, var(--color-bg-base));
+}
+
+/* 标题层级 / Heading hierarchy */
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4,
+.md-body h5,
+.md-body h6 {
+  line-height: 1.4;
+  letter-spacing: 0.055em;
+}
+.md-body h1 {
+  color: var(--color-amber);
+  border-bottom: 0.075em solid var(--md-color-border);
+  padding-bottom: 0.3em;
+}
+.md-body h2 {
+  color: var(--md-color-accent);
+  border-left: 0.15em solid var(--md-color-accent);
+  padding-left: 0.45em;
+  font-weight: 800;
+}
+.md-body h3 { color: var(--morandi-purple); padding-left: 0.25em; }
+.md-body h4 { color: var(--morandi-blue); }
+.md-body h5 {
+  color: color-mix(in oklab, var(--color-amber) 65%, var(--md-color-dim));
+  font-size: 1.1em;
+  font-style: italic;
+}
+.md-body h6 { color: var(--md-color-dim); font-size: 1em; font-weight: 400; }
+
+/* 链接与代码 / Links and code */
+.md-body a {
+  color: var(--morandi-rose);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--morandi-rose) 35%, transparent);
+  text-underline-offset: 0.22em;
+}
+.md-body a:hover { text-decoration-color: var(--morandi-rose); }
+.md-body code {
+  color: var(--morandi-purple);
+  background: var(--md-quote-bg);
+  padding: 0.15em 0.3em;
+  border-radius: 0.3em;
+  letter-spacing: 0.025em;
+}
+.md-body pre {
+  background: var(--md-quote-bg);
+  padding: 1.2em;
+  border: 1px solid var(--md-color-border);
+  border-radius: 0.6em;
+  line-height: 1.8;
+}
+.md-body pre code {
+  color: var(--md-color-text);
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  letter-spacing: normal;
+}
+
+/* 嵌套列表：仅沿子列表画线，短条目不会产生越界线段。
+ * Nested list guides use the list box, so short items cannot overrun it. */
+.md-body li { margin: 0.5em 0; line-height: 1.7; }
+.md-body li::marker { color: var(--morandi-purple); }
+.md-body li > ul,
+.md-body li > ol {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  margin-left: 0.15em;
+  border-left: 1px solid var(--morandi-purple);
+  padding-left: 1.5em;
+}
+.md-body ul ul { list-style-type: circle; }
+.md-body ul ul ul { list-style-type: square; }
+.md-body li > ul ul,
+.md-body li > ol ol { border-left-color: var(--md-color-accent); }
+.md-body li > ul ul ul,
+.md-body li > ol ol ol { border-left-color: var(--color-amber); }
+
+/* 圆角引文：层级越深底色越淡 / Rounded quotes, lighter nested washes */
+.md-body blockquote {
+  margin: 1.5em 0;
+  padding: 1em 1.2em;
+  border-radius: 0 0.6em 0.6em 0;
+}
+.md-body blockquote > :last-child { margin-bottom: 0; }
+.md-body blockquote blockquote {
+  margin: 0.8em 0;
+  border-left-color: var(--morandi-purple);
+  background: color-mix(in srgb, var(--md-color-accent) 4%, var(--color-bg-base));
+}
+.md-body blockquote blockquote blockquote {
+  border-left-color: var(--morandi-blue);
+  background: color-mix(in srgb, var(--md-color-accent) 2%, var(--color-bg-base));
+}
+
+/* 表格与分隔线 / Tables and rules */
+.md-body table { margin: 2em 0; font-size: 0.95em; }
+.md-body th,
+.md-body td { border: 1px solid var(--morandi-table-rule); padding: 0.8em 1em; }
+.md-body th {
+  background: color-mix(in srgb, var(--md-color-accent) 10%, var(--color-bg-base));
+  color: var(--md-color-accent);
+  font-weight: 700;
+}
+.md-body tbody tr:hover { background: var(--md-quote-bg); }
+.md-body hr {
+  background: color-mix(in srgb, var(--md-color-accent) 28%, var(--color-bg-base));
+  margin: 2.5em 0;
+}
+.md-body img { border-radius: 0.5em; margin-inline: auto; }
+
+@media print {
+  .md-body h1, .md-body h2, .md-body h3, .md-body h4,
+  .md-body h5, .md-body h6 { break-after: avoid; }
+  .md-body pre, .md-body blockquote, .md-body tr,
+  .md-body img { break-inside: avoid; }
+  .md-body thead { display: table-header-group; }
+  .md-body blockquote, .md-body pre, .md-body th, .md-body hr {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -1,0 +1,101 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   莫兰迪花园 · 豆绿 — 外观主题 / an appearance theme
+
+   参考 Kitsunee-CN 的 Typora 主题 MorandiGarden（README 声明 MIT）。
+   保留近白底 #FBFDFB、深褐灰正文 #403C3C、豆绿 #506956 与暖棕 #7A5F52；
+   其余界面令牌由本应用的明度台阶生成。配套排版：morandi-garden.css。
+   Inspired by Kitsunee-CN/MorandiGarden (MIT, as declared in its README).
+   Source ground, body text, sage accent and clay companion are retained;
+   other shell tokens use this app's lightness ramp. Pair with morandi-garden.css.
+   Source: https://github.com/Kitsunee-CN/MorandiGarden
+   This is an independently written adaptation; no upstream fonts are bundled.
+
+   怎么用 / How to use
+     1. 设置 → 外观 → 「打开主题文件夹」，把这个文件放进去。
+        Settings → Appearance → "Open themes folder", drop it in.
+        外观主题只能装在这里；项目的 .ai-writer/themes/ 只收排版主题。
+        Appearance themes install here only; a project's .ai-writer/themes/
+        takes typography themes.
+     2. 设置页开着时文件夹是被监听的，卡片自己出现；否则点「重新载入」。
+        The folder is watched while Settings is open; otherwise hit Reload.
+     3. 在「外观主题」里选中它——它排在「浅色时」那一档。
+        Pick it under "Appearance themes", in the "When light" band.
+
+   改它 / Making it yours
+     · 文件名就是主题 id（morandi-garden-light.css → morandi-garden-light）。复制一份改个名，就是新主题。
+       The file name is the theme id. Copy and rename = a new theme.
+     · 只有下面这 41 个核心令牌要写，其余两百多个界面颜色应用自己按公式推。
+       Only the 41 core tokens below need writing — the app derives the rest.
+     · 写别的（别的选择器、普通 CSS 属性、@media）会被逐条丢弃并在设置卡片上
+       列出原因，文件本身永远不会被改写。
+       Anything else (other selectors, plain properties, @media) is dropped
+       rule by rule and listed on the settings card; the file is never rewritten.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 元数据 / Metadata ───────────────────────────────────────────────────── */
+:root {
+  --theme-name: 莫兰迪花园 · 豆绿;
+  --theme-kind: ui;
+  --theme-scheme: light;
+  --theme-extends: paper;
+  --theme-version: 1;
+  --theme-author: Codex / Kitsunee-CN (palette inspiration);
+}
+
+/* ── 令牌 / Tokens ───────────────────────────────────────────────────────── */
+:root {
+  /* 底 / Grounds */
+  --color-bg-base:            #FBFDFB;
+  --color-bg-surface:         #FBFFFB;
+  --color-bg-elevated:        #EFF3F0;
+  --color-bg-hover:           #E5E9E6;
+  --color-bg-tinted:          #FBFDFB;   /* ＝底 / = the ground */
+  --color-bg-overlay:         rgba(32, 35, 33, 0.3);
+
+  /* 文字 / Text */
+  --color-text-primary:       #403C3C;
+  --color-text-secondary:     #525552;
+  --color-text-muted:         #7E827F;
+  --color-text-faint:         #A9ADAA;
+  --color-text-ghost:         #C2C6C3;
+
+  /* 强调 / Accent */
+  --color-sienna:             #506956;   /* 唯一强调色：1px 线、填底、焦点环三用 / the one accent: rules, fills, focus ring */
+  --color-sienna-hover:       #405946;
+  --color-amber:              #7A5F52;   /* 第二色 / the companion */
+  --color-amber-soft:         #F0E7E0;
+
+  /* 线 / Rules */
+  --color-border:             #DDE6DF;
+  --color-border-soft:        #E5ECE6;
+  --color-border-strong:      #7A5F52;
+
+  /* 状态 / Status */
+  --color-success:            #6F9B62;
+  --color-warning:            #B08A3E;
+  --color-error:              #B0524A;
+
+  /* 模型能力标签 / Model-type tags */
+  --color-type-text-bg:       #E5E8D3;
+  --color-type-text-fg:       #63692D;
+  --color-type-multimodal-bg: #F0DFD2;
+  --color-type-multimodal-fg: #98512E;
+  --color-type-image-bg:      #E9DCEA;
+  --color-type-image-fg:      #7C5083;
+  --color-type-video-bg:      #DBE3EE;
+  --color-type-video-fg:      #4E6390;
+  --color-type-vision-bg:     #DAE6DC;
+  --color-type-vision-fg:     #466A4E;
+  --color-type-asr-bg:        #EEDADF;
+  --color-type-asr-fg:        #8C4458;
+
+  /* 投影与毛玻璃 / Elevation and glass */
+  --shadow-sm:                0 1px 3px rgba(32, 35, 33, 0.07);
+  --shadow-md:                0 2px 16px rgba(32, 35, 33, 0.11);
+  --shadow-lg:                0 4px 24px rgba(32, 35, 33, 0.11);
+  --shadow-xl:                0 16px 56px rgba(32, 35, 33, 0.24);
+  --shadow-drawer:            -28px 0 56px rgba(32, 35, 33, 0.18);
+  --glass-bg:                 rgba(251, 255, 251, 0.85);
+  --glass-bg-strong:          rgba(251, 255, 251, 0.72);
+  --glass-border:             1px solid rgba(32, 35, 33, 0.09);
+}
