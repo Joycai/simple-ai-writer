@@ -1,134 +1,98 @@
-# 017 — 首次运行向导换步：enter-only 淡入
+# 017 — 首次运行向导换步：鼠标触发的纯淡入
 
-- **Status**: TODO（2026-08-26 解除阻断）。曾因「阻断 B」回退并标记 BLOCKED；该阻断经实测证明是测量产物而非缺陷，见 `docs/issues/motion-enter-only-hidden-tab.md`。**本方案内容无需修改，可原样执行**
-- **Commit**: 78160c2
-- **Severity**: LOW（加法项）
-- **Category**: 遗漏机会（空间连续性）
-- **Estimated scope**: 1 个 TSX 文件，~8 行（含 2 行 import）
+- **Status**: IMPLEMENTED（2026-10-03；代码审查及机械检查通过，真实 Tauri 目检待验）
+- **Commit**: 1e0e0d22
+- **Severity**: LOW
+- **Category**: Missed opportunities / 状态指示
+- **Estimated scope**: 1 个 TSX 文件，约 60 行；无新依赖
 
 ## Problem
 
-四步向导的 1→2→3→4 是硬切。面板整体有一次入场（`Onboarding.module.css:22` 的 `scaleIn 220ms`），方案 013 又给它补了谢幕淡出（`closing` + `modal-closing`），**唯独中间的换步没有任何桥接**——而向导底部一直画着进度点和「1 / 4」，在明示这是一段有方向的路径：
+项目根目录：`/Users/caizhengxu/github/simple-ai-writer`。以下相对路径从这里解析。
+`src/components/onboarding/Onboarding.tsx:362`：
 
 ```tsx
-// src/components/onboarding/Onboarding.tsx:362-364 — 现状
           <div className={styles.form}>
             {renderStep()}
           </div>
 ```
 
-`renderStep()`（`:153`）按 `step` 返回四个片段之一，四个分支各自 `return (<>…</>)`（`:155-156`、`:218-219`、`:275-276`，以及 step 4 的分支）。React 原地 reconcile，整块 50px padding 的表单内容一帧换掉。
+内部步骤直接替换，外框已经有 scaleIn 220ms 入场和 160ms 谢幕。换步是罕见的首次使用动作，适合轻量状态桥接。键盘推进必须即时，按钮与导航不应随内容淡入。
 
-这是全应用**频率最低**的界面——每位作者一生看一次。按频率闸门，这里正是「取悦预算」该花的地方，也是唯一花得起的地方。
+历史：017 曾因后台标签页时间轴暂停而误报阻断；`docs/issues/motion-enter-only-hidden-tab.md` 已澄清，保持该结论，不重新调查。本次更新沿用 enter-only、无串行等待的决定。旧稿的 keyed Motion 容器、6px 位移及「根 MotionConfig 自动处理 raw transform」说明不再作为实施依据：本次用户选中的是纯透明度、键盘即时的方案。
 
 ## Target
 
-把已有的 `<div className={styles.form}>` 换成一个按 `step` 取 key 的 `motion.div`，**enter-only**：只有 `initial` / `animate`，**没有 `AnimatePresence`，没有 `exit`**。
+新步骤立即挂载，只有鼠标/触摸点击引发的换步给内容播放 opacity 0 → 1，200ms，`cubic-bezier(0.32, 0.72, 0, 1)`，delay 0，单次，fill none。键盘、辅助技术/程序化 click（detail 为 0）不动画。异步保存和文件选择必须在调用开始时捕获该布尔值，不能在 await 后读取事件或全局输入模态。
 
-```tsx
-// src/components/onboarding/Onboarding.tsx — 目标（替换 :362-364 三行）
-          {/* Enter-only（照 AiPanel.tsx:1410 的注释与方案 004 的先例）：
-              换步是直接操纵，新一步应立即落位；keyed motion.div 会重置子树，
-              所以这里面不能有本地 useState——本组件的状态全在组件体上。 */}
-          <motion.div
-            key={step}
-            className={styles.form}
-            variants={panelFade}
-            initial="initial"
-            animate="animate"
-            transition={springPanel}
-          >
-            {renderStep()}
-          </motion.div>
-```
+只动画 `.form` 的直接内容元素，排除 `.spacer`、`.stepNav`；末步 `.final` 不整块动画，而是动画它的直接内容元素，排除 `.nextBtn`。不重挂载 `.form`，不改变 flex 子元素关系，不强行移动焦点。当前 React 分支本身造成的焦点行为保持原状；不承诺跨步骤保留一个已删除控件的焦点。
 
-需要新增的两行 import：
-
-```tsx
-import { motion } from "motion/react";
-import { panelFade, springPanel } from "../../lib/motion";
-```
-
-（`../../lib/motion` 是从 `src/components/onboarding/` 出发的正确相对路径；照 `src/components/layout/Sidebar.tsx` 的 import 形式核对。）
-
-### 为什么**不能**用 `AnimatePresence mode="wait"`
-
-这一点是硬性的，仓库已经否决过两次：
-
-1. 方案 004 就是专门把 `mode="wait"` 从侧栏标签切换里**拆掉**的（Status: DONE）。
-2. `src/components/ai/AiPanel.tsx:1410-1418` 的注释写着理由：*"an AnimatePresence `mode=\"wait\"` crossfade would hold the outgoing branch on screen for the length of its exit before the new one appears, and a task switch is a direct manipulation that should land under the cursor immediately."*
-
-作者点「下一步」之后必须**立刻**看到下一步。串行的进出场会让每次换步白等两段弹簧时长。
-
-### 为什么把 `.form` 本身变成 motion 元素，而不是在里面再包一层
-
-`.form` 是 `flex: 1` 的 flex 列容器（`Onboarding.module.css:144-149`），而 `renderStep()` 返回的是**片段**，其子元素（含 `styles.spacer`）依赖这个 flex 上下文。在中间插一层新的 div 会把 spacer 的伸缩撑开逻辑打断，布局会塌。让 `motion.div` 直接**接管** `className={styles.form}`，flex 上下文与子元素关系一模一样。
+使用浏览器 WAAPI 给已有内容节点播放一次透明度动画，原因是这样可在不引入包装层、不加 key 重置输入子树的情况下重播同一节点；不扩展到按钮、hover 或列表。每次步骤改变和组件卸载取消该次动画，避免旧动画残留。不是需要 springs/AnimatePresence 的进退场。
 
 ## Repo conventions to follow
 
-- Motion 是设计规范里唯一被批准的 JS 动画库，且**只用于**转场与浮层；本用法属于其中明列的 "Screen / content switches" 一类（见 `docs/reference/design-system.md` → 例外 · 转场与浮层）。
-- 精确照抄的范本：`src/components/layout/Sidebar.tsx:121-130`
-
-```tsx
-      {/* Enter-only（照 AiPanel.tsx:1384 的注释与先例）：标签切换是直接操纵，
-          新面板应立即落位；keyed motion.div 仍会重置子树。 */}
-      <motion.div
-        key={projectPath ? activeSideTab : "empty"}
-        className={isTree ? styles.contentFlush : styles.content}
-        variants={panelFade}
-        initial="initial"
-        animate="animate"
-        transition={springPanel}
-      >
-```
-
-- `panelFade`（`opacity` + 6px 纵向位移）与 `springPanel` 都在 `src/lib/motion.ts`，**直接复用，不要新建预设、不要写内联 transition 对象**。
-- `<MotionConfig reducedMotion="user">` 在 `App.tsx` 根部，本处自动遵循 reduced-motion，**不需要**任何本地处理。
-
-## 两条已核实、执行时不必再查的前提
-
-1. **keyed 重挂载是安全的。** `key={step}` 会在每次换步时重置整个子树。`renderStep()` 内部**没有**任何 `useState`——`step` / `closing` / `selected` / `apiKey` / `saving` / `opening` 全部声明在组件体上（`Onboarding.tsx:46-52`）。执行时若发现某个分支里新增了本地 state，停下报告，不要硬上。
-2. **不会踩 containing-block 陷阱。** 设计规范提醒：motion 元素动画期间带 `transform`，会成为 `position: fixed` 后代的包含块。本组件内**没有** portal、没有 `Select`、没有 `ContextMenu`，唯一的 `position: fixed` 是根部的 `.backdrop`（`Onboarding.module.css:2`），是祖先不是后代。第 2 步打开的是 Tauri 原生目录对话框（OS 层，不在 DOM 里），同样不受影响。
-3. **与方案 013 的谢幕淡出不冲突。** 013 把 `modal-closing` 加在 `.backdrop` 上，其规则 `.modal-closing > *`（`global.css:104-106`）命中的是直接子元素 `.modal`，够不到更深一层的 `.form`。两者作用在不同元素上。
+React 19 + TypeScript + CSS Modules；`src/styles/tokens.css:75` 的 `--ease-out` 是 `cubic-bezier(0.32, 0.72, 0, 1)`，`--transition-base` 为 200ms。读取该 token，不重定义曲线。
+`src/styles/global.css:67` 的范本 `fadeIn` 也是 opacity 0 → 1。这里用相同参数的 WAAPI，以保留 DOM 和导航稳定性。
+全局 reduced-motion 会压缩 CSS transition，但不会处理 WAAPI；本方案从一开始就只动 opacity，所以正常和 reduced-motion 均为 200ms 淡入，无 transform。不要添加令动画归零的媒体查询或修改 `src/lib/motion.ts`。
+先读 `docs/reference/design-system.md`、`docs/reference/codemap.md` 的 onboarding 章节，以及上述后台标签页澄清文档。
 
 ## Steps
 
-1. `src/components/onboarding/Onboarding.tsx`：在文件既有的 import 块末尾追加两行：
-   ```tsx
-   import { motion } from "motion/react";
-   import { panelFade, springPanel } from "../../lib/motion";
-   ```
-2. 同文件，把 `:362-364` 的
-   ```tsx
-          <div className={styles.form}>
-            {renderStep()}
-          </div>
-   ```
-   整块替换为 Target 一节给出的带注释的 `motion.div` 版本。缩进与周围保持一致。
+1. `Onboarding.tsx` 从 React 增加 `useRef`、`useLayoutEffect` imports。在已有 `step` state 后添加以下状态和函数。所有 hooks 必须在 `if (!showOnboarding) return null` 之前调用：
+
+```tsx
+const formRef = useRef<HTMLDivElement>(null);
+const animateStep = useRef(false);
+const goToStep = (next: number, animate: boolean) => {
+  animateStep.current = animate;
+  setStep(next);
+};
+
+useLayoutEffect(() => {
+  const form = formRef.current;
+  const shouldAnimate = animateStep.current;
+  animateStep.current = false;
+  if (!form || !shouldAnimate) return;
+  const easing = getComputedStyle(form).getPropertyValue("--ease-out").trim();
+  const targets = Array.from(form.children).flatMap((child) =>
+    child.classList.contains(styles.final) ? Array.from(child.children) : [child],
+  ).filter((child) =>
+    !child.classList.contains(styles.spacer) &&
+    !child.classList.contains(styles.stepNav) &&
+    !child.classList.contains(styles.nextBtn) &&
+    !child.classList.contains(styles.backBtn),
+  );
+  const animations = targets.map((child) => child.animate(
+    [{ opacity: 0 }, { opacity: 1 }],
+    { duration: 200, easing, fill: "none" },
+  ));
+  return () => animations.forEach((animation) => animation.cancel());
+}, [step, showOnboarding]);
+```
+
+2. 给上述现有 `.form` 元素加 `ref={formRef}`，不要加 key 或包装层。初次显示向导不调用 goToStep，所以不叠加新的内容淡入。
+3. 将 `handleSaveProvider` 和 `handlePickFolder` 签名改为 `(animate: boolean)`。各自内部成功时的 `setStep(2)` / `setStep(3)`，以及保存前已有的空 key 分支，分别换成 `goToStep(2, animate)` / `goToStep(3, animate)`。其余异步业务、try/catch/finally 与取消分支逐字保留。
+4. 保存按钮改为 `onClick={(event) => void handleSaveProvider(event.detail > 0)}`；目录卡片改为 `onClick={(event) => void handlePickFolder(event.detail > 0)}`。布尔参数在 await 前已求值，保证键盘启动后鼠标移动不改变这次结果。
+5. `stepNav` 的 onNext 参数类型改为 `(animate: boolean) => void`。后退按钮改为 `onClick={(event) => goToStep(back, event.detail > 0)}`；下一步按钮改为 `onClick={(event) => onNext(event.detail > 0)}`。调用点改为 `stepNav(1, (animate) => goToStep(3, animate))` 和 `stepNav(2, (animate) => goToStep(4, animate))`。
+6. 「稍后」卡片的直接 `setStep(3)` 改成 `onClick={(event) => goToStep(3, event.detail > 0)}`。核对 `rg -n 'setStep|goToStep|handleSaveProvider|handlePickFolder' src/components/onboarding/Onboarding.tsx`：直接 setStep 只留在 helper；所有动作明确传入 animate；`beginDismiss` 保持原样。
 
 ## Boundaries
 
-- **不要**引入 `AnimatePresence`，**不要**写 `exit` 属性，**不要**写 `mode="wait"`（见 Target 里的两条否决记录）。
-- 不动 `renderStep()` 的任何一个分支——四步的内容、字段顺序、按钮、`stepNav` 全部不改。
-- 不动向导的步骤流转逻辑（`setStep` 的每一处调用、第 2 步的 dialog 取消分支）。
-- 不动 `closing` / `beginDismiss` / `dismiss`（方案 013 的产物）。
-- 不动 `Onboarding.module.css`——包括 `.modal` 上既有的 `scaleIn 220ms`（那是整体入场，与换步是两回事）。
-- 不新增 `src/lib/motion.ts` 的预设，不写内联 transition。
-- 不引入新依赖（`motion` 已在 `package.json`）。
-- 若 `:362-364` 的内容与摘录不符（相对 78160c2 有漂移），停下报告。
+- 不用 AnimatePresence、exit、mode="wait"、setTimeout 或 rAF 调度入场；不引入额外组件库。
+- 不修改 CSS 布局、现有外框动画/谢幕、步骤文案、目录选择、能力包写入或供应商保存语义。
+- 不修改键盘语义或修复既有 div 卡片的可访问性；这是独立工作。
+- 不添加 transform、stagger、will-change；不动画宽度/高度。第 4 步移除欢迎栏后的布局仍瞬时变化，本方案不尝试用布局动画掩盖它。
+- 不重挂载输入、强制 focus 或清空表单。相同步骤内输入/勾选不触发 effect。
+- 基准漂移影响上述选择器、步骤结构或异步语义时停止并报告，不扩大范围。
 
 ## Verification
 
-- **Mechanical**:
-  - `pnpm tsc --noEmit` 通过。
-  - `pnpm build` 通过。
-  - `grep -n "AnimatePresence\|mode=\"wait\"\|exit=" src/components/onboarding/Onboarding.tsx` **零命中**。
-- **Feel check**: 需要触发首次运行向导。删除/重命名本地的首次运行标记后 `pnpm dev`（若不便，临时在组件里强制渲染即可，**但不要把该改动留在提交里**）：
-  - 点「下一步」：新一步应**立即**开始出现并伴 6px 上浮淡入，不应有「旧的先淡出、等一拍、新的才来」的串行感。若感到串行，说明误加了 `AnimatePresence`。
-  - 点「上一步」返回：同样立即落位（enter-only 对两个方向一视同仁，这是预期，不是缺陷）。
-  - **关键回归**：在第 1 步输入 API key → 前进到第 2 步 → 退回第 1 步，确认输入框里的 key **还在**（证明状态确实在组件体上，keyed 重挂载没有吃掉它）。
-  - **关键回归**：走完第 2 步的「选择项目目录」，确认原生对话框正常弹出、取消后停留在原步骤。
-  - 走到第 4 步点「开始写作」：确认 013 的整层 160ms 淡出仍然正常，没有被本方案破坏。
-  - DevTools → Animations，播放速度 10%：确认只有透明度与 6px 位移，没有缩放、没有横向位移。
-  - DevTools → Rendering → `prefers-reduced-motion: reduce`：换步应变为瞬时（`MotionConfig reducedMotion="user"` 的预期行为）。
-- **Done when**: 四步之间的前进与后退都有即时的轻微上浮淡入、无串行等待；输入状态跨步保持；013 的谢幕淡出与 `.modal` 的整体入场均无回归。
+- **Mechanical**：实施后在项目根目录运行 `pnpm exec tsc --noEmit` 和 `pnpm exec vitest run src/lib/__tests__/cssModuleClassRefs.test.ts src/lib/__tests__/cssKeyframeNames.test.ts`，均须通过。完成仓库要求的提交门禁。无需新增只重复动画常量的测试。
+- **Feel check**：在可见的真实 Tauri 窗口用隔离测试配置触发 onboarding（`pnpm tauri dev`）；不得删除真实 prefs/配置，不用付费调用验动画。不以 Vite 单独运行的 IPC 失败结果当验收。
+- 鼠标依次前进、后退：新内容立即进入，只淡入 200ms，按钮/导航不淡入；快速返回应取消旧动画而非叠加或排队。初次打开只有原有外框入场。
+- Tab + Enter/Space 前进后退：本次换步无新增 opacity 动画；程序化 detail=0 也即时。尤其检验键盘启动异步保存后移动鼠标，完成仍即时；鼠标启动异步步骤则完成后淡入。
+- 输入 API key、切换步骤再返回，值保留；同一步输入与能力包勾选不重播。文件对话框取消保持原步骤。保存失败停留原步骤，不触发换步动画。
+- 在 DevTools Animations 以 10% 播放，确认只有内容 opacity，没有按钮、导航、几何或 transform 动画。真实浏览器/WebView 检查 `document.visibilityState === 'visible'`，避免后台时间轴误判。
+- 开启 `prefers-reduced-motion: reduce`：鼠标触发仍是轻淡入，键盘仍即时。完成后各目标 opacity 为 1；组件关闭/卸载不留运行的动画。
+- 第 4 步开始写作的原有 160ms 谢幕不变；浅/深色、窄窗口均无布局回归。
+- **Done when**：3 个步骤边界的鼠标纯淡入、键盘即时、异步模态捕获和取消均符合以上条件，且表单值和现有焦点行为未因新增重挂载而变化。

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Key, ArrowRight, FolderOpen } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
@@ -44,6 +44,34 @@ export function Onboarding() {
   const { providers, addProvider } = useAiStore();
 
   const [step, setStep] = useState(1);
+  const formRef = useRef<HTMLDivElement>(null);
+  const animateStep = useRef(false);
+  const goToStep = (next: number, animate: boolean) => {
+    animateStep.current = animate;
+    setStep(next);
+  };
+
+  // Replay only pointer-triggered content changes without remounting the form.
+  useLayoutEffect(() => {
+    const form = formRef.current;
+    const shouldAnimate = animateStep.current;
+    animateStep.current = false;
+    if (!form || !shouldAnimate) return;
+    const easing = getComputedStyle(form).getPropertyValue("--ease-out").trim();
+    const targets = Array.from(form.children).flatMap((child) =>
+      child.classList.contains(styles.final) ? Array.from(child.children) : [child],
+    ).filter((child) =>
+      !child.classList.contains(styles.spacer) &&
+      !child.classList.contains(styles.stepNav) &&
+      !child.classList.contains(styles.nextBtn) &&
+      !child.classList.contains(styles.backBtn),
+    );
+    const animations = targets.map((child) => child.animate(
+      [{ opacity: 0 }, { opacity: 1 }],
+      { duration: 200, easing, fill: "none" },
+    ));
+    return () => animations.forEach((animation) => animation.cancel());
+  }, [step, showOnboarding]);
   // First-run curtain call — not a dismissible-by-backdrop modal, but the
   // one moment where a 160ms fade beats a hard cut into the main UI.
   const [closing, setClosing] = useState(false);
@@ -76,14 +104,14 @@ export function Onboarding() {
     window.setTimeout(dismiss, 160);
   };
 
-  const handleSaveProvider = async () => {
+  const handleSaveProvider = async (animate: boolean) => {
     const info = PROVIDERS.find((p) => p.id === selected)!;
     // Matches the "继续" button's own disabled check below: Ollama needs no
     // key, so an empty one there isn't "skip setup" the way it is for every
     // other provider — it must still create the provider, or a first-run
     // author who picks Ollama finishes onboarding with zero providers
     // configured and every AI action silently has nothing to run against.
-    if (selected !== "ollama" && !apiKey.trim()) { setStep(2); return; }
+    if (selected !== "ollama" && !apiKey.trim()) { goToStep(2, animate); return; }
     setSaving(true);
     try {
       await addProvider(
@@ -94,7 +122,7 @@ export function Onboarding() {
         } as any,
         apiKey.trim(),
       );
-      setStep(2);
+      goToStep(2, animate);
     } catch (e) {
       console.error(e);
     } finally {
@@ -102,7 +130,7 @@ export function Onboarding() {
     }
   };
 
-  const handlePickFolder = async () => {
+  const handlePickFolder = async (animate: boolean) => {
     if (opening) return;
     setOpening(true);
     try {
@@ -122,7 +150,7 @@ export function Onboarding() {
       if (stillDefault && !sameAsPicked) {
         await store.setPacks(packIds);
       }
-      setStep(3);
+      goToStep(3, animate);
     } catch (e) {
       console.error(e);
     } finally {
@@ -130,7 +158,7 @@ export function Onboarding() {
     }
   };
 
-  const stepNav = (back: number | null, onNext: () => void, nextLabel?: string) => (
+  const stepNav = (back: number | null, onNext: (animate: boolean) => void, nextLabel?: string) => (
     <div className={styles.stepNav}>
       <div className={styles.dots}>
         {[1, 2, 3, 4].map((n) => (
@@ -140,11 +168,11 @@ export function Onboarding() {
       <span className={styles.dotCount}>{step} / 4</span>
       <span className={styles.spacer} />
       {back !== null && (
-        <button className={styles.backBtn} onClick={() => setStep(back)}>
+        <button className={styles.backBtn} onClick={(event) => goToStep(back, event.detail > 0)}>
           {t("onboarding.back")}
         </button>
       )}
-      <button className={styles.nextBtn} onClick={onNext} disabled={saving || opening}>
+      <button className={styles.nextBtn} onClick={(event) => onNext(event.detail > 0)} disabled={saving || opening}>
         {nextLabel ?? t("onboarding.next")} <ArrowRight size={12} />
       </button>
     </div>
@@ -205,7 +233,7 @@ export function Onboarding() {
             <span className={styles.spacer} />
             <button
               className={styles.nextBtn}
-              onClick={handleSaveProvider}
+              onClick={(event) => void handleSaveProvider(event.detail > 0)}
               disabled={saving || (selected !== "ollama" && !apiKey.trim())}
             >
               {saving ? t("onboarding.saving") : t("onboarding.next")} <ArrowRight size={12} />
@@ -248,7 +276,7 @@ export function Onboarding() {
           </div>
 
           <div className={styles.providerList}>
-            <div className={styles.providerCard} onClick={() => void handlePickFolder()}>
+            <div className={styles.providerCard} onClick={(event) => void handlePickFolder(event.detail > 0)}>
               <FolderOpen size={18} color="var(--color-sienna)" />
               <div className={styles.providerInfo}>
                 <div className={styles.providerName}>
@@ -257,7 +285,7 @@ export function Onboarding() {
                 <div className={styles.providerHint}>{t("onboarding.pickFolderHint")}</div>
               </div>
             </div>
-            <div className={styles.providerCard} onClick={() => setStep(3)}>
+            <div className={styles.providerCard} onClick={(event) => goToStep(3, event.detail > 0)}>
               <ArrowRight size={18} color="var(--color-text-muted)" />
               <div className={styles.providerInfo}>
                 <div className={styles.providerName}>{t("onboarding.later")}</div>
@@ -267,7 +295,7 @@ export function Onboarding() {
           </div>
 
           <span className={styles.spacer} />
-          {stepNav(1, () => setStep(3))}
+          {stepNav(1, (animate) => goToStep(3, animate))}
         </>
       );
     }
@@ -282,7 +310,7 @@ export function Onboarding() {
           </p>
 
           <span className={styles.spacer} />
-          {stepNav(2, () => setStep(4))}
+          {stepNav(2, (animate) => goToStep(4, animate))}
         </>
       );
     }
@@ -359,7 +387,7 @@ export function Onboarding() {
             </div>
           )}
 
-          <div className={styles.form}>
+          <div className={styles.form} ref={formRef}>
             {renderStep()}
           </div>
         </div>
