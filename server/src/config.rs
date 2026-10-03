@@ -227,7 +227,14 @@ impl Config {
     /// without pulling in an argument parser for one flag.
     pub fn load(argv: &[String]) -> Result<Config, String> {
         let (file_path, file_origin) = resolve_path(argv)?;
+        Self::load_from(file_path, file_origin, env)
+    }
 
+    fn load_from(
+        file_path: PathBuf,
+        file_origin: PathOrigin,
+        env: impl Fn(&str) -> Option<String>,
+    ) -> Result<Config, String> {
         let mut file_exists = file_path.exists();
         let mut file_error = None;
         let mut file_created = false;
@@ -370,6 +377,13 @@ impl Config {
 
         // admin
         let file_admin = raw.admin.unwrap_or_default();
+        let env_session_hours = env("AIW_KB_ADMIN_SESSION_HOURS")
+            .map(|raw| {
+                raw.parse::<u64>().map_err(|e| {
+                    format!("AIW_KB_ADMIN_SESSION_HOURS is not a number ({raw:?}): {e}")
+                })
+            })
+            .transpose()?;
         let env_user = env("AIW_KB_ADMIN_USER");
         let env_pass = env("AIW_KB_ADMIN_PASSWORD");
         let username = env_user.clone().or_else(|| file_admin.username.clone());
@@ -392,8 +406,11 @@ impl Config {
                         Source::File
                     },
                 );
-                let (session_hours, sh_src) =
-                    pick(None, file_admin.session_hours, DEFAULT_SESSION_HOURS);
+                let (session_hours, sh_src) = pick(
+                    env_session_hours,
+                    file_admin.session_hours,
+                    DEFAULT_SESSION_HOURS,
+                );
                 mark("admin.session_hours", sh_src);
                 Some(AdminSettings {
                     username: u.trim().to_string(),
@@ -715,6 +732,78 @@ pub fn harden_permissions(path: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn container_environment_overrides_file_and_marks_locked_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        // Exercise first boot too: Docker must retain this generated file.
+        let overrides = [
+            ("AIW_KB_BIND", "0.0.0.0:9898"),
+            ("AIW_KB_DATA_DIR", "/data"),
+            ("AIW_KB_MAX_ENTRY_MB", "128"),
+            ("AIW_KB_CONFIG_MAX_MB", "8"),
+            ("AIW_KB_CONFIG_VERSIONS", "20"),
+            ("AIW_KB_ALLOW_ANONYMOUS", "false"),
+            ("RUST_LOG", "warn"),
+            ("AIW_KB_ADMIN_USER", "operator"),
+            ("AIW_KB_ADMIN_PASSWORD", "container-password"),
+            ("AIW_KB_ADMIN_SESSION_HOURS", "48"),
+            ("AIW_KB_TOKENS", "0123456789abcdef, fedcba9876543210"),
+        ];
+        let read_env = |key: &str| {
+            overrides
+                .iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, v)| v.to_string())
+        };
+        let config = Config::load_from(path.clone(), PathOrigin::Env, read_env).unwrap();
+        assert!(config.file_created);
+        assert_eq!(config.server.bind.to_string(), "0.0.0.0:9898");
+        assert_eq!(config.server.data_dir, PathBuf::from("/data"));
+        assert_eq!(config.server.max_entry_mb, 128);
+        assert_eq!(config.server.config_max_mb, 8);
+        assert_eq!(config.server.config_versions, 20);
+        assert!(!config.server.allow_anonymous);
+        assert_eq!(config.server.log, "warn");
+        let admin = config.admin.as_ref().unwrap();
+        assert_eq!(admin.username, "operator");
+        assert_eq!(admin.password, "container-password");
+        assert_eq!(admin.session_hours, 48);
+        assert_eq!(config.tokens.len(), 2);
+        assert!(config.tokens.iter().all(|t| t.from_env));
+        assert!(config.sources.values().all(|s| *s == Source::Env));
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let reloaded = Config::load_from(path.clone(), PathOrigin::Env, read_env).unwrap();
+        assert!(!reloaded.file_created);
+        assert_eq!(saved, std::fs::read_to_string(&path).unwrap());
+        let file_only = Config::load_from(path, PathOrigin::Env, |_| None).unwrap();
+        assert_eq!(
+            file_only.admin.unwrap().session_hours,
+            DEFAULT_SESSION_HOURS
+        );
+    }
+
+    #[test]
+    fn session_environment_rejects_invalid_numbers_and_preserves_file_clamping() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        for (raw, expected) in [("0", 1), ("99999", 8760), ("24", 24)] {
+            let config = Config::load_from(path.clone(), PathOrigin::Env, |key| {
+                (key == "AIW_KB_ADMIN_SESSION_HOURS").then(|| raw.to_string())
+            })
+            .unwrap();
+            assert_eq!(config.admin.as_ref().unwrap().session_hours, expected);
+            assert_eq!(config.source_of("admin.session_hours"), Source::Env);
+        }
+        for raw in ["no", "-1", "18446744073709551616"] {
+            let error = Config::load_from(path.clone(), PathOrigin::Env, |key| {
+                (key == "AIW_KB_ADMIN_SESSION_HOURS").then(|| raw.to_string())
+            })
+            .unwrap_err();
+            assert!(error.contains("AIW_KB_ADMIN_SESSION_HOURS"));
+        }
+    }
 
     #[test]
     fn starter_data_dir_lands_beside_the_config_file() {

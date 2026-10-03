@@ -1,0 +1,31 @@
+# Import into Synology Container Manager > Project.
+services:
+  aiw-kb:
+    image: ghcr.io/joycai/simple-ai-writer/aiw-kb-server:latest
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      AIW_KB_BIND: "0.0.0.0:8787"
+      AIW_KB_DATA_DIR: /data
+      AIW_KB_CONFIG: /data/config.toml
+      # Optional overrides. Omit credentials to generate them on first boot;
+      # retrieve them from Container Manager's container log.
+      # AIW_KB_ADMIN_USER: admin
+      # AIW_KB_ADMIN_PASSWORD: replace-with-a-long-unique-password
+      # AIW_KB_TOKENS: replace-with-a-random-token-at-least-16-characters
+      # AIW_KB_ADMIN_SESSION_HOURS: "168"
+      # AIW_KB_MAX_ENTRY_MB: "64"
+      # AIW_KB_CONFIG_MAX_MB: "4"
+      # AIW_KB_CONFIG_VERSIONS: "10"
+      # RUST_LOG: aiw_kb_server=info,tower_http=info
+    volumes:
+      - aiw-kb-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  aiw-kb-data:

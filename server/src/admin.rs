@@ -1305,7 +1305,7 @@ async fn read_config(State(state): State<Arc<AppState>>) -> Json<Value> {
             kind: "number",
             value: json!(admin.map(|a| a.session_hours).unwrap_or(config::DEFAULT_SESSION_HOURS)),
             default: json!(config::DEFAULT_SESSION_HOURS),
-            env_var: "",
+            env_var: "AIW_KB_ADMIN_SESSION_HOURS",
             needs_restart: false,
             help: "登录后多久需要重新登录。",
         },

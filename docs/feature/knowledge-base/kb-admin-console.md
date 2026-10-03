@@ -23,6 +23,10 @@ to meet already speaks environment variables"*。那对 systemd 和 docker 成�
 所以现在的优先级是 **内置默认值 < 配置文件 < 环境变量**。环境变量一个都没删，
 因为容器化部署里它仍然是最顺手的临时覆盖手段。
 
+容器部署补齐 `AIW_KB_ADMIN_SESSION_HOURS`，使会话有效期也能完全由环境变量配置；
+沿用文件的 1–8760 小时限制和配置来源锁定。Docker 将配置和数据放在同一个持久卷，
+不通过启动脚本生成另一套配置语义；首启与后台写回继续共用现有实现。
+
 ### 1.1 每个值都记得自己从哪来
 
 `Config` 带一张 `sources: BTreeMap<String, Source>`，每一项标 `default` / `file` / `env`。
