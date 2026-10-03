@@ -251,7 +251,7 @@ curl -s -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 | `[[tokens]]` | `AIW_KB_TOKENS`(逗号分隔) | 无 | 同步 API 的 bearer token,每个 ≥16 字符 |
 | `admin.username` | `AIW_KB_ADMIN_USER` | 无 | 后台账号;整个 `[admin]` 缺失 = 后台关闭 |
 | `admin.password` | `AIW_KB_ADMIN_PASSWORD` | 无 | 明文,靠文件权限保护 |
-| `admin.session_hours` | — | `168` | 后台登录保持多久 |
+| `admin.session_hours` | `AIW_KB_ADMIN_SESSION_HOURS` | `168` | 后台登录保持多久（小时）；与文件一致，限制在 1–8760 |
 
 配置文件的查找顺序:`--config <路径>` > `AIW_KB_CONFIG` > 可执行文件同目录的
 `aiw-kb.toml` > 系统配置目录。后台的「配置」页会显示当前生效的是哪一个,
@@ -325,44 +325,64 @@ journalctl -u aiw-kb -f
 > `/var/lib/private/aiw-kb`,而 `/var/lib/aiw-kb` 是指向它的符号链接。
 > 备份时跟着链接走(`tar -h` 或直接备份真实路径)。
 
-### 4.2 Docker
+### 4.2 Docker / Synology Container Manager
 
-仓库里没有 Dockerfile —— 一个静态二进制不太需要容器。真要用:
+仓库提供 [`Dockerfile`](Dockerfile)、最小构建上下文白名单 `.dockerignore`、
+[`docker-compose.yml`](docker-compose.yml) 和容器冒烟测试 `docker-smoke-test.sh`。
+镜像包含 Linux amd64 / arm64 两种架构（不含 32 位 ARM），Docker 自动选择匹配项。
+NAS 本身必须支持并已安装 Container Manager。
 
-```dockerfile
-FROM rust:1-slim AS build
-WORKDIR /src
-COPY . .
-RUN cargo build --release
+**先发布镜像：** GitHub → Actions → **Container server** → Run workflow，选择 `main`，
+勾选 `publish`。两种架构都通过健康检查、鉴权和容器重建持久化测试后，发布到
+`ghcr.io/joycai/simple-ai-writer/aiw-kb-server:latest`，同时保留 `sha-<完整提交 SHA>` 标签。
+默认不勾选时只构建和测试；PR 也只验证，不发布。发布只能从 `main` 执行。
+fork 会使用自己的小写仓库路径，请相应修改 Compose 的 `image`。
+首次发布后，在 GitHub Packages 中将包设为 Public，NAS 才能匿名拉取；私有包需要
+先在 NAS 上登录 GHCR。此工作流使用 `GITHUB_TOKEN`，不需要 Docker Hub 密钥。
+尚未运行发布工作流时，该镜像地址不会因为提交了 Dockerfile 就自动可用。
 
-FROM gcr.io/distroless/cc-debian12
-COPY --from=build /src/target/release/aiw-kb-server /aiw-kb-server
-ENV AIW_KB_DATA_DIR=/data AIW_KB_BIND=0.0.0.0:8787 AIW_KB_CONFIG=/data/config.toml
-EXPOSE 8787
-ENTRYPOINT ["/aiw-kb-server"]
+**在群晖上启动：**
+
+1. 在 File Station 中创建项目目录，例如 `/volume1/docker/aiw-kb`，放入
+   `docker-compose.yml`。
+2. Container Manager → 项目（Project）→ 新增，选该目录并使用现有 Compose 文件。
+   按需要取消 `environment` 中各项的注释并填入自己的值；全部运行设置见 §3 表格。
+3. 构建并启动项目。默认映射 NAS 的 `8787` 到容器 `8787`，在局域网访问
+   `http://<NAS-IP>:8787/admin`。若宿主机端口已占用，只改映射左侧，例如 `8788:8787`。
+4. 未提供凭据时，首启随机生成密码和同步 token，在容器日志里查看。
+   后续重启沿用 `/data/config.toml`，不会重新生成。日志包含凭据，请限制日志访问。
+   也可以同时提供 `AIW_KB_ADMIN_USER`、`AIW_KB_ADMIN_PASSWORD` 和 `AIW_KB_TOKENS`；
+   token 逗号分隔，每个至少 16 字符。环境变量覆盖文件，后台会锁定对应项。
+
+示例使用 Docker 命名卷保存整个 `/data`，包括配置、知识库、应用配置备份及日志。
+命名卷避免群晖共享文件夹的初始权限阻止非 root 进程首启。更新时拉取新镜像并重建
+容器，保留同一项目和卷；**不要删除卷或执行 `docker compose down -v`**。
+需要 File Station / Hyper Backup 直接管理时，可把挂载改成
+`/volume1/docker/aiw-kb/data:/data`，先创建目录并通过 DSM ACL 或 SSH 赋予
+UID/GID `10001:10001` 读写权限（含目录内已有文件）。也可在 Compose 添加
+`user: "<NAS用户UID>:<NAS组GID>"` 配合目录权限。镜像不实现 `PUID` / `PGID`。
+配置通过临时文件加 rename 保存，必须挂载整个目录，不能只挂载 `config.toml`。
+
+默认端口映射面向局域网；使用 DSM 反向代理及 HTTPS 时，可改成
+`127.0.0.1:8787:8787`，由 DSM 代理到该地址。不要将未加 TLS 的端口直接转发到公网。
+容器内监听保持 `0.0.0.0:8787`。若修改容器监听端口，同时调整映射并设置
+`AIW_KB_HEALTH_ADDRESS=127.0.0.1:<容器端口>`，供内置健康检查使用。
+
+**本地构建与检查（从仓库根目录）：**
+
+```bash
+docker build -t aiw-kb-server:local ./server
+bash server/docker-smoke-test.sh aiw-kb-server:local
 ```
 
-配置文件指向挂载卷里(`/data/config.toml`),否则它会写进容器的可写层 ——
-容器一重建,后台里改过的配置和发过的 token 全部消失。
+构建阶段与运行阶段同用 Debian bookworm，避免 glibc 版本错配；只编译服务端二进制，
+运行层不带 Rust 工具链。默认 UID/GID 为 `10001:10001`，端口 8787，无需特权模式。
+凭据不写入镜像；配置仍走现有的默认值 → TOML → 环境变量解析，避免容器启动脚本
+重写用户配置。`restart: unless-stopped` 也能接住后台「重启服务」发出的正常退出。
+构建在原生 amd64 / arm64 runner 上完成，避免 NAS 上编译或 QEMU 模拟 Rust 编译。
 
-```yaml
-# docker-compose.yml
-services:
-  aiw-kb:
-    build: .
-    volumes:
-      - ./data:/data               # 配置文件也在这里面,chmod 600
-    ports:
-      - "127.0.0.1:8787:8787"      # 只暴露给本机,外面套反向代理
-    restart: unless-stopped
-```
-
-容器里 `AIW_KB_BIND` 必须是 `0.0.0.0:8787`,否则宿主机映射不进去;
-但**端口映射写成 `127.0.0.1:8787:8787`**,让 TLS 由反向代理负责。
-
-注意上面用 `ENV` 设了三项 —— 它们会**覆盖**配置文件里的同名项,所以这三项在
-后台的配置页里是锁着的(显示「环境变量覆盖」)。想在后台里改 bind 或数据目录,
-就别在这里设它们。
+参考：[Synology 项目管理](https://kb.synology.com/en-global/DSM/help/ContainerManager/docker_project?version=7)、
+[Docker 多平台 CI](https://docs.docker.com/build/ci/github-actions/multi-platform/)。
 
 ### 4.3 Windows:托盘启动器(aiw-kb-tray)
 

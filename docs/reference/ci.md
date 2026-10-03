@@ -19,6 +19,12 @@ The [`CI`](../../.github/workflows/ci.yml) workflow runs on every pull request t
 
 ## What it checks
 
+Server containers have a separate [`Container server`](../../.github/workflows/container-server.yml)
+workflow: server PRs build and smoke-test on native amd64 / arm64 runners. Manual runs do the
+same; opting into publication from `main` pushes tested images to GHCR and assembles `latest`
+and `sha-<full commit>` multi-platform tags. No desktop version bump or installer release is
+involved: this is the server's independent distribution. See `server/DEPLOY.md` §4.2.
+
 | Job | Steps | Purpose |
 | --- | --- | --- |
 | **Detect changed areas** | `dorny/paths-filter` | Decides whether the Rust and sync-server jobs have anything to do |

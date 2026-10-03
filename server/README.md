@@ -101,7 +101,10 @@ created_at_ms   = 1787191234718
 `AIW_KB_BIND` · `AIW_KB_DATA_DIR` · `AIW_KB_MAX_ENTRY_MB` ·
 `AIW_KB_CONFIG_MAX_MB` · `AIW_KB_CONFIG_VERSIONS` ·
 `AIW_KB_ALLOW_ANONYMOUS` · `RUST_LOG` · `AIW_KB_TOKENS`(逗号分隔) ·
-`AIW_KB_ADMIN_USER` / `AIW_KB_ADMIN_PASSWORD`。
+`AIW_KB_ADMIN_USER` / `AIW_KB_ADMIN_PASSWORD` · `AIW_KB_ADMIN_SESSION_HOURS`。
+
+Synology Container Manager 可直接导入 [`docker-compose.yml`](docker-compose.yml)。
+镜像构建、发布与持久化步骤见 [`DEPLOY.md` §4.2](DEPLOY.md#42-docker--synology-container-manager)。
 
 **为什么从「只有环境变量」改成「文件为主」:** 原来的注释说「每种部署方式都会说
 环境变量」,那对 systemd 和 docker 成立,对真正需要这个后台的那种人不成立 ——
