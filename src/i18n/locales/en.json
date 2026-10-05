@@ -2428,6 +2428,29 @@
       "date": "{{monthName}} {{day}}",
       "dateYear": "{{monthName}} {{day}}, {{year}}",
       "dateTime": "{{date}}, {{time}}"
+    },
+    "recovery": {
+      "title": "Saved outputs ({{count}})",
+      "help": "Interrupted text is saved here. Continue starts a new paid prose request using the original model; review the join afterwards. Images and tool actions are not replayed.",
+      "saveFailed": "Could not save recovery data",
+      "interrupted": "Interrupted",
+      "truncated": "Output limit reached",
+      "kept": "Kept",
+      "streaming": "Generating",
+      "savedText": "Saved text",
+      "progress": "{{done}} of {{total}} sections complete",
+      "stop": "Stop",
+      "copy": "Copy",
+      "keep": "Keep",
+      "discard": "Discard",
+      "longTitle": "Write a long document in sections",
+      "longHelp": "Provide the request and an outline (up to 20 sections). Each section is a separate paid request using the selected model; completed text is saved before the next section starts. Include required source material in the request.",
+      "request": "Writing request and source material",
+      "outline": "Outline — one section per line",
+      "start": "Generate sections",
+      "continue": "Continue",
+      "empty": "The model returned no text; progress was preserved.",
+      "attention": "Needs attention"
     }
   },
   "aiConfig": {

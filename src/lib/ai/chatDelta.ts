@@ -50,6 +50,7 @@ export interface ChatChoice {
 interface ChatDeltaReader {
   /** Feed one frame's choice. Throws on a finish reason that means failure. */
   read(choice: ChatChoice | undefined): void;
+  hasFinishReason(): boolean;
   /**
    * The stream is over: flush the `<think>` splitter and hand the tool calls
    * over. Called once.
@@ -177,6 +178,7 @@ export function createChatDeltaReader(opts: StreamOptions, label = "OpenAI"): Ch
 
   return {
     read,
+    hasFinishReason: () => !!stopReason,
     finish() {
       emit(inlineThink.flush());
       emitToolCalls();

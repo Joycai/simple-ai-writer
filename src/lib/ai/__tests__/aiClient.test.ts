@@ -284,12 +284,10 @@ describe("streamCompletion — OpenAI SSE", () => {
     expect(JSON.parse(toolCalls[0].arguments)).toEqual({ path: "a.md" });
   });
 
-  it("emits done even when the stream ends without [DONE]", async () => {
-    const { received } = await collect({
+  it("rejects a stream that ends without completion evidence", async () => {
+    await expect(collect({
       chunks: [`data: {"choices":[{"delta":{"content":"tail"}}],"usage":{"prompt_tokens":1,"completion_tokens":2}}`],
-    });
-    expect(text(received)).toBe("tail");
-    expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 1, outputTokens: 2 });
+    })).rejects.toThrow(/interrupted/);
   });
 
   it("prepends the model prefix as a leading system instruction", async () => {
@@ -426,14 +424,14 @@ describe("streamCompletion — Gemini SSE", () => {
       standard: "gemini",
       chunks: [
         `data: {"candidates":[{"content":{"parts":[{"text":"thinking...","thought":true},{"text":"Hi "}]}}]}\n`,
-        `data: {"candidates":[{"content":{"parts":[{"text":"there"}]}}],"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":3}}\n`,
+        `data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"there"}]}}],"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":3}}\n`,
       ],
     });
     // A thought part must never reach `text` — that variant is what gets
     // inserted into the manuscript.
     expect(text(received)).toBe("Hi there");
     expect(received).toContainEqual({ reasoning: "thinking..." });
-    expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 7, outputTokens: 3 });
+    expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 7, outputTokens: 3, stopReason: "STOP" });
   });
 
   it("asks for a thinking level and for the thoughts to come back", async () => {
@@ -442,7 +440,7 @@ describe("streamCompletion — Gemini SSE", () => {
     const { calls } = await collect({
       standard: "gemini",
       reasoningEffort: "medium",
-      chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}\n`],
+      chunks: [`data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"hi"}]}}]}\n`],
     });
     expect((calls[0].body.generationConfig as Record<string, unknown>).thinkingConfig).toEqual({
       thinkingLevel: "MEDIUM",
@@ -460,7 +458,7 @@ describe("streamCompletion — Gemini SSE", () => {
       const { calls } = await collect({
         standard: "gemini",
         reasoningEffort: effort,
-        chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"x"}]}}]}\n`],
+        chunks: [`data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"x"}]}}]}\n`],
       });
       const cfg = (calls[0].body.generationConfig as Record<string, unknown>)
         .thinkingConfig as Record<string, unknown>;
@@ -471,7 +469,7 @@ describe("streamCompletion — Gemini SSE", () => {
   it("sends no thinkingConfig when the model has no level set", async () => {
     const { calls } = await collect({
       standard: "gemini",
-      chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}\n`],
+      chunks: [`data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"hi"}]}}]}\n`],
     });
     expect(calls[0].body.generationConfig).toBeUndefined();
   });
@@ -479,7 +477,7 @@ describe("streamCompletion — Gemini SSE", () => {
   it("merges thinkingConfig into an existing generationConfig", async () => {
     // JSON mode already puts responseMimeType there via extraBody; assigning in
     // either direction would drop the other's field.
-    const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[{"text":"{}"}]}}]}\n`]);
+    const calls = mockFetch([`data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"{}"}]}}]}\n`]);
     await streamCompletion({
       baseUrl: "https://generativelanguage.googleapis.com",
       apiKey: "k",
@@ -549,7 +547,7 @@ describe("streamCompletion — Gemini SSE", () => {
   });
 
   it("joins every system message into one systemInstruction, flattening part arrays", async () => {
-    const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n`]);
+    const calls = mockFetch([`data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"ok"}]}}]}\n`]);
     await streamCompletion({
       baseUrl: "", apiKey: "k", standard: "gemini", modelId: "gemini-3-pro",
       messages: [
@@ -567,7 +565,7 @@ describe("streamCompletion — Gemini SSE", () => {
     // Google accepts both spellings; relays fronting it document only camel,
     // and an unrecognised key is ignored rather than rejected — a snake_case
     // `inline_data` means the picture silently never reaches the model.
-    const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n`]);
+    const calls = mockFetch([`data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"ok"}]}}]}\n`]);
     await streamCompletion({
       baseUrl: "https://generativelanguage.googleapis.com",
       apiKey: "k",
@@ -602,7 +600,7 @@ describe("streamCompletion — Gemini SSE", () => {
     const { received } = await collect({
       standard: "gemini",
       chunks: [
-        `data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"list_files","args":{"dir":"writing"}}}]}}]}\n`,
+        `data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"functionCall":{"name":"list_files","args":{"dir":"writing"}}}]}}]}\n`,
       ],
     });
     const toolChunk = received.find((c) => "toolCalls" in c) as {
@@ -701,21 +699,21 @@ describe("streamCompletion — Gemini SSE", () => {
     const { received } = await collect({
       standard: "gemini",
       chunks: [
-        `data: {"candidates":[{"content":{"parts":[{"text":"answer"}]}}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":50,"thoughtsTokenCount":500}}\n`,
+        `data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"answer"}]}}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":50,"thoughtsTokenCount":500}}\n`,
       ],
     });
-    expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 10, outputTokens: 550 });
+    expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 10, outputTokens: 550, stopReason: "STOP" });
   });
 
   it("reports cached tokens as a subset of input tokens", async () => {
     const { received } = await collect({
       standard: "gemini",
       chunks: [
-        `data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}],"usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":5,"cachedContentTokenCount":80}}\n`,
+        `data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"hi"}]}}],"usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":5,"cachedContentTokenCount":80}}\n`,
       ],
     });
     expect(received[received.length - 1]).toEqual({
-      done: true, inputTokens: 100, outputTokens: 5, cachedTokens: 80,
+      done: true, inputTokens: 100, outputTokens: 5, cachedTokens: 80, stopReason: "STOP",
     });
   });
 });
@@ -774,7 +772,7 @@ describe("streamCompletion — reasoning effort", () => {
     // level in thinkingConfig and Anthropic in output_config, so neither may
     // leak the OpenAI field.
     const gemini = await collect({
-      chunks: ['data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}\n'],
+      chunks: ['data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"hi"}]}}]}\n'],
       standard: "gemini",
       reasoningEffort: "max",
     });
@@ -1629,7 +1627,7 @@ describe("streamCompletion — toolChoice", () => {
   });
 
   it("maps a forced tool_choice to Gemini's functionCallingConfig", async () => {
-    const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[]}}]}\n`]);
+    const calls = mockFetch([`data: {"candidates":[{"finishReason":"STOP","content":{"parts":[]}}]}\n`]);
     await streamCompletion({
       baseUrl: "",
       apiKey: "k",
@@ -1649,7 +1647,7 @@ describe("streamCompletion — toolChoice", () => {
   });
 
   it("omits Gemini tool_config when toolChoice is auto/unset", async () => {
-    const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[]}}]}\n`]);
+    const calls = mockFetch([`data: {"candidates":[{"finishReason":"STOP","content":{"parts":[]}}]}\n`]);
     await streamCompletion({
       baseUrl: "",
       apiKey: "k",
@@ -1853,16 +1851,11 @@ describe("streamCompletion — Anthropic SSE", () => {
     ).rejects.toThrow(/declined this response/);
   });
 
-  it("emits done even when the stream ends without message_stop", async () => {
-    const { received } = await collect({
+  it("rejects a stream that ends without message_stop", async () => {
+    await expect(collect({
       ...ANTHROPIC,
-      chunks: [
-        `data: {"type":"message_start","message":{"usage":{"input_tokens":6}}}\n\n`,
-        `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}\n`,
-      ],
-    });
-    expect(text(received)).toBe("hi");
-    expect(received[received.length - 1]).toMatchObject({ done: true, inputTokens: 6 });
+      chunks: [`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}\n`],
+    })).rejects.toThrow(/interrupted/);
   });
 
   it("hoists system messages into the top-level system field", async () => {
@@ -2665,17 +2658,14 @@ describe("streamCompletion — Anthropic SSE", () => {
     expect(resumes[0]).toContain("现在就把这一批的正文写出来");
   });
 
-  it("still reports the query when a search is cut off mid-flight", async () => {
-    const { received } = await collect({
+  it("rejects a search cut off mid-flight", async () => {
+    await expect(collect({
       ...ANTHROPIC,
       chunks: [
         `data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srvtoolu_2","name":"web_search","input":{}}}\n\n`,
         `data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"query\\":\\"半路断了\\"}"}}\n\n`,
       ],
-    });
-    expect(received).toContainEqual({
-      serverTool: { phase: "call", id: "srvtoolu_2", name: "web_search", input: { query: "半路断了" } },
-    });
+    })).rejects.toThrow(/interrupted/);
   });
 
   it("reports a failed search as an error rather than as empty results", async () => {
@@ -3033,7 +3023,7 @@ describe("streamCompletion — compat standards reach their own adapter", () => 
     const { calls } = await collect({
       standard: "gemini_compat",
       baseUrl: "https://relay.example.com/v1beta",
-      chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}\n\n`],
+      chunks: [`data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"hi"}]}}]}\n\n`],
     });
     expect(calls[0].url).toBe(
       "https://relay.example.com/v1beta/models/test-model:streamGenerateContent?alt=sse",
@@ -3059,7 +3049,7 @@ describe("streamCompletion — compat standards reach their own adapter", () => 
       vi.fn(async (url: string, init: RequestInit) => {
         expect(String(url)).not.toContain("secret");
         calls.push(new Headers(init.headers));
-        return sseResponse([`data: {"candidates":[]}\n\n`]);
+        return sseResponse([`data: {"candidates":[{"finishReason":"STOP"}]}\n\n`]);
       }),
     );
     await streamCompletion({
@@ -3076,7 +3066,7 @@ describe("streamCompletion — compat standards reach their own adapter", () => 
 
 describe("streamCompletion — temperature", () => {
   const OPENAI_DONE = [`data: [DONE]\n\n`];
-  const GEMINI_ONE = [`data: {"candidates":[{"content":{"parts":[{"text":"x"}]}}]}\n`];
+  const GEMINI_ONE = [`data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"x"}]}}]}\n`];
   const ANTHROPIC_ONE = [
     `data: {"type":"message_start","message":{"usage":{"input_tokens":1,"output_tokens":0}}}\n\n`,
     `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}\n\n`,
@@ -3140,7 +3130,7 @@ describe("streamCompletion — top_p / frequency_penalty", () => {
   const OPENAI_DONE = [`data: [DONE]
 
 `];
-  const GEMINI_ONE = [`data: {"candidates":[{"content":{"parts":[{"text":"x"}]}}]}
+  const GEMINI_ONE = [`data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"x"}]}}]}
 `];
 
   it("sends neither field when unset — an untouched request stays byte-identical", async () => {
@@ -3381,7 +3371,7 @@ describe("streamCompletion — upstream-reported cost", () => {
 
   it("Gemini: the last block's cost wins", async () => {
     const chunks = [
-      `data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}],"usageMetadata":{"promptTokenCount":5,"costUsd":1e-6}}\n`,
+      `data: {"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"ok"}]}}],"usageMetadata":{"promptTokenCount":5,"costUsd":1e-6}}\n`,
       GEMINI[1],
     ];
     const { done } = await run("gemini_compat", "https://api.orcarouter.ai/v1beta", [chunks]);

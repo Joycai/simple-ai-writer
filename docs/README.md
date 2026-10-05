@@ -80,6 +80,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 
 | Doc | Status | What it settles |
 |---|---|---|
+| [long-output-recovery.md](feature/agent/long-output-recovery.md) | `shipped` | 流式正文定期保存、重启后续写与按大纲分节生成 |
 | [unified-agent-plan.md](feature/agent/unified-agent-plan.md) | `shipped` | One tool loop under every AI feature; the two-stage evolution to a chat assistant |
 | [subagent-plan.md](feature/agent/subagent-plan.md) | `shipped` | High-level design. Kept for the feasibility reasoning; the LLD supersedes its detail |
 | [subagent-lld.md](feature/agent/subagent-lld.md) | `shipped` | Task workspaces + per-kind subagents (PR-A…PR-E) |

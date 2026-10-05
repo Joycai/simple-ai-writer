@@ -2424,6 +2424,29 @@
       "date": "{{month}} 月 {{day}} 日",
       "dateYear": "{{year}} 年 {{month}} 月 {{day}} 日",
       "dateTime": "{{date}} {{time}}"
+    },
+    "recovery": {
+      "title": "已保存的输出（{{count}}）",
+      "help": "中断的内容保存在这里。续写会使用原模型发起新的付费文本请求，请检查衔接处。图片和工具操作不会重放。",
+      "saveFailed": "恢复内容保存失败",
+      "interrupted": "已中断",
+      "truncated": "达到输出上限",
+      "kept": "已保留",
+      "streaming": "生成中",
+      "savedText": "已保存的内容",
+      "progress": "已完成 {{done}} / {{total}} 节",
+      "stop": "停止",
+      "copy": "复制",
+      "keep": "保留",
+      "discard": "丢弃",
+      "longTitle": "分节生成长文",
+      "longHelp": "填写写作要求和大纲（最多 20 节）。每节使用所选模型单独发起付费请求，完成的内容保存后才开始下一节。需要的素材请放进写作要求中。",
+      "request": "写作要求与素材",
+      "outline": "大纲——每行一节",
+      "start": "开始分节生成",
+      "continue": "继续写",
+      "empty": "模型没有返回文本，已有进度已保留。",
+      "attention": "需要处理"
     }
   },
   "aiConfig": {

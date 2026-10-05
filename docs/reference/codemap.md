@@ -132,6 +132,8 @@ CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, ico
 
 ### `src/components/ai/`
 
+`OutputRecoveryPanel` 是聊天与任务面板共用的「已保存的输出」入口，含纯文本续写与按作者大纲分节生成；数据属于项目，不随组件卸载丢失。设计与边界见 [`long-output-recovery.md`](../feature/agent/long-output-recovery.md)。
+
 AiPanel (task UI, streaming output), ConsistencyCheck, 提示词库 (`SnippetPicker` 取用 + `SnippetSaveMenu` 右键存入 + `snippetTrace` 的确认痕迹)，以及执行日志与审批卡的这几件：
 
 - `PlanLedger.tsx`——执行日志里的方案账本。它在轮次**上方**单独一段，不塞进批准它的那一轮：结束的轮是折叠的，要从手风琴里挖出来的账没人读。
@@ -349,6 +351,10 @@ All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`
 - A question can be rewound to (`lib/agent/rewind.ts` — a *cut* of the wire history at that turn's start, never a re-seed, and never offered for a turn already folded into the summary: what the author still sees above the cut must be what the model still holds; §12 of the same doc).
 - Behind the 状态记忆 Beta (`lib/agent/stateFlag.ts`) a conversation can instead run on a SKILL.state-style **structured execution state** (`skillState.ts` schema/validation/rendering + `skillStateRun.ts`, arXiv:2608.26263): every send folds everything before the last turn into one schema-validated JSON block in the summary's slot — the same `planFold` with `keepTurns: 1`, so the fold invariants are unchanged — and a state the model twice fails to make valid leaves the history alone and falls back to ordinary compaction
   - the mode is per session (`ChatSessionMeta.stateMode`, the composer chip mirrors it; the Lab sub-option 「新会话默认打开」 only sets where a *new* conversation starts — `freshChat` / `newChatStateMemory`), see `docs/feature/agent/skill-state-memory-plan.md`.
+
+#### 长输出恢复
+
+`outputRecovery.ts` 在项目 SQLite 中原子保存可见正文，每 1.5 秒一次、同一输出串行写入。恢复不重放工具历史，`outputRecoveryStore` 用新文本请求追加内容；两种写作表面共用，项目和模型绑定运行起点。见 [`long-output-recovery.md`](../feature/agent/long-output-recovery.md)。
 
 #### 任务工作区
 
@@ -827,6 +833,7 @@ Zustand stores。一个 store 一个关注点，**存的是「现在是什么」
 - **`editorStore`** — 编辑器内容、脏标记、视图模式（editor / split / preview）、保存调度、字数 / 字符数（从内容算出，所以跟内容住一起）。**不 import `projectStore`**——要同时看两边的东西放在 `openDocument.ts`。写盘与切换的时序规矩（`saveNow` 只「清」自己写出去的那份、同一路径的写盘排成一条链、`loadFile` 先读后 flush 再同一拍切换）写在 `docs/feature/html-artifact-plan.md` D5。
 - **`loreStore`** — 已索引的知识库条目、别名映射、条目摘要；项目打开时自动扫 `.ai-writer/lore/`（`scanLore`）。另带 `categoryNotes`：墙筛到某分类时读一次的分类说明摘要（`loadCategoryNote`，`null` 也缓存），换项目随索引清空、同项目重扫保留，`describe` 写盘经 `ToolAppState.categoryNoteWritten` 逐出一条——它**不在** `LoreIndex` 上，重扫读不到它（`docs/feature/lore/folder-note-plan.md` §5.2）。
 - **`aiStore`** — 供应商、模型、提示词。**API 密钥不在这里**：它们经 Rust 的 `secret_*` 命令住在 OS 钥匙串里（`src/lib/keyStore.ts`），这个 store 只存「有哪些 provider」，而那几行也是「钥匙串里有哪些账户」的唯一记录（见 `appReset` 的顺序规矩）。
+- **`outputRecoveryStore`** — 项目级恢复列表、流式正文检查点和按大纲分节生成；恢复只续写文字，绝不复原审批授权。
 - **`aiTaskStore`** — 正在跑的 AI 任务：流式输出、token 用量、中断信号。任务按声明的 `tools` / `target` / `continuation` 分支，**从不按 id 分支**。
 - **`agentStore`** — 对话助手的家：L2 审批队列 **和** 会话状态。同时开几个会话（`chats: Record<key, LiveChat>` + `activeChatKey` 一根轴，`runningChats` / `chatQueue` 另一根，信号量在 `lib/agent/scheduler.ts`，与 roleplay 共用）；每张卡片带 `surface: chat:<key>`，「本次都批准」的 key 是 `chatAutoApproveKey(key)` 而不是一个共享字面量。
   - **拆分（P5，docs/feature/code-structure-plan.md）。** `agentStore.ts` 只留 store 本体（状态、动作、审批队列）；类型在 `stores/agent/types.ts`，一次聊天运行与多会话管线在 `stores/agent/chatJob.ts`（用 store 的 `set` / `get` 调，不 import store），给组件的纯读取在 `stores/agent/selectors.ts`，批准后的写盘在 `lib/agent/proposalApply.ts`（app 以 `ProposalApplyDeps` 传入，所以每一种提案都能单测）。这些名字由 `agentStore` 重新导出，组件的 import 一行不用改。**`stores/` 的子目录只放一个 store 的私有拆分**，以 store 名命名（`stores/agent/`），不放跨 store 的东西——跨 store 的编排是 `stores/` 根下的平铺文件（`projectLifecycle.ts`、`openDocument.ts`、`configImportRefresh.ts`、`toolAppState.ts`）。

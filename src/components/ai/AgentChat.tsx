@@ -1,3 +1,4 @@
+import { OutputRecoveryPanel } from "./OutputRecoveryPanel";
 /**
  * 对话助手 — the stage-two conversational surface of the unified agent.
  *
@@ -778,6 +779,7 @@ export function AgentChat() {
 
   return (
     <div className={styles.chat}>
+      <OutputRecoveryPanel />
       {/* 取材范围的骑缝带（设计稿 03b 屏 26-B）。围栏在**运行发生的地方**必须看得见
           ——知识库墙上写着一遍不够，作者写作时看的是这一栏。同一个控件的窄栏形态：
           省掉分类分布，只留条目数。 */}

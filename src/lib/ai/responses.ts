@@ -514,5 +514,5 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
       return;
     }
   }
-  finish();
+  throw new Error("Responses: stream interrupted before a terminal event");
 }

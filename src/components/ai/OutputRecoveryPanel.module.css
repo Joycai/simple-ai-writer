@@ -1,0 +1,33 @@
+.shelf {
+  flex: 0 0 auto;
+  max-height: 45%;
+  overflow: auto;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+.shelf summary { cursor: pointer; }
+.shelf p { margin: 8px 0; line-height: 1.5; }
+.shelf textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 6px 0;
+  padding: 8px;
+  resize: vertical;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-inset);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+.shelf button {
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-inset);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+.shelf button:disabled { opacity: .5; cursor: default; }
+.item { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--color-border); }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; }

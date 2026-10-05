@@ -210,10 +210,15 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   }
 
   // Stream ended without a [DONE] sentinel — flush any buffered final line.
+  let terminalSentinel = false;
   const tail = buffer.trim();
   if (tail.startsWith("data:")) {
     const data = tail.slice(5).trim();
-    if (data !== "[DONE]") parseData(data);
+    if (data === "[DONE]") terminalSentinel = true;
+    else parseData(data);
+  }
+  if (!terminalSentinel && !choices.hasFinishReason()) {
+    throw new Error("OpenAI: stream interrupted before completion");
   }
   const { stopReason, truncated } = choices.finish();
   opts.onChunk({
