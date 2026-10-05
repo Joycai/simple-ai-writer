@@ -102,6 +102,24 @@ describe("output recovery orchestration", () => {
     expect(h.stream).toHaveBeenCalledTimes(1);
     expect(useOutputRecoveryStore.getState().rows[0]).toMatchObject({ nextSection: 0, status: "truncated" });
   });
+  it("aborts a background continuation on project switch without moving its output", async () => {
+    useOutputRecoveryStore.setState({ rows: [row()] });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    h.stream.mockImplementationOnce(async (opts) => {
+      opts.onChunk({ text: " in flight" });
+      entered();
+      await new Promise<void>((_resolve, reject) => {
+        opts.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      });
+    });
+    const run = useOutputRecoveryStore.getState().resume("r");
+    await started;
+    await useOutputRecoveryStore.getState().load("/b");
+    await run;
+    expect(h.save).toHaveBeenLastCalledWith("/a", expect.objectContaining({ text: "Saved beginning in flight", status: "interrupted" }));
+    expect(useOutputRecoveryStore.getState()).toMatchObject({ project: "/b", rows: [], running: null, error: null });
+  });
   it("extracts text from multimodal requests while dropping tools, media bytes and the agent briefing", () => {
     const request = recoveryRequest([
       { role: "system", content: "tool briefing" },
