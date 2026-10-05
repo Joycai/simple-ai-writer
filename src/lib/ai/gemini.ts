@@ -436,6 +436,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   // Flush any buffered final line that arrived without a trailing newline.
   if (buffer.trim()) processLine(buffer);
 
+  if (!stopReason) throw new Error("Gemini: stream interrupted before finishReason");
   if (geminiToolCalls.length > 0) {
     opts.onChunk({ toolCalls: geminiToolCalls, _geminiModelParts: geminiAllModelParts });
   }

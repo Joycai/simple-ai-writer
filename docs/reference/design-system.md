@@ -431,3 +431,7 @@ Presets live in `src/lib/motion.ts` (`springScreen`/`springPanel`/`springDrawer`
 **Onboarding step changes** are a narrow native **Web Animations API** exception: pointer clicks (`detail > 0`) fade the new step's existing content nodes from opacity 0 to 1 over 200ms with `--ease-out`; keyboard/assistive/programmatic clicks switch immediately. The trigger is captured before asynchronous provider saves or folder selection. Animating existing nodes avoids keyed form remounts and extra wrappers that would disrupt the flex layout. Navigation, spacers and the final start button stay immediate; there is no exit, transform, stagger or initial-show content animation. Each step change or unmount cancels the preceding animations, with fill mode `none` so opacity returns to its normal style. Reduced motion keeps this pure fade. This does not authorize WAAPI for hovers, buttons or lists.
 
 **Theme (light/dark) crossfade** is *not* Motion — it uses the native **View Transitions API** (`document.startViewTransition`) in `appStore.applyThemeAnimated`, so the whole UI cross-dissolves on a theme flip (CSS vars change instantly, so only a full-page snapshot can crossfade everything). Timing is tuned via `::view-transition-old/new(root)` in `global.css`; it no-ops on webviews without the API and is skipped under `prefers-reduced-motion`.
+
+### 长输出恢复入口
+
+聊天和任务面板顶部共用一条原生折叠栏「已保存的输出」，显示条目数量；保存错误同时进入栏标题，折叠时也不能隐藏失败。展开后每条可查看、复制、继续写、保留或丢弃。正文使用只读文本框，保证中断于 Markdown 结构中间时仍能取回全部原文。可选分节表单放在同一栏的次级折叠区，避免正常短回复增加必填项；所有颜色使用现有主题令牌。见 [长输出恢复](../feature/agent/long-output-recovery.md)。

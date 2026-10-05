@@ -18,11 +18,17 @@
  */
 
 import { useAgentStore } from "./agentStore";
+import { useOutputRecoveryStore } from "./outputRecoveryStore";
 import { useProjectStore, type OpenProjectOutcome, type ProjectSwitchHooks } from "./projectStore";
 
 const chatHooks: ProjectSwitchHooks = {
   confirmLeave: (name) => useAgentStore.getState().confirmProjectSwitch(name),
-  onSwitched: (projectPath) => useAgentStore.getState().resetChatForProject(projectPath),
+  onSwitched: async (projectPath) => {
+    // Own this here, not only in the recovery shelf's effect: the shelf can be
+    // unmounted while a long document is generating in the background.
+    await useOutputRecoveryStore.getState().load(projectPath);
+    await useAgentStore.getState().resetChatForProject(projectPath);
+  },
 };
 
 /** Open `path`, or prompt for a folder when it is omitted. */

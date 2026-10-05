@@ -469,12 +469,8 @@ describe("Responses adapter — stream", () => {
     ).rejects.toThrow(/400 \(https:\/\/relay.example.com\/v1\/responses\).*Unsupported value/);
   });
 
-  it("emits done even when the stream ends without a terminal event", async () => {
-    const { received } = await collect({
-      chunks: [ev("response.output_text.delta", { delta: "tail" })],
-    });
-    expect(text(received)).toBe("tail");
-    expect(doneOf(received)).toEqual({ done: true, inputTokens: 0, outputTokens: 0 });
+  it("rejects a stream that ends without a terminal event", async () => {
+    await expect(collect({ chunks: [ev("response.output_text.delta", { delta: "partial" })] })).rejects.toThrow(/interrupted/);
   });
 
   it("dispatches the compat half to the same adapter", async () => {

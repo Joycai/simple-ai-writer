@@ -1,3 +1,4 @@
+import { trackOutput, recoveryRequest } from "./outputRecoveryStore";
 import { create } from "zustand";
 import i18n from "../i18n";
 import { streamCompletion } from "../lib/ai";
@@ -494,6 +495,13 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       truncated: false,
     }));
 
+    const recoveries = new Map(drafts.map((d) => [d.id, trackOutput(projectPath, {
+      source: "task", modelId: model.id, request: instruction,
+    })]));
+    const recoveryTexts = new Map(drafts.map((d) => [d.id, ""]));
+    const recoveryDone = new Map<string, boolean>();
+    let recoveryContext: string | undefined;
+    const recoveryTruncated = new Set<string>();
     const controller = new AbortController();
     set({
       isRunning: true, drafts, activeDraftId: drafts[0].id,
@@ -554,10 +562,14 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       pendingOutputText = null;
       pendingReasoning = null;
       if (reasoning && get().abortController === controller) get().appendAgentEvent(reasoning);
-      if (output !== null) patchDraft(set, drafts[0].id, { text: output });
+      if (output !== null) {
+        patchDraft(set, drafts[0].id, { text: output });
+        recoveryTexts.set(drafts[0].id, output);
+      }
       if (pendingAppends.size > 0) {
         const appends = new Map(pendingAppends);
         pendingAppends.clear();
+        for (const [id, add] of appends) recoveryTexts.set(id, (recoveryTexts.get(id) ?? "") + add);
         set((s) => ({
           drafts: s.drafts.map((d) => {
             const add = appends.get(d.id);
@@ -565,6 +577,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           }),
         }));
       }
+      for (const [id, text] of recoveryTexts) recoveries.get(id)?.update(text, recoveryContext);
     });
 
     // Only a task that can browse the project needs to know which file it is
@@ -611,6 +624,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         // lore report with the aborted one's.
         const agentMessages = bundleToMessages(bundle);
         if (get().abortController === controller) {
+          recoveryContext = recoveryRequest(agentMessages);
           set({ loreReport: bundle.loreReport, lastMessages: agentMessages });
         }
 
@@ -778,6 +792,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           }
         }
         const cost = costFor(model, inputTokens, outputTokens, cachedTokens, reportedCost);
+        recoveryDone.set(drafts[0].id, outcome !== "paused" && !controller.signal.aborted);
+        if (outcome === "truncated") recoveryTruncated.add(drafts[0].id);
         patchDraft(set, drafts[0].id, { usage: { inputTokens, outputTokens, cost }, done: true });
         if (get().abortController === controller) {
           get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
@@ -799,6 +815,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         );
         const messages = bundleToMessages(bundle);
         if (get().abortController === controller) {
+          recoveryContext = recoveryRequest(messages);
           set({ loreReport: bundle.loreReport, lastMessages: messages });
         }
 
@@ -839,6 +856,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
                   // usage/done patch, or the pane briefly shows a finished
                   // draft missing its tail.
                   stream.flush();
+                  recoveryDone.set(draft.id, true);
+                  if (chunk.truncated) recoveryTruncated.add(draft.id);
                   const { inputTokens, outputTokens, truncated, cachedTokens, reportedCost } = chunk;
                   const cost = costFor(model, inputTokens, outputTokens, cachedTokens ?? 0, reportedCost);
                   patchDraft(set, draft.id, {
@@ -913,6 +932,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         recordRunOutcome(model.id, String(e));
       }
     } finally {
+      stream.flush();
+      await Promise.all([...recoveries].map(([id, recovery]) => recovery.finish(
+        recoveryTruncated.has(id) ? "truncated" : recoveryDone.get(id) ? "complete" : "interrupted",
+      )));
       if (!get().error) recordRunOutcome(model.id, null);
       // Drain this run's own approvals — a dangling Promise here would wedge
       // the next run's tool executor, but an unrelated chat turn's pending

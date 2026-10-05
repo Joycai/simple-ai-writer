@@ -7,6 +7,7 @@
  */
 
 import i18n from "../../i18n";
+import { trackOutput, recoveryRequest } from "../outputRecoveryStore";
 import { coreDoneFor, createSessionMeta, injectedFacetsFor, noteTurnStart, recordInjectionsFromReport, compactTriggerFor } from "../../lib/agent/compact";
 import { compactChatHistory, summarizeForCompaction } from "../../lib/agent/compactRun";
 import { requestStateUpdate, updateSkillState } from "../../lib/agent/skillStateRun";
@@ -326,6 +327,13 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
   // reasoning are both latest-wins, so they buffer here and land at most
   // once per interval (see streamThrottle). Everything else (tool steps,
   // run-done) still writes immediately, behind a flush() ordering barrier.
+  const recovery = trackOutput(projectPath, {
+    source: "chat", modelId: model.id,
+    request: get().chats[key]?.turns.filter((t) => t.role === "user")
+      .map((t) => [t.quote, t.text].filter(Boolean).join("\n")).join("\n\n") ?? "",
+  });
+  let recoveryStatus: "complete" | "interrupted" | "truncated" = "interrupted";
+  let recoveryContext: string | undefined;
   let pendingText: string | null = null;
   let pendingReasoning: (AgentEvent & { kind: "reasoning" }) | null = null;
   const stream = createStreamThrottle(() => {
@@ -334,6 +342,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
     pendingText = null;
     pendingReasoning = null;
     if (text === null && reasoning === null) return;
+    if (text !== null) recovery.update(text, recoveryContext);
     patchAssistant((tn) => ({
       ...tn,
       ...(reasoning ? { log: appendAgentEventTo(tn.log, reasoning) } : {}),
@@ -729,6 +738,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
     // 静态 import 会在模块求值期炸掉。
     const { loreOrganizer } = await import("../projectStore");
 
+    recoveryContext = recoveryRequest(history);
     const { inputTokens, outputTokens, cachedTokens, reportedCost, outcome } = await runAgent({
       ...connOptions({ provider, model, apiKey }),
       // Never undefined: without a ceiling the tool loop's history trimming
@@ -852,6 +862,8 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
         stream.schedule();
       },
     });
+    recoveryStatus = outcome === "truncated" ? "truncated"
+      : outcome === "paused" || controller.signal.aborted ? "interrupted" : "complete";
     // The turn is over; whatever the throttle still holds is the final text.
     stream.flush();
 
@@ -929,6 +941,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
           : i18n.t("notify.chatDone"),
       );
     }
+    await recovery.finish(recoveryStatus);
     // Save after every turn, success or failure — the crash that loses a
     // session never announces itself first.
     void get().persistChat(key);

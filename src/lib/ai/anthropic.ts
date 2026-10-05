@@ -916,6 +916,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
       const tail = buffer.trim();
       if (tail.startsWith("data:")) parseData(tail.slice(5).trim());
     }
+    if (!ended) throw new Error("Anthropic: stream interrupted before message_stop");
     flushServerCalls();
     total = {
       inputTokens: total.inputTokens + usage.inputTokens,
