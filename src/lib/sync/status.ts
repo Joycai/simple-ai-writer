@@ -71,3 +71,18 @@ export function compareFreshness(local: HashMap, remote: HashMap, snapshot: Hash
 
   return { verdict, localAhead, remoteAhead, diverged };
 }
+
+/** Shared by settings and the wall: unknown is not an in-flight comparison. */
+export type SyncVerdict = FreshnessVerdict | "offline" | "loading" | "unknown" | "error";
+
+export function syncVerdict(state: {
+  connection: string;
+  comparing: boolean;
+  comparisonError: string | null;
+  freshness: Freshness | null;
+}): SyncVerdict {
+  if (state.connection !== "connected") return "offline";
+  if (state.comparing) return "loading";
+  if (state.comparisonError !== null) return "error";
+  return state.freshness?.verdict ?? "unknown";
+}

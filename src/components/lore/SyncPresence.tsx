@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useProjectStore } from "../../stores/projectStore";
 import { useSyncStore } from "../../stores/syncStore";
 import { useAppStore } from "../../stores/appStore";
-import type { FreshnessVerdict } from "../../lib/sync/status";
+import { syncVerdict, type FreshnessVerdict } from "../../lib/sync/status";
 import { baseName } from "../../lib/paths";
 import s from "./SyncPresence.module.css";
 
@@ -49,9 +49,7 @@ export function SyncPresence() {
 
   const connected = sync.connection === "connected";
   const running = sync.phase === "running";
-  const verdict: FreshnessVerdict | "offline" | "loading" = !connected
-    ? "offline"
-    : (sync.freshness?.verdict ?? "loading");
+  const verdict = syncVerdict(sync);
   const risk = verdict === "diverged";
   const f = sync.freshness;
 
@@ -63,7 +61,6 @@ export function SyncPresence() {
     await sync.connect();
     const ok = useSyncStore.getState().connection === "connected";
     setReconnectFailed(!ok);
-    if (ok) await sync.refreshCounts(projectPath);
   };
 
   if (running) {
@@ -114,7 +111,9 @@ export function SyncPresence() {
       ? t("sync.wOffline")
       : verdict === "loading"
         ? t("sync.vLoading")
-        : t(VERDICT_KEY[verdict]);
+        : verdict === "error" || verdict === "unknown"
+          ? t(verdict === "error" ? "sync.vCompareFailed" : "sync.vUnknown")
+          : t(VERDICT_KEY[verdict]);
   const count =
     verdict === "loading"
       ? // 比对进度:大库的本地哈希要跑上几秒,数字是它和「挂了」之间的区别。
@@ -167,6 +166,18 @@ export function SyncPresence() {
       >
         {t("sync.wPull")}
       </button>
+      {(verdict === "error" || verdict === "unknown") && (
+        <button
+          className={s.action}
+          title={sync.comparisonError ?? undefined}
+          onClick={(ev) => {
+            ev.stopPropagation();
+            void sync.refreshCounts(projectPath);
+          }}
+        >
+          {t("sync.vRetryComparison")}
+        </button>
+      )}
       {!connected && (
         <>
           <span className={s.sep} />
