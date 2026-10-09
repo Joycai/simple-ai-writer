@@ -4963,6 +4963,21 @@
       "response": "The service did not return usable vectors or scores. Check the API format and model compatibility.",
       "model": "The selected retrieval model is missing, disabled, or has the wrong type. Select a model in Settings > Labs.",
       "keyring": "Could not read the channel API key. Check access to the system keychain."
-    }
+    },
+    "indexTitle": "Embedding cache",
+    "indexChecking": "Checking saved embeddings…",
+    "indexEmpty": "No entries in the current source scope.",
+    "indexReady": "Ready · {{ready}} / {{total}} entries",
+    "indexOutdated": "Needs preparation · {{ready}} / {{total}} entries ready",
+    "indexBuilding": "Preparing · {{ready}} / {{total}} entries",
+    "indexPrepare": "Prepare index",
+    "indexRebuild": "Rebuild index",
+    "indexStop": "Stop",
+    "indexHint": "Saved with this project and reused after restart. Preparation covers the current source scope; new or changed descriptions are filled on demand. Preparing or rebuilding sends descriptions to the selected service and may incur charges.",
+    "indexRebuildConfirm": "Regenerate all embeddings in the current source scope using the selected model? This sends descriptions again and may incur charges. Completed batches are saved if you stop.",
+    "indexReadFailed": "Could not read the cache. Check the selected model and project access, then reopen these settings.",
+    "indexFailed": "Preparation failed or timed out. Completed batches are saved; prepare again to resume.",
+    "indexHttp": "Service returned HTTP {{status}}. Completed batches are saved.",
+    "indexStopped": "Stopped. Completed batches are saved."
   }
 }

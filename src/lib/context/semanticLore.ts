@@ -1,11 +1,11 @@
 /** Optional, bounded catalog retrieval. Scope is filtered before any text leaves the app. */
 import type { Model, Provider } from "../ai/configDb";
-import { providerFor } from "../ai/routes";
-import { loadApiKey } from "../keyStore";
-import { embed, rerank, cosine, embeddingLimits, retrievalUrl, RetrievalError, type RetrievalConnection } from "../ai/retrieval";
-import { recordUsage } from "../ai/usageRow";
+import { embed, rerank, cosine, embeddingLimits, RetrievalError } from "../ai/retrieval";
 import { inScope, type LoreEntity, type LoreIndex, type LoreScope } from "../lore";
 import { semanticPrefs } from "./semanticPrefs";
+import { catalogText, resolveIndexConnection, indexedVectors, indexIdentity } from "./semanticIndex";
+import { invalidateEmbeddings } from "./embeddingCache";
+export { catalogText } from "./semanticIndex";
 
 export interface SemanticRequest {
   projectPath: string;
@@ -28,16 +28,6 @@ export interface SemanticReport {
 interface SemanticMatch { entity: LoreEntity; score: number }
 const CATALOG_LIMIT = 256;
 const QUERY_LIMIT = 4000;
-const CACHE_LIMIT = 1024;
-const vectors = new Map<string, number[]>();
-export function clearSemanticCache(): void { vectors.clear(); }
-
-/** Metadata only: descriptions must carry the connections retrieval can discover. */
-export function catalogText(e: LoreEntity): string {
-  return [e.name, ...(e.aliases ?? []), e.summary, ...e.facets.filter((f) => f.mode !== "manual").map((f) => `${f.title}: ${f.keys.join(", ")}`)]
-    .filter(Boolean).join("\n");
-}
-
 export async function retrieveSemantic(
   target: string, index: LoreIndex, scope: LoreScope | undefined,
   exclude: ReadonlySet<string>, args: SemanticRequest,
@@ -66,48 +56,24 @@ export async function retrieveSemantic(
     if (signal.aborted) stop(); else signal.addEventListener("abort", stop, { once: true });
   });
   const run = async (): Promise<SemanticMatch[]> => {
-    const resolve = async (id: string, ranking: boolean) => {
-      const model = args.models.find((m) => m.id === id && m.enabled);
-      const provider = model && providerFor(model, args.providers);
-      if (!model?.retrieval || !provider || (model.retrieval.format === "cohere-rerank") !== ranking) throw new RetrievalError("model");
-      const apiKey = await loadApiKey(provider.id) ?? "";
-      signal.throwIfAborted();
-      const conn: RetrievalConnection = { baseUrl: provider.baseUrl, modelId: model.modelId, apiKey, retrieval: model.retrieval };
-      return { conn, usage: (usage: { promptTokens: number; outputUnits?: number }) => {
-        void recordUsage(args.projectPath, { model, reportedCost: null, task: ranking ? "kb-rerank" : "kb-embedding", ...usage });
-      } };
-    };
     if (!prefs.embeddingModelId && !prefs.rerankerModelId) throw new RetrievalError("model");
     let candidates = catalog.map((entity) => ({ entity, score: 0 }));
     const query = target.slice(0, QUERY_LIMIT);
     if (prefs.embeddingModelId) {
-      const { conn, usage } = await resolve(prefs.embeddingModelId, false);
-      const { batchSize, timeoutMs } = embeddingLimits(conn);
+      const { conn, usage } = await resolveIndexConnection(args, prefs.embeddingModelId, signal);
+      const { timeoutMs } = embeddingLimits(conn);
       // Smaller provider batches need more round trips on a cold catalog. Keep
       // one absolute deadline, including credential resolution and reranking.
       clearTimeout(timer);
       timer = setTimeout(timeout, Math.max(0, timeoutMs - (Date.now() - started)));
-      const texts = catalog.map((e) => (conn.retrieval?.documentPrefix ?? "") + catalogText(e).slice(0, 1600));
-      const identity = JSON.stringify([args.projectPath, prefs.embeddingModelId, retrievalUrl(conn), conn.modelId, conn.retrieval]);
-      const keys = texts.map((s) => identity + s);
-      const missing = keys.map((k, i) => vectors.has(k) ? -1 : i).filter((i) => i >= 0);
-      for (let start = 0; start < missing.length; start += batchSize) {
-        signal.throwIfAborted();
-        const batch = missing.slice(start, start + batchSize);
-        const output = await embed(conn, batch.map((i) => texts[i]), signal, usage);
-        signal.throwIfAborted();
-        batch.forEach((i, j) => {
-          if (vectors.size >= CACHE_LIMIT) vectors.delete(vectors.keys().next().value!);
-          vectors.set(keys[i], output[j]);
-        });
-      }
+      const vectors = await indexedVectors(args, conn, catalog, index, signal, usage);
       const [q] = await embed(conn, [(conn.retrieval?.queryPrefix ?? "") + query], signal, usage);
-      if (keys.some((key) => vectors.get(key)?.length !== q.length)) {
-        keys.forEach((key) => vectors.delete(key));
+      if (vectors.some((v) => v.length !== q.length)) {
+        await invalidateEmbeddings(args.projectPath, await indexIdentity(conn));
         throw new Error("Embedding dimensions changed; cache invalidated");
       }
       candidates = catalog.map((entity, i) => {
-        const v = vectors.get(keys[i]);
+        const v = vectors[i];
         if (!v) throw new Error("Embedding cache changed during retrieval");
         return { entity, score: cosine(q, v) };
       }).sort((a, b) => b.score - a.score || a.entity.dirPath.localeCompare(b.entity.dirPath));
@@ -115,7 +81,7 @@ export async function retrieveSemantic(
       if (prefs.rerankerModelId) candidates = candidates.slice(0, 30);
     }
     if (prefs.rerankerModelId) {
-      const { conn, usage } = await resolve(prefs.rerankerModelId, true);
+      const { conn, usage } = await resolveIndexConnection(args, prefs.rerankerModelId, signal, true);
       const ranked = await rerank(conn, query, candidates.map((c) => catalogText(c.entity).slice(0, 1600)), signal, usage);
       candidates = ranked.map((r) => ({ entity: candidates[r.index].entity, score: r.score }));
     }

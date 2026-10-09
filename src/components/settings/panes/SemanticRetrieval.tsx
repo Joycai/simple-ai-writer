@@ -7,6 +7,7 @@ import { RETRIEVAL_PATHS, validRetrievalPath, type RetrievalConfig } from "../..
 import { attachFees, type Model } from "../../../lib/ai/configDb";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
 import { Select } from "../../common/Select";
+import { SemanticIndexPanel } from "./SemanticIndexPanel";
 import { Section, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 import common from "../settingsCommon.module.css";
@@ -77,6 +78,7 @@ function ProjectRetrieval({ project }: { project: string | null }) {
         <input className={`${common.input} ${common.rowNumber}`} aria-label={t("semantic.threshold")} type="number" min={-1} max={1} step={0.05} defaultValue={prefs.minScore}
           onBlur={(e) => { const n = Number(e.target.value); if (Number.isFinite(n)) { const minScore = Math.max(-1, Math.min(1, n)); update({ minScore }); e.target.value = String(minScore); } }} />
       </Row>
+      {prefs.embeddingModelId && <SemanticIndexPanel project={project} modelId={prefs.embeddingModelId} />}
       {!prefs.embeddingModelId && !prefs.rerankerModelId && <p className={ui.rowWarn}>{t("semantic.chooseModel")}</p>}
       <p className={ui.rowDesc}>{t("semantic.transferHint", { entry: terms.entry })}</p>
     </div>}
