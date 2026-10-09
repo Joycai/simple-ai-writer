@@ -2,7 +2,7 @@
 import type { Model, Provider } from "../ai/configDb";
 import { providerFor } from "../ai/routes";
 import { loadApiKey } from "../keyStore";
-import { embed, rerank, cosine, retrievalUrl, type RetrievalConnection } from "../ai/retrieval";
+import { embed, rerank, cosine, retrievalUrl, RetrievalError, type RetrievalConnection } from "../ai/retrieval";
 import { recordUsage } from "../ai/usageRow";
 import { inScope, type LoreEntity, type LoreIndex, type LoreScope } from "../lore";
 import { semanticPrefs } from "./semanticPrefs";
@@ -17,6 +17,7 @@ export interface SemanticRequest {
 }
 export interface SemanticReport {
   status: "complete" | "unavailable" | "timeout";
+  failure?: { code: "http" | "network" | "response" | "model" | "keyring"; status?: number };
   considered: number;
   omitted: number;
   queryTruncated: boolean;
@@ -66,7 +67,7 @@ export async function retrieveSemantic(
     const resolve = async (id: string, ranking: boolean) => {
       const model = args.models.find((m) => m.id === id && m.enabled);
       const provider = model && providerFor(model, args.providers);
-      if (!model?.retrieval || !provider || (model.retrieval.format === "cohere-rerank") !== ranking) throw new Error("Retrieval model unavailable");
+      if (!model?.retrieval || !provider || (model.retrieval.format === "cohere-rerank") !== ranking) throw new RetrievalError("model");
       const apiKey = await loadApiKey(provider.id) ?? "";
       signal.throwIfAborted();
       const conn: RetrievalConnection = { baseUrl: provider.baseUrl, modelId: model.modelId, apiKey, retrieval: model.retrieval };
@@ -74,7 +75,7 @@ export async function retrieveSemantic(
         void recordUsage(args.projectPath, { model, reportedCost: null, task: ranking ? "kb-rerank" : "kb-embedding", ...usage });
       } };
     };
-    if (!prefs.embeddingModelId && !prefs.rerankerModelId) throw new Error("No retrieval model selected");
+    if (!prefs.embeddingModelId && !prefs.rerankerModelId) throw new RetrievalError("model");
     let candidates = catalog.map((entity) => ({ entity, score: 0 }));
     const query = target.slice(0, QUERY_LIMIT);
     if (prefs.embeddingModelId) {
@@ -120,6 +121,9 @@ export async function retrieveSemantic(
   catch (error) {
     if (args.signal?.aborted) throw error;
     report.status = timedOut ? "timeout" : "unavailable";
+    if (!timedOut) report.failure = error instanceof RetrievalError
+      ? { code: error.code, status: error.status }
+      : { code: error instanceof Error && error.name === "KeyringError" ? "keyring" : "response" };
     return { matches: [], report };
   } finally {
     clearTimeout(timer);

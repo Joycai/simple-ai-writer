@@ -5,6 +5,7 @@ import { useAiStore } from "../../../stores/aiStore";
 import { semanticPrefs, saveSemanticPrefs, type SemanticPrefs } from "../../../lib/context/semanticPrefs";
 import { RETRIEVAL_PATHS, validRetrievalPath, type RetrievalConfig } from "../../../lib/ai/retrievalConfig";
 import { attachFees, type Model } from "../../../lib/ai/configDb";
+import { ConfirmDialog } from "../../common/ConfirmDialog";
 import { Select } from "../../common/Select";
 import { Section, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
@@ -20,24 +21,52 @@ function ProjectRetrieval({ project }: { project: string | null }) {
   const terms = useTerms();
   const [prefs, setPrefs] = useState(() => semanticPrefs(project));
   const models = useAiStore((s) => s.models);
+  const providers = useAiStore((s) => s.providers);
+  const [pendingDelete, setPendingDelete] = useState<Model | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+  const retrievalModels = models.filter((m) => m.retrieval);
   const [editing, setEditing] = useState<string | null>(null);
   const update = (patch: Partial<SemanticPrefs>) => {
     if (!project) return;
-    const next = { ...prefs, ...patch }; setPrefs(next); saveSemanticPrefs(project, next);
+    const next = { ...semanticPrefs(project), ...patch }; setPrefs(next); saveSemanticPrefs(project, next);
+  };
+  const remove = async (model: Model) => {
+    setDeleting(model.id); setDeleteError("");
+    try {
+      await useAiStore.getState().removeModel(model.id);
+      if (editing === model.id) setEditing(null);
+      if (project) {
+        const current = semanticPrefs(project);
+        update({
+          embeddingModelId: current.embeddingModelId === model.id ? "" : current.embeddingModelId,
+          rerankerModelId: current.rerankerModelId === model.id ? "" : current.rerankerModelId,
+        });
+      }
+    } catch { setDeleteError(t("semantic.deleteFailed")); }
+    finally { setDeleting(null); }
   };
   const options = (ranking: boolean, selected: string) => [
     { value: "", label: t("semantic.none") },
     ...models.filter((m) => m.enabled && m.retrieval && (m.retrieval.format === "cohere-rerank") === ranking)
-      .map((m) => ({ value: m.id, label: m.name })),
+      .map((m) => ({ value: m.id, label: `${m.name} · ${providers.find((p) => p.id === m.providerId)?.name ?? t("semantic.unavailableChannel")}` })),
     ...(selected && !models.some((m) => m.id === selected && m.enabled && m.retrieval && (m.retrieval.format === "cohere-rerank") === ranking)
       ? [{ value: selected, label: t("semantic.unavailableModel") }] : []),
   ];
   return <Section label={t("semantic.title", { kb: terms.kb })} action={<span className={ui.badge}>Beta</span>}>
+    <section className={styles.group} aria-label={t("semantic.projectSettings")}>
+    <header className={styles.groupHeader}>
+      <div><h3 className={styles.groupTitle}>{t("semantic.projectSettings")}</h3>
+        <p className={ui.rowDesc}>{project ? t("semantic.project", { name: project.split(/[\\/]/).pop() }) : t("semantic.noProject")}</p>
+      </div>
+      <span className={styles.scope}>{t("semantic.projectOnly")}</span>
+    </header>
+    <div className={styles.groupBody}>
     <Row title={t("semantic.enable")} desc={t("semantic.description", { kb: terms.kb })}
-      foot={<div className={ui.rowDesc}>{project ? t("semantic.project", { name: project.split(/[\\/]/).pop() }) : t("semantic.noProject")}</div>}>
+      last={!project || !prefs.enabled}>
       {project && <Toggle on={prefs.enabled} onChange={(enabled) => update({ enabled })} label={t("semantic.enable")} />}
     </Row>
-    {project && prefs.enabled && <>
+    {project && prefs.enabled && <div className={styles.projectFields}>
       <Row title={t("semantic.embedding")} desc={t("semantic.embeddingHint")}>
         <Select value={prefs.embeddingModelId} options={options(false, prefs.embeddingModelId)} onChange={(embeddingModelId) => update({ embeddingModelId })} ariaLabel={t("semantic.embedding")} className={common.rowSelect} />
       </Row>
@@ -50,14 +79,49 @@ function ProjectRetrieval({ project }: { project: string | null }) {
       </Row>
       {!prefs.embeddingModelId && !prefs.rerankerModelId && <p className={ui.rowWarn}>{t("semantic.chooseModel")}</p>}
       <p className={ui.rowDesc}>{t("semantic.transferHint", { entry: terms.entry })}</p>
-    </>}
-    <Row title={t("semantic.models")} desc={t("semantic.modelsHint")} last>
-      <button className={common.btnSecondary} onClick={() => setEditing("new")}>{t("semantic.add")}</button>
-    </Row>
-    {models.filter((m) => m.retrieval).map((m) => <Row key={m.id} title={m.name} desc={t(`semantic.format.${m.retrieval!.format}`)}>
-      <button className={common.btnSecondary} onClick={() => setEditing(m.id)}>{t("semantic.edit")}</button>
-    </Row>)}
-    {editing && <RetrievalEditor key={editing} existing={models.find((m) => m.id === editing)} onClose={() => setEditing(null)} />}
+    </div>}
+    </div>
+    </section>
+    <section className={styles.group} aria-label={t("semantic.models")}>
+      <header className={styles.groupHeader}>
+        <div><h3 className={styles.groupTitle}>{t("semantic.models")}</h3>
+          <p className={ui.rowDesc}>{t("semantic.modelsHint")}</p>
+        </div>
+        <span className={styles.scope}>{t("semantic.shared")}</span>
+      </header>
+      <div className={styles.groupBody}>
+        <div className={styles.libraryToolbar}>
+          <span className={styles.heading}>{t("semantic.existing", { count: retrievalModels.length })}</span>
+          <button className={common.btnSecondary} onClick={() => setEditing("new")} disabled={deleting !== null}>{t("semantic.add")}</button>
+        </div>
+        {editing === "new" && <RetrievalEditor key="new" onClose={() => setEditing(null)} />}
+        {retrievalModels.length === 0 && <p className={styles.empty}>{t("semantic.empty")}</p>}
+        <ul className={styles.modelList}>
+        {retrievalModels.map((m) => <li key={m.id} className={styles.modelItem}>
+          <div className={styles.modelRow}>
+            <div className={styles.modelInfo}>
+              <div className={styles.modelTitle}>
+                <strong>{m.name}</strong>
+                <span className={styles.scope}>{t(m.retrieval!.format === "cohere-rerank" ? "semantic.reranker" : "semantic.embedding")}</span>
+                {(prefs.embeddingModelId === m.id || prefs.rerankerModelId === m.id) && <span className={ui.badge}>{t("semantic.selectedHere")}</span>}
+              </div>
+              <p className={ui.rowDesc}>{providers.find((p) => p.id === m.providerId)?.name ?? t("semantic.unavailableChannel")} · {t(`semantic.format.${m.retrieval!.format}`)}</p>
+              <code className={styles.modelId}>{m.modelId}</code>
+            </div>
+            <div className={styles.actions}>
+              <button className={common.btnSecondary} aria-label={t("semantic.editNamed", { name: m.name })} onClick={() => setEditing(m.id)} disabled={deleting !== null}>{t("semantic.editAction")}</button>
+              <button className={`${common.btnSecondary} ${styles.deleteButton}`} aria-label={t("semantic.deleteNamed", { name: m.name })} onClick={() => setPendingDelete(m)} disabled={deleting !== null}>{t("common.delete")}</button>
+            </div>
+          </div>
+          {editing === m.id && <RetrievalEditor key={m.id} existing={m} onClose={() => setEditing(null)} />}
+        </li>)}
+        </ul>
+        {deleteError && <p role="alert" className={ui.rowWarn}>{deleteError}</p>}
+      </div>
+    </section>
+    {pendingDelete && <ConfirmDialog title={t("semantic.deleteNamed", { name: pendingDelete.name })}
+      message={t("semantic.deleteConfirm")} confirmLabel={t("common.delete")} danger
+      onConfirm={() => { void remove(pendingDelete); }} onClose={() => setPendingDelete(null)} />}
   </Section>;
 }
 

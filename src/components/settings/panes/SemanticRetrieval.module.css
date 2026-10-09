@@ -12,3 +12,31 @@
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 .actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 @media (max-width: 700px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+.group { container-type: inline-size; margin-top: var(--space-5); border: 1px solid var(--color-border); background: var(--color-bg-surface); }
+.groupHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: var(--space-4); background: var(--color-bg-elevated); border-bottom: 1px solid var(--color-border); }
+.groupTitle { margin: 0; font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary); }
+.groupBody { padding: 0 var(--space-4) var(--space-4); }
+.scope { display: inline-flex; flex-shrink: 0; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs); color: var(--color-text-secondary); background: var(--color-tag-bg); }
+.libraryToolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-4) 0; }
+.modelList { list-style: none; margin: 0; padding: 0; }
+.modelItem { padding: var(--space-4) 0; border-top: 1px solid var(--color-border); }
+.modelItem:last-child { padding-bottom: 0; }
+.modelRow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.modelInfo { min-width: 0; }
+.modelTitle { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); font-size: var(--font-size-base); overflow-wrap: anywhere; }
+.modelId { display: block; margin-top: var(--space-1); font-family: var(--font-mono); font-size: var(--font-size-xs); color: var(--color-text-muted); overflow-wrap: anywhere; }
+.modelRow .actions { flex-shrink: 0; }
+.deleteButton.deleteButton { color: var(--color-error); background: transparent; }
+.deleteButton.deleteButton:hover { background: var(--color-bg-hover); }
+.empty { padding: var(--space-4) 0; margin: 0; font-size: var(--font-size-md); color: var(--color-text-secondary); }
+@media (max-width: 700px) {
+  .groupHeader, .libraryToolbar { flex-wrap: wrap; }
+  .modelRow { align-items: flex-start; flex-direction: column; gap: var(--space-3); }
+  .modelRow .actions { align-self: flex-end; }
+}
+
+@container (max-width: 600px) {
+  .projectFields > div { flex-direction: column; align-items: stretch; gap: var(--space-2); }
+  .projectFields > div > div:last-child > button { width: 100%; max-width: none; }
+}

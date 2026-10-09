@@ -396,3 +396,7 @@
   }
 }
 
+
+/* Multiline retrieval status aligns its marker with the first line. */
+.semanticRow { align-items: flex-start; }
+.semanticRow > .marker { align-self: flex-start; margin-top: var(--space-1); }

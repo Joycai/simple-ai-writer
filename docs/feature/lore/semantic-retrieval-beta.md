@@ -1,6 +1,6 @@
 # Project-scoped semantic retrieval Beta
 
-> Status: `shipped` · `unverified` against live model endpoints. Protocol fixtures and offline integration tests cover the implementation.
+> Status: `shipped` · live Ark Agent Plan embedding smoke test verified (2026-10-09); broader retrieval quality remains unverified. Protocol fixtures and offline integration tests cover the implementation.
 
 ## Intent and design
 
@@ -11,6 +11,12 @@ Settings → AI configuration → Labs contains **Semantic Knowledge Base retrie
 Model registration is in the same section: channel, arbitrary model ID, display name, API format, same-host endpoint path, optional query/document prefixes for embedding models, and fee group. This reuses existing channel credentials, the model table and config backup rather than creating a second secret store. Models are installation-wide, while enablement and selections use `prefs.ts`'s project-keyed family `lore:semantic:`. Like the existing project pins/scope, these are per-project **on this device**, not portable project files or app-config backup entries.
 
 The production Section / Row / Toggle / Select / form controls carry the app's Settings palette and typography. New CSS uses existing tokens only; the editor's two-column fields collapse at narrow widths. No theme attributes or new colour palette are introduced. Missing channels, unavailable selections, no selected model and save failure have explicit states. Turning the switch off hides the project controls but preserves configuration and makes no retrieval request. Saving configuration itself never calls a model.
+
+## Settings hierarchy and model removal
+
+The settings surface separates **Project retrieval settings** from the shared **Retrieval model library** with distinct themed panels and scope labels. This prevents model registration from looking like another project preference. The library has its own add action, saved-model count and empty state. Each saved model shows its purpose, channel, model ID and current-project selection; edit forms appear directly under their model, while new-model forms appear below the library toolbar. Narrow panels stack the project controls under their labels.
+
+Every saved model has explicit Edit and Delete actions. Delete uses the shared confirmation dialog and existing `aiStore.removeModel`, with a visible failure state. A successful deletion clears matching selections in the current project. Other projects retain the existing unavailable-model state until the author chooses a replacement; no project is silently switched to a different model. The confirmation explains the shared scope and that server-side model files are unaffected. This UI does not change retrieval or model-serving behavior.
 
 ## Pipeline and invariants
 
@@ -44,4 +50,12 @@ Offline tests cover wire bodies, response ordering/validation, same-host endpoin
 
 UI review uses fictional in-memory channel/model/project fixtures, never real credentials or author files: on/off, add/save, selectors, light/dark and narrow/wide settings layout. These browser checks do not prove native keyring/HTTP behavior.
 
-Live model quality and latency remain unverified. Before considering this beyond Beta, evaluate real author-labelled requests against current matching: recovered necessary entries, irrelevant additions, incremental latency and actual usage. Report these separately from protocol correctness. A live endpoint is not selected automatically for testing.
+Broader model quality and latency remain unverified; the Ark Agent Plan smoke test is recorded in `docs/api/retrieval.md`. Before considering this beyond Beta, evaluate real author-labelled requests against current matching: recovered necessary entries, irrelevant additions, incremental latency and actual usage. Report these separately from protocol correctness. A live endpoint is not selected automatically for testing.
+
+## Chat report and endpoint correction (1.95.1)
+
+The semantic report is an execution-log list row with the shared marker, typography and padding. Its own content wraps long entry names and status text within the available width. Failure reports preserve only a typed reason and HTTP status, never raw upstream errors or credentials. Legacy saved reports without these fields still render.
+
+The default OpenAI embedding path now follows the channel API prefix: a channel ending in `/api/plan/v3` calls `/api/plan/v3/embeddings`, rather than dropping the prefix and calling the host-root `/v1/embeddings`. Root-only local channels continue to use `/v1/embeddings`; custom non-default paths remain host-root paths. This fixes the generic default for prefixed providers without changing user channel configuration. Authenticated Ark inference was subsequently verified on the author-supplied `/api/plan/v3/embeddings` endpoint with `doubao-embedding-vision`: HTTP 200, indexed 2,048-dimensional float vectors, and the relevant fictional entry ranked first. This verifies the wire format and endpoint, not the native keychain/UI path.
+
+First-turn assembly no longer appends the author matching text twice to the semantic query. The 4,000-character bound still applies to genuinely long queries and remains visible as an informational notice.

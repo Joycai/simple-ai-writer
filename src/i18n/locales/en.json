@@ -4913,8 +4913,8 @@
     "unavailableModel": "Selected model is unavailable",
     "chooseModel": "Choose at least one model. Until then, keyword matching remains active.",
     "transferHint": "Sends your request and in-scope {{entry}} names, summaries and automatic facet labels to the selected service. Up to 256 descriptions per run; up to 5 additions. Requests may incur charges. Local services keep this processing local.",
-    "models": "Retrieval models",
-    "modelsHint": "Models are shared across projects; the switch and selections above apply only to this project on this device. Add channels in Channels & Models.",
+    "models": "Retrieval model library",
+    "modelsHint": "Add and manage models shared by all projects. Add their channels in Channels & Models.",
     "add": "Add retrieval model",
     "edit": "Edit retrieval model",
     "channel": "Channel",
@@ -4923,7 +4923,7 @@
     "name": "Display name",
     "protocol": "API format",
     "path": "Endpoint path",
-    "pathHint": "Path on the selected channel’s host. Uses that channel’s saved API key. Change this for compatible services with a different path.",
+    "pathHint": "The default /v1/embeddings follows the channel API prefix. Other paths start at the channel host root. Uses the saved channel API key.",
     "queryPrefix": "Query prefix (optional)",
     "documentPrefix": "Document prefix (optional)",
     "feeGroup": "Fee group",
@@ -4944,6 +4944,25 @@
     "budgetDropped": "{{n}} semantic matches did not fit the context budget.",
     "notConversational": "Retrieval models cannot be used for conversation. Select a chat model.",
     "descriptionsTruncated": "{{n}} descriptions were shortened to 1,600 characters for retrieval.",
-    "matchesLimited": "{{n}} additional matches were below the top-five limit."
+    "matchesLimited": "{{n}} additional matches were below the top-five limit.",
+    "projectSettings": "Project retrieval settings",
+    "projectOnly": "This project",
+    "shared": "All projects",
+    "existing": "Saved models · {{count}}",
+    "empty": "No retrieval models yet. Add an embedding or reranker model, then select it in the project settings above.",
+    "selectedHere": "Selected here",
+    "unavailableChannel": "Channel unavailable",
+    "editNamed": "Edit {{name}}",
+    "deleteNamed": "Delete {{name}}",
+    "deleteConfirm": "This model will be removed from the shared model library. Its selection in this project will be cleared; other projects using it will need a replacement. The model files on your server will not be deleted.",
+    "deleteFailed": "Could not delete the model. Please try again.",
+    "editAction": "Edit",
+    "failure": {
+      "http": "The service returned HTTP {{status}}. Check the endpoint path, model ID and channel credentials.",
+      "network": "Could not reach the retrieval service. Check the server address and whether it is running.",
+      "response": "The service did not return usable vectors or scores. Check the API format and model compatibility.",
+      "model": "The selected retrieval model is missing, disabled, or has the wrong type. Select a model in Settings > Labs.",
+      "keyring": "Could not read the channel API key. Check access to the system keychain."
+    }
   }
 }

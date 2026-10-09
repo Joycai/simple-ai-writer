@@ -1,6 +1,6 @@
 # Embedding and rerank protocols
 
-> Status: `living` · `unverified` against live services. Official reference review: 2026-10-09.
+> Status: `living` · Ark Agent Plan embedding endpoint verified below; other formats retain fixture-only coverage. Official reference review: 2026-10-09.
 
 These endpoints have their own request/response shapes; they are not chat-completion models.
 
@@ -18,4 +18,10 @@ Cohere uses bearer authentication, accepts a list of strings and can limit the r
 
 A compatible service can expose a different path while preserving these bodies. Native APIs with other bodies/authentication are not automatically covered. Embedding query/document prefixes are model-specific instructions: consult the selected model's own documentation. Scores from different models should not be treated as calibrated probabilities or compared as one shared scale.
 
-No live endpoint measurements were performed for this change. Fixture tests validate the documented shapes; they do not certify every compatible provider.
+Fixture tests validate the documented shapes; the live measurement below certifies only that endpoint/model/request combination.
+
+## Ark Agent Plan live measurement — 2026-10-09
+
+Official protocol reference: [Volcengine embedding integration guide](https://www.volcengine.com/docs/82379/2279748). The vendor guide describes OpenAI-compatible embeddings; the author supplied their Agent Plan base URL, which was tested exactly rather than substituted with the Coding Plan URL.
+
+`POST https://ark.cn-beijing.volces.com/api/plan/v3/embeddings`, model `doubao-embedding-vision`, bearer authentication, `input` as four short Chinese strings and `encoding_format: "float"` returned HTTP 200 in 1.116 s. The response contained indexed `data[]` vectors, each 2,048 dimensions, and usage of 122 prompt/total tokens. Cosine scores for a poisoned-traveler query were 0.6356 for the healer, 0.1440 for a treasury and 0.0587 for a mountain gate. This is a small protocol/relevance smoke test, not a retrieval benchmark. No credentials or author documents are recorded here.
