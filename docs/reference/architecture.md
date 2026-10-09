@@ -19,6 +19,7 @@ project.db   token_usage (id, model_id, task, prompt_tokens, cached_tokens, comp
                           cost_usd, created_at, + 计费快照与分项 22 列 — lib/ai/usageSchema.ts)
 project.db   chat_sessions (id, preview, data, pinned, title, stash_id, created_at, updated_at)
                           -- 对话助手会话，每条一个 JSON blob（lib/agent/sessionDb）
+project.db   kb_embeddings (namespace, entry, hash, vector) -- disposable persistent retrieval cache (lib/context/embeddingCache)
 project.db   output_recovery (id, data, updated_at) -- 长输出正文检查点（lib/agent/outputRecovery）
 config.db    token_usage 同上 + project          -- 总账：比任何一个项目活得久
 config.db    fee_groups  (id, name, vendor, billing_mode, input_price, cache_input_price,

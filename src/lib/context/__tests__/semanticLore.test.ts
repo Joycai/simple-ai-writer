@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearSemanticCache, retrieveSemantic, catalogText, type SemanticRequest } from "../semanticLore";
+import { retrieveSemantic, catalogText, type SemanticRequest } from "../semanticLore";
 import { saveSemanticPrefs, semanticPrefs } from "../semanticPrefs";
 import { assembleContext } from "../rag";
 import { selectLore } from "../loreSelect";
@@ -7,6 +7,17 @@ import { embed, rerank, RetrievalError } from "../../ai/retrieval";
 import type { LoreEntity, LoreIndex } from "../../lore";
 import type { Model, Provider } from "../../ai/configDb";
 
+const cache = vi.hoisted(() => new Map<string, Map<string, { entry: string; hash: string; vector: number[] }>>());
+vi.mock("../embeddingCache", () => ({
+  digest: async (s: string) => s,
+  readEmbeddings: async (p: string, n: string) => new Map(cache.get(p + n)),
+  writeEmbeddings: async (p: string, n: string, rows: { entry: string; hash: string; vector: number[] }[]) => {
+    const map = cache.get(p + n) ?? new Map(); rows.forEach((r) => map.set(r.entry, r)); cache.set(p + n, map);
+  },
+  invalidateEmbeddings: async (p: string, n: string) => { cache.delete(p + n); },
+  pruneEmbeddings: async () => {},
+  removeEmbeddings: async (p: string, n: string, entries: string[]) => { entries.forEach((e) => cache.get(p + n)?.delete(e)); },
+}));
 const prefs = vi.hoisted(() => new Map<string, string>());
 vi.mock("../../prefs", () => ({ SEMANTIC_LORE_PREFIX: "lore:semantic:", readPref: (k: string) => prefs.get(k), writePref: (k: string, v: string) => prefs.set(k, v) }));
 vi.mock("../../keyStore", () => ({ loadApiKey: vi.fn(async () => "") }));
@@ -22,7 +33,7 @@ const models = [
 ] as Model[];
 const args: SemanticRequest = { projectPath: "/p", models, providers: [{ id: "p", baseUrl: "http://localhost:8000" }] as Provider[] };
 const enable = (embeddingModelId = "", rerankerModelId = "r") => saveSemanticPrefs("/p", { enabled: true, embeddingModelId, rerankerModelId, minScore: 0.5 });
-beforeEach(() => { prefs.clear(); clearSemanticCache(); vi.clearAllMocks(); });
+beforeEach(() => { prefs.clear(); cache.clear(); vi.clearAllMocks(); });
 afterEach(() => vi.useRealTimers());
 
 describe("semantic catalog retrieval", () => {

@@ -4954,6 +4954,21 @@
       "response": "服务未返回可用的向量或评分。请检查接口格式与模型兼容性。",
       "model": "所选检索模型不存在、已停用或类型不符。请到设置中的实验室重新选择。",
       "keyring": "无法读取渠道 API Key，请检查系统钥匙串的访问权限。"
-    }
+    },
+    "indexTitle": "向量缓存",
+    "indexChecking": "正在检查已保存的向量…",
+    "indexEmpty": "当前取材范围内没有条目。",
+    "indexReady": "已就绪 · {{ready}} / {{total}} 条",
+    "indexOutdated": "待准备 · {{ready}} / {{total}} 条已就绪",
+    "indexBuilding": "正在准备 · {{ready}} / {{total}} 条",
+    "indexPrepare": "准备索引",
+    "indexRebuild": "重建索引",
+    "indexStop": "停止",
+    "indexHint": "随项目保存，重启后可复用。准备索引覆盖当前取材范围；新增或变更的描述也会在检索时自动补齐。准备或重建会将描述发送到所选服务，可能产生费用。",
+    "indexRebuildConfirm": "使用所选模型重新生成当前取材范围内的全部向量？这会再次发送描述，可能产生费用。停止后已完成的批次会保留。",
+    "indexReadFailed": "无法读取缓存。请检查所选模型与项目访问权限，然后重新打开此设置。",
+    "indexFailed": "准备失败或超时。已完成的批次已保存，可再次准备以继续。",
+    "indexHttp": "服务返回 HTTP {{status}}。已完成的批次已保存。",
+    "indexStopped": "已停止，已完成的批次已保存。"
   }
 }
