@@ -4901,8 +4901,8 @@
     "unavailableModel": "已选模型不可用",
     "chooseModel": "请至少选择一个模型。在此之前仍使用关键词匹配。",
     "transferHint": "会将当前请求与取材范围内{{entry}}的名称、概要及自动特征标签发送给所选服务。每次最多检索 256 份描述，补充 5 项。请求可能产生费用；使用本地服务时，这一步在本地完成。",
-    "models": "检索模型",
-    "modelsHint": "模型跨项目共用；上方开关与选择只用于本机的当前项目。渠道在「渠道与模型」中添加。",
+    "models": "检索模型库",
+    "modelsHint": "在此添加和管理模型，供各项目选择使用。渠道在「渠道与模型」中添加。",
     "add": "添加检索模型",
     "edit": "编辑检索模型",
     "channel": "渠道",
@@ -4932,6 +4932,18 @@
     "budgetDropped": "{{n}} 项语义命中未能放入上下文预算。",
     "notConversational": "检索模型不能用于对话，请选择对话模型。",
     "descriptionsTruncated": "{{n}} 份描述仅使用了前 1,600 字进行检索。",
-    "matchesLimited": "{{n}} 项其他命中未进入前五项。"
+    "matchesLimited": "{{n}} 项其他命中未进入前五项。",
+    "projectSettings": "项目检索配置",
+    "projectOnly": "仅本项目",
+    "shared": "跨项目共用",
+    "existing": "已添加模型 · {{count}}",
+    "empty": "还没有检索模型。添加向量或重排模型后，在上方项目配置中选择使用。",
+    "selectedHere": "本项目已选",
+    "unavailableChannel": "渠道不可用",
+    "editNamed": "编辑 {{name}}",
+    "deleteNamed": "删除 {{name}}",
+    "deleteConfirm": "将从共用模型库中移除此模型，并清除本项目对它的选择。其他使用它的项目需要重新选择模型。不会删除服务端的模型文件。",
+    "deleteFailed": "模型删除失败，请重试。",
+    "editAction": "编辑"
   }
 }

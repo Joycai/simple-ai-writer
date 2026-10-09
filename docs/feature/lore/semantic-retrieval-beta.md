@@ -12,6 +12,12 @@ Model registration is in the same section: channel, arbitrary model ID, display 
 
 The production Section / Row / Toggle / Select / form controls carry the app's Settings palette and typography. New CSS uses existing tokens only; the editor's two-column fields collapse at narrow widths. No theme attributes or new colour palette are introduced. Missing channels, unavailable selections, no selected model and save failure have explicit states. Turning the switch off hides the project controls but preserves configuration and makes no retrieval request. Saving configuration itself never calls a model.
 
+## Settings hierarchy and model removal
+
+The settings surface separates **Project retrieval settings** from the shared **Retrieval model library** with distinct themed panels and scope labels. This prevents model registration from looking like another project preference. The library has its own add action, saved-model count and empty state. Each saved model shows its purpose, channel, model ID and current-project selection; edit forms appear directly under their model, while new-model forms appear below the library toolbar. Narrow panels stack the project controls under their labels.
+
+Every saved model has explicit Edit and Delete actions. Delete uses the shared confirmation dialog and existing `aiStore.removeModel`, with a visible failure state. A successful deletion clears matching selections in the current project. Other projects retain the existing unavailable-model state until the author chooses a replacement; no project is silently switched to a different model. The confirmation explains the shared scope and that server-side model files are unaffected. This UI does not change retrieval or model-serving behavior.
+
 ## Pipeline and invariants
 
 The first Beta applies to **writing tasks and assistant chat**, including subsequent chat turns. Roleplay and consistency-review retrieval retain their existing rules. This boundary avoids changing their binding/memory and exhaustive-review semantics in a retrieval experiment.
