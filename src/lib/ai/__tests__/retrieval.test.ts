@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { embed, rerank, retrievalUrl, cosine, type RetrievalConnection } from "../retrieval";
+import { embed, rerank, retrievalUrl, embeddingLimits, cosine, type RetrievalConnection } from "../retrieval";
 import { conversationalModels, modelUpsert, type Model } from "../configDb";
 import { streamCompletion } from "../index";
 import { parseRetrievalConfig } from "../retrievalConfig";
@@ -54,6 +54,14 @@ describe("retrieval protocols", () => {
     }
     expect(retrievalUrl({ ...conn, baseUrl: "http://localhost:8000" })).toBe("http://localhost:8000/v1/embeddings");
     expect(retrievalUrl({ ...conn, baseUrl: "https://relay.example/prefix", retrieval: { format: "openai-embedding", path: "/custom/embed" } })).toBe("https://relay.example/custom/embed");
+  });
+  it("uses the measured batch limit only for the Ark Agent Plan endpoint", () => {
+    expect(embeddingLimits({ ...conn, baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3/" }))
+      .toEqual({ batchSize: 10, timeoutMs: 60_000 });
+    for (const baseUrl of ["http://localhost:8000", "https://relay.example/api/plan/v3", "https://ark.cn-beijing.volces.com/api/v3"]) {
+      expect(embeddingLimits({ ...conn, baseUrl, modelId: "doubao-embedding-vision" }))
+        .toEqual({ batchSize: 32, timeoutMs: 20_000 });
+    }
   });
   it("reports HTTP status without leaking provider error bodies or credentials", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("secret upstream payload", { status: 401 })));
