@@ -48,6 +48,19 @@ describe("retrieval protocols", () => {
     }
     expect(retrievalUrl(conn)).toBe("http://localhost:11434/v1/embeddings");
   });
+  it("preserves channel API prefixes for the default embedding path", () => {
+    for (const baseUrl of ["https://ark.example/api/plan/v3", "https://ark.example/api/plan/v3/", "https://ark.example/api/plan/v3/chat/completions"]) {
+      expect(retrievalUrl({ ...conn, baseUrl })).toBe("https://ark.example/api/plan/v3/embeddings");
+    }
+    expect(retrievalUrl({ ...conn, baseUrl: "http://localhost:8000" })).toBe("http://localhost:8000/v1/embeddings");
+    expect(retrievalUrl({ ...conn, baseUrl: "https://relay.example/prefix", retrieval: { format: "openai-embedding", path: "/custom/embed" } })).toBe("https://relay.example/custom/embed");
+  });
+  it("reports HTTP status without leaking provider error bodies or credentials", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("secret upstream payload", { status: 401 })));
+    await expect(embed(conn, ["a"], new AbortController().signal)).rejects.toMatchObject({ code: "http", status: 401, message: "Retrieval http (401)" });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("private endpoint details")));
+    await expect(embed(conn, ["a"], new AbortController().signal)).rejects.toMatchObject({ code: "network", message: "Retrieval network" });
+  });
   it("rejects cross-model dimensions and computes cosine similarity", () => {
     expect(cosine([1, 0], [0, 1])).toBe(0);
     expect(cosine([2, 0], [1, 0])).toBe(1);

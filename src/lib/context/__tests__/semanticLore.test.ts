@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearSemanticCache, retrieveSemantic, catalogText, type SemanticRequest } from "../semanticLore";
 import { saveSemanticPrefs, semanticPrefs } from "../semanticPrefs";
+import { assembleContext } from "../rag";
 import { selectLore } from "../loreSelect";
-import { embed, rerank } from "../../ai/retrieval";
+import { embed, rerank, RetrievalError } from "../../ai/retrieval";
 import type { LoreEntity, LoreIndex } from "../../lore";
 import type { Model, Provider } from "../../ai/configDb";
 
@@ -63,6 +64,18 @@ describe("semantic catalog retrieval", () => {
     expect((await retrieveSemantic("sneak", index, null, new Set(), args)).report?.status).toBe("unavailable");
     enable(); vi.mocked(rerank).mockRejectedValue(new Error("down"));
     expect((await retrieveSemantic("sneak", index, null, new Set(), args)).report?.status).toBe("unavailable");
+  });
+  it("does not duplicate author text in first-turn semantic queries", async () => {
+    enable("e", ""); vi.mocked(embed).mockImplementation(async (_c, texts) => texts.map(() => [1, 0]));
+    const question = "x".repeat(2500);
+    const bundle = await assembleContext("system", index, "", "", "task", { extraMatchText: question, semantic: args });
+    expect(bundle.loreReport.semantic?.queryTruncated).toBe(false);
+    expect(vi.mocked(embed).mock.calls[vi.mocked(embed).mock.calls.length - 1]?.[1]).toEqual([question + "\n"]);
+  });
+  it("preserves actionable failure details without serializing raw errors", async () => {
+    enable(); vi.mocked(rerank).mockRejectedValue(new RetrievalError("http", 404));
+    const { report } = await retrieveSemantic("sneak", index, null, new Set(), args);
+    expect(report).toMatchObject({ status: "unavailable", failure: { code: "http", status: 404 } });
   });
   it("bounds even a service that ignores cancellation", async () => {
     vi.useFakeTimers(); enable(); vi.mocked(rerank).mockImplementation(() => new Promise(() => {}));

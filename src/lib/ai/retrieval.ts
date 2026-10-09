@@ -11,7 +11,19 @@ export function retrievalUrl(conn: RetrievalConnection): string {
   if (!conn.retrieval || !validRetrievalPath(conn.retrieval.path)) throw new Error("Invalid retrieval path");
   const base = new URL(conn.baseUrl);
   if (!/^https?:$/.test(base.protocol) || base.username || base.password) throw new Error("Invalid retrieval host");
-  return new URL(conn.retrieval.path, base.origin).href;
+  let path = conn.retrieval.path;
+  // The generic OpenAI default follows the channel's API prefix (Ark, relays,
+  // etc.). An explicit non-default path remains relative to the host root.
+  if (conn.retrieval.format === "openai-embedding" && path === "/v1/embeddings") {
+    const prefix = base.pathname.replace(/\/+(?:chat\/completions|responses|embeddings)\/?$/, "").replace(/\/+$/, "");
+    if (prefix) path = `${prefix}/embeddings`;
+  }
+  return new URL(path, base.origin).href;
+}
+export class RetrievalError extends Error {
+  constructor(public readonly code: "http" | "network" | "response" | "model" | "keyring", public readonly status?: number) {
+    super(`Retrieval ${code}${status ? ` (${status})` : ""}`);
+  }
 }
 function object(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Invalid retrieval response");
@@ -21,13 +33,19 @@ function number(raw: unknown): number {
   return typeof raw === "number" && Number.isFinite(raw) && raw >= 0 ? raw : 0;
 }
 async function request(conn: RetrievalConnection, body: object, signal: AbortSignal, onUsage?: UsageListener) {
-  const response = await fetch(retrievalUrl(conn), {
+  const url = retrievalUrl(conn);
+  const response = await fetch(url, {
     method: "POST", signal, redirect: "error",
     headers: { "Content-Type": "application/json", ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}) },
     body: JSON.stringify({ model: conn.modelId, ...body }),
+  }).catch((error: unknown) => {
+    if (signal.aborted) throw error;
+    throw new RetrievalError("network");
   });
-  if (!response.ok) throw new Error(`Retrieval HTTP ${response.status}`);
-  const data = object(await response.json());
+  if (!response.ok) throw new RetrievalError("http", response.status);
+  let data: Record<string, unknown>;
+  try { data = object(await response.json()); }
+  catch { throw new RetrievalError("response"); }
   const usage = data.usage as Record<string, unknown> | undefined;
   const meta = data.meta as { billed_units?: { search_units?: unknown } } | undefined;
   // Record successful billed requests even if their vectors/scores are malformed.

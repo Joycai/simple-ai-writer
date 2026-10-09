@@ -387,15 +387,16 @@ export async function assembleContext(
   // (and the same "don't guess when the anchor is lost" rule: endIdx < 0
   // contributes no tail at all rather than falling back to the document end).
   const MATCH_TAIL_CHARS = 500;
-  const matchTarget = selection + (
+  const documentMatch = selection + (
     endIdx >= 0 ? documentText.slice(Math.max(0, endIdx - MATCH_TAIL_CHARS), endIdx) : ""
-  ) + (extras?.extraMatchText ? `\n${extras.extraMatchText}` : "");
+  );
+  const matchTarget = documentMatch + (extras?.extraMatchText ? `\n${extras.extraMatchText}` : "");
   const { text: loreSnippets, report: loreReport } = await selectLore(
     matchTarget,
     loreIndex,
     extras?.manualLorePaths ?? [],
     loreBudgetChars,
-    { scope: extras?.loreScope ?? null, semantic: extras?.semantic ? { ...extras.semantic, query: `${extras.extraMatchText ?? ""}\n${matchTarget}` } : undefined },
+    { scope: extras?.loreScope ?? null, semantic: extras?.semantic ? { ...extras.semantic, query: extras.semantic.query ?? `${extras.extraMatchText ?? ""}\n${documentMatch}` } : undefined },
   );
 
   // Layer 4: recent context — the text immediately *before* the selection, used

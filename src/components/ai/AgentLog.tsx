@@ -621,7 +621,10 @@ function AgentLogRow({ row, showTime, runStatus }: {
       // index matched. A miss (0 entities) is reported just as loudly as a hit.
       return (
         <>
-          {event.semanticReport && <SemanticReport report={event.semanticReport} />}
+          {event.semanticReport && <li className={`${styles.row} ${styles.semanticRow}`}>
+            <Marker state={event.semanticReport.semantic?.status === "complete" ? "done" : "error"} />
+            <SemanticReport report={event.semanticReport} />
+          </li>}
           {/* A named document with no window: the assistant was told which file
               is open and left to read it if the question turns out to be about
               it (lib/context/docFocus). Muted, because nothing was spent. */}

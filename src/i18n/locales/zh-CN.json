@@ -4911,7 +4911,7 @@
     "name": "显示名称",
     "protocol": "接口格式",
     "path": "接口路径",
-    "pathHint": "使用所选渠道的主机地址和已保存的 API Key。兼容服务的路径不同时可在此修改。",
+    "pathHint": "默认 /v1/embeddings 会沿用渠道的 API 前缀；其他路径从渠道主机根地址开始。使用渠道已保存的 API Key。",
     "queryPrefix": "查询前缀（可选）",
     "documentPrefix": "材料前缀（可选）",
     "feeGroup": "计费组",
@@ -4944,6 +4944,13 @@
     "deleteNamed": "删除 {{name}}",
     "deleteConfirm": "将从共用模型库中移除此模型，并清除本项目对它的选择。其他使用它的项目需要重新选择模型。不会删除服务端的模型文件。",
     "deleteFailed": "模型删除失败，请重试。",
-    "editAction": "编辑"
+    "editAction": "编辑",
+    "failure": {
+      "http": "服务返回 HTTP {{status}}。请检查接口路径、模型 ID 和渠道凭据。",
+      "network": "无法连接检索服务。请检查服务地址及运行状态。",
+      "response": "服务未返回可用的向量或评分。请检查接口格式与模型兼容性。",
+      "model": "所选检索模型不存在、已停用或类型不符。请到设置中的实验室重新选择。",
+      "keyring": "无法读取渠道 API Key，请检查系统钥匙串的访问权限。"
+    }
   }
 }

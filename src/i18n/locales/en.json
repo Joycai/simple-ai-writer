@@ -4920,7 +4920,7 @@
     "name": "Display name",
     "protocol": "API format",
     "path": "Endpoint path",
-    "pathHint": "Path on the selected channel’s host. Uses that channel’s saved API key. Change this for compatible services with a different path.",
+    "pathHint": "The default /v1/embeddings follows the channel API prefix. Other paths start at the channel host root. Uses the saved channel API key.",
     "queryPrefix": "Query prefix (optional)",
     "documentPrefix": "Document prefix (optional)",
     "feeGroup": "Fee group",
@@ -4953,6 +4953,13 @@
     "deleteNamed": "Delete {{name}}",
     "deleteConfirm": "This model will be removed from the shared model library. Its selection in this project will be cleared; other projects using it will need a replacement. The model files on your server will not be deleted.",
     "deleteFailed": "Could not delete the model. Please try again.",
-    "editAction": "Edit"
+    "editAction": "Edit",
+    "failure": {
+      "http": "The service returned HTTP {{status}}. Check the endpoint path, model ID and channel credentials.",
+      "network": "Could not reach the retrieval service. Check the server address and whether it is running.",
+      "response": "The service did not return usable vectors or scores. Check the API format and model compatibility.",
+      "model": "The selected retrieval model is missing, disabled, or has the wrong type. Select a model in Settings > Labs.",
+      "keyring": "Could not read the channel API key. Check access to the system keychain."
+    }
   }
 }
