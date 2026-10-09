@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useProjectStore } from "../../../stores/projectStore";
 import { useSyncStore } from "../../../stores/syncStore";
 import type { RemoteSyncRecord } from "../../../lib/sync/client";
-import type { FreshnessVerdict } from "../../../lib/sync/status";
+import { syncVerdict, type SyncVerdict } from "../../../lib/sync/status";
 import { ConfigBackupSection } from "./ConfigBackupSection";
 import { KbPicker } from "./KbPicker";
 import { useConfigSyncStore, slotHeader } from "../../../stores/configSyncStore";
@@ -66,9 +66,7 @@ export function SyncPane() {
   // when a connect failed and the fields are the thing to fix.
   const showForm = !connecting && (editConn || sync.connection === "error");
 
-  const verdict: FreshnessVerdict | "offline" | "loading" = !connected
-    ? "offline"
-    : (sync.freshness?.verdict ?? "loading");
+  const verdict = syncVerdict(sync);
 
   const connect = async () => {
     await sync.connect();
@@ -441,7 +439,7 @@ function ConfigSummary({ connected }: { connected: boolean }) {
   return <>{parts.join(" · ")}</>;
 }
 
-type AnchorVerdict = FreshnessVerdict | "offline" | "loading";
+type AnchorVerdict = SyncVerdict;
 
 /** 双卡带中间那根线:五档判定各有一个形。 */
 function Connector({ verdict }: { verdict: AnchorVerdict }) {
@@ -453,7 +451,11 @@ function Connector({ verdict }: { verdict: AnchorVerdict }) {
         {(verdict === "remote-ahead" || risk) && (
           <span className={`${sp.linkHeadLeft} ${risk ? sp.linkHeadRisk : ""}`} />
         )}
-        {verdict === "first-sync" || verdict === "offline" || verdict === "loading" ? (
+        {verdict === "first-sync" ||
+        verdict === "offline" ||
+        verdict === "loading" ||
+        verdict === "unknown" ||
+        verdict === "error" ? (
           <span className={sp.linkDashed} />
         ) : (
           <span
@@ -473,6 +475,8 @@ function VerdictHead({ verdict }: { verdict: AnchorVerdict }) {
   const { t } = useTranslation();
   const f = useSyncStore((s) => s.freshness);
   const checking = useSyncStore((s) => s.checking);
+  const comparisonError = useSyncStore((s) => s.comparisonError);
+  const projectPath = useProjectStore((s) => s.projectPath);
   switch (verdict) {
     case "in-sync":
       return (
@@ -515,6 +519,24 @@ function VerdictHead({ verdict }: { verdict: AnchorVerdict }) {
         <div className={sp.verdictHead}>
           <span className={`${sp.dot} ${sp.dotUnknown}`} />
           <span className={`${sp.verdictName} ${sp.verdictNameDim}`}>{t("sync.vOffline")}</span>
+        </div>
+      );
+    case "unknown":
+    case "error":
+      return (
+        <div className={sp.verdictHead}>
+          <span className={`${sp.dot} ${sp.dotUnknown}`} />
+          <span className={sp.verdictName} title={comparisonError ?? undefined}>
+            {t(verdict === "error" ? "sync.vCompareFailed" : "sync.vUnknown")}
+          </span>
+          <button
+            className={ui.rowBtn}
+            onClick={() => {
+              if (projectPath) void useSyncStore.getState().refreshCounts(projectPath);
+            }}
+          >
+            {t("sync.vRetryComparison")}
+          </button>
         </div>
       );
     default:

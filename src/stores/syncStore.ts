@@ -19,7 +19,6 @@ import {
   manifestHashes,
   probeHealth,
   type RemoteKb,
-  type RemoteManifest,
   type RemoteSyncRecord,
   type SyncClient,
 } from "../lib/sync/client";
@@ -83,6 +82,8 @@ interface SyncState {
   /** Who is newer, from the three-way hash comparison. null = not known
    *  (disconnected, or the manifest could not be fetched). */
   freshness: Freshness | null;
+  comparing: boolean;
+  comparisonError: string | null;
   /** Recent sync runs from the server's per-base log, newest first — every
    *  machine's, which is what a local record could never show. */
   records: RemoteSyncRecord[];
@@ -149,13 +150,23 @@ function requireClient(): SyncClient {
   return client;
 }
 
-/**
- * One comparison at a time. `refreshCounts` is called from several surfaces
- * (the wall widget's mount, hydrate, a reconnect) that can land together, and
- * hashing the whole tree twice in parallel doubles the slowest thing the sync
- * feature does for zero information.
- */
-let refreshing = false;
+/** Invalidate results whenever the project, binding, or connection changes.
+ * Coalesce callers only within that context; a new context must not be dropped
+ * just because the previous project's hashing is still in flight. */
+let comparisonEpoch = 0;
+let comparisonFlight: { epoch: number; promise: Promise<void> } | null = null;
+let hydrationEpoch = 0;
+let connectionEpoch = 0;
+
+const emptyComparison = {
+  freshness: null,
+  comparing: false,
+  comparisonError: null,
+  checking: null,
+  localCount: -1,
+  remoteCount: -1,
+  records: [],
+};
 
 export const useSyncStore = create<SyncState>((set, get) => ({
   serverUrl: "",
@@ -170,6 +181,8 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   localCount: -1,
   remoteCount: -1,
   freshness: null,
+  comparing: false,
+  comparisonError: null,
   records: [],
   checking: null,
   phase: "idle",
@@ -197,9 +210,11 @@ export const useSyncStore = create<SyncState>((set, get) => ({
    * widget is happily synced must not repaint everything as disconnected.
    */
   hydrate: async (projectPath) => {
+    const hydration = ++hydrationEpoch;
+    comparisonEpoch++;
+    set({ hydratedFor: null, binding: null, ...emptyComparison });
     const serverUrl = getServerUrl();
-    const binding = await loadBinding(projectPath);
-    const alive = client !== null;
+    const binding = projectPath ? await loadBinding(projectPath) : null;
     let token = "";
     if (serverUrl) {
       try {
@@ -207,7 +222,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       } catch (e) {
         // A locked keyring is worth saying out loud: it looks exactly like
         // "no token saved" and would otherwise read as a forgotten setup.
-        set({ error: e instanceof Error ? e.message : String(e) });
+        if (hydration === hydrationEpoch) set({ error: e instanceof Error ? e.message : String(e) });
       }
     }
     let device = get().device;
@@ -216,6 +231,8 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     } catch {
       // Purely the 「本机」 tag on record rows; an unnamed machine loses nothing.
     }
+    if (hydration !== hydrationEpoch) return;
+    const alive = client !== null;
     set({
       serverUrl,
       token,
@@ -224,7 +241,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       // The empty string ("no project") is a real hydrated state, not null:
       // the pane's cold-start effect keys on "has hydrate run at all".
       hydratedFor: projectPath,
-      connection: alive ? "connected" : "disconnected",
+      connection: alive ? "connected" : get().connection === "connecting" ? "connecting" : "disconnected",
       kbs: alive ? get().kbs : [],
       freshness: null,
       records: [],
@@ -234,6 +251,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 
   ensureReady: async (projectPath) => {
     if (get().hydratedFor !== projectPath) await get().hydrate(projectPath);
+    if (get().hydratedFor !== projectPath) return;
     const { binding, token, connection } = get();
     if (!binding) return;
     const wantsConnect = connection === "disconnected" && Boolean(token);
@@ -244,9 +262,13 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     // tree included) runs at all. The manual 连接 button deliberately skips
     // this and makes the real attempt, whose error can tell a bad token
     // from a dead server.
-    if (!(await probeHealth(get().serverUrl))) {
+    const epoch = comparisonEpoch;
+    const healthy = await probeHealth(get().serverUrl);
+    if (epoch !== comparisonEpoch) return;
+    if (!healthy) {
+      comparisonEpoch++;
       client = null;
-      set({ connection: "error", error: "服务器无响应（/health 超时或不可达）", kbs: [] });
+      set({ connection: "error", error: "服务器无响应（/health 超时或不可达）", kbs: [], ...emptyComparison });
       return;
     }
     if (wantsConnect) {
@@ -256,7 +278,6 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       // that merely display configuration. A failure lands in `connection:
       // "error"` and the widget shows 连不上 with a manual 重连.
       await get().connect();
-      if (get().connection === "connected") await get().refreshCounts(projectPath);
     } else {
       await get().refreshCounts(projectPath);
     }
@@ -269,25 +290,35 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       set({ error: "请先填写服务器地址", connection: "error" });
       return;
     }
-    set({ connection: "connecting", error: null });
+    const attempt = ++connectionEpoch;
+    comparisonEpoch++;
+    client = null;
+    set({ connection: "connecting", error: null, ...emptyComparison });
     try {
       const next = createSyncClient(url, token, await deviceLabel());
       const kbs = await next.listKbs();
-      client = next;
+      if (attempt !== connectionEpoch) return;
       setServerUrl(url);
       await saveToken(url, token);
+      if (attempt !== connectionEpoch) return;
+      client = next;
       const now = Date.now();
       writePref("app:kbLastConnectedAt", String(now));
       set({ connection: "connected", kbs, serverUrl: url, lastConnectedAt: now });
+      const projectPath = get().hydratedFor;
+      if (projectPath && get().binding) await get().refreshCounts(projectPath);
     } catch (e) {
+      if (attempt !== connectionEpoch) return;
       client = null;
       set({ connection: "error", error: e instanceof Error ? e.message : String(e), kbs: [] });
     }
   },
 
   disconnect: () => {
+    connectionEpoch++;
+    comparisonEpoch++;
     client = null;
-    set({ connection: "disconnected", kbs: [], error: null });
+    set({ connection: "disconnected", kbs: [], error: null, ...emptyComparison });
   },
 
   createKb: async (name) => {
@@ -321,62 +352,64 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       lastSyncAt: null,
     };
     await saveBinding(projectPath, binding);
-    set({ binding });
+    hydrationEpoch++;
+    comparisonEpoch++;
+    set({ binding, hydratedFor: projectPath, ...emptyComparison });
     await get().refreshCounts(projectPath);
   },
 
   unbind: async (projectPath) => {
     await clearBinding(projectPath);
-    set({ binding: null, localCount: -1, remoteCount: -1, freshness: null, records: [] });
+    hydrationEpoch++;
+    comparisonEpoch++;
+    set({ binding: null, ...emptyComparison });
   },
 
   refreshCounts: async (projectPath) => {
-    const { binding } = get();
-    // 没连上就不比对: the local hashing below is the slowest thing this store
-    // does, and without a reachable server there is nothing to compare it to.
-    if (!binding || !client) return;
-    if (refreshing) return;
-    refreshing = true;
-    try {
-      // Remote side first — it fails fast when the server is gone, *before*
-      // any disk work starts, and its entry count is on screen while the
-      // local hashing below still runs.
-      let manifest: RemoteManifest;
+    const { binding, hydratedFor } = get();
+    const activeClient = client;
+    if (!binding || !activeClient || hydratedFor !== projectPath) return;
+    const epoch = comparisonEpoch;
+    if (comparisonFlight?.epoch === epoch) return comparisonFlight.promise;
+    const current = () => comparisonEpoch === epoch && client === activeClient;
+    set({ comparing: true, comparisonError: null, freshness: null, checking: null, localCount: -1, remoteCount: -1 });
+    const promise = (async () => {
       try {
-        manifest = await client.manifest(binding.kbId);
-      } catch {
-        set({ remoteCount: -1, freshness: null });
-        return;
+        const manifest = await activeClient.manifest(binding.kbId);
+        if (!current()) return;
+        set({ remoteCount: manifest.entries.length, checking: { done: 0, total: 0, path: "" } });
+        const local = await localEntryHashes(projectPath, undefined, (p) => {
+          if (current()) set({ checking: p });
+        });
+        if (!current()) return;
+        set({
+          localCount: Object.keys(local).length,
+          binding: { ...binding, kbName: manifest.kb.name },
+          freshness: compareFreshness(local, manifestHashes(manifest), binding.snapshot),
+          comparing: false,
+          checking: null,
+        });
+        // History is optional: an older server may not implement this endpoint.
+        try {
+          const records = await activeClient.listSyncs(binding.kbId);
+          if (current()) set({ records });
+        } catch {
+          // Keep the comparison even if history is unavailable.
+        }
+      } catch (e) {
+        if (current()) {
+          set({
+            freshness: null,
+            comparisonError: e instanceof Error ? e.message : String(e),
+          });
+        }
+      } finally {
+        if (current()) set({ comparing: false, checking: null });
+        if (comparisonFlight?.epoch === epoch) comparisonFlight = null;
       }
-      set({
-        remoteCount: manifest.entries.length,
-        binding: { ...binding, kbName: manifest.kb.name },
-      });
-      let local: HashMap | null = null;
-      try {
-        set({ checking: { done: 0, total: 0, path: "" } });
-        local = await localEntryHashes(projectPath, undefined, (p) => set({ checking: p }));
-        set({ localCount: Object.keys(local).length });
-      } catch {
-        set({ localCount: -1 });
-      }
-      set({
-        // Who is newer — the same three maps the plan reads, so this verdict
-        // and the preview the author will see can never disagree.
-        freshness: local
-          ? compareFreshness(local, manifestHashes(manifest), binding.snapshot)
-          : null,
-      });
-      try {
-        set({ records: await client.listSyncs(binding.kbId) });
-      } catch {
-        // The log is decoration: a server built before the endpoint existed
-        // answers 404, and a failed fetch keeps the list already on screen.
-      }
-    } finally {
-      refreshing = false;
-      set({ checking: null });
-    }
+    })();
+    comparisonFlight = { epoch, promise };
+    await promise;
   },
 
   startPreview: async (projectPath, direction) => {
@@ -458,6 +491,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       await saveBinding(projectPath, result.binding);
       // A run the author had put away comes back with its result: the backup
       // location and the failures are shown nowhere else.
+      comparisonEpoch++;
       set({ phase: "done", result, binding: result.binding, progress: null, modalHidden: false });
       // Report the run to the server's per-base sync log — the record another
       // machine will read to learn this one synced. Best-effort: the sync
