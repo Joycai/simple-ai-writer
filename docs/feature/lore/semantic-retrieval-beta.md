@@ -1,6 +1,6 @@
 # Project-scoped semantic retrieval Beta
 
-> Status: `shipped` · `unverified` against live model endpoints. Protocol fixtures and offline integration tests cover the implementation.
+> Status: `shipped` · live Ark Agent Plan embedding smoke test verified (2026-10-09); broader retrieval quality remains unverified. Protocol fixtures and offline integration tests cover the implementation.
 
 ## Intent and design
 
@@ -50,12 +50,12 @@ Offline tests cover wire bodies, response ordering/validation, same-host endpoin
 
 UI review uses fictional in-memory channel/model/project fixtures, never real credentials or author files: on/off, add/save, selectors, light/dark and narrow/wide settings layout. These browser checks do not prove native keyring/HTTP behavior.
 
-Live model quality and latency remain unverified. Before considering this beyond Beta, evaluate real author-labelled requests against current matching: recovered necessary entries, irrelevant additions, incremental latency and actual usage. Report these separately from protocol correctness. A live endpoint is not selected automatically for testing.
+Broader model quality and latency remain unverified; the Ark Agent Plan smoke test is recorded in `docs/api/retrieval.md`. Before considering this beyond Beta, evaluate real author-labelled requests against current matching: recovered necessary entries, irrelevant additions, incremental latency and actual usage. Report these separately from protocol correctness. A live endpoint is not selected automatically for testing.
 
 ## Chat report and endpoint correction (1.95.1)
 
 The semantic report is an execution-log list row with the shared marker, typography and padding. Its own content wraps long entry names and status text within the available width. Failure reports preserve only a typed reason and HTTP status, never raw upstream errors or credentials. Legacy saved reports without these fields still render.
 
-The default OpenAI embedding path now follows the channel API prefix: a channel ending in `/api/plan/v3` calls `/api/plan/v3/embeddings`, rather than dropping the prefix and calling the host-root `/v1/embeddings`. Root-only local channels continue to use `/v1/embeddings`; custom non-default paths remain host-root paths. This fixes the generic default for prefixed providers without changing user channel configuration. Live authenticated Ark inference remains unverified; a status response without credentials does not establish model compatibility.
+The default OpenAI embedding path now follows the channel API prefix: a channel ending in `/api/plan/v3` calls `/api/plan/v3/embeddings`, rather than dropping the prefix and calling the host-root `/v1/embeddings`. Root-only local channels continue to use `/v1/embeddings`; custom non-default paths remain host-root paths. This fixes the generic default for prefixed providers without changing user channel configuration. Authenticated Ark inference was subsequently verified on the author-supplied `/api/plan/v3/embeddings` endpoint with `doubao-embedding-vision`: HTTP 200, indexed 2,048-dimensional float vectors, and the relevant fictional entry ranked first. This verifies the wire format and endpoint, not the native keychain/UI path.
 
 First-turn assembly no longer appends the author matching text twice to the semantic query. The 4,000-character bound still applies to genuinely long queries and remains visible as an informational notice.
