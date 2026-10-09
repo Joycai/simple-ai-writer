@@ -3,6 +3,8 @@
  * templates, plus the legacy plaintext-key migration helpers used by keyStore.
  */
 
+import type { ConnOptions } from "./conn";
+import { parseRetrievalConfig } from "./retrievalConfig";
 import Database from "@tauri-apps/plugin-sql";
 
 import type { ComfyWorkflowConfig } from "../comfy/workflow";
@@ -434,6 +436,8 @@ export interface Model {
    * before this existed reads as.
    */
   translateFormat?: TranslateFormat;
+  /** Dedicated embedding/reranking model, excluded from conversation pickers. */
+  retrieval?: ConnOptions["retrieval"];
   /**
    * Which transcription protocol an `asr`-type model speaks.
    *
@@ -588,7 +592,7 @@ export function normalizeAsrIdentity(m: Model): Model {
 export function conversationalModels(models: readonly Model[]): Model[] {
   // 转写模型同样无条件排除：它的端点收的是一个音频 URL，不是 messages，作为
   // 主模型会让对话在第一轮就死掉（asr 执行方案 §1 不变量 1）。
-  return models.filter((m) => !isTranslateOnly(m) && !isAsrOnly(m));
+  return models.filter((m) => !isTranslateOnly(m) && !isAsrOnly(m) && !m.retrieval);
 }
 
 /**
@@ -895,6 +899,7 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "translate_format", "TEXT");
   await addColumn(db, modelCols, "models", "structured_output", "TEXT");
   await addColumn(db, modelCols, "models", "asr_format", "TEXT");
+  await addColumn(db, modelCols, "models", "retrieval", "TEXT");
   await addColumn(db, modelCols, "models", "price_per_second", "REAL");
   await addColumn(db, modelCols, "models", "probed_context_size", "INTEGER");
   await addColumn(db, modelCols, "models", "probed_max_output", "INTEGER");
@@ -1296,11 +1301,11 @@ export function modelUpsert(m: Model, pricing: ModelPricing): SqlStatement {
   const keep = pricing === "local" && !m.feeGroupId;
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps, active_route, routes, fee_group_id, relay_upstream, fee_migrated)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${keep ? "(SELECT fee_migrated FROM models WHERE id = ?)" : "?"})`,
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps, active_route, routes, fee_group_id, relay_upstream, retrieval, fee_migrated)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${keep ? "(SELECT fee_migrated FROM models WHERE id = ?)" : "?"})`,
     // The flat columns are the current route's (lib/ai/routes.ts), which is
     // also all an older build reads; the other routes ride in `routes`.
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null, m.activeRoute ?? null, m.routes && Object.keys(m.routes).length ? JSON.stringify(m.routes) : null, m.feeGroupId ?? null, m.relayUpstream ?? null, keep ? m.id : pricing === "legacy" ? null : 1],
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null, m.activeRoute ?? null, m.routes && Object.keys(m.routes).length ? JSON.stringify(m.routes) : null, m.feeGroupId ?? null, m.relayUpstream ?? null, m.retrieval ? JSON.stringify(m.retrieval) : null, keep ? m.id : pricing === "legacy" ? null : 1],
   };
 }
 
@@ -1396,6 +1401,7 @@ function rowToModel(r: Record<string, unknown>): Model {
     translateFormat: parseTranslateFormat(r.translate_format),
     structuredOutput: parseStructuredOutputMode(r.structured_output),
     asrFormat: parseAsrFormat(r.asr_format),
+    retrieval: parseRetrievalConfig(r.retrieval),
     pricePerSecond: typeof r.price_per_second === "number" ? r.price_per_second : undefined,
     feeGroupId: typeof r.fee_group_id === "string" && r.fee_group_id ? r.fee_group_id : undefined,
     activeRoute: parseRouteFamily(r.active_route),

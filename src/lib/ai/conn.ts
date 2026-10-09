@@ -72,6 +72,13 @@ export interface ConnOptions {
    * from the address", the same answer `listProviders` gives (`wireOf`).
    */
   platform?: PlatformId;
+  /** Dedicated retrieval wire; never sent to conversational adapters. */
+  retrieval?: {
+    format: "openai-embedding" | "ollama-embedding" | "cohere-rerank";
+    path: string;
+    queryPrefix?: string;
+    documentPrefix?: string;
+  };
   /** L3 — the model. */
   modelId: string;
   /**
@@ -230,6 +237,7 @@ export function connOptions(conn: AiConn): ConnOptions {
     authMode: provider.authMode,
     platform,
     modelId: model.modelId,
+    retrieval: model.retrieval,
     canonicalModelId: catalogIdOf(model, provider, platform),
     prefix: model.prefix,
     contextSize: contextSize?.value,
@@ -273,6 +281,7 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     authMode: o.authMode,
     platform: o.platform,
     modelId: o.modelId,
+    retrieval: o.retrieval,
     canonicalModelId: o.canonicalModelId,
     prefix: o.prefix,
     contextSize: o.contextSize,

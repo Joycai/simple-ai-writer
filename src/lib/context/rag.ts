@@ -12,6 +12,7 @@
  *   Layer 5 – Current selection / task instruction
  */
 
+import type { SemanticRequest } from "./semanticLore";
 import i18n from "../../i18n";
 import type { MessageContent } from "../ai/types";
 import type { LoreEntity, LoreIndex, LoreScope } from "../lore";
@@ -30,6 +31,7 @@ const MAX_CONTEXT_CHARS = RECENT_WINDOW_MIN_CHARS;
 
 /** Extra options available for AI tasks (continue / polish / rewrite / summary). */
 export interface TaskExtras {
+  semantic?: SemanticRequest;
   /**
    * The pack that declared the task being assembled (`ResolvedTask.packId`) —
    * scopes the 【…】 block labels to that pack's wording. Omitted (base tasks,
@@ -393,7 +395,7 @@ export async function assembleContext(
     loreIndex,
     extras?.manualLorePaths ?? [],
     loreBudgetChars,
-    { scope: extras?.loreScope ?? null },
+    { scope: extras?.loreScope ?? null, semantic: extras?.semantic ? { ...extras.semantic, query: `${extras.extraMatchText ?? ""}\n${matchTarget}` } : undefined },
   );
 
   // Layer 4: recent context — the text immediately *before* the selection, used
@@ -558,6 +560,7 @@ interface TurnInjection {
  * body-only.
  */
 export async function assembleTurnInjection(opts: {
+  semantic?: SemanticRequest;
   loreIndex: LoreIndex;
   /** Question + quote + current document tail — same targets the seed used. */
   matchTarget: string;
@@ -608,6 +611,7 @@ export async function assembleTurnInjection(opts: {
       coreDone: opts.coreDone,
       excludeFacets: opts.excludeFacets,
       scope: opts.scope ?? null,
+      semantic: opts.semantic,
     },
   );
 

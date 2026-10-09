@@ -2,7 +2,8 @@
 
 > 状态：`shipped`。三片 PR 已落地（PR-A / PR-B / PR-C），实现与本文的出入记在 §9。
 > 都不引入向量、不引入新的存储；`selectLore` 多了一层 L3（见 §9.1，这是本文被
-> 实现证伪的一条）。向量通道（原第 3 级）**明确推迟**，理由与重启条件在 §6。
+> 实现证伪的一条）。向量通道（原第 3 级）当时推迟，理由与重启条件在 §6。
+> 2026-10-09 以独立、项目级 [语义检索 Beta](semantic-retrieval-beta.md) 重启；第 0–2 级保持原语义。
 >
 > 前置阅读：[lore-facet-plan.md](lore-facet-plan.md)（特征的激活模型）、
 > [lore-collection-plan.md](lore-collection-plan.md)（取材范围围栏为什么只挡自动发现）。

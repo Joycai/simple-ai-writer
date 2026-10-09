@@ -123,7 +123,7 @@ describe("connOptions", () => {
     const wide = { ...connOptions(conn), systemPrompt: "…", onText: () => {} };
     expect(Object.keys(pickConnOptions(wide)).sort()).toEqual([
       "apiKey", "authMode", "baseUrl", "canonicalModelId", "contextSize", "maxOutput",
-      "modelId", "modelType", "pdfInput", "platform", "prefix", "provenance", "reasoningEffort", "relayUpstream", "safetySettings", "serverTools",
+      "modelId", "modelType", "pdfInput", "platform", "prefix", "provenance", "reasoningEffort", "relayUpstream", "retrieval", "safetySettings", "serverTools",
       "standard", "structuredOutput", "temperature", "textVerbosity", "thinkingBudget", "thinkingCategory", "videoFps", "videoInput", "vlHighResolution",
     ]);
   });

@@ -314,6 +314,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
   // The slot is already ours (pump took it); the controller is what 停止 and
   // the card queues know this run by.
   const controller = new AbortController();
+  const semantic = { projectPath, models: useAiStore.getState().models, providers: useAiStore.getState().providers, signal: controller.signal };
   set((s) => ({ chatAborts: { ...s.chatAborts, [key]: controller } }));
   patchChat(set, key, { error: null });
 
@@ -461,6 +462,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
           // target for a conversation anyway.
           extraMatchText: seedMatch,
           loreScope: useLoreStore.getState().scope,
+          semantic,
         },
         null,
         memory,
@@ -509,6 +511,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
           memoryChars: bundle.storySummary.length,
           loreEntities: bundle.loreReport.entities.length,
           loreChars: bundle.loreReport.usedChars,
+          semanticReport: bundle.loreReport.semantic ? bundle.loreReport : undefined,
           at: Date.now(),
         }),
       }));
@@ -644,6 +647,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
           coreDone: coreDoneFor(meta, loreIdx),
           excludeFacets: injectedFacetsFor(meta, loreIdx),
           scope: useLoreStore.getState().scope,
+          semantic,
           loreBudgetChars: loreBudgetTokens * measureCharsPerToken(focus.text),
           doc: (docSwitched || needsBody) && activeFilePath
             ? {
@@ -663,6 +667,12 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
               }
             : null,
         });
+        if (!inj.text && inj.loreReport.semantic) {
+          patchAssistant((tn) => ({ ...tn, log: appendAgentEventTo(tn.log, {
+            kind: "context-seeded", documentName: null, recentChars: 0, memoryChars: 0,
+            loreEntities: 0, loreChars: 0, semanticReport: inj.loreReport, at: Date.now(),
+          }) }));
+        }
         if (inj.text) {
           const injMsg: StreamMessage = { role: "user", content: inj.text };
           history.push(injMsg);
@@ -682,6 +692,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
               // 条目照样会进报告，把它们算进去等于告诉作者注入了并不存在的东西。
               loreEntities: contributingEntities(inj.loreReport).length,
               loreChars: inj.loreReport.usedChars,
+              semanticReport: inj.loreReport.semantic ? inj.loreReport : undefined,
               at: Date.now(),
             }),
           }));

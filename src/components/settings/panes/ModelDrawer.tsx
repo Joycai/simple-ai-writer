@@ -729,6 +729,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
           })
         : undefined;
       const shared = {
+        retrieval: existing?.retrieval,
         providerId,
         modelId: form.modelId,
         name: form.name || form.modelId,

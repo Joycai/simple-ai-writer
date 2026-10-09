@@ -1,4 +1,5 @@
 import { OutputRecoveryPanel } from "./OutputRecoveryPanel";
+import { SemanticReport } from "./SemanticReport";
 /**
  * 生成面板 — the task-driven half of the AI assistant (续写 / 重写 / 润色 /
  * 总结 / 自定义).
@@ -614,6 +615,7 @@ function LoreReportSection({
         label={t("ai.panel.loreReportTitle", { entry: terms.entry })}
         meta={`${estTk(report.usedChars)} / ${estTk(report.budgetChars)} tk`}
       />
+      <div className={styles.hintLine}><SemanticReport report={report} /></div>
       {report.entities.length === 0 ? (
         <div className={styles.hintLine}>{t("ai.panel.loreReportEmpty")}</div>
       ) : (

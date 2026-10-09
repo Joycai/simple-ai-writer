@@ -154,7 +154,8 @@ export const PINNED_LORE_PREFIX = "ai:pinnedLore:";
  * 只会让打开另一个项目时围栏莫名其妙地还立着。空值/缺席＝全部。
  */
 export const LORE_SCOPE_PREFIX = "lore:scope:";
-export const PREF_KEY_PREFIXES = [PINNED_LORE_PREFIX, LORE_SCOPE_PREFIX] as const;
+export const SEMANTIC_LORE_PREFIX = "lore:semantic:";
+export const PREF_KEY_PREFIXES = [PINNED_LORE_PREFIX, LORE_SCOPE_PREFIX, SEMANTIC_LORE_PREFIX] as const;
 
 /**
  * Preferences that describe *this machine* rather than the author's taste, and

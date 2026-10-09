@@ -503,6 +503,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     let recoveryContext: string | undefined;
     const recoveryTruncated = new Set<string>();
     const controller = new AbortController();
+    extras = { ...extras, semantic: { projectPath, models, providers, signal: controller.signal } };
     set({
       isRunning: true, drafts, activeDraftId: drafts[0].id,
       // Cleared with the log it belongs to: until this run creates its own

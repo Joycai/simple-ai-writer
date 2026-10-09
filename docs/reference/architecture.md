@@ -442,7 +442,7 @@ The vocabulary — `toPosixPath` / `baseName` / `dirName` / `joinPath` / `projec
 ### RAG (Retrieval-Augmented Generation)
 
 - **Location** — `src/lib/context/rag.ts` (assembly) + `src/lib/context/loreSelect.ts` (lore selection)
-- **Method** — Alias-based keyword matching (no embeddings, fast); facet-level secondary-key matching within matched entities
+- **Method** — Alias-based keyword matching and facet-level secondary keys by default; optional project-scoped semantic retrieval appends budget-checked entries in writing tasks and assistant chat. See [semantic retrieval Beta](../feature/lore/semantic-retrieval-beta.md).
 - **Context Assembly** (4 layers in `assembleContext()`):
   1. System prompt (from active template or default)
   2. Lore (facet-aware layered selection, see below)

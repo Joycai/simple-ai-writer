@@ -1,3 +1,4 @@
+import type { LoreActivationReport } from "../context/loreSelect";
 /**
  * Structured events emitted while an AI task runs — the data source for the
  * execution log panel (AiPanel's AgentLogSection).
@@ -363,6 +364,7 @@ export type AgentEvent = AgentEventScope & (
        * richer 「本次注入设定」 report and does not emit this.
        */
       kind: "context-seeded";
+      semanticReport?: Pick<LoreActivationReport, "semantic" | "entities">;
       /** Document the verbatim window was taken from, if one is open. */
       documentName: string | null;
       /** Verbatim manuscript chars injected. */
