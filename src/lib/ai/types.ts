@@ -1,3 +1,4 @@
+import type { ConnOptions } from "./conn";
 /**
  * Shared protocol types for the streaming AI client.
  * Kept dependency-light so helpers (apiLog, tokenEstimate, agent loop) can
@@ -444,7 +445,7 @@ export interface WireRewrite {
   echoed: string;
 }
 
-export interface StreamOptions {
+export interface StreamOptions extends Pick<ConnOptions, "retrieval"> {
   baseUrl: string;
   apiKey: string;
   standard: ApiStandard;

@@ -181,6 +181,8 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 
 #### 实验室与上下文记忆
 
+- `SemanticRetrieval` in Labs adds a project-scoped semantic retrieval Beta, shared retrieval-model registration and themed controls. Pipeline and bounds: [semantic-retrieval-beta.md](../feature/lore/semantic-retrieval-beta.md).
+
 - Under the AI group, 实验室 (`LabPane`) holds **every** Beta switch — each gates an assistant capability, so its neighbours are the panes an author configures next —
 - and 上下文与记忆 (`ContextMemoryPane`) holds what a conversation puts in front of the model, in the order one bounds the next:
   - **窗口占用** (the 50–90% share of the model's window a single request may occupy — `CONTEXT_UTILIZATION_*`; it moved here from the AI panel's chip row on 2026-09-05, which is why the compaction example's third attribution now scrolls up this same page rather than leaving settings — see `docs/feature/agent/compact-threshold-plan.md` §D)
@@ -644,6 +646,8 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 capability packs: what kinds of writing a project enables (`model.ts` pack types/built-ins/validation, `resolve.ts` multi-pack merge, `file.ts` profile.json v1/v2/v3 parsing, `active.ts` module singleton holding the merged `ResolvedWorkspace`, `store.ts` `.ai-writer/profile.json` IO). Drives the knowledge-base category layout (packs + user-defined + the `custom` bucket), each category's optional **type schema** (`slots`/`imageSlots` — what facets and images entries of that category are expected to have; metadata and prompts only, never injection — see `docs/feature/lore/lore-entry-type-plan.md`), and the per-pack-task 【…】 block labels. The merge rules, orphan categories, the task fields and the rules for reading the singleton are in [能力包](#能力包workspace-packs) above.
 
 ### `src/lib/context/`
+
+- `semanticPrefs` stores per-project opt-in/model selection through prefs; `semanticLore` ranks a bounded scoped catalog via `ai/retrieval`, caching vectors in memory. `selectLore` admits semantic additions only after existing layers and reports provenance/fallbacks.
 
 RAG assembly (`rag.ts`), the current time as one line (`clock.ts` — a line, not a tool; appended to a single-shot run's system prompt but stamped on the chat's *current turn*, because a clock in `history[0]` would invalidate the whole conversation's cache prefix every send; roleplay, summarizers and the consistency reviewer deliberately carry none — the source guard in `currentTime.test.ts` makes every new `role: "system"` builder decide. See `docs/reference/architecture.md` → 当前时间), the chat's current-document policy (`docFocus.ts` — describe the open file by default, inject its window only when the turn points at it), story memory (`memory.ts`), book spine (`outline.ts` — the library members live in the spine and `resolveVolumes` filters by them, so 续写 sees only the library (`library.ts` holds the members table's pure rules); `isChapterFile` keeps the folder note `index.md` off the spine, and deliberately reads no `status`: the spine and 续写 are the author's explicit acts, not automatic discovery, see `folder-note-plan.md` §3), book-level continuation context (`bookContext.ts`), per-volume collection digests for the library view (`collectionDigest.ts` + `stores/digestStore.ts`; display-only, never task context)
 

@@ -16,6 +16,7 @@
  * the local config is left alone.
  */
 
+import { parseRetrievalConfig } from "./retrievalConfig";
 import { getVersion } from "@tauri-apps/api/app";
 import { loadCustomFormats, saveCustomFormat } from "../docx/presets";
 import { parseDocFormat, type DocFormatPreset } from "../docx/format";
@@ -350,6 +351,7 @@ export function parseConfigBundle(
       translateFormat: parseTranslateFormat(r.translateFormat),
       // Same degradation for a transcription format this build doesn't know.
       asrFormat: parseAsrFormat(r.asrFormat),
+      retrieval: parseRetrievalConfig(r.retrieval),
       // 绑定的计费组。v2 及更早的包没有它，落库之后 `applyConfigImport`
       // 当场跑的迁移会按旧价格列给这一行补上——和一台机器从老版本升上来
       // 走的是同一个函数。

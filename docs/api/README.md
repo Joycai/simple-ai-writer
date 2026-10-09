@@ -78,7 +78,7 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
   记录存在性即可，不展开。
 - **MCP** —— 工具与上下文的协议，与模型 API 正交，不在这一层。
 - **OpenAI Realtime / 各家语音通道** —— WebSocket/WebRTC，不是请求-响应模型。
-- **Embedding / rerank / 微调端点** —— 另一组端点，与对话补全无关。
+- **微调端点** —— 与对话补全无关。Embedding / rerank 的独立接口见 [retrieval.md](retrieval.md)。
 
 ## 索引
 
@@ -90,6 +90,7 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 | --- | --- | --- |
 | [`landscape.md`](landscape.md) | 四族总览、逐族骨架、部署变体；§7 马甲层——逐家、逐条线路的实测样本（开头有按厂商的索引）；§8 仍存活的自有格式 | `living` |
 | [`tools.md`](tools.md) | 工具定义 / 调用 / 结果回传 / tool_choice 四族对照，含配对硬要求 | `living` |
+| [`retrieval.md`](retrieval.md) | 独立向量与重排接口：OpenAI / Ollama / Cohere，官方文档与响应校验 | `living` |
 | [`streaming.md`](streaming.md) | SSE 机制、结束原因、**失败怎么送达**（四种「看起来成功」的失败） | `living` |
 | [`reasoning.md`](reasoning.md) | §0 核实思考档位的三步（先读文档再测）；思考强度、思维链取回、以及**回传义务**（唯一会让请求被拒的一件） | `living` |
 | [`usage.md`](usage.md) | token 计数的两个口径陷阱、输出上限、上下文窗口为何只能靠探测 | `living` |

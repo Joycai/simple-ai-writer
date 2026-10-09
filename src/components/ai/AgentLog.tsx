@@ -1,3 +1,4 @@
+import { SemanticReport } from "./SemanticReport";
 /**
  * Execution log — the shared live view of an agent run. Used by AiPanel for
  * editor tasks, by AgentChat per assistant turn, and by the lore AI modals.
@@ -620,6 +621,7 @@ function AgentLogRow({ row, showTime, runStatus }: {
       // index matched. A miss (0 entities) is reported just as loudly as a hit.
       return (
         <>
+          {event.semanticReport && <SemanticReport report={event.semanticReport} />}
           {/* A named document with no window: the assistant was told which file
               is open and left to read it if the question turns out to be about
               it (lib/context/docFocus). Muted, because nothing was spent. */}

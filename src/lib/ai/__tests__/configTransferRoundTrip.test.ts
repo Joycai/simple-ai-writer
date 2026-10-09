@@ -104,6 +104,7 @@ const caps: Required<ImageCaps> = {
  * 覆盖真正落库的字段，`fee` 的缺席是断言的一部分。
  */
 const model: Required<Omit<Model, "fee">> = {
+  retrieval: { format: "openai-embedding", path: "/v1/embeddings" },
   id: "m1",
   feeGroupId: "fg1",
   providerId: "p1",

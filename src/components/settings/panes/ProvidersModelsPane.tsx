@@ -617,12 +617,12 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                       )}
                       {/* The route this row's requests take, in full (§6.1). Image and
                           transcription rows pick a dedicated endpoint, not a route. */}
-                      {!isOrphan && m.type !== "image" && !isAsrOnly(m) && (() => {
+                      {!isOrphan && !m.retrieval && m.type !== "image" && !isAsrOnly(m) && (() => {
                         const channel = providers.find((p) => p.id === m.providerId);
                         return channel ? <span className={`${r.badge} ${r.badgeOn}`}>{ROUTE_LONG[activeFamily(m, channel)]}</span> : null;
                       })()}
                       <span className={hub.modelType} data-type={m.type}>
-                        {t(`aiConfig.modelTypes.${m.type}`)}
+                        {m.retrieval ? t(m.retrieval.format === "cohere-rerank" ? "semantic.reranker" : "semantic.embedding") : t(`aiConfig.modelTypes.${m.type}`)}
                       </span>
                       <button
                         className={`${hub.iconBtn} ${hub.iconBtnDanger}`}

@@ -32,6 +32,7 @@
  * refreshes on the next rescan.
  */
 
+import { retrieveSemantic, type SemanticRequest, type SemanticReport } from "./semanticLore";
 import i18n from "../../i18n";
 import { FALLBACK_CHARS_PER_TOKEN } from "./budget";
 import { readFile } from "../fs/fileio";
@@ -201,7 +202,8 @@ export interface LoreEntityReport {
    * "the compass exists and here is what it is" costs one line instead of a
    * chapter (docs/feature/lore/lore-retrieval-plan.md §4.2 ①).
    */
-  reason: "auto" | "pinned" | "ref";
+  reason: "auto" | "pinned" | "ref" | "semantic";
+  semanticScore?: number;
   /**
    * `ref` only: the entry whose prose cited this one.
    *
@@ -231,6 +233,7 @@ export interface LoreEntityReport {
 }
 
 export interface LoreActivationReport {
+  semantic?: SemanticReport;
   entities: LoreEntityReport[];
   budgetChars: number;
   usedChars: number;
@@ -448,6 +451,7 @@ export async function selectLore(
     coreDone?: ReadonlySet<string>;
     excludeFacets?: ReadonlySet<string>;
     scope?: LoreScope;
+    semantic?: SemanticRequest;
   },
 ): Promise<LoreSelection> {
   const lower = matchTarget.toLowerCase();
@@ -880,10 +884,34 @@ export async function selectLore(
     if (parts.length > 1) blocks.push(parts.join("\n"));
   }
 
+  // Semantic additions run last: even their summaries must fit the remainder.
+  const semanticReports: LoreEntityReport[] = [];
+  let semantic: SemanticReport | undefined;
+  if (opts?.semantic) {
+    const exclude = new Set([...byDir.keys()].filter((dir) =>
+      selected.some((s) => s.entity.dirPath === dir) || opts.excludeDirs?.has(dir) || coreDone?.has(dir)));
+    const result = await retrieveSemantic(matchTarget, loreIndex, opts.scope, exclude, opts.semantic);
+    semantic = result.report;
+    for (const { entity, score } of result.matches) {
+      opts.semantic.signal?.throwIfAborted();
+      const remaining = Math.max(0, budgetChars - used - 7);
+      const picked = await selectLore(`${matchTarget}\n${entity.name}`, { [entity.category]: [entity] }, [], remaining,
+        { excludeFacets: opts.excludeFacets, scope: opts.scope });
+      if (!picked.text || picked.report.usedChars > remaining) {
+        if (semantic) semantic.budgetDropped++;
+        continue;
+      }
+      blocks.push(picked.text);
+      used += picked.report.usedChars + 7;
+      semanticReports.push(...picked.report.entities.map((e) => ({ ...e, reason: "semantic" as const, semanticScore: score })));
+    }
+  }
+
   return {
     text: blocks.join("\n\n---\n\n"),
     report: {
-      entities: selected.map((s) => s.report),
+      entities: [...selected.map((s) => s.report), ...semanticReports],
+      ...(semantic ? { semantic } : {}),
       budgetChars,
       usedChars: used,
       ...(autoCapped > 0 ? { autoCapped } : {}),

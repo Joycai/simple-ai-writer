@@ -1,3 +1,4 @@
+import { SemanticRetrieval } from "./SemanticRetrieval";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SettingsTab } from "../../../stores/appStore";
@@ -95,6 +96,8 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
   return (
     <Pane>
       <PaneHeader title={t("systemSettings.tabs.lab")} sub={t("systemSettings.lab.paneSub")} />
+
+      <SemanticRetrieval />
 
       <Section label={t("systemSettings.lab.groupExport")}>
         <Row top title={t("systemSettings.lab.pptxLabel")} desc={t("systemSettings.lab.pptxHint")}>
