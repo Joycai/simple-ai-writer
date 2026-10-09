@@ -20,6 +20,14 @@ export function retrievalUrl(conn: RetrievalConnection): string {
   }
   return new URL(path, base.origin).href;
 }
+/** Endpoint limits measured in docs/api/retrieval.md; do not infer them from model names. */
+export function embeddingLimits(conn: RetrievalConnection): { batchSize: number; timeoutMs: number } {
+  const url = new URL(retrievalUrl(conn));
+  const arkPlan = conn.retrieval?.format === "openai-embedding"
+    && url.hostname === "ark.cn-beijing.volces.com"
+    && url.pathname === "/api/plan/v3/embeddings";
+  return arkPlan ? { batchSize: 10, timeoutMs: 60_000 } : { batchSize: 32, timeoutMs: 20_000 };
+}
 export class RetrievalError extends Error {
   constructor(public readonly code: "http" | "network" | "response" | "model" | "keyring", public readonly status?: number) {
     super(`Retrieval ${code}${status ? ` (${status})` : ""}`);

@@ -25,3 +25,9 @@ Fixture tests validate the documented shapes; the live measurement below certifi
 Official protocol reference: [Volcengine embedding integration guide](https://www.volcengine.com/docs/82379/2279748). The vendor guide describes OpenAI-compatible embeddings; the author supplied their Agent Plan base URL, which was tested exactly rather than substituted with the Coding Plan URL.
 
 `POST https://ark.cn-beijing.volces.com/api/plan/v3/embeddings`, model `doubao-embedding-vision`, bearer authentication, `input` as four short Chinese strings and `encoding_format: "float"` returned HTTP 200 in 1.116 s. The response contained indexed `data[]` vectors, each 2,048 dimensions, and usage of 122 prompt/total tokens. Cosine scores for a poisoned-traveler query were 0.6356 for the healer, 0.1440 for a treasury and 0.0587 for a mountain gate. This is a small protocol/relevance smoke test, not a retrieval benchmark. No credentials or author documents are recorded here.
+
+### Batch limit follow-up — 2026-10-09
+
+The [official Agent Plan embedding guide](https://docs.volcengine.com/docs/ark/agent-plan-personal-vectorized-models?lang=zh) confirms the dedicated `/api/plan/v3` base, Agent Plan key and `doubao-embedding-vision` model. Live tests on the same `/embeddings` endpoint returned HTTP 400 for 32 inputs (both short strings and 1,600-character strings): `Embeddings API input limit exceeded: max 10, got 32`. A single 4,000-character input succeeded (HTTP 200, 3.62 s). Thus the earlier four-input success does not certify larger batches. This limit is measured for this endpoint, not inferred for all services exposing the same model name.
+
+A follow-up request with 10 synthetic descriptions of 1,600 characters each succeeded: HTTP 200 in 1.49 s, 10 indexed vectors of 2,048 dimensions. No author documents or credentials are stored in this measurement.

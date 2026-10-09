@@ -46,6 +46,39 @@ describe("semantic catalog retrieval", () => {
     await retrieveSemantic("sneak", { custom: [{ ...index.custom[0], summary: "Changed" }] }, null, new Set(), args);
     expect(embed).toHaveBeenCalledTimes(5);
   });
+  it("splits a cold Ark catalog into accepted batches and reuses every vector", async () => {
+    enable("e", "");
+    const arkArgs = { ...args, providers: [{ id: "p", baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3" }] as Provider[] };
+    const catalog = { custom: Array.from({ length: 32 }, (_, i) => entity(`entry-${i}`)) };
+    vi.mocked(embed).mockImplementation(async (_c, texts) => {
+      if (texts.length > 10) throw new RetrievalError("http", 400);
+      return texts.map(() => [1, 0]);
+    });
+    const first = await retrieveSemantic("sneak", catalog, null, new Set(), arkArgs);
+    expect(first.report).toMatchObject({ status: "complete", considered: 32 });
+    expect(first.matches).toHaveLength(5);
+    expect(vi.mocked(embed).mock.calls.map((c) => c[1].length)).toEqual([10, 10, 10, 2, 1]);
+    expect(vi.mocked(embed).mock.calls.slice(0, 4).flatMap((c) => c[1])).toEqual(
+      [...catalog.custom].sort((a, b) => a.dirPath.localeCompare(b.dirPath)).map(catalogText),
+    );
+    await retrieveSemantic("again", catalog, null, new Set(), arkArgs);
+    expect(embed).toHaveBeenCalledTimes(6);
+  });
+  it("allows Ark cold batches past 20 seconds but still stops at the absolute deadline", async () => {
+    vi.useFakeTimers(); enable("e", "");
+    const arkArgs = { ...args, providers: [{ id: "p", baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3" }] as Provider[] };
+    vi.mocked(embed).mockImplementation(async (_c, texts) => {
+      await new Promise((resolve) => setTimeout(resolve, 11_000));
+      return texts.map(() => [1, 0]);
+    });
+    const pending = retrieveSemantic("sneak", index, null, new Set(), arkArgs);
+    await vi.advanceTimersByTimeAsync(22_001);
+    expect((await pending).report?.status).toBe("complete");
+    vi.mocked(embed).mockImplementation(() => new Promise(() => {}));
+    const stalled = retrieveSemantic("again", index, null, new Set(), arkArgs);
+    await vi.advanceTimersByTimeAsync(60_001);
+    expect((await stalled).report?.status).toBe("timeout");
+  });
   it("invalidates cached vectors if the served model changes dimensions", async () => {
     enable("e", "");
     vi.mocked(embed).mockResolvedValueOnce([[1, 0]]).mockResolvedValueOnce([[1, 0, 0]]);

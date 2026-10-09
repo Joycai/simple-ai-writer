@@ -2,7 +2,7 @@
 import type { Model, Provider } from "../ai/configDb";
 import { providerFor } from "../ai/routes";
 import { loadApiKey } from "../keyStore";
-import { embed, rerank, cosine, retrievalUrl, RetrievalError, type RetrievalConnection } from "../ai/retrieval";
+import { embed, rerank, cosine, embeddingLimits, retrievalUrl, RetrievalError, type RetrievalConnection } from "../ai/retrieval";
 import { recordUsage } from "../ai/usageRow";
 import { inScope, type LoreEntity, type LoreIndex, type LoreScope } from "../lore";
 import { semanticPrefs } from "./semanticPrefs";
@@ -57,7 +57,9 @@ export async function retrieveSemantic(
   args.signal?.addEventListener("abort", abort, { once: true });
   if (args.signal?.aborted) abort();
   let timedOut = false;
-  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 20_000);
+  const started = Date.now();
+  const timeout = () => { timedOut = true; controller.abort(); };
+  let timer = setTimeout(timeout, 20_000);
   const signal = controller.signal;
   const stopped = new Promise<never>((_, reject) => {
     const stop = () => reject(new DOMException("Retrieval stopped", "AbortError"));
@@ -80,13 +82,18 @@ export async function retrieveSemantic(
     const query = target.slice(0, QUERY_LIMIT);
     if (prefs.embeddingModelId) {
       const { conn, usage } = await resolve(prefs.embeddingModelId, false);
+      const { batchSize, timeoutMs } = embeddingLimits(conn);
+      // Smaller provider batches need more round trips on a cold catalog. Keep
+      // one absolute deadline, including credential resolution and reranking.
+      clearTimeout(timer);
+      timer = setTimeout(timeout, Math.max(0, timeoutMs - (Date.now() - started)));
       const texts = catalog.map((e) => (conn.retrieval?.documentPrefix ?? "") + catalogText(e).slice(0, 1600));
       const identity = JSON.stringify([args.projectPath, prefs.embeddingModelId, retrievalUrl(conn), conn.modelId, conn.retrieval]);
       const keys = texts.map((s) => identity + s);
       const missing = keys.map((k, i) => vectors.has(k) ? -1 : i).filter((i) => i >= 0);
-      for (let start = 0; start < missing.length; start += 32) {
+      for (let start = 0; start < missing.length; start += batchSize) {
         signal.throwIfAborted();
-        const batch = missing.slice(start, start + 32);
+        const batch = missing.slice(start, start + batchSize);
         const output = await embed(conn, batch.map((i) => texts[i]), signal, usage);
         signal.throwIfAborted();
         batch.forEach((i, j) => {
