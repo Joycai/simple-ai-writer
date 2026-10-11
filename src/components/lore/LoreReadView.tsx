@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useProjectStore } from "../../stores/projectStore";
 import { useTranslation } from "react-i18next";
 import { Pencil } from "lucide-react";
 import {
@@ -87,14 +88,15 @@ export function LoreReadView({
 
   const cat = findCategory(entity.category);
   const catLabelText = cat ? categoryLabel(cat, isZh) : entity.category;
+  const workspace = useProjectStore((state) => state.workspace);
   const typeName = categoryTypeName(entity.category, isZh);
   const cols = entityCollections(entity);
   const tags = activationTags(entity);
   const stats = entityReadStats(entity, indexBody.length);
   const catColorValue = degraded ? "var(--lore-neutral-line)" : categoryColor(entity.category);
 
-  const sections = useMemo(() => facetSections(entity), [entity]);
-  const imgSections = useMemo(() => imageSections(entity), [entity]);
+  const sections = useMemo(() => facetSections(entity), [entity, workspace]);
+  const imgSections = useMemo(() => imageSections(entity), [entity, workspace]);
   const dict = entity.dict === true;
   const dictSplit = useMemo(() => (dict ? splitDictBody(indexBody) : null), [dict, indexBody]);
 

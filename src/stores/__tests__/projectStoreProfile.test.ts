@@ -351,3 +351,65 @@ describe("setCustomCategories", () => {
     expect(loreCategoryIds()).toContain("qualifications");
   });
 });
+
+describe("category facet slots", () => {
+  const slot = { id: "user-motivation", labelZh: "动机", labelEn: "Motivation" };
+  beforeEach(async () => {
+    await openProject("D:/projects/book");
+    vi.clearAllMocks();
+  });
+
+  it("persists schema-only custom-category edits and removal", async () => {
+    const store = useProjectStore.getState();
+    await store.setCustomCategories([{ id: "research", labelZh: "Research", labelEn: "Research" }]);
+    await store.setCategorySlots("research", [slot]);
+    expect(useProjectStore.getState().customCategories[0].slots).toEqual([slot]);
+    await store.setCategorySlots("research", [{ ...slot, labelEn: "Purpose", labelZh: "目的", expected: true }]);
+    expect(activeWorkspace().categories.find((c) => c.id === "research")?.slots?.[0].labelEn).toBe("Purpose");
+    await store.setCategorySlots("research", []);
+    expect(useProjectStore.getState().customCategories[0].slots).toBeUndefined();
+    expect(h.saveProfileFileMock).toHaveBeenCalledTimes(4);
+    expect(h.scaffoldProject).toHaveBeenCalledTimes(1);
+    expect(h.scanProject).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves additions through pack, category and collection saves, then reopening", async () => {
+    const store = useProjectStore.getState();
+    await store.setCategorySlots("characters", [slot]);
+    const expected = { characters: { slots: [slot] } };
+    await store.setPacks([]);
+    expect(loreCategoryIds()).not.toContain("characters");
+    await store.setCustomCategories([{ id: "research", labelZh: "Research", labelEn: "Research" }]);
+    await store.setCollections(["Notes"]);
+    await store.setPacks(["novel"]);
+    for (const [, selection] of h.saveProfileFileMock.mock.calls) {
+      expect((selection as ProfileSelection).categoryExtensions).toEqual(expected);
+    }
+    const saved = h.saveProfileFileMock.mock.calls[h.saveProfileFileMock.mock.calls.length - 1][1] as ProfileSelection;
+    await closeProject();
+    expect(useProjectStore.getState().categoryExtensions).toEqual({});
+    h.loadProfileFileMock.mockResolvedValue(saved);
+    await openProject("D:/projects/book");
+    expect(activeWorkspace().categories.find((c) => c.id === "characters")?.slots).toContainEqual(slot);
+    await store.setCategorySlots("characters", []);
+    expect(useProjectStore.getState().categoryExtensions).toEqual({});
+    expect(activeWorkspace().categories.find((c) => c.id === "characters")?.slots).not.toContainEqual(slot);
+  });
+
+  it("leaves the active schema unchanged on save failure", async () => {
+    const before = activeWorkspace();
+    h.saveProfileFileMock.mockRejectedValueOnce(new Error("disk full"));
+    await expect(useProjectStore.getState().setCategorySlots("characters", [slot])).rejects.toThrow("disk full");
+    expect(activeWorkspace()).toBe(before);
+    expect(useProjectStore.getState().categoryExtensions).toEqual({});
+  });
+
+  it("rejects unknown categories, built-in collisions, and invalid lists before writing", async () => {
+    const store = useProjectStore.getState();
+    await expect(store.setCategorySlots("orphan", [slot])).rejects.toThrow(/no longer/);
+    const base = NOVEL_PROFILE.categories.find((c) => c.id === "characters")!.slots![0];
+    await expect(store.setCategorySlots("characters", [{ ...slot, id: base.id.toUpperCase() }])).rejects.toThrow(/built-in/);
+    await expect(store.setCategorySlots("characters", [slot, slot])).rejects.toThrow(/duplicate/);
+    expect(h.saveProfileFileMock).not.toHaveBeenCalled();
+  });
+});

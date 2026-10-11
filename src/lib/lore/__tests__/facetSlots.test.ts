@@ -234,3 +234,20 @@ describe("categoryTypeName", () => {
     expect(categoryTypeName("characters", true)).toBeNull();
   });
 });
+
+describe("project-added slots", () => {
+  it("shares slots across entries, supplies AI guidance, and preserves facets when removed", () => {
+    const custom = { id: "user-purpose", labelZh: "目的", labelEn: "Purpose", expected: true, defaults: { mode: "manual" as const, priority: 2 } };
+    const filled = entity("characters", [facet({ file: "purpose.md", title: "Purpose", slot: custom.id, mode: "manual", priority: 2 })]);
+    const empty = { ...entity("characters", []), id: "bob" };
+    const before = JSON.stringify(filled);
+    setActiveWorkspace(resolveWorkspace([NOVEL_PROFILE], [], { characters: { slots: [custom] } }));
+    expect(slotStatuses(filled).find((s) => s.slot.id === custom.id)?.missing).toBe(false);
+    expect(slotStatuses(empty).find((s) => s.slot.id === custom.id)?.missing).toBe(true);
+    expect(slotChecklistText(empty)).toContain("user-purpose");
+    expect(withSlotDefaults(meta({ slot: custom.id }), "characters").mode).toBe("manual");
+    setActiveWorkspace(resolveWorkspace([NOVEL_PROFILE]));
+    expect(unslottedFacets(filled)).toEqual(filled.facets);
+    expect(JSON.stringify(filled)).toBe(before);
+  });
+});

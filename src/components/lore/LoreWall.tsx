@@ -38,12 +38,13 @@ import { CollectionRail } from "./collections/CollectionRail";
 import { BindingEdge } from "./collections/BindingEdge";
 import { CollectionAssignMenu, type AssignMode } from "./collections/CollectionAssignMenu";
 import { CategoryMoveMenu } from "./CategoryMoveMenu";
+import { CategorySlotsModal } from "./CategorySlotsModal";
 import { CategoryDeleteModal, type CategoryDeleteChoice } from "./CategoryDeleteModal";
 import { CollectionsManageModal } from "./collections/CollectionsManageModal";
 import { ScopeBand, ScopeButton, ScopeMenu, type ScopeMenuAnchor } from "./collections/ScopePicker";
 import cs from "./collections/collections.module.css";
 import { IMAGE_EXTENSIONS, readImageBytes } from "../../lib/fs/images";
-import { appTerms, categoryLabel, defaultCategoryId, findCategory, loreCategories, loreCategoryIds, suggestCategoryId } from "../../lib/profile";
+import { appTerms, categoryLabel, defaultCategoryId, findCategory, loreCategories } from "../../lib/profile";
 import { useAppStore } from "../../stores/appStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { useImageThumbnails } from "./useImageDataUrl";
@@ -124,6 +125,7 @@ export function LoreWall() {
   /** 「移到分类」的浮层。和归集清单分开两个状态：两块板子的语汇不同，合并只会长出一堆 if。 */
   const [catMove, setCatMove] = useState<{ x: number; y: number; above?: boolean } | null>(null);
   /** 分类芯片的右键菜单，和卡片那个 `menu` 分开——菜单项的来源不同，合进去要在每一项上判类型。 */
+  const [slotsCategory, setSlotsCategory] = useState<string | null>(null);
   const [catMenu, setCatMenu] = useState<{ x: number; y: number; cat: IndexedCategory } | null>(null);
   const [deleteCat, setDeleteCat] = useState<IndexedCategory | null>(null);
   const [showManage, setShowManage] = useState(false);
@@ -462,17 +464,21 @@ export function LoreWall() {
           action: () => setDeleteCat(cat) },
       ];
     }
+    const manageSlots: ContextMenuEntry = {
+      kind: "item", icon: <Plus size={13} />, label: t("lore.slotEditor.title"),
+      action: () => { setCatMenu(null); setSlotsCategory(cat.id); },
+    };
     if (!isUserCategory(cat.id)) {
       // 藏掉菜单项会让作者以为自己点错了地方。留着、禁用、把理由写在标签上。
       return [
-        describe,
+        describe, manageSlots,
         { kind: "divider" },
         { kind: "item", icon: <Trash2 size={13} />, label: t("lore.categoryDelete.menu"),
           hint: t("lore.categoryDelete.menuFromPack"), disabled: true, action: () => {} },
       ];
     }
     return [
-      describe,
+      describe, manageSlots,
       { kind: "divider" },
       { kind: "item", icon: <Trash2 size={13} />, danger: true, label: t("lore.categoryDelete.menu"),
         action: () => setDeleteCat(cat) },
@@ -722,20 +728,10 @@ export function LoreWall() {
         />
       )}
       {showNewCategory && (
-        <NewCategoryModal
-          onClose={() => setShowNewCategory(false)}
-          onCreate={async (label) => {
-            const id = suggestCategoryId(label, loreCategoryIds());
-            const store = useProjectStore.getState();
-            await store.setCustomCategories([
-              ...store.customCategories,
-              { id, labelZh: label, labelEn: label },
-            ]);
-            setShowNewCategory(false);
-            setFilter(id);
-          }}
-        />
+        <CategorySlotsModal onClose={() => setShowNewCategory(false)} onSaved={(id) => setFilter(id)} />
       )}
+      {slotsCategory && <CategorySlotsModal categoryId={slotsCategory} onClose={() => setSlotsCategory(null)} />}
+
       {newMode === "manual" && (
         <NewEntryModal
           initialCategory={filter !== "all" ? (filter as CategoryId) : defaultCategoryId()}
@@ -1291,87 +1287,6 @@ export function LoreWall() {
         )}
       </AnimatePresence>
     </div>
-  );
-}
-
-/**
- * Create one user-defined knowledge-base category. The author names it; the
- * folder id is derived (`suggestCategoryId`) so the dialog never has to
- * explain folder-name rules. One label serves both languages — a per-language
- * pair here would be ceremony for a personal organisational bucket.
- */
-function NewCategoryModal({
-  onClose,
-  onCreate,
-}: {
-  onClose: () => void;
-  onCreate: (label: string) => Promise<void>;
-}) {
-  const { t, i18n } = useTranslation();
-  const isZh = i18n.language.startsWith("zh");
-  const [label, setLabel] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const ime = useImeGuard();
-  const shellCloseRef = useRef<(() => void) | null>(null);
-  const requestClose = () => (shellCloseRef.current ?? onClose)();
-
-  const handleSubmit = async () => {
-    if (!label.trim() || saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await onCreate(label.trim());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <ModalShell overlayClassName={styles.modalBackdrop} onClose={onClose} isDirty={label.trim().length > 0} closeOnBackdrop={false} closeRef={shellCloseRef}>
-      <div className={styles.modal}>
-        <div className={styles.modalHeader}>
-          <div className={styles.modalEyebrow}>{isZh ? "新建分类" : "NEW CATEGORY"}</div>
-          <div className={styles.modalTitle}>
-            {t("lore.newCategory.title", { defaultValue: isZh ? "新建知识库分类" : "New knowledge-base category" })}
-          </div>
-        </div>
-
-        <div className={styles.modalBody}>
-          <label className={styles.modalLabel}>{isZh ? "名称" : "Name"}</label>
-          <input
-            className={styles.modalInput}
-            placeholder={t("lore.newCategory.placeholder", { defaultValue: isZh ? "如：会议纪要、竞品调研…" : "e.g. Meeting notes, Research…" })}
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            maxLength={40}
-            {...ime.imeProps}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !ime.isComposing(e)) void handleSubmit();
-            }}
-            autoFocus
-          />
-          {error && (
-            <div style={{ marginTop: 6, font: "400 12px/1.5 var(--font-sans)", color: "var(--color-error)" }}>
-              {error}
-            </div>
-          )}
-        </div>
-
-        <div className={styles.modalActions}>
-          <button className={styles.btnSecondary} onClick={requestClose}>
-            {t("lore.form.cancel", { defaultValue: isZh ? "取消" : "Cancel" })}
-          </button>
-          <button className={styles.btnPrimary} onClick={handleSubmit} disabled={!label.trim() || saving}>
-            {saving
-              ? t("lore.form.creating", { defaultValue: isZh ? "创建中…" : "Creating…" })
-              : t("lore.form.create", { defaultValue: isZh ? "创建" : "Create" })}
-          </button>
-        </div>
-      </div>
-    </ModalShell>
   );
 }
 

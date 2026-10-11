@@ -1,0 +1,24 @@
+.overlay { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; background: var(--color-bg-overlay); }
+.modal { width: min(640px, calc(100vw - 32px)); max-height: 88vh; display: flex; flex-direction: column; font-family: var(--font-sans); background: var(--color-bg-surface); color: var(--color-text-primary); border: 1px solid var(--color-border); box-shadow: var(--lore-shadow-modal); }
+.header { padding: var(--space-5); border-bottom: 1px solid var(--color-border); }
+.header h2 { margin: 0 0 var(--space-2); font-size: 20px; }
+.header p { margin: var(--space-2) 0 0; font-size: 12px; color: var(--color-text-muted); }
+.body { overflow-y: auto; padding: var(--space-5); }
+.fields { display: grid; gap: var(--space-3); border: 0; margin: 0; padding: 0; min-width: 0; }
+.fields label { display: grid; gap: var(--space-2); font-size: 12px; }
+.fields input:not([type="checkbox"]), .fields textarea, .fields select { width: 100%; box-sizing: border-box; border: 1px solid var(--color-border); background: var(--color-bg-surface); color: var(--color-text-primary); padding: var(--space-2); border-radius: 0; font: inherit; }
+.fields textarea { min-height: 64px; resize: vertical; }
+.fields h3 { margin: 0; font-size: 13px; }
+.fields .checkbox { display: flex; align-items: center; }
+.checkbox input { accent-color: var(--color-sienna); }
+.slot { border: 1px solid var(--color-border); padding: var(--space-3); }
+.inherited { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); font-size: 12px; color: var(--color-text-muted); }
+.inherited span { border: 1px solid var(--color-border); padding: var(--space-1) var(--space-2); }
+.note { font-size: 12px; color: var(--color-text-muted); line-height: 1.6; }
+.actions, .footer { display: flex; gap: var(--space-2); margin-top: var(--space-3); }
+.footer { justify-content: flex-end; padding: var(--space-4) var(--space-5); border-top: 1px solid var(--color-border); margin-top: 0; }
+.modal button { padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); background: transparent; color: var(--color-text-primary); font: inherit; cursor: pointer; border-radius: 0; }
+.modal button:disabled { opacity: .45; cursor: default; }
+.modal button:hover:not(:disabled) { background: var(--color-bg-hover); }
+.modal .primary { background: var(--color-sienna); color: var(--color-bg-surface); }
+.error { color: var(--color-error); font-size: 12px; }

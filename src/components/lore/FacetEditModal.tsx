@@ -26,7 +26,7 @@ import {
   type FacetMeta,
   type LoreEntity,
 } from "../../lib/lore";
-import { categoryFacetSlots, findFacetSlot, slotLabel } from "../../lib/profile";
+import { categoryFacetSlots, findFacetSlot, findCategory, slotLabel } from "../../lib/profile";
 import { parseFrontmatter } from "../../lib/fs/markdown";
 import { estimateTextTokens } from "../../lib/ai/tokenEstimate";
 import { useProjectStore } from "../../stores/projectStore";
@@ -36,6 +36,7 @@ import { MarkdownPreview } from "../common/MarkdownPreview";
 import { ModalShell } from "../common/ModalShell";
 import { Combobox } from "../common/Combobox";
 import { useImeGuard } from "../../lib/ime";
+import { CategorySlotsModal } from "./CategorySlotsModal";
 import { FacetAiAssistantModal } from "./ai/FacetAiAssistantModal";
 import styles from "./FacetEditModal.module.css";
 
@@ -84,6 +85,7 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose, onSa
   const [loaded, setLoaded] = useState(file === null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSlots, setShowSlots] = useState(false);
   const [showAi, setShowAi] = useState(false);
 
   // Group suggestions: every group already used on this entity.
@@ -93,9 +95,8 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose, onSa
   );
 
   // ── 归属槽位 (屏 21) ────────────────────────────────────────────────────
-  // The facet's place in its category's type schema. The whole field disappears
-  // when the category declares no slots — a user-defined category, the `custom`
-  // bucket, or one whose pack is off — which is the degraded form of this form.
+  // Active categories always offer slot creation, including an empty schema.
+  // Unknown stored ids remain intact and display as unclassified.
   const slots = categoryFacetSlots(entity.category);
   const typeName = categoryTypeName(entity.category, isZh);
   const [slot, setSlot] = useState<string | null>(initialSlot);
@@ -296,7 +297,7 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose, onSa
           </div>
 
           {/* 归属槽位 (屏 21) — 面只影响归类与默认值，不影响注入规则本身。 */}
-          {slots.length > 0 && (
+          {(slots.length > 0 || findCategory(entity.category)) && (
             <div>
               <div className={styles.label}>
                 {t("lore.slot.field", { defaultValue: "归属槽位" })}
@@ -312,12 +313,13 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose, onSa
               <div className={styles.slotChips}>
                 <button
                   type="button"
-                  className={`${styles.slotChip} ${slot === null ? styles.slotChipActive : ""} ${styles.slotChipNone}`}
+                  className={`${styles.slotChip} ${!slot || !findFacetSlot(entity.category, slot) ? styles.slotChipActive : ""} ${styles.slotChipNone}`}
                   onClick={() => pickSlot(null)}
-                  aria-pressed={slot === null}
+                  aria-pressed={!slot || !findFacetSlot(entity.category, slot)}
                 >
                   {t("lore.slot.none", { defaultValue: "不归类" })}
                 </button>
+                {findCategory(entity.category) && <button type="button" className={styles.slotChip} onClick={() => setShowSlots(true)}>{t("lore.slotEditor.add")}</button>}
                 {slots.map((sl) => (
                   <button
                     key={sl.id}
@@ -498,6 +500,7 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose, onSa
           </button>
         </div>
       </div>
+      {showSlots && <CategorySlotsModal categoryId={entity.category} addSlot onClose={() => setShowSlots(false)} onSaved={(_category, id) => { if (id) pickSlot(id); }} />}
     </ModalShell>
 
     {showAi && (
