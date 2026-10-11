@@ -15,6 +15,9 @@ import {
   builtinProfile,
   loadProfileFile,
   parseCategoryList,
+  parseFacetSlots,
+  type CategoryExtensions,
+  type FacetSlot,
   resetActiveWorkspace,
   resolveWorkspace,
   saveProfileFile,
@@ -173,6 +176,10 @@ interface ProjectState {
    * them; this is the editable source list `setCustomCategories` works from.
    */
   customCategories: ProfileCategory[];
+  /** Project additions to pack/app categories; retained while their category is unavailable. */
+  categoryExtensions: CategoryExtensions;
+  /** Replace only author-owned facet slots, never built-in or image slots. */
+  setCategorySlots: (categoryId: string, slots: FacetSlot[]) => Promise<void>;
   /**
    * The project's declared knowledge-base **collections**, in profile.json
    * order (see lib/lore/collections).
@@ -412,6 +419,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   workspace: DEFAULT_WORKSPACE,
   customPacks: [],
   customCategories: [],
+  categoryExtensions: {},
   collections: [],
   activeFilePath: null,
   fileTree: [],
@@ -465,7 +473,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // project reading the failed project's categories.
       const selection = await loadProfileFile(target);
       const workspace = selection
-        ? resolveWorkspace(selection.enabled, selection.customCategories)
+        ? resolveWorkspace(selection.enabled, selection.customCategories, selection.categoryExtensions)
         : DEFAULT_WORKSPACE;
       if (workspace.issues.length > 0) {
         console.warn(`[profile] ${target} merge problems:\n  - ${workspace.issues.join("\n  - ")}`);
@@ -475,7 +483,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       resetDocuments();
       await getDb(target);
       setActiveWorkspace(workspace);
-      set({ projectPath: target, workspace, customPacks: selection?.customPacks ?? [], customCategories: selection?.customCategories ?? [], collections: selection?.collections ?? [], activeFilePath: null, fileTree: [], treeFor: null, expandedDirs: {}, clipboard: null });
+      set({ projectPath: target, workspace, customPacks: selection?.customPacks ?? [], customCategories: selection?.customCategories ?? [], categoryExtensions: selection?.categoryExtensions ?? {}, collections: selection?.collections ?? [], activeFilePath: null, fileTree: [], treeFor: null, expandedDirs: {}, clipboard: null });
       useEditorStore.getState().setDocCounts(0, 0);
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(target);
@@ -515,7 +523,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // Back to the default workspace: with no project open, anything that reads
     // the active workspace must not still see the closed project's categories.
     resetActiveWorkspace();
-    set({ projectPath: null, workspace: DEFAULT_WORKSPACE, customPacks: [], customCategories: [], collections: [], activeFilePath: null, fileTree: [], treeFor: null, expandedDirs: {}, clipboard: null });
+    set({ projectPath: null, workspace: DEFAULT_WORKSPACE, customPacks: [], customCategories: [], categoryExtensions: {}, collections: [], activeFilePath: null, fileTree: [], treeFor: null, expandedDirs: {}, clipboard: null });
     useEditorStore.getState().setDocCounts(0, 0);
     if (closing) void releaseProjectLock(closing);
   },
@@ -537,7 +545,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       enabled.push(resolvePack(id));
     }
 
-    const next = resolveWorkspace(enabled, customCategories);
+    const next = resolveWorkspace(enabled, customCategories, get().categoryExtensions);
     if (next.issues.length > 0) {
       console.warn(`[profile] merge problems:\n  - ${next.issues.join("\n  - ")}`);
     }
@@ -552,13 +560,45 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     // Persist first: if writing profile.json fails, nothing else has moved and
     // the next open still resolves the previous selection.
-    await saveProfileFile(projectPath, { enabled: next.enabled, customPacks, customCategories, collections: get().collections, issues: [] });
+    await saveProfileFile(projectPath, { categoryExtensions: get().categoryExtensions, enabled: next.enabled, customPacks, customCategories, collections: get().collections, issues: [] });
     setActiveWorkspace(next);
     set({ workspace: next });
     await scaffoldProject(projectPath, next.categories.map((c) => c.id));
     await get().refreshFileTree();
     // The lore index is keyed by category, so it is entirely stale now.
     await useLoreStore.getState().scanProject(projectPath);
+  },
+
+  setCategorySlots: async (categoryId, slots) => {
+    const { projectPath, workspace, customCategories, categoryExtensions, customPacks, collections } = get();
+    if (!projectPath) throw new Error("Open a project before changing slots.");
+    const key = categoryId.toLowerCase();
+    const category = workspace.categories.find((c) => c.id.toLowerCase() === key);
+    if (!category) throw new Error("This category is no longer available.");
+    const issues: string[] = [];
+    const cleaned = parseFacetSlots(slots, issues);
+    if (issues.length) throw new Error(issues.join("\n"));
+    const own = customCategories.find((c) => c.id.toLowerCase() === key);
+    const inherited = resolveWorkspace(workspace.enabled).categories.find((c) => c.id.toLowerCase() === key)?.slots ?? [];
+    if (cleaned.some((slot) => inherited.some((base) => base.id.toLowerCase() === slot.id.toLowerCase()))) {
+      throw new Error("A custom slot cannot replace a built-in slot.");
+    }
+    if (own) {
+      await get().setCustomCategories(customCategories.map((c) => {
+        if (c !== own) return c;
+        const { slots: _previous, ...rest } = c;
+        return cleaned.length ? { ...rest, slots: cleaned } : rest;
+      }));
+      return;
+    }
+    const nextExtensions = { ...categoryExtensions };
+    if (cleaned.length) Object.defineProperty(nextExtensions, key, { value: { slots: cleaned }, enumerable: true, configurable: true, writable: true });
+    else delete nextExtensions[key];
+    if (JSON.stringify(nextExtensions) === JSON.stringify(categoryExtensions)) return;
+    await saveProfileFile(projectPath, { enabled: workspace.enabled, customPacks, customCategories, collections, categoryExtensions: nextExtensions, issues: [] });
+    const next = resolveWorkspace(workspace.enabled, customCategories, nextExtensions);
+    setActiveWorkspace(next);
+    set({ categoryExtensions: nextExtensions, workspace: next });
   },
 
   setCustomCategories: async (categories) => {
@@ -572,23 +612,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (issues.length > 0) {
       throw new Error(`Invalid categories:\n  - ${issues.join("\n  - ")}`);
     }
-    if (
-      cleaned.length === customCategories.length &&
-      cleaned.every(
-        (c, i) =>
-          c.id === customCategories[i].id &&
-          c.labelZh === customCategories[i].labelZh &&
-          c.labelEn === customCategories[i].labelEn,
-      )
-    ) {
-      return;
-    }
+    if (JSON.stringify(cleaned) === JSON.stringify(customCategories)) return;
 
-    const next = resolveWorkspace(workspace.enabled, cleaned);
+    const sameDirectories = cleaned.length === customCategories.length &&
+      cleaned.every((c) => customCategories.some((previous) => previous.id === c.id));
+    const next = resolveWorkspace(workspace.enabled, cleaned, get().categoryExtensions);
     // Persist first, same contract as setPacks.
-    await saveProfileFile(projectPath, { enabled: workspace.enabled, customPacks, customCategories: cleaned, collections: get().collections, issues: [] });
+    await saveProfileFile(projectPath, { categoryExtensions: get().categoryExtensions, enabled: workspace.enabled, customPacks, customCategories: cleaned, collections: get().collections, issues: [] });
     setActiveWorkspace(next);
     set({ workspace: next, customCategories: cleaned });
+    // A schema/label edit only changes the resolved view. No entity or folder
+    // changed, so scanning can only disturb an open draft or fail after saving.
+    if (sameDirectories) return;
     await scaffoldProject(projectPath, next.categories.map((c) => c.id));
     await get().refreshFileTree();
     // A removed category hides its entities; an added one may reveal parked
@@ -605,7 +640,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // list but still named by some entry keeps working; it just stops carrying
     // an author-chosen position (see collectionViews). Unfiling is
     // `deleteCollection`, which is a different intent and says so.
-    await saveProfileFile(projectPath, {
+    await saveProfileFile(projectPath, { categoryExtensions: get().categoryExtensions,
       enabled: workspace.enabled, customPacks, customCategories, collections: cleaned, issues: [],
     });
     set({ collections: cleaned });
@@ -621,7 +656,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const fresh = add.filter((name) => !collections.some((c) => sameCollection(c, name)));
     if (fresh.length > 0) {
       const next = normalizeCollections([...collections, ...fresh]);
-      await saveProfileFile(projectPath, {
+      await saveProfileFile(projectPath, { categoryExtensions: get().categoryExtensions,
         enabled: workspace.enabled, customPacks, customCategories, collections: next, issues: [],
       });
       set({ collections: next });
@@ -644,7 +679,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const loreStore = useLoreStore.getState();
     const touched = await refileCollection(projectPath, loreStore.index, from, target);
     const next = renameInList(collections, from, target);
-    await saveProfileFile(projectPath, {
+    await saveProfileFile(projectPath, { categoryExtensions: get().categoryExtensions,
       enabled: workspace.enabled, customPacks, customCategories, collections: next, issues: [],
     });
     set({ collections: next });
@@ -666,7 +701,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const loreStore = useLoreStore.getState();
     const touched = await refileCollection(projectPath, loreStore.index, name, null);
     const next = removeFromList(collections, name);
-    await saveProfileFile(projectPath, {
+    await saveProfileFile(projectPath, { categoryExtensions: get().categoryExtensions,
       enabled: workspace.enabled, customPacks, customCategories, collections: next, issues: [],
     });
     set({ collections: next });

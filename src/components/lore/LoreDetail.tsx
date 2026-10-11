@@ -82,7 +82,7 @@ interface Props {
 export function LoreDetail({ entity: initialEntity, onBack, initialEditing = false }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
-  const { setActiveFilePath, projectPath } = useProjectStore();
+  const { setActiveFilePath, projectPath, workspace } = useProjectStore();
   const loreIndex = useLoreStore((s) => s.index);
   const scanProject = useLoreStore((s) => s.scanProject);
   const refreshEntity = useLoreStore((s) => s.refreshEntity);
@@ -322,9 +322,9 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   // one, the `custom` bucket, or one whose pack is disabled — and then every
   // column renders the flat list it always did. That flat rendering *is* the
   // degraded presentation (屏 23); nothing here changes what gets injected.
-  const sections = useMemo(() => facetSections(entity), [entity]);
-  const imgSections = useMemo(() => imageSections(entity), [entity]);
-  const coverage = useMemo(() => slotCoverage(entity), [entity]);
+  const sections = useMemo(() => facetSections(entity), [entity, workspace]);
+  const imgSections = useMemo(() => imageSections(entity), [entity, workspace]);
+  const coverage = useMemo(() => slotCoverage(entity), [entity, workspace]);
   const imageSlots = categoryImageSlots(entity.category);
   const typeName = categoryTypeName(entity.category, isZh);
 

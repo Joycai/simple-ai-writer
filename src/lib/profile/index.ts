@@ -11,3 +11,4 @@ export * from "./resolve";
 export * from "./file";
 export * from "./active";
 export * from "./store";
+export * from "./categoryExtensions";

@@ -1530,7 +1530,7 @@ const PROMPT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_.]{0,79}$/;
 export const MAX_CATEGORIES = 24;
 const MAX_LABEL_CHARS = 40;
 /** Schema size caps — a category schema is a checklist, not a database. */
-const MAX_SLOTS = 12;
+export const MAX_SLOTS = 12;
 const MAX_IMAGE_SLOTS = 8;
 /** Suggested trigger words per slot, capped like a facet's own key list. */
 const MAX_SLOT_KEYS = 8;
@@ -1657,6 +1657,11 @@ function parseFacetSlot(raw: unknown, issues: string[]): FacetSlot | null {
   if (!base) return null;
   const defaults = parseSlotDefaults((raw as Record<string, unknown>).defaults, base.id, issues);
   return defaults ? { ...base, defaults } : base;
+}
+
+/** Shared validator for editable category schemas and project extensions. */
+export function parseFacetSlots(raw: unknown, issues: string[]): FacetSlot[] {
+  return parseSlotList(raw, "facet slot", MAX_SLOTS, parseFacetSlot, issues);
 }
 
 function parseImageSlot(raw: unknown, issues: string[]): ImageSlot | null {

@@ -59,6 +59,9 @@ export async function saveProfileFile(projectPath: string, selection: ProfileSel
   };
   if (selection.customPacks.length > 0) body.packs = selection.customPacks;
   if (selection.customCategories.length > 0) body.categories = selection.customCategories;
+  if (selection.categoryExtensions && Object.keys(selection.categoryExtensions).length > 0) {
+    body.categoryExtensions = selection.categoryExtensions;
+  }
   // Only the declaration — the membership is on the entries themselves, and an
   // absent list simply means every collection is discovered from them.
   if (selection.collections.length > 0) body.collections = selection.collections;

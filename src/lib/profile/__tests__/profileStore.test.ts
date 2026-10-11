@@ -201,3 +201,12 @@ describe("saveProfileFile", () => {
     expect(selection?.customPacks.map((p) => p.id)).toEqual(["homebrew"]);
   });
 });
+
+it("round-trips category extensions and omits an empty extension map", async () => {
+  const categoryExtensions = { characters: { slots: [{ id: "user-purpose", labelZh: "目的", labelEn: "Purpose" }] } };
+  const selection = { enabled: [NOVEL_PROFILE], customPacks: [], customCategories: [], collections: [], issues: [], categoryExtensions };
+  await saveProfileFile(ROOT, selection);
+  expect((await loadProfileFile(ROOT))?.categoryExtensions).toEqual(categoryExtensions);
+  await saveProfileFile(ROOT, { ...selection, categoryExtensions: {} });
+  expect(JSON.parse(files.get(PROFILE_PATH)!)).not.toHaveProperty("categoryExtensions");
+});

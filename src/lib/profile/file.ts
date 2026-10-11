@@ -22,6 +22,7 @@
  */
 
 import { normalizeCollections } from "../lore/collections";
+import { parseCategoryExtensions, type CategoryExtensions } from "./categoryExtensions";
 import {
   builtinProfile,
   NOVEL_PROFILE,
@@ -33,6 +34,7 @@ import {
 
 /** What profile.json describes once parsed: the project's pack selection. */
 export interface ProfileSelection {
+  categoryExtensions?: CategoryExtensions;
   /** Every enabled pack, in file order. May be empty (a packs-free project). */
   enabled: WorkspaceProfile[];
   /**
@@ -202,5 +204,8 @@ function parseSelection(rec: Record<string, unknown>, version: 2 | 3): ProfileSe
   const collections =
     version === 3 ? normalizeCollections(rec.collections) : [];
 
-  return { enabled, customPacks, customCategories, collections, issues };
+  const categoryExtensions = version === 3 ? parseCategoryExtensions(rec.categoryExtensions, issues) : {};
+  return { enabled, customPacks, customCategories, collections, issues,
+    ...(Object.keys(categoryExtensions).length ? { categoryExtensions } : {}),
+  };
 }

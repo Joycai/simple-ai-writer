@@ -26,6 +26,7 @@
  */
 
 import { DEFAULT_TASKS, type ProfileCategory, type TaskDef, type WorkspaceProfile } from "./model";
+import type { CategoryExtensions } from "./categoryExtensions";
 
 /**
  * The app-level misc bucket. Always last in the merged view and always
@@ -171,6 +172,7 @@ export function packsDeclaringCategory(
 export function resolveWorkspace(
   enabled: readonly WorkspaceProfile[],
   userCategories: readonly ProfileCategory[] = [],
+  extensions: CategoryExtensions = {},
 ): ResolvedWorkspace {
   // Dedupe packs by id defensively — ./file already rejects duplicates.
   const packs: WorkspaceProfile[] = [];
@@ -213,6 +215,19 @@ export function resolveWorkspace(
   }
   for (const cat of userCategories) addCategory(cat, null, true);
   addCategory(CUSTOM_CATEGORY, null, false);
+
+  // Extensions are dormant when no enabled declaration supplies the category.
+  // Existing pack arbitration stays unchanged; a conflict is reported, not overwritten.
+  for (const [id, extension] of Object.entries(extensions)) {
+    const category = categoryByKey.get(id.toLowerCase());
+    if (!category) continue;
+    const used = new Set(category.slots?.map((slot) => slot.id.toLowerCase()));
+    for (const slot of extension.slots) {
+      if (used.has(slot.id.toLowerCase())) issues.push(`Slot ${slot.id} in category ${id} conflicts with an existing slot`);
+    }
+    const slots = unionSlots(category.slots, extension.slots);
+    if (slots) category.slots = slots;
+  }
 
   // Tasks: the app-level base menu first, then each pack's. A pack declaring a
   // base id *overrides* that base task in place (first enabled pack wins,

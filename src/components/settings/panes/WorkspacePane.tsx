@@ -7,9 +7,7 @@ import { exportProjectBundle, restoreProjectBundle } from "../../../lib/fs/proje
 import {
   BUILTIN_PROFILES,
   categoryLabel,
-  loreCategoryIds,
   profileLabel,
-  suggestCategoryId,
   type ProfileCategory,
   type WorkspaceProfile,
 } from "../../../lib/profile";
@@ -29,6 +27,7 @@ import {
   CategoryDeleteModal,
   type CategoryDeleteChoice,
 } from "../../lore/CategoryDeleteModal";
+import { CategorySlotsModal } from "../../lore/CategorySlotsModal";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 import common from "../settingsCommon.module.css";
@@ -433,7 +432,8 @@ function CustomCategoriesSection() {
   const setCustomCategories = useProjectStore((s) => s.setCustomCategories);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [newLabel, setNewLabel] = useState("");
+  const [slotEditor, setSlotEditor] = useState<{ categoryId?: string } | null>(null);
+  const workspace = useProjectStore((s) => s.workspace);
   const [editing, setEditing] = useState<{ id: string; label: string } | null>(null);
   const [deleting, setDeleting] = useState<ProfileCategory | null>(null);
   const loreIndex = useLoreStore((s) => s.index);
@@ -451,14 +451,6 @@ function CustomCategoriesSection() {
     } finally {
       setBusy(false);
     }
-  };
-
-  const handleAdd = async () => {
-    const label = newLabel.trim();
-    if (!label || busy) return;
-    const id = suggestCategoryId(label, loreCategoryIds());
-    await apply([...customCategories, { id, labelZh: label, labelEn: label }]);
-    setNewLabel("");
   };
 
   const handleRename = async () => {
@@ -496,12 +488,12 @@ function CustomCategoriesSection() {
       <div className={`${ui.rowStacked} ${ui.rowLast}`}>
         <div className={ui.rowDesc}>{t("systemSettings.workspace.categoriesHint")}</div>
 
-        {customCategories.length > 0 && (
+        {workspace.categories.length > 0 && (
           <div style={{ marginTop: "var(--space-3)" }}>
-            {customCategories.map((c) => (
+            {workspace.categories.map((c) => (
               <div key={c.id} className={ui.customRow}>
                 <span className={ui.badge}>{c.id}</span>
-                {editing?.id === c.id ? (
+                {!c.userDefined ? <span className={ui.customName}>{categoryLabel(c, isZh)}</span> : editing?.id === c.id ? (
                   <input
                     className={common.input}
                     value={editing.label}
@@ -530,35 +522,24 @@ function CustomCategoriesSection() {
                   </span>
                 )}
                 <span className={ui.spacer} />
-                <button
+                <button className={ui.rowBtn} onClick={() => setSlotEditor({ categoryId: c.id })}>{t("lore.slotEditor.title")}</button>
+                {c.userDefined && <button
                   className={ui.iconBtn}
                   title={t("systemSettings.workspace.removeCategory")}
                   disabled={busy}
                   onClick={() => setDeleting(c)}
                 >
                   <X size={14} />
-                </button>
+                </button>}
               </div>
             ))}
           </div>
         )}
 
-        <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-3)" }}>
-          <input
-            className={common.input}
-            placeholder={t("systemSettings.workspace.newCategoryPlaceholder")}
-            value={newLabel}
-            maxLength={40}
-            onChange={(e) => setNewLabel(e.target.value)}
-            {...ime.imeProps}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !ime.isComposing(e)) void handleAdd();
-            }}
-          />
-          <button className={ui.rowBtn} onClick={() => void handleAdd()} disabled={busy || !newLabel.trim()}>
-            {t("systemSettings.workspace.addCategory")}
-          </button>
+        <div style={{ marginTop: "var(--space-3)" }}>
+          <button className={ui.rowBtn} onClick={() => setSlotEditor({})}>{t("systemSettings.workspace.addCategory")}</button>
         </div>
+        {slotEditor && <CategorySlotsModal {...slotEditor} onClose={() => setSlotEditor(null)} />}
         {error && <div className={ui.statusError}>{error}</div>}
       </div>
 
