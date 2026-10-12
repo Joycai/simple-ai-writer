@@ -1,3 +1,5 @@
+import { SchemaMergePanel } from "./SchemaMergePanel";
+import type { SchemaChoices } from "../../lib/profile/transferSchema";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
@@ -556,10 +558,11 @@ export function LoreWall() {
     }
   };
 
-  const handleApplyImport = async (strategy: ConflictStrategy) => {
+  const handleApplyImport = async (strategy: ConflictStrategy, choices: SchemaChoices) => {
     if (!projectPath || !importStaged) return;
     try {
-      const summary = await applyLoreImport(projectPath, importStaged, strategy);
+      const summary = await applyLoreImport(projectPath, importStaged, strategy, choices);
+      await useProjectStore.getState().reloadCategoryDefinitions(projectPath);
       setImportStaged(null);
       await scanProject(projectPath);
       let msg = t("lore.transfer.importDone", { imported: summary.imported, skipped: summary.skipped });
@@ -569,6 +572,9 @@ export function LoreWall() {
       window.alert(msg);
     } catch (err) {
       setImportStaged(null);
+      // A later entry can fail after the definitions or earlier entries landed.
+      await useProjectStore.getState().reloadCategoryDefinitions(projectPath);
+      await scanProject(projectPath);
       window.alert(`${t("lore.transfer.importFailed", { kb: terms.kb })}\n${err}`);
     }
   };
@@ -1393,11 +1399,12 @@ function LoreImportModal({
 }: {
   staged: StagedLoreImport;
   onCancel: () => void;
-  onApply: (strategy: ConflictStrategy) => Promise<void>;
+  onApply: (strategy: ConflictStrategy, choices: SchemaChoices) => Promise<void>;
 }) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const terms = useTerms();
+  const [choices, setChoices] = useState<SchemaChoices>({});
   const [strategy, setStrategy] = useState<ConflictStrategy>("skip");
   const [applying, setApplying] = useState(false);
   const shellCloseRef = useRef<(() => void) | null>(null);
@@ -1414,7 +1421,7 @@ function LoreImportModal({
     if (applying) return;
     setApplying(true);
     try {
-      await onApply(strategy);
+      await onApply(strategy, choices);
     } finally {
       setApplying(false);
     }
@@ -1436,6 +1443,7 @@ function LoreImportModal({
             )}
           </div>
 
+          {staged.schema && <SchemaMergePanel {...staged.schema} choices={choices} onChange={setChoices} disabled={applying} />}
           {conflicts.length > 0 && (
             <>
               <div style={{

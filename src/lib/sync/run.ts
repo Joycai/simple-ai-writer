@@ -1,3 +1,5 @@
+import { canonical, validateSchemaForProfile, applyLoreSchema, readSchemaProfile } from "../profile/transferSchema";
+import { SCHEMA_PATH, schemaMerge, schemaHash } from "./schema";
 /**
  * Executing a plan.
  *
@@ -40,6 +42,7 @@ import {
   removeFile,
   renamePath,
   writeBinaryFile,
+  writeFile,
 } from "../fs/fileio";
 import type { SyncBinding, SyncPlan, SyncStep } from "./model";
 import { actionableSteps } from "./plan";
@@ -92,6 +95,7 @@ interface RunOptions {
 export async function runSync(options: RunOptions): Promise<SyncRunResult> {
   const { projectPath, binding, plan, onProgress } = options;
   const steps = actionableSteps(plan);
+  if (plan.schema) await validateSchemaPreview(options);
 
   const staging = syncStagingPath(projectPath);
   // A previous run that was killed mid-flight leaves its scratch behind; the
@@ -114,7 +118,7 @@ export async function runSync(options: RunOptions): Promise<SyncRunResult> {
   // your own work would be reported as a two-sided conflict.)
   const settled: string[] = [];
   for (const step of plan.steps) {
-    if (step.action !== "none") continue;
+    if (step.path === SCHEMA_PATH || step.action !== "none") continue;
     settled.push(step.path);
     // Both sides agree there is nothing here: `advanceSnapshot` drops it.
     if (step.sourceHash) reached[step.path] = step.sourceHash;
@@ -123,6 +127,11 @@ export async function runSync(options: RunOptions): Promise<SyncRunResult> {
   for (const [index, step] of steps.entries()) {
     onProgress?.(index, steps.length, step.path);
     try {
+      if (step.path === SCHEMA_PATH) {
+        await runSchema(options, backupPath);
+        succeeded.push(step.path);
+        continue;
+      }
       if (plan.direction === "push") await pushStep(options, step, staging);
       else await pullStep(options, step, staging);
       succeeded.push(step.path);
@@ -131,6 +140,7 @@ export async function runSync(options: RunOptions): Promise<SyncRunResult> {
       // `advanceSnapshot` reads the missing key as "drop it".
       if (step.sourceHash) reached[step.path] = step.sourceHash;
     } catch (err) {
+      if (step.path === SCHEMA_PATH) throw err; // Definitions must land before dependent entries.
       failures.push({
         path: step.path,
         conflict: err instanceof SyncConflictError,
@@ -141,6 +151,17 @@ export async function runSync(options: RunOptions): Promise<SyncRunResult> {
   onProgress?.(steps.length, steps.length, "");
 
   await removeDir(staging).catch(() => {});
+  if (plan.schema) {
+    const merged = schemaMerge(plan).schema;
+    const applied = succeeded.includes(SCHEMA_PATH);
+    const local = applied && plan.direction === 'pull' ? merged : plan.schema.local;
+    const remote = applied && plan.direction === 'push' ? merged : plan.schema.remote;
+    const localHash = await schemaHash(local);
+    if (localHash === await schemaHash(remote)) {
+      reached[SCHEMA_PATH] = localHash;
+      settled.push(SCHEMA_PATH);
+    }
+  }
 
   return {
     succeeded,
@@ -281,4 +302,30 @@ async function displace(projectPath: string, path: string, dir: string): Promise
 
 function short(hash: string | null | undefined): string {
   return hash ? `${hash.slice(0, 8)}…` : "nothing";
+}
+
+async function runSchema({ projectPath, binding, client, plan }: RunOptions, backupPath: string | null): Promise<void> {
+  const schema = plan.schema;
+  if (!schema) throw new Error('Missing schema preview');
+  const current = await validateSchemaPreview({ projectPath, binding, client, plan });
+  const merged = schemaMerge(plan).schema;
+  if (plan.direction === 'push') {
+    if (!client.putSchema) throw new Error('Server does not support category definitions');
+    await client.putSchema(binding.kbId, merged, schema.remoteHash ? { kind: 'hash', hash: schema.remoteHash } : { kind: 'absent' });
+  } else {
+    if (backupPath) await writeFile(`${backupPath}.profile.json`, current.raw ?? JSON.stringify({ version: 3, enabled: ["novel"] }));
+    await applyLoreSchema(projectPath, schema.local, merged);
+  }
+}
+
+async function validateSchemaPreview({ projectPath, binding, client, plan }: RunOptions) {
+  const schema = plan.schema!;
+  const current = await readSchemaProfile(projectPath);
+  if (canonical(current.schema) !== canonical(schema.local)) throw new Error('Category definitions changed; reopen the preview');
+  if (plan.direction === "pull") validateSchemaForProfile(schemaMerge(plan).schema, current.selection);
+  const remote = await client.manifest(binding.kbId);
+  if (remote.schema === undefined || (remote.schema?.hash ?? null) !== schema.remoteHash) {
+    throw new SyncConflictError(SCHEMA_PATH, remote.schema?.hash ?? null, 'Remote category definitions changed; reopen the preview');
+  }
+  return current;
 }

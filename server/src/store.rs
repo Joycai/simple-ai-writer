@@ -142,6 +142,7 @@ pub struct ManifestEntry {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Manifest {
+    pub schema: Option<KbSchema>,
     pub kb: KbSummary,
     /// sha256 over the sorted `path\0hash\n` lines — one value that changes iff
     /// some entry's content changed. Lets a client answer "is there anything to
@@ -150,6 +151,12 @@ pub struct Manifest {
     /// make (see `routes`' `If-Match` on every mutation).
     pub digest: String,
     pub entries: Vec<ManifestEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+pub struct KbSchema {
+    pub hash: String,
+    pub data: serde_json::Value,
 }
 
 // ─── Application-config backups ──────────────────────────────────────────────
@@ -734,6 +741,63 @@ impl Store {
 
     // ── Manifest ────────────────────────────────────────────────────────────
 
+    pub fn read_schema(&self, kb: &str) -> Result<Option<KbSchema>> {
+        self.require_kb(kb)?;
+        let path = self.kb_dir(kb).join("schema.json");
+        match fs::read(path) {
+            Ok(bytes) => {
+                let data = serde_json::from_slice(&bytes)
+                    .map_err(|e| StoreError::Invalid(e.to_string()))?;
+                Ok(Some(KbSchema {
+                    hash: crate::hex_lower(Sha256::digest(&bytes)),
+                    data,
+                }))
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn put_schema(
+        &self,
+        kb: &str,
+        data: serde_json::Value,
+        precondition: Precondition,
+        device: Option<&str>,
+    ) -> Result<KbSchema> {
+        self.require_kb(kb)?;
+        if data.get("version").and_then(|v| v.as_u64()) != Some(1)
+            || !data.get("categories").is_some_and(|v| v.is_array())
+            || !data
+                .get("categoryExtensions")
+                .is_some_and(|v| v.is_object())
+        {
+            return Err(StoreError::Invalid("invalid knowledge-base schema".into()));
+        }
+        let bytes = serde_json::to_vec(&data).map_err(|e| StoreError::Invalid(e.to_string()))?;
+        if bytes.len() > 1_048_576 {
+            return Err(StoreError::Invalid("schema exceeds 1 MiB".into()));
+        }
+        let lock = self.lock_for(kb);
+        let _guard = lock.lock().expect("kb lock poisoned");
+        let old = self.read_schema(kb)?;
+        check_precondition(&precondition, old.as_ref().map(|s| s.hash.as_str()))?;
+        let dir = self.kb_dir(kb);
+        let tmp = dir.join("schema.tmp");
+        fs::write(&tmp, &bytes)?;
+        // Keep the previous definition document for recovery without touching entries.
+        let previous = dir.join("schema.json");
+        if previous.exists() {
+            fs::copy(&previous, dir.join("schema.previous.json"))?;
+        }
+        fs::rename(tmp, previous)?;
+        self.record_write(kb, device);
+        Ok(KbSchema {
+            hash: crate::hex_lower(Sha256::digest(&bytes)),
+            data,
+        })
+    }
+
     pub fn manifest(&self, kb: &str) -> Result<Manifest> {
         let meta = self.require_kb(kb)?;
         let mut entries = Vec::new();
@@ -766,7 +830,12 @@ impl Store {
             hasher.update(e.hash.as_bytes());
             hasher.update(*b"\n");
         }
+        let schema = self.read_schema(kb)?;
+        if let Some(ref schema) = schema {
+            hasher.update(schema.hash.as_bytes());
+        }
         Ok(Manifest {
+            schema,
             kb: meta,
             digest: crate::hex_lower(hasher.finalize()),
             entries,
@@ -1533,6 +1602,54 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::new(dir.path().to_path_buf()).unwrap();
         (dir, store)
+    }
+
+    #[test]
+    fn schema_roundtrip_preconditions_and_recovery() {
+        let (dir, s) = store();
+        let kb = s.create_kb("Schema", None).unwrap().meta.id;
+        let initial = s.manifest(&kb).unwrap();
+        assert!(initial.schema.is_none());
+        let data = serde_json::json!({"version":1,"categories":[],"categoryExtensions":{}});
+        let first = s
+            .put_schema(&kb, data.clone(), Precondition::Absent, None)
+            .unwrap();
+        assert_ne!(initial.digest, s.manifest(&kb).unwrap().digest);
+        assert_eq!(s.read_schema(&kb).unwrap().unwrap().data, data);
+        assert!(matches!(
+            s.put_schema(&kb, data.clone(), Precondition::Absent, None),
+            Err(StoreError::Precondition { .. })
+        ));
+        assert!(matches!(
+            s.put_schema(&kb, data.clone(), Precondition::Match("stale".into()), None),
+            Err(StoreError::Precondition { .. })
+        ));
+        let next =
+            serde_json::json!({"version":1,"categories":[{"id":"people"}],"categoryExtensions":{}});
+        s.put_schema(&kb, next.clone(), Precondition::Match(first.hash), None)
+            .unwrap();
+        assert_eq!(s.read_schema(&kb).unwrap().unwrap().data, next);
+        let old: serde_json::Value = serde_json::from_slice(
+            &fs::read(
+                dir.path()
+                    .join("kbs")
+                    .join(&kb)
+                    .join("schema.previous.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(old, data);
+        assert!(s.manifest(&kb).unwrap().entries.is_empty());
+        assert!(s
+            .put_schema(
+                &kb,
+                serde_json::json!({"version":2}),
+                Precondition::None,
+                None
+            )
+            .is_err());
+        assert!(s.read_schema("missing").is_err());
     }
 
     const H1: &str = "1111111111111111111111111111111111111111111111111111111111111111";

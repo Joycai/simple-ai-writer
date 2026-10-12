@@ -374,3 +374,10 @@ cargo test
 | `icons/` | 图标本体:`build.py` 从设计数字生成 `app.ico` / `tray-*.ico` / `app.svg`,产物提交进仓库,编译时不需要 Python |
 
 改后台的页面只要重新 `cargo build` —— 三个文件是编译期嵌进去的,没有单独的前端构建。
+
+### 分类及槽位定义同步
+
+新客户端需要 manifest 的 `schema` 字段（未保存时为 null）。`GET/PUT /v1/kbs/{kb}/schema`
+访问知识库的定义文档，PUT 必须带 `If-Match` 或 `If-None-Match: *`；限制 1 MiB。
+文件存于 `kbs/<id>/schema.json`，上一个版本保留为 `schema.previous.json`。分类和 slot 的合并由客户端预览决定，
+服务端在知识库锁内校验前置条件并替换；条目接口保持兼容。升级服务器后才可使用新版客户端的完整知识库同步。

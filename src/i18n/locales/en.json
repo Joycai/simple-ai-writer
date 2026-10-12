@@ -3911,6 +3911,18 @@
       "manual": "Manual",
       "projectChanged": "The project changed. Reopen this editor in the intended project.",
       "schemaChanged": "This category changed while you were editing. Reopen the editor to use its latest slots."
+    },
+    "schemaTransfer": {
+      "title": "Category and facet slot definitions",
+      "description": "Includes {{categories}} custom categories and {{slots}} facet slots. New IDs are added; conflicts keep the receiving definition unless you choose the incoming version. Definitions are shared by all items in the category. Skipping this step may leave incoming slots unclassified.",
+      "keep": "Keep receiving definition",
+      "replace": "Use incoming definition",
+      "compare": "Compare definitions",
+      "expected": "Recommended facet",
+      "mode": "Default inclusion",
+      "priority": "Default priority",
+      "group": "Default group",
+      "keys": "Default keywords"
     }
   },
   "fileTree": {

@@ -104,6 +104,12 @@ pub fn router(state: Arc<AppState>, max_entry_bytes: usize, max_config_bytes: us
     let kb_api = Router::new()
         .route("/v1/kbs", get(list_kbs).post(create_kb))
         .route("/v1/kbs/{kb}/manifest", get(manifest))
+        .route(
+            "/v1/kbs/{kb}/schema",
+            get(get_schema)
+                .put(put_schema)
+                .layer(DefaultBodyLimit::max(1_048_576)),
+        )
         .route("/v1/kbs/{kb}/syncs", get(list_sync_log).post(report_sync))
         .route(
             "/v1/kbs/{kb}/entries/{category}/{id}",
@@ -285,6 +291,36 @@ async fn manifest(
     let store = Arc::clone(&state);
     let manifest = blocking(move || store.store.manifest(&kb)).await??;
     Ok(Json(manifest))
+}
+
+async fn get_schema(
+    State(state): State<Arc<AppState>>,
+    Path(kb): Path<String>,
+) -> Result<Json<Option<crate::store::KbSchema>>, ApiError> {
+    Ok(Json(blocking(move || state.store.read_schema(&kb)).await??))
+}
+
+async fn put_schema(
+    State(state): State<Arc<AppState>>,
+    Path(kb): Path<String>,
+    headers: HeaderMap,
+    Json(data): Json<serde_json::Value>,
+) -> Result<Json<crate::store::KbSchema>, ApiError> {
+    let precondition = precondition_from(&headers)?;
+    if matches!(precondition, Precondition::None) {
+        return Err(ApiError::bad_request(
+            "schema writes require If-Match or If-None-Match",
+        ));
+    }
+    let device = device_from(&headers);
+    Ok(Json(
+        blocking(move || {
+            state
+                .store
+                .put_schema(&kb, data, precondition, device.as_deref())
+        })
+        .await??,
+    ))
 }
 
 // ─── Sync log ────────────────────────────────────────────────────────────────
