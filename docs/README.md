@@ -37,6 +37,7 @@ reaching for is one of the states above, plus a modifier if it needs one.
 
 | Doc | Status | Read when |
 |---|---|---|
+| [network-diagnostics.md](reference/network-diagnostics.md) | `living` | HTTP 错误原因链、插件补丁维护与约一分钟断开的调查证据 |
 | [codemap.md](reference/codemap.md) | `living` | Changing **any** directory: one section per `src/components/*`, `src/lib/*`, `src-tauri/` and `server/`, plus 能力包 — module split, invariants, why-not-the-other-way, and each subsystem's design-doc pointer. Moved out of `CLAUDE.md` on 2026-09-07 (it had grown to 73KB); `AGENTS.md` keeps one line per directory plus the hard rules |
 | [architecture.md](reference/architecture.md) | `living` | Touching a mechanism that spans directories: DB schema, prefs, multi-instance, RAG and the budget planner, images in context, key storage, export / backup, transactions, CSP. Per-directory facts (the SSE adapters, the IPC commands, packs) are in `codemap.md` |
 | [design-system.md](reference/design-system.md) | `living` | Building or restyling **any** UI |

@@ -8,6 +8,7 @@
 import { appLogDir, join } from "@tauri-apps/api/path";
 import { appendFile, fileExists, makeDir } from "../fs/fileio";
 import { readPref, writePref } from "../prefs";
+import { networkDiagnostics } from "../networkDiagnostics";
 import type { StreamChunk, StreamMessage, StreamOptions, WireRewrite } from "./types";
 
 const ENABLED_KEY = "app:apiLogEnabled";
@@ -181,6 +182,7 @@ export function beginImageApiLog(req: {
         durationMs: Math.round(performance.now() - start),
         model: req.modelId,
         error: e instanceof Error ? e.message : String(e),
+        network: networkDiagnostics(e),
       });
     },
     note(data) {
@@ -310,6 +312,7 @@ export function beginApiLog(opts: StreamOptions): ApiCallLogger {
         durationMs: Math.round(performance.now() - start),
         model: opts.modelId,
         error: e instanceof Error ? e.message : String(e),
+        network: networkDiagnostics(e),
         partialOutput: output || undefined,
       });
     },

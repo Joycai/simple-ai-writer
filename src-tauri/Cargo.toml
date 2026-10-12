@@ -1,9 +1,16 @@
 [package]
 name = "simple-ai-writer"
-version = "1.96.2"
+version = "1.96.3"
 description = "Simple AI Writer"
 authors = ["joycai"]
 edition = "2021"
+
+# The app stays the default package; the patched HTTP dependency shares its
+# lockfile so its real cancellation entry points can be regression-tested in CI.
+[workspace]
+members = ["vendor/tauri-plugin-http"]
+default-members = ["."]
+resolver = "2"
 
 [lib]
 name = "simple_ai_writer_lib"
@@ -32,7 +39,7 @@ tauri-plugin-fs = { version = "2", features = ["watch"] }
 # the caller didn't, so every other request is unaffected. Origin is the sole
 # forbidden header this app sets; keep it that way (Host/Content-Length/Cookie &c.
 # now pass through unchecked).
-tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
+tauri-plugin-http = { version = "=2.6.0", path = "vendor/tauri-plugin-http", features = ["unsafe-headers"] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 # System notifications (需要审批 / 执行完成), gated behind a settings switch —
 # see `src/lib/notify.ts`. Desktop `request_permission` always answers Granted:
