@@ -688,27 +688,30 @@ function LoreReportSection({
                 </span>
               ))}
             </div>
-            {(e.droppedFacets.length > 0 || e.droppedImages) && (
-              <div className={styles.chipRow}>
-                <span className={styles.droppedLabel}>
-                  {t("ai.panel.loreDroppedTitle", { defaultValue: "超出预算未注入" })}
-                </span>
-                {e.droppedFacets.map((d) => (
-                  <span
-                    key={`drop-${d.file}`}
-                    className={styles.droppedChip}
-                    title={dropReason(d.reason)}
-                  >
-                    {d.title}
-                  </span>
-                ))}
-                {e.droppedImages ? (
-                  <span className={styles.droppedChip} title={dropReason("budget")}>
-                    {`${t("ai.panel.loreGallery")} ×${e.droppedImages}`}
-                  </span>
-                ) : null}
-              </div>
-            )}
+            {(["no-key", "manual-only", "group-lost", "resident", "budget"] as const).map((reason) => {
+              const facets = e.droppedFacets.filter((d) => d.reason === reason);
+              const images = reason === "budget" ? e.droppedImages : 0;
+              if (facets.length === 0 && !images) return null;
+              return (
+                <div key={reason} className={styles.chipRow}>
+                  <span className={styles.droppedLabel}>{dropReason(reason)}</span>
+                  {facets.map((d) => (
+                    <span
+                      key={`drop-${d.file}`}
+                      className={styles.droppedChip}
+                      title={dropReason(d.reason)}
+                    >
+                      {d.title}
+                    </span>
+                  ))}
+                  {images ? (
+                    <span className={styles.droppedChip} title={dropReason("budget")}>
+                      {`${t("ai.panel.loreGallery")} ×${images}`}
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         ))
       )}

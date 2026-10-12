@@ -1467,7 +1467,6 @@
       "unitDrafts": "drafts",
       "draftLabel": "Draft {{n}}",
       "loreFacetCount": "{{n}} facets",
-      "loreDroppedTitle": "Dropped (over budget)",
       "loreAutoCapped": "{{n}} more matches left out (max {{cap}} per run, ranked by matched-term length)",
       "loreRefFrom": "← cited by 〈{{name}}〉 (summary only)",
       "loreRefCapped": "{{n}} more cited entries left out (max {{per}} per entry, {{total}} in total)",

@@ -331,6 +331,8 @@ Rules of the road:
 
 ### AI 面板设计语言 (AI surfaces — `src/components/ai/**`)
 
+“本次注入条目”的未注入特征按实际原因分行显示：未命中关键词、仅手动、互斥组落选、已在上下文、超出预算。不能统称预算不足：激活条件与预算是两道独立判断，预算有余也不应自动填入未激活的特征。
+
 “指定条目”提供“全部 / 已勾选（数量）”切换，数量按仍有效的条目去重（含只勾选特征的条目）。切到已勾选时清空搜索，列出范围外的置顶并直接展示已勾选特征，允许逐项取消；不按取材范围隐藏，因为此处要让作者发现以前保留的显式指定。筛选仅影响列表，不改变注入规则。
 
 The AI drawer and every surface it spawns (panels, cards, modals, the inline bubble) follow a scoped **manuscript-ink** dialect of the system, transcribed from the AI-panel mockup in the claude.ai/design project ("Simple AI Writer UI redesign" → `02 AI 面板`). The dark rendition is the binding reference; light values are paper equivalents derived from the same project's paper screens. Everything below is implemented as tokens in `tokens.css` under the `AI 面板设计语言` comment in each theme block.
