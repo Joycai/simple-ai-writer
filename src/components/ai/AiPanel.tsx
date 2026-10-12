@@ -423,7 +423,7 @@ function ExtraSection({
 function LoreSection({
   entities, search, setSearch, selectedPaths, toggle, charsPerToken,
 }: {
-  entities: { dirPath: string; name: string; categoryLabel: string; facets: LoreFacet[] }[];
+  entities: { dirPath: string; name: string; aliases: string[]; categoryLabel: string; facets: LoreFacet[] }[];
   search: string;
   setSearch: (v: string) => void;
   selectedPaths: string[];
@@ -441,6 +441,7 @@ function LoreSection({
   // check, so the planner hard-caps lore. Say so rather than silently ignoring
   // a bigger setting the author just typed in.
   const loreCapped = contextSize <= 0 && loreBudgetTokens > STATIC_LORE_BUDGET_MAX_TOKENS;
+  const [selectedOnly, setSelectedOnly] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // Uncommitted text in the budget field. Held separately so typing "12000"
   // isn't clamped digit-by-digit; committed (and clamped by the store) on
@@ -460,6 +461,14 @@ function LoreSection({
       if (next.has(dirPath)) next.delete(dirPath); else next.add(dirPath);
       return next;
     });
+
+  const selectedEntities = entities.filter((e) =>
+    selectedPaths.includes(e.dirPath) || e.facets.some((f) =>
+      selectedPaths.includes(`${e.dirPath}#${f.file}`)));
+  const query = search.trim().toLowerCase();
+  const visibleEntities = (selectedOnly ? selectedEntities : entities).filter((e) =>
+    !query || [e.name, ...e.aliases, e.categoryLabel].some((text) =>
+      text.toLowerCase().includes(query)));
 
   const estTk = (chars: number) => Math.ceil(chars / charsPerToken);
 
@@ -504,6 +513,25 @@ function LoreSection({
         }
       />
 
+      <div className={styles.chipGroup}>
+        <button
+          type="button"
+          className={`${styles.chip} ${!selectedOnly ? styles.chipActive : ""}`}
+          aria-pressed={!selectedOnly}
+          onClick={() => setSelectedOnly(false)}
+        >
+          {t("ai.panel.loreShowAll")}
+        </button>
+        <button
+          type="button"
+          className={`${styles.chip} ${selectedOnly ? styles.chipActive : ""}`}
+          aria-pressed={selectedOnly}
+          onClick={() => { setSelectedOnly(true); setSearch(""); }}
+        >
+          {t("ai.panel.loreShowSelected", { count: selectedEntities.length })}
+        </button>
+      </div>
+
       <input
         className={styles.searchInput}
         placeholder={t("ai.panel.continueLoreSearch", { entry: terms.entry })}
@@ -512,12 +540,15 @@ function LoreSection({
       />
 
       <div className={styles.loreList}>
-        {entities.length === 0 ? (
-          <span className={styles.loreEmpty}>{t("ai.panel.continueLoreEmpty", { entry: terms.entry })}</span>
+        {visibleEntities.length === 0 ? (
+          <span className={styles.loreEmpty}>{query
+            ? t("ai.panel.loreSearchEmpty")
+            : selectedOnly ? t("ai.panel.loreSelectedEmpty")
+            : t("ai.panel.continueLoreEmpty", { entry: terms.entry })}</span>
         ) : (
-          entities.map((entity) => {
+          visibleEntities.map((entity) => {
             const facets = entity.facets ?? [];
-            const isExpanded = expanded.has(entity.dirPath);
+            const isExpanded = selectedOnly || expanded.has(entity.dirPath);
             const isPinned = selectedPaths.includes(entity.dirPath);
             const pinnedFacetCount = facets.filter((f) =>
               selectedPaths.includes(`${entity.dirPath}#${f.file}`)
@@ -544,7 +575,7 @@ function LoreSection({
                       {(isPinned || pinnedFacetCount > 0) && entityChars > 0 && (
                         <span className={styles.loreTk}>· {estTk(entityChars)}tk</span>
                       )}
-                      <button
+                      {!selectedOnly && <button
                         className={styles.loreExpand}
                         onClick={(ev) => { ev.preventDefault(); toggleExpanded(entity.dirPath); }}
                         title={t("ai.panel.loreFacets")}
@@ -552,11 +583,12 @@ function LoreSection({
                         <Layers size={10} strokeWidth={1.8} />
                         {pinnedFacetCount > 0 ? `${pinnedFacetCount}/${facets.length}` : ""}
                         {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-                      </button>
+                      </button>}
                     </>
                   )}
                 </label>
-                {isExpanded && facets.map((f) => {
+                {isExpanded && facets.filter((f) => !selectedOnly ||
+                  selectedPaths.includes(`${entity.dirPath}#${f.file}`)).map((f) => {
                   const pinPath = `${entity.dirPath}#${f.file}`;
                   return (
                     <label key={pinPath} className={`${styles.loreItem} ${styles.loreItemFacet}`}>
@@ -656,27 +688,30 @@ function LoreReportSection({
                 </span>
               ))}
             </div>
-            {(e.droppedFacets.length > 0 || e.droppedImages) && (
-              <div className={styles.chipRow}>
-                <span className={styles.droppedLabel}>
-                  {t("ai.panel.loreDroppedTitle", { defaultValue: "超出预算未注入" })}
-                </span>
-                {e.droppedFacets.map((d) => (
-                  <span
-                    key={`drop-${d.file}`}
-                    className={styles.droppedChip}
-                    title={dropReason(d.reason)}
-                  >
-                    {d.title}
-                  </span>
-                ))}
-                {e.droppedImages ? (
-                  <span className={styles.droppedChip} title={dropReason("budget")}>
-                    {`${t("ai.panel.loreGallery")} ×${e.droppedImages}`}
-                  </span>
-                ) : null}
-              </div>
-            )}
+            {(["no-key", "manual-only", "group-lost", "resident", "budget"] as const).map((reason) => {
+              const facets = e.droppedFacets.filter((d) => d.reason === reason);
+              const images = reason === "budget" ? e.droppedImages : 0;
+              if (facets.length === 0 && !images) return null;
+              return (
+                <div key={reason} className={styles.chipRow}>
+                  <span className={styles.droppedLabel}>{dropReason(reason)}</span>
+                  {facets.map((d) => (
+                    <span
+                      key={`drop-${d.file}`}
+                      className={styles.droppedChip}
+                      title={dropReason(d.reason)}
+                    >
+                      {d.title}
+                    </span>
+                  ))}
+                  {images ? (
+                    <span className={styles.droppedChip} title={dropReason("budget")}>
+                      {`${t("ai.panel.loreGallery")} ×${images}`}
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         ))
       )}
@@ -1272,17 +1307,6 @@ export function AiPanel() {
       categoryLabel: categoryLabel(cat, isZh),
     }))
   );
-  const filteredLoreEntities = loreSearch.trim()
-    ? allLoreEntities.filter((e) => {
-        const q = loreSearch.toLowerCase();
-        return (
-          e.name.toLowerCase().includes(q) ||
-          e.aliases.some((a) => a.toLowerCase().includes(q)) ||
-          e.categoryLabel.toLowerCase().includes(q)
-        );
-      })
-    : allLoreEntities;
-
   const toggleLorePath = (dirPath: string) => {
     setSelectedLorePaths((prev) => {
       const next = prev.includes(dirPath)
@@ -1836,7 +1860,7 @@ export function AiPanel() {
 
                 {/* ── Lore ── */}
                 <LoreSection
-                  entities={filteredLoreEntities}
+                  entities={allLoreEntities}
                   search={loreSearch}
                   setSearch={setLoreSearch}
                   selectedPaths={selectedLorePaths}
