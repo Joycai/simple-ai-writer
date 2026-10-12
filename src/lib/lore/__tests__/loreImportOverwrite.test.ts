@@ -124,7 +124,7 @@ describe("the other strategies are untouched", () => {
 
     expect(summary.imported).toBe(1);
     expect(renames()).toEqual([[`${TEMP}/characters/hero`, `${ROOT}/characters/hero`]]);
-    expect(h.makeDir).not.toHaveBeenCalled();
+    expect(h.makeDir).toHaveBeenCalledWith(`${ROOT}/characters`);
   });
 
   it("reports a category the active profile does not show", async () => {

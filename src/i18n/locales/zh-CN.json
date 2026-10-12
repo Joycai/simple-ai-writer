@@ -3902,6 +3902,18 @@
       "manual": "手动",
       "projectChanged": "项目已切换，请在目标项目中重新打开编辑器。",
       "schemaChanged": "编辑期间该分类已更改，请重新打开编辑器以使用最新槽位。"
+    },
+    "schemaTransfer": {
+      "title": "分类与特征槽位定义",
+      "description": "包含 {{categories}} 个自定义分类和 {{slots}} 个特征槽位。新 ID 自动添加；冲突默认保留接收方，可逐项选用传入版本。定义由同分类所有条目共享。跳过定义步骤可能使传入槽位显示为未归类。",
+      "keep": "保留接收方定义",
+      "replace": "使用传入定义",
+      "compare": "对比定义",
+      "expected": "建议补充此特征",
+      "mode": "默认纳入方式",
+      "priority": "默认优先级",
+      "group": "默认互斥组",
+      "keys": "默认关键词"
     }
   },
   "fileTree": {

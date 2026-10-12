@@ -28,6 +28,12 @@ vi.mock("../../lib/sync/run", () => ({ runSync: mocks.run }));
 vi.mock("../loreStore", () => ({ useLoreStore: { getState: () => ({ scanProject: async () => {} }) } }));
 vi.mock("../../lib/prefs", () => ({ readPref: () => null, writePref: () => {} }));
 
+vi.mock("../../lib/profile/transferSchema", async original => ({
+  ...await original<typeof import("../../lib/profile/transferSchema")>(),
+  readSchemaProfile: async () => ({ schema: { version: 1, categories: [], categoryExtensions: {} } }),
+}));
+vi.mock("../projectStore", () => ({ useProjectStore: { getState: () => ({ reloadCategoryDefinitions: async () => {} }) } }));
+
 const { useSyncStore } = await import("../syncStore");
 const state = () => useSyncStore.getState();
 const binding: SyncBinding = {
@@ -35,7 +41,7 @@ const binding: SyncBinding = {
 };
 const manifest: RemoteManifest = {
   kb: { id: "kb", name: "Library", createdAtMs: 1, entryCount: 0, updatedAtMs: 1, lastDevice: null },
-  digest: "digest", entries: [],
+  digest: "digest", entries: [], schema: null,
 };
 function deferred<T>() {
   let resolve!: (value: T) => void;

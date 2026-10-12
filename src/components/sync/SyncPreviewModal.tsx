@@ -1,3 +1,5 @@
+import { SchemaMergePanel } from "../lore/SchemaMergePanel";
+import { SCHEMA_PATH } from "../../lib/sync/schema";
 /**
  * 知识库同步 · 预览 / 执行 / 结果（设计稿 03c）。
  *
@@ -257,7 +259,8 @@ function PreviewBody(p: PreviewProps) {
     />
   );
 
-  if (sourceEmpty && targetTotal > 0) {
+  const hasSchema = plan.schema && [plan.schema.local, plan.schema.remote].some(schema => schema.categories.length || Object.keys(schema.categoryExtensions).length);
+  if (sourceEmpty && targetTotal > 0 && !hasSchema) {
     return (
       <>
         <div className={s.centered}>
@@ -275,7 +278,7 @@ function PreviewBody(p: PreviewProps) {
           />
         </div>
         <div className={s.foot}>
-          <button className={s.btnLink} onClick={p.onConfirm}>
+          <button className={s.btnLink} onClick={() => { p.setAcknowledged(true); p.onConfirm(); }}>
             {t(isPush ? "sync.emptyPushAnyway" : "sync.emptyPullAnyway")}
           </button>
           <span className={s.spacer} />
@@ -288,7 +291,7 @@ function PreviewBody(p: PreviewProps) {
     );
   }
 
-  if (targetEmpty) {
+  if (targetEmpty && !hasSchema) {
     return (
       <>
         <div className={s.centered}>
@@ -350,6 +353,7 @@ function PreviewBody(p: PreviewProps) {
     <>
       {band}
 
+      {plan.schema && <SchemaMergePanel source={p.isPush ? plan.schema.local : plan.schema.remote} target={p.isPush ? plan.schema.remote : plan.schema.local} choices={plan.schema.choices} onChange={choices => useSyncStore.getState().setSchemaChoices(choices)} />}
       {plan.firstSync && (
         <div className={s.notice}>
           <span className={s.noticeMark}>i</span>
@@ -598,7 +602,7 @@ function Row({
   return (
     <div className={`${s.grid} ${rowClass} ${skip ? s.rowSkipped : ""}`}>
       <div className={s.entry}>
-        <span className={s.entryCat}>{category} / </span>
+        <span className={s.entryCat}>{step.path === SCHEMA_PATH ? t("lore.schemaTransfer.title") : `${category} / `}</span>
         {name}
         {step.warning && (
           <div className={`${s.warn} ${conflict ? s.warnConflict : ""}`}>

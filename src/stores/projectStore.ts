@@ -163,6 +163,7 @@ interface ProjectState {
    * them in sync anywhere else would let the UI and the prompt disagree about
    * which packs are in force.
    */
+  reloadCategoryDefinitions: (projectPath: string) => Promise<void>;
   workspace: ResolvedWorkspace;
   /**
    * The hand-written packs the project's profile.json carries (usually none).
@@ -416,6 +417,13 @@ export function loreOrganizer(): LoreOrganizer {
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
   projectPath: null,
+  reloadCategoryDefinitions: async (projectPath) => {
+    const selection = await loadProfileFile(projectPath);
+    if (get().projectPath !== projectPath || !selection) return;
+    const workspace = resolveWorkspace(selection.enabled, selection.customCategories, selection.categoryExtensions);
+    setActiveWorkspace(workspace);
+    set({ workspace, customCategories: selection.customCategories, categoryExtensions: selection.categoryExtensions ?? {}, customPacks: selection.customPacks, collections: selection.collections });
+  },
   workspace: DEFAULT_WORKSPACE,
   customPacks: [],
   customCategories: [],

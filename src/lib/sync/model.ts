@@ -119,6 +119,7 @@ export interface SyncStep {
 }
 
 export interface SyncPlan {
+  schema?: import("./schema").SchemaSync;
   direction: SyncDirection;
   /** Every entry either side knows about, sorted by path — including `none`
    *  steps, so the UI can show "unchanged" rather than silently omitting them. */

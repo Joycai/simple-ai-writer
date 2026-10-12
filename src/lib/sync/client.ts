@@ -38,6 +38,8 @@ interface RemoteManifestEntry {
 }
 
 export interface RemoteManifest {
+  /** Absent only on legacy servers; null means supported but empty. */
+  schema?: { hash: string; data: unknown } | null;
   kb: RemoteKb;
   /** sha256 over the sorted path+hash list — "has anything changed at all". */
   digest: string;
@@ -104,6 +106,7 @@ export class SyncConflictError extends SyncHttpError {
 }
 
 export interface SyncClient {
+  putSchema?(kbId: string, data: import("../profile/transferSchema").LoreSchema, expect: Expect): Promise<void>;
   listKbs(): Promise<RemoteKb[]>;
   createKb(name: string): Promise<RemoteKb>;
   manifest(kbId: string): Promise<RemoteManifest>;
@@ -176,6 +179,11 @@ export function createSyncClient(serverUrl: string, token: string, device = ""):
   }
 
   return {
+    async putSchema(kbId, data, expect) {
+      const r = await fetch(`${base}/v1/kbs/${encodeURIComponent(kbId)}/schema`, { method: "PUT", headers: { ...authHeaders(), ...writeHeaders(), ...preconditionHeaders(expect), "Content-Type": "application/json" }, body: JSON.stringify(data) });
+      if (!r.ok) await fail(r, "@schema");
+    },
+
     async listKbs() {
       const r = await fetch(`${base}/v1/kbs`, { headers: authHeaders() });
       if (!r.ok) await fail(r);

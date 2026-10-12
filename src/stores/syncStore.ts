@@ -1,3 +1,6 @@
+import { useProjectStore } from "./projectStore";
+import { prepareSchema, withSchemaChoices, schemaHash, SCHEMA_PATH } from "../lib/sync/schema";
+import type { SchemaChoices } from "../lib/profile/transferSchema";
 /**
  * Knowledge-base sync: connection, binding, and the plan→run lifecycle.
  *
@@ -58,6 +61,7 @@ interface SyncProgress {
 }
 
 interface SyncState {
+  setSchemaChoices: (choices: SchemaChoices) => void;
   serverUrl: string;
   token: string;
   /** This machine's own name (`deviceLabel`), for the 「本机」 tag on records. */
@@ -382,10 +386,13 @@ export const useSyncStore = create<SyncState>((set, get) => ({
           if (current()) set({ checking: p });
         });
         if (!current()) return;
+        const schema = await prepareSchema(projectPath, manifest);
+        const localSchemaHash = await schemaHash(schema.local), remoteSchemaHash = await schemaHash(schema.remote);
+        if (!current()) return;
         set({
           localCount: Object.keys(local).length,
           binding: { ...binding, kbName: manifest.kb.name },
-          freshness: compareFreshness(local, manifestHashes(manifest), binding.snapshot),
+          freshness: compareFreshness({ ...local, [SCHEMA_PATH]: localSchemaHash }, { ...manifestHashes(manifest), [SCHEMA_PATH]: remoteSchemaHash }, binding.snapshot),
           comparing: false,
           checking: null,
         });
@@ -412,6 +419,11 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     await promise;
   },
 
+  setSchemaChoices: (choices) => {
+    const { plan } = get();
+    if (plan) set({ plan: withSchemaChoices(plan, choices), acknowledged: false });
+  },
+
   startPreview: async (projectPath, direction) => {
     const { binding } = get();
     if (!binding) return;
@@ -430,9 +442,11 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         requireClient().manifest(binding.kbId),
       ]);
       const remote = manifestHashes(manifest);
+      const schema = await prepareSchema(projectPath, manifest);
+      if (get().hydratedFor !== projectPath || get().binding !== binding) return;
       set({
         phase: "preview",
-        plan: planSync({ local, remote, snapshot: binding.snapshot, direction }),
+        plan: withSchemaChoices({ ...planSync({ local, remote, snapshot: binding.snapshot, direction }), schema }, {}),
         planLocal: local,
         planRemote: remote,
         localCount: Object.keys(local).length,
@@ -473,8 +487,9 @@ export const useSyncStore = create<SyncState>((set, get) => ({
    * changed after you confirmed" group in the result.
    */
   confirmRun: async (projectPath) => {
-    const { binding, plan } = get();
-    if (!binding || !plan) return;
+    const { binding, plan, hydratedFor, acknowledged } = get();
+    if (!binding || !plan || hydratedFor !== projectPath || get().phase !== "preview") return;
+    if (plan.summary.warnings && !acknowledged) return;
     // Every step skipped is not a sync — and for a pull it would still zip the
     // whole tree "before" writing nothing. The button is disabled in that state;
     // this is the guard for the paths that do not go through the button.
@@ -515,7 +530,10 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       // The lore tree may have changed under the app — a pull rewrites entity
       // folders the index was built from, so it has to be rebuilt before any
       // surface reads it again.
-      if (plan.direction === "pull") await useLoreStore.getState().scanProject(projectPath);
+      if (plan.direction === "pull") {
+        await useProjectStore.getState().reloadCategoryDefinitions(projectPath);
+        await useLoreStore.getState().scanProject(projectPath);
+      }
       await get().refreshCounts(projectPath);
     } catch (e) {
       set({ phase: "preview", error: e instanceof Error ? e.message : String(e), progress: null });

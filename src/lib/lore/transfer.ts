@@ -1,3 +1,4 @@
+import { readSchemaProfile, validateSchemaForProfile, parseLoreSchema, mergeLoreSchema, applyLoreSchema, type LoreSchema, type SchemaChoices } from "../profile/transferSchema";
 /**
  * Lore bundle export/import.
  *
@@ -25,12 +26,13 @@ import { uniqueEntityId } from "./entity";
 import { baseName } from "../paths";
 
 const LORE_BUNDLE_KIND = "ai-writer-lore-bundle";
-const LORE_BUNDLE_VERSION = 1;
+const LORE_BUNDLE_VERSION = 2;
 
 /** Staging dir name under `.ai-writer/`. A constant so an aborted import is overwritten by the next one. */
 const STAGING_DIR = "lore-import-tmp";
 
 interface LoreBundleManifest {
+  schema?: LoreSchema;
   kind: typeof LORE_BUNDLE_KIND;
   version: number;
   exportedAt: string;
@@ -48,6 +50,7 @@ interface StagedEntity {
 }
 
 export interface StagedLoreImport {
+  schema?: { source: LoreSchema; target: LoreSchema };
   tempDir: string;
   zipPath: string;
   manifest: LoreBundleManifest | null;
@@ -120,6 +123,7 @@ export async function exportLoreBundle(projectPath: string): Promise<string | nu
   }
 
   const manifest: LoreBundleManifest = {
+    schema: (await readSchemaProfile(projectPath)).schema,
     kind: LORE_BUNDLE_KIND,
     version: LORE_BUNDLE_VERSION,
     exportedAt: new Date().toISOString(),
@@ -162,22 +166,22 @@ export async function stageLoreImport(projectPath: string): Promise<StagedLoreIm
   }
 
   const staged = await walkLoreTree(tempDir);
-  if (staged.length === 0) {
-    try {
-      await removeDir(tempDir);
-    } catch {}
-    throw new Error("empty-bundle");
-  }
-
   let manifest: LoreBundleManifest | null = null;
   if (result.manifest) {
-    try {
-      const parsed = JSON.parse(result.manifest);
-      if (parsed && parsed.kind === LORE_BUNDLE_KIND) manifest = parsed as LoreBundleManifest;
-    } catch {
-      // manifest unreadable — the extracted tree is still importable
-    }
+    const parsed = JSON.parse(result.manifest);
+    if (parsed?.kind !== LORE_BUNDLE_KIND || ![1, 2].includes(parsed.version)) throw new Error("Unsupported knowledge-base bundle");
+    if (parsed.version === 2 && parsed.schema === undefined) throw new Error("Knowledge-base definitions are missing");
+    manifest = parsed as LoreBundleManifest;
   }
+
+  const schema = manifest?.schema !== undefined
+    ? { source: parseLoreSchema(manifest.schema), target: (await readSchemaProfile(projectPath)).schema }
+    : undefined;
+  if (!staged.length && (!schema || (!schema.source.categories.length && !Object.keys(schema.source.categoryExtensions).length))) {
+    await cancelLoreImport(tempDir);
+    throw new Error("empty-bundle");
+  }
+  if (schema) validateSchemaForProfile(mergeLoreSchema(schema.target, schema.source).schema, (await readSchemaProfile(projectPath)).selection);
 
   const entities: StagedEntity[] = [];
   for (const e of staged) {
@@ -185,7 +189,7 @@ export async function stageLoreImport(projectPath: string): Promise<StagedLoreIm
     entities.push({ ...e, conflicts });
   }
 
-  return { tempDir, zipPath: result.zip_path, manifest, entities };
+  return { tempDir, zipPath: result.zip_path, manifest, entities, ...(schema ? { schema } : {}) };
 }
 
 /**
@@ -196,9 +200,15 @@ export async function applyLoreImport(
   projectPath: string,
   staged: StagedLoreImport,
   strategy: ConflictStrategy,
+  choices: SchemaChoices = {},
 ): Promise<LoreImportSummary> {
+  if (staged.schema) {
+    const merged = mergeLoreSchema(staged.schema.target, staged.schema.source, choices);
+    await applyLoreSchema(projectPath, staged.schema.target, merged.schema);
+  }
   const root = loreRoot(projectPath);
   const activeIds = new Set(loreCategoryIds());
+  for (const c of staged.schema?.source.categories ?? []) activeIds.add(c.id);
   const hidden = new Set<string>();
   let imported = 0;
   let skipped = 0;
@@ -222,6 +232,7 @@ export async function applyLoreImport(
 
     const to = `${root}/${e.category}/${targetId}`;
     try {
+      await makeDir(`${root}/${e.category}`);
       await renamePath(from, to);
     } catch (err) {
       // The move in failed with the author's entity already out of the way.
