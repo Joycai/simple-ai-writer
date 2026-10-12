@@ -3,6 +3,8 @@ mod cmd;
 mod commands;
 mod docx;
 mod fontproto;
+#[cfg(test)]
+mod http_diagnostics;
 mod instance;
 mod lorehash;
 mod pptx;

@@ -827,6 +827,8 @@ document import into the workspace:
 
 #### 平台与能力探测
 - `http.ts`
+  - `networkDiagnostics.ts` 提取 Rust HTTP IPC 错误中的原因链；图片与聊天日志都写入 `network`。插件诊断补丁、脱敏契约与复现步骤见 [network-diagnostics.md](network-diagnostics.md)。
+  - Rust HTTP 插件的共用 `client_builder()` 关闭三项 TCP 保活，避免当前网络路径把长等待误判成失活；各调用的 deadline、取消和 URL scope 保留。真实 socket 与取消回归也见同一文档。
 - `paths.ts`
 - `platform.ts`
 - `motion.ts` (the shared Motion presets for screen / panel transitions — the one sanctioned exception to pure-CSS motion; the variants animate a raw `transform`, so every consumer goes through `useMotionPreset()`, which is what keeps the reduced-motion promise)

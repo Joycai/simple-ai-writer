@@ -53,6 +53,7 @@ const ROOT_MODULE_TESTS: Readonly<Record<string, string>> = {
   "ime.test.ts": "ime",
   "keyStore.test.ts": "keyStore",
   "notify.test.ts": "notify",
+  "networkDiagnostics.test.ts": "networkDiagnostics",
   "paths.test.ts": "paths",
   "pinnedProjects.test.ts": "recentProjects",
   "prefs.test.ts": "prefs",
