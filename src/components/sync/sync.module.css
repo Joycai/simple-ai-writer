@@ -140,6 +140,12 @@
 .arrowNote { font-size: 10.5px; color: var(--stg-text-faint); }
 
 /* ── Notices ─────────────────────────────────────────────────────────────── */
+.schemaPanel {
+  min-width: 0;
+  padding: 0 26px;
+  overflow-wrap: anywhere;
+}
+
 .notice {
   margin: 14px 26px 0;
   background: var(--stg-stat);

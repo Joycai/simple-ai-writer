@@ -353,7 +353,16 @@ function PreviewBody(p: PreviewProps) {
     <>
       {band}
 
-      {plan.schema && <SchemaMergePanel source={p.isPush ? plan.schema.local : plan.schema.remote} target={p.isPush ? plan.schema.remote : plan.schema.local} choices={plan.schema.choices} onChange={choices => useSyncStore.getState().setSchemaChoices(choices)} />}
+      {plan.schema && (
+        <div className={s.schemaPanel}>
+          <SchemaMergePanel
+            source={p.isPush ? plan.schema.local : plan.schema.remote}
+            target={p.isPush ? plan.schema.remote : plan.schema.local}
+            choices={plan.schema.choices}
+            onChange={choices => useSyncStore.getState().setSchemaChoices(choices)}
+          />
+        </div>
+      )}
       {plan.firstSync && (
         <div className={s.notice}>
           <span className={s.noticeMark}>i</span>

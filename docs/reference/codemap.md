@@ -667,7 +667,7 @@ RAG assembly (`rag.ts`), the current time as one line (`clock.ts` — a line, no
 
 知识库同步的客户端一侧（服务端是 `server/`，两者的可行性与线格式在 `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §13–§20，UI 稿在 `sync-lore-ui-brief.md`）。
 
-定义迁移：`profile/transferSchema.ts` 校验、按 ID 合并与备份写入；`sync/schema.ts` 将定义作为独立预览步骤，`SchemaMergePanel` 共用导入和同步冲突选项。服务器 schema API 独立于条目；旧服务器明确要求升级。契约见 `lore-entry-type-plan.md` §11。
+定义迁移：`profile/transferSchema.ts` 校验、按 ID 合并与备份写入；`sync/schema.ts` 将定义作为独立预览步骤，`SchemaMergePanel` 共用导入和同步冲突选项。同步模态在调用处提供与方向卡片、条目列表一致的 26px 左右留白，并允许长文本换行；共享面板不承担宿主布局，否则新增区块会直接贴到模态边缘。服务器 schema API 独立于条目；旧服务器明确要求升级。契约见 `lore-entry-type-plan.md` §11。
 
 #### 共同词汇与同步方向（model.ts）
 - `model.ts` 是共同词汇：一个项目可以**绑定**到服务器上一个具名知识库，同步是**单向、整棵树**的——把本地 `.ai-writer/lore/` 推上去，或把远端拉下来，**没有 merge**，作者选方向、另一侧变成它的镜像
