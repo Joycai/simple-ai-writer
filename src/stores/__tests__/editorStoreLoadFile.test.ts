@@ -21,7 +21,7 @@ vi.mock("../../lib/fs/fileio", () => ({
   writeFile: h.writeFile,
 }));
 
-import { useEditorStore } from "../editorStore";
+import { editorViewport, useEditorStore } from "../editorStore";
 
 describe("editorStore.loadFile — failed read", () => {
   beforeEach(() => {
@@ -181,5 +181,43 @@ describe("editorStore.loadFile — typing during a switch", () => {
     expect(h.writeFile).not.toHaveBeenCalled();
     expect(useEditorStore.getState().content).toBe("as it stands on disk");
     expect(useEditorStore.getState().isDirty).toBe(false);
+  });
+});
+
+
+describe("editor viewport lifecycle", () => {
+  const doc = { filePath: "/proj/a.md", content: "same", isDirty: false, saveTimer: null };
+  it("invalidates even an identical reload and rejects late cleanup", async () => {
+    useEditorStore.setState(doc);
+    const before = useEditorStore.getState();
+    editorViewport.savePreview(before, { top: 900, left: 0 });
+    h.readFile.mockResolvedValueOnce("same");
+    await before.loadFile(doc.filePath);
+    const after = useEditorStore.getState();
+    expect(after.viewportRevision).toBeGreaterThan(before.viewportRevision);
+    editorViewport.savePreview(before, { top: 900, left: 0 });
+    expect(editorViewport.preview(after, null)).toBeUndefined();
+  });
+
+  it("clears on the buffer reset used by close and project reset", () => {
+    useEditorStore.setState(doc);
+    const before = useEditorStore.getState();
+    editorViewport.savePreview(before, { top: 900, left: 0 });
+    useEditorStore.setState({ content: "", filePath: null });
+    editorViewport.savePreview(before, { top: 900, left: 0 });
+    useEditorStore.setState(doc);
+    expect(editorViewport.preview(useEditorStore.getState(), null)).toBeUndefined();
+  });
+
+  it("clears both remembered positions when navigation requests a line", () => {
+    useEditorStore.setState({ ...doc, scrollToLine: null });
+    const before = useEditorStore.getState();
+    editorViewport.savePreview(before, { top: 900, left: 0 });
+    before.jumpToLine(2);
+    const jump = vi.fn();
+    useEditorStore.getState().setScrollToLine(jump);
+    expect(jump).toHaveBeenCalledWith(1);
+    expect(editorViewport.preview(useEditorStore.getState(), null)).toBeUndefined();
+    useEditorStore.getState().setScrollToLine(null);
   });
 });

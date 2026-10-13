@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { EditorState, type StateEffect, type TransactionSpec } from "@codemirror/state";
+import { EditorState, type StateEffect, type Transaction, type TransactionSpec } from "@codemirror/state";
+import type { EditorView } from "@codemirror/view";
 import {
   aiTargetField,
   clearAiTarget,
+  markTargetEnd,
+  markTargetStart,
   setAiTargetEnd,
   setAiTargetStart,
 } from "../aiTarget";
@@ -28,6 +31,64 @@ function markedText(state: EditorState): string | null {
 
 const DOC = "第一段。\n\n第二段。\n\n第三段。";
 const SECOND = DOC.indexOf("第二段。");
+
+// Exercise the real commands and state transactions without a browser view.
+// Browser focus/scroll behavior still needs a separate integration check.
+function commandView(state: EditorState) {
+  const transactions: Transaction[] = [];
+  const adapter = {
+    state,
+    dispatch(spec: TransactionSpec) {
+      const transaction = adapter.state.update(spec);
+      transactions.push(transaction);
+      adapter.state = transaction.state;
+    },
+  };
+  return { view: adapter as unknown as EditorView, transactions };
+}
+
+describe("AI target commands", () => {
+  it("uses selection edges without changing its direction or requesting scroll", () => {
+    const state = apply(stateWith(DOC), { selection: { anchor: SECOND + 4, head: SECOND } });
+    const { view, transactions } = commandView(state);
+
+    expect(markTargetStart(view)).toBe(true);
+    expect(view.state.field(aiTargetField)).toEqual({ from: SECOND, to: null });
+    expect(view.state.selection.eq(state.selection)).toBe(true);
+
+    expect(markTargetEnd(view)).toBe(true);
+    expect(markedText(view.state)).toBe("第二段。");
+    expect(view.state.selection.eq(state.selection)).toBe(true);
+    for (const transaction of transactions) {
+      expect(transaction.selection).toBeUndefined();
+      expect(transaction.scrollIntoView).toBe(false);
+      // Also excludes a scrollIntoView effect, which is separate from the flag.
+      expect(transaction.effects.every((e) => e.is(setAiTargetStart) || e.is(setAiTargetEnd))).toBe(true);
+    }
+  });
+
+  it("keeps a start pending when a plain click moves the caret, until the end command", () => {
+    const { view, transactions } = commandView(apply(stateWith(DOC), { selection: { anchor: SECOND } }));
+    markTargetStart(view);
+    const endpoint = DOC.indexOf("第三段。") + 4;
+
+    // The selection transaction produced by an ordinary click must not extend
+    // from the AI marker, or silently finish that marker.
+    view.dispatch({ selection: { anchor: endpoint }, userEvent: "select.pointer" });
+    expect(view.state.selection.main.empty).toBe(true);
+    expect(view.state.selection.main.head).toBe(endpoint);
+    expect(view.state.field(aiTargetField)).toEqual({ from: SECOND, to: null });
+    expect(markedText(view.state)).toBeNull();
+    const clickedSelection = view.state.selection;
+
+    markTargetEnd(view);
+    expect(view.state.field(aiTargetField)).toEqual({ from: SECOND, to: endpoint });
+    expect(markedText(view.state)).toBe(DOC.slice(SECOND, endpoint));
+    expect(view.state.selection.eq(clickedSelection)).toBe(true);
+    expect(transactions[transactions.length - 1].scrollIntoView).toBe(false);
+    expect(transactions[transactions.length - 1].effects.every((e) => e.is(setAiTargetEnd))).toBe(true);
+  });
+});
 
 describe("aiTargetField", () => {
   it("is empty until both ends are marked", () => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { EditorState } from "@codemirror/state";
@@ -18,7 +18,7 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { syntaxHighlighting } from "@codemirror/language";
 import { manuscriptHighlight } from "../../lib/editor/highlight";
-import { useEditorStore } from "../../stores/editorStore";
+import { editorViewport, useEditorStore } from "../../stores/editorStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { EditorContextMenu } from "./EditorContextMenu";
 import { EditorToolbar } from "./EditorToolbar";
@@ -94,6 +94,7 @@ export function CodeEditor({ value, onChange, toolbar = true }: Props) {
   const [illustrating, setIllustrating] = useState(false);
   const hasImageModel = useAiStore((s) => s.models.some((m) => m.type === "image"));
   const filePath = useEditorStore((s) => s.filePath);
+  const viewportRevision = useEditorStore((s) => s.viewportRevision);
   // The live view, as the store learns about it — see the toolbar's `view` prop.
   const editorView = useEditorStore((s) => s.editorView);
   /** A failed 插入图片, shown until the next attempt. */
@@ -136,7 +137,7 @@ export function CodeEditor({ value, onChange, toolbar = true }: Props) {
   // the file to "dirty" and schedule a redundant save on every file open).
   const isSyncingRef = useRef(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!containerRef.current) return;
 
     const updateListener = EditorView.updateListener.of((update) => {
@@ -162,8 +163,10 @@ export function CodeEditor({ value, onChange, toolbar = true }: Props) {
       }
     });
 
+    const restored = editorViewport.editor({ filePath, content: value, viewportRevision }, useEditorStore.getState().pendingJump);
     const state = EditorState.create({
       doc: value,
+      selection: restored?.selection,
       extensions: [
         history(),
         drawSelection(),
@@ -195,7 +198,7 @@ export function CodeEditor({ value, onChange, toolbar = true }: Props) {
       ],
     });
 
-    const view = new EditorView({ state, parent: containerRef.current });
+    const view = new EditorView({ state, parent: containerRef.current, scrollTo: restored?.scroll });
     viewRef.current = view;
     externalValueRef.current = value;
     useEditorStore.getState().setEditorView(view);
@@ -212,6 +215,10 @@ export function CodeEditor({ value, onChange, toolbar = true }: Props) {
     });
 
     return () => {
+      // Layout cleanup runs while the scrolling DOM is still attached.
+      editorViewport.saveEditor({ filePath, viewportRevision, content: view.state.doc.toString() }, {
+        selection: view.state.selection, scroll: view.scrollSnapshot(),
+      });
       useEditorStore.getState().setScrollToLine(null);
       useEditorStore.getState().setEditorView(null);
       useEditorStore.getState().setAiTarget(null);
@@ -220,7 +227,7 @@ export function CodeEditor({ value, onChange, toolbar = true }: Props) {
       viewRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [filePath, viewportRevision]);
 
   // Sync external value changes (file switch) without re-creating editor
   useEffect(() => {

@@ -170,7 +170,7 @@ export function EditorArea() {
               ? <Suspense fallback={null}>{isSamePath(activeFilePath, filePath) && <SlidesPreview key={`${projectPath}:${activeFilePath}`} source={content} filePath={activeFilePath} projectPath={projectPath} />}</Suspense>
               : isHtml
               ? <HtmlPreview source={content} filePath={filePath} />
-              : <Preview source={content} basePath={filePath ? dirName(filePath) : null} />}
+              : <Preview source={content} filePath={filePath} basePath={filePath ? dirName(filePath) : null} />}
           </div>
         )}
       </div>

@@ -126,6 +126,8 @@ Main layout structure (TitleBar, IconRail, Sidebar, ProjectRow (项目名那一�
 
 **关闭文档只有一处实现**：`stores/openDocument.ts` 的 `closeDocument()`（面包屑末尾的 ×、⌘W、文件树右键三个入口共用）。**「关闭」是三层，三平台同一套**（`lib/shortcuts.ts` 的 `CLOSE_DOC_COMBOS` 顶上有那张表）：文档 ⌘W · 项目 ⇧⌘W（`ProjectRow`，项目开着时才挂）· 窗口 ⌥⌘W（仅 mac，`windowmenu.rs` 的菜单项）。窗口那一层**不能**用 `PredefinedMenuItem::close_window`：预置项在 macOS 上固定带 ⌘W，而原生菜单先于 webview 收键——一个窗口就是一个工作区，于是「关文档」的 ⌘W 实际关掉的是整个项目窗口。先 flush 再置空，**写盘失败就不关**（缓冲区是那几行字唯一的副本），痕迹是面包屑尾巴两秒的一行；关的是图片时不碰缓冲区里那篇待写的文档。四条都钉在 `src/stores/__tests__/openDocumentClose.test.ts`。设计稿的两张表与出入表在 `docs/feature/topbar-doc-actions-brief.md`。
 
+底栏的 AI 标记按钮和格式工具栏一样，在鼠标按下时阻止默认聚焦：标记只更新范围，保留编辑器焦点与原选区，避免滚动到远处后再次点击正文时多一次离焦/回焦。键盘 Tab / 激活仍保留。
+
 ### `src/components/editor/`
 
 `SlidesPreview` / `NativeSlideView` provide the lazy `.slides.json` preview from the export resolver, page navigation/notes, and prepare→review→write export using the P4 artifact cache. Source edits invalidate the review; unmount aborts work. Preview stays approximate and names unembedded fonts (pptx-plan §8.12).
@@ -459,6 +461,7 @@ clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
 - `format.ts`（CodeMirror）与 `textareaFormat.ts`（条目编辑器那种裸 `<textarea>`）——同一套 markdown 命令的两个面。行内标记**开关式**（对已加粗的文字再加粗就是去掉），块级命令作用于选区碰到的每一行。`textareaFormat` 把变换切成纯函数（`*Edit`，算出一段连续替换 + 结果选区，无 DOM 可测）加一层薄的 DOM 应用层，改动靠派发 `input` 事件写回 React。
 - `highlight.ts`——`manuscriptHighlight` **只发 `.tok-*` 类名、不带颜色**。CodeMirror 的 `defaultHighlightStyle` 自带一套浅色调色板，而且它是个 JavaScript 对象：没有令牌、读不到 `data-scheme`，主题伸不进去（夜间的代码和引用会一直是浅色，模块 CSS 里读令牌的 `.tok-*` 规则也匹配不上，因为默认样式发的是生成类名）。颜色因此和编辑器画的其他东西一起住在模块样式表里，主题换编辑器配色就和换按钮颜色是同一件事（`docs/feature/theme-system-plan.md` §8）。
 - `insertFlash.ts` 与 `caretFlash.ts`——两种落点回执，**mark 与 line 装饰的分别**是被逼出来的：插入用 mark 画那段刚落下的文字；跳转到 `doc.length`、文档又以换行结尾时落在**空行**上，零宽区间的 mark 什么都画不出来，所以跳转用 line 装饰（它至少还有行高）。
+- `viewport.ts`——当前缓冲区的一份内存视口快照：主视图往返仍卸载编辑树，CodeEditor 在 layout cleanup（DOM 尚未移除）保存 CodeMirror `scrollSnapshot` 和选区，以初始 `scrollTo` 恢复；Markdown Preview 在正文渲染后恢复滚动，并跟随图片 / 图表的迟到尺寸，作者输入即停止。editorStore 按路径、原文、载入代次校验，关闭 / 项目重置清空，内容变化或同路径重新载入失效，迟到的旧组件 cleanup 无权写入；明确跳行清掉两侧快照，避免异步布局覆盖导航。只存当前文档，不保存 DOM、完整 EditorState 或磁盘偏好。
 - `scrollSync.ts`——分栏两侧**按源行对齐而不是按滚动百分比**：同样的行在两边高度差得远（`# 标题` 变成一个高标题，`![图]` 变成一整块图），等百分比会把不同的段落摆到屏上。每一侧交一份 `ScrollMapping`（视口顶 → 分数源行，以及反向），没有映射时退回等比镜像，两个极端始终吸附。插值数学是这里的纯函数。
 - `scrollAnchors.ts`——那两份具体映射（编辑器侧读 CodeMirror 的块几何，预览侧读 `renderMarkdown` 在分栏下打的 `data-line` 锚点）。纯测量，正是 jsdom 跑不了的那部分，所以数学留在 `scrollSync.ts`。
 - `previewZoom.ts`——预览缩放的**定档梯子**：按钮和 ⌘/Ctrl+滚轮必须对「一档是多少」有共识，而一个作者说不出名字的百分比（113%）比稍粗一点的跳档更糟；档位在 100% 附近变密，因为阅读微调都发生在那儿。

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import { renderMarkdown } from "../../lib/fs/markdown";
@@ -15,10 +15,13 @@ import { annotateCitations } from "../../lib/lore/citations";
 import { useLoreStore } from "../../stores/loreStore";
 import { MD_BODY_CLASS } from "../../lib/theme/markdownThemes";
 import { useScheme } from "../../lib/theme/scheme";
+import { editorViewport, useEditorStore } from "../../stores/editorStore";
 import styles from "./Preview.module.css";
 
 interface Props {
   source: string;
+  /** Actual buffer identity; basePath cannot distinguish sibling documents. */
+  filePath?: string | null;
   /** Directory of the source file, used to resolve relative image links. */
   basePath?: string | null;
 }
@@ -33,10 +36,12 @@ interface Props {
  */
 const TYPING_DEBOUNCE_MS = 300;
 
-export function Preview({ source, basePath }: Props) {
+export function Preview({ source, basePath, filePath = null }: Props) {
   const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const viewportRevision = useEditorStore((s) => s.viewportRevision);
+  const renderedDocument = useRef({ filePath, content: source, viewportRevision });
   const zoom = useAppStore((s) => s.previewZoom);
   const setZoom = useAppStore((s) => s.setPreviewZoom);
   const stepZoom = useAppStore((s) => s.stepPreviewZoom);
@@ -64,12 +69,13 @@ export function Preview({ source, basePath }: Props) {
   }, []);
 
   // The source the DOM currently shows. Trails `source` by the debounce while
-  // the author types; a *different document* (basePath change) applies at once
+  // the author types; a *different document* (buffer identity change) applies at once
   // so the old document's text is never resolved against the new folder.
   const [shown, setShown] = useState(source);
-  const [prevBase, setPrevBase] = useState(basePath);
-  if (prevBase !== basePath) {
-    setPrevBase(basePath);
+  const documentKey = `${viewportRevision}:${filePath ?? basePath ?? ""}`;
+  const [prevDocument, setPrevDocument] = useState(documentKey);
+  if (prevDocument !== documentKey) {
+    setPrevDocument(documentKey);
     setShown(source);
   }
   useEffect(() => {
@@ -96,6 +102,12 @@ export function Preview({ source, basePath }: Props) {
 
   useEffect(() => {
     if (!ref.current) return;
+    const previous = renderedDocument.current;
+    if (scrollerRef.current && (previous.filePath !== filePath || previous.viewportRevision !== viewportRevision)) {
+      scrollerRef.current.scrollTop = 0;
+      scrollerRef.current.scrollLeft = 0;
+    }
+    renderedDocument.current = { filePath, content: shown, viewportRevision };
     // lineAnchors: the data-line stamps EditorArea's split-view scroll link
     // aligns on. Harmless when the pane is shown alone, and always stamping
     // keeps the rendered DOM identical between preview and split mode.
@@ -173,7 +185,56 @@ export function Preview({ source, basePath }: Props) {
     // `basePath` belongs here too: two documents in different folders can hold
     // identical text (a template, a duplicated draft), and without it the
     // second one would render the first one's pictures — or none at all.
-  }, [shown, basePath, scheme]);
+  }, [shown, basePath, filePath, viewportRevision, scheme]);
+
+  // Capture before detachment, and only describe the text actually rendered
+  // (the preview can still be behind the buffer's typing debounce).
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    return () => {
+      if (scroller) editorViewport.savePreview(renderedDocument.current, {
+        top: scroller.scrollTop, left: scroller.scrollLeft,
+      });
+    };
+  }, []);
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    const page = ref.current;
+    const doc = renderedDocument.current;
+    const saved = editorViewport.preview(doc, useEditorStore.getState().pendingJump);
+    if (!scroller || !page || !saved) return;
+    let stopped = false;
+    const restore = () => {
+      // A new jump clears the snapshot, even if CodeEditor already consumed
+      // pendingJump. Late image/diagram sizing must never undo that jump.
+      if (stopped || editorViewport.preview(doc, useEditorStore.getState().pendingJump) !== saved) return;
+      scroller.scrollTop = saved.top;
+      scroller.scrollLeft = saved.left;
+    };
+    const stop = () => {
+      stopped = true;
+      // Retire it as well as stopping this effect: a later theme rebuild must
+      // not reinstate the old position after the author has taken over.
+      editorViewport.clearPreview();
+      observer.disconnect();
+    };
+    const observer = new ResizeObserver(restore);
+    observer.observe(page);
+    restore();
+    // Keep restoring as images / Mermaid settle, until the author takes over.
+    window.addEventListener("wheel", stop, { passive: true });
+    window.addEventListener("pointerdown", stop);
+    window.addEventListener("touchstart", stop, { passive: true });
+    window.addEventListener("keydown", stop);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("pointerdown", stop);
+      window.removeEventListener("touchstart", stop);
+      window.removeEventListener("keydown", stop);
+    };
+  }, [shown, filePath, viewportRevision, scheme]);
 
   // data-preview-scroller marks the element that actually scrolls (the one
   // carrying `overflow-y: auto` — no longer this component's root since the
