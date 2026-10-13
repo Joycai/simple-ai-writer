@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Sparkles } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
-import { useEditorStore } from "../../stores/editorStore";
+import { editorViewport, useEditorStore } from "../../stores/editorStore";
 import { loadIntoEditor } from "../../stores/openDocument";
 import { CodeEditor } from "../editor/CodeEditor";
 import { EditorScrollNav } from "../editor/EditorScrollNav";
@@ -14,6 +14,7 @@ import { EditorBottomStrip } from "./EditorBottomStrip";
 import { FileNotice } from "./FileNotice";
 import { MOD_KEY } from "../../lib/platform";
 import { docKindOf, fileNoticeReason, isViewOnlyKind } from "../../lib/fs/docKind";
+import { afterViewportRestore } from "../../lib/editor/viewport";
 import { linkScrollers } from "../../lib/editor/scrollSync";
 import { editorScrollMap, previewScrollMap } from "../../lib/editor/scrollAnchors";
 import styles from "./EditorArea.module.css";
@@ -63,10 +64,18 @@ export function EditorArea() {
     const editor = editorView?.scrollDOM;
     const preview = previewPaneRef.current?.querySelector<HTMLElement>("[data-preview-scroller]");
     if (!editorView || !editor || !preview) return;
-    return linkScrollers(editor, preview, {
+    const link = () => linkScrollers(editor, preview, {
       mapA: editorScrollMap(editorView),
       mapB: previewScrollMap(preview),
     });
+    const buffer = useEditorStore.getState();
+    if (!editorViewport.editor(buffer, buffer.pendingJump) && !editorViewport.preview(buffer, buffer.pendingJump)) {
+      return link();
+    }
+    // Restoration scrolls are not user scrolling. CodeMirror initially uses
+    // estimated line heights, then corrects them in its measurement loop. Do
+    // not send those intermediate positions through the other pane and back.
+    return afterViewportRestore(editorView, link);
   }, [viewMode, activeFilePath, isImage, isHtml, isSlides, editorView]);
 
   // Load file when active path changes. View-only kinds are rendered directly
