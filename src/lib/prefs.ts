@@ -29,6 +29,8 @@
 import { isSamePath } from "./paths";
 
 export const PREF_KEYS = [
+  "app:mcpBeta",
+  "app:mcpServers",
   "app:theme",
   // Which appearance theme each polarity uses — a theme file's id, or the
   // built-in (`paper` / `night`). The mode above resolves the polarity, the
@@ -165,6 +167,8 @@ export const PREF_KEY_PREFIXES = [PINNED_LORE_PREFIX, LORE_SCOPE_PREFIX, SEMANTI
  * not another, and a first-run flag whose whole job is to be false once.
  */
 export const MACHINE_LOCAL_PREF_KEYS: readonly string[] = [
+  "app:mcpBeta",
+  "app:mcpServers",
   // Absolute document paths and their continuation choices stay on this machine.
   "app:generateDocuments",
   "app:recentProjects",
@@ -294,6 +298,21 @@ export function writePref(key: string, value: string): void {
   enqueue((db) =>
     db.execute(`INSERT OR REPLACE INTO ${TABLE} (key, value) VALUES (?, ?)`, [key, value]),
   );
+}
+
+/** Persist before publishing a value whose durability guards a secret write.
+ * Unlike ordinary UI preferences, a missing account registry is not harmless.
+ * Keep errors visible to this caller while leaving the shared queue usable.
+ */
+export async function writePrefConfirmed(key: string, value: string): Promise<void> {
+  if (!hydrated) throw new Error("Preferences database is unavailable.");
+  const operation = writeChain.then(async () => {
+    const db = await openDb();
+    await db.execute(`INSERT OR REPLACE INTO ${TABLE} (key, value) VALUES (?, ?)`, [key, value]);
+    cache.set(key, value);
+  });
+  writeChain = operation.catch(() => {});
+  await operation;
 }
 
 /**

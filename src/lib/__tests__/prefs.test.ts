@@ -571,3 +571,25 @@ describe("refreshPrefs", () => {
     });
   });
 });
+
+
+describe("confirmed preference writes", () => {
+  it("fails before hydration instead of silently using a volatile fallback", async () => {
+    await expect(prefs.writePrefConfirmed("app:mcpServers", "[]")).rejects.toThrow("unavailable");
+  });
+  it("keeps the old cached value when disk persistence fails and permits later writes", async () => {
+    await prefs.hydratePrefs();
+    await prefs.writePrefConfirmed("app:mcpServers", "old");
+    h.execute.mockRejectedValueOnce(new Error("disk full"));
+    await expect(prefs.writePrefConfirmed("app:mcpServers", "new")).rejects.toThrow("disk full");
+    expect(prefs.readPref("app:mcpServers")).toBe("old");
+    await prefs.writePrefConfirmed("app:mcpServers", "next");
+    expect(prefs.readPref("app:mcpServers")).toBe("next");
+  });
+  it("excludes MCP connections and the trust switch from portable backups", () => {
+    prefs.writePref("app:mcpBeta", "1");
+    prefs.writePref("app:mcpServers", "[]");
+    expect(prefs.portablePrefEntries().some(([key]) => key.startsWith("app:mcp"))).toBe(false);
+    expect(prefs.applyPrefEntries([["app:mcpBeta", "1"], ["app:mcpServers", "[]"]])).toBe(0);
+  });
+});

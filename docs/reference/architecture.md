@@ -114,7 +114,10 @@ should cost the author their preferences syncing, not their app starting.
   right in the store and the screen still shows what it computed at startup.
 - **Writes** — serialized on one chain, so two `writePref` calls for the same
   key (a slider being dragged) land in call order rather than in whichever
-  order the driver finishes them.
+  order the driver finishes them. `writePrefConfirmed` is the explicit exception to
+  best-effort persistence: MCP account registration must reach disk before a
+  keyring write, so it rejects on database failure and publishes the cache only
+  after success. MCP connections and the Beta trust switch stay machine-local.
 
 ### Multi-instance (多开 — `src/lib/instance.ts` + `src-tauri/src/instance.rs`)
 

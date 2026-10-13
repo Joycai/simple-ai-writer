@@ -463,6 +463,10 @@ describe("tool schema budget", () => {
     // or apt, and a wrong guess costs a whole round of reading an error.
     const command = estimateToolsTokens(getToolDefinitions(["run_command"]));
     expect(command).toBeLessThanOrEqual(360);
+    // MCP exposes only discovery + approved dispatch; remote schemas arrive
+    // as results on demand, not in every round’s fixed header.
+    const mcp = estimateToolsTokens(getToolDefinitions(["discover_mcp_tools", "call_mcp_tool"]));
+    expect(mcp).toBeLessThanOrEqual(450);
   });
 
   it("keeps each tool pack's resident half inside the plan's budget", () => {

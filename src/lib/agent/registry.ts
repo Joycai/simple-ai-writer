@@ -26,6 +26,7 @@ import { type ToolCall, type ToolResult } from "./tools";
 import { autoLoadMessage, isSearchableGroup, SEARCHABLE_GROUPS, type SearchableTools } from "./toolSearch";
 
 import { CATEGORY_PLACEHOLDER } from "./toolTable/shared";
+import { MCP_TOOLS } from "./toolTable/mcp";
 import { READ_TOOLS } from "./toolTable/read";
 import { LORE_TOOLS } from "./toolTable/lore";
 import { COLLECTOR_TOOLS } from "./toolTable/collectors";
@@ -56,6 +57,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   ...SCRATCHPAD_TOOLS,
   ...ROLEPLAY_TOOLS,
   ...SUB_RUN_TOOLS,
+  ...MCP_TOOLS,
 };
 
 /**

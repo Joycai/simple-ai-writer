@@ -23,6 +23,7 @@ import { isXlsxExportEnabled } from "../xlsx/flag";
 import { isTranslateEnabled } from "../translate/flag";
 import { isAsrEnabled } from "../asr/flag";
 import { isCliEnabled } from "../cli/flag";
+import { isMcpEnabled, readMcpServers } from "../mcp/config";
 import { IS_TAURI } from "../platform";
 import { isOrchestratorEnabled } from "./packFlag";
 import type { Model, Provider } from "../ai/configDb";
@@ -99,6 +100,8 @@ export interface RouteOptions {
    * exists at all; any one no means absent, never a tool that refuses.
    */
   commands?: boolean;
+  /** External MCP calls need a visible approval card. */
+  mcp?: boolean;
   /**
    * The provider list, so `searchReadsPages` can check the search model's wire
    * — not a per-surface choice like the rest, but carried here so the pricing
@@ -258,6 +261,12 @@ function route(
   // routed-tools assertion. docs/feature/agent/shell-command-plan.md §3.5.
   if (options?.commands && isCliEnabled() && IS_TAURI && !tools.includes("run_command")) {
     tools.push("run_command");
+  }
+
+  if (options?.mcp && IS_TAURI && isMcpEnabled() && readMcpServers().some((s) => s.enabled)) {
+    for (const id of ["discover_mcp_tools", "call_mcp_tool"] as const) {
+      if (!tools.includes(id)) tools.push(id);
+    }
   }
 
   // Search subagent takes over web search: withhold the web server tools from

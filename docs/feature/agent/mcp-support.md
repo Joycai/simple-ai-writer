@@ -1,0 +1,125 @@
+# MCP servers
+
+> **Status: `partial`.** Streamable HTTP tool discovery and approved calls are built. Stdio, legacy HTTP+SSE, OAuth, resources/prompts browsing, sampling, elicitation, and the stateless 2026 protocol are outside this version.
+
+## Author workflow
+
+Settings → AI configuration → Labs → MCP servers (Beta). Enable the feature,
+paste a standard `mcpServers` object, then choose **Import configuration**.
+The same server name replaces its connection and headers. Test connection performs
+only `initialize`, `notifications/initialized`, and paginated `tools/list`, then
+closes the session. It never calls a tool or generates an image.
+
+```json
+{
+  "mcpServers": {
+    "joycai-images": {
+      "url": "http://127.0.0.1:39287/mcp",
+      "headers": { "Authorization": "Bearer YOUR_TOKEN" }
+    }
+  }
+}
+```
+
+Open a project and ask the chat assistant (or a non-batch Agent task) to use the
+server. It discovers names, asks for an individual tool's schema, and proposes a
+call with the exact server URL, tool, and arguments visible on an approval card.
+Every remote tool call requires approval, including reads and polling: server
+annotations are information from the remote party, not an author authorization.
+The normal prose/shell/image approval grants do not cover MCP.
+
+For joycai-images the sequence is `list_models` → `get_model_schema` →
+`generate_image` → `get_generation` → `read_generation_image`. The server owns
+queued jobs; a successful submission is not a finished image. Use its `requestId`
+contract if a retry is needed, poll its returned task ID, and request
+`preview: false` when the original image is wanted. Stopping an HTTP request or
+closing a session does not cancel a durable job; `cancel_generation` is a separate
+approved call. Charges are external, unknown to the app, and not entered into its
+LLM usage ledger.
+
+## Design and boundaries
+
+- `lib/mcp/config.ts`: only metadata in `app:mcpServers`; Beta and server list are
+  machine-local preferences excluded from backup and import. All header values
+  are one JSON credential per server under `mcp:<id>` in the existing OS keyring.
+  No token, header value, or sample credential is shipped in source. A confirmed
+  database write (`writePrefConfirmed`) registers a disabled server before its
+  secret is saved. Failed secret writes leave the server disabled. Removal and
+  app reset erase the keyring account before discarding its record.
+- Endpoint validation accepts HTTPS and loopback HTTP, rejects credentials,
+  query strings and fragments in URLs, and reserves protocol headers. Redirects
+  are disabled both through Fetch and the Tauri HTTP plugin's `maxRedirections`;
+  Fetch's `redirect` alone does not control the native plugin.
+- Native requests explicitly omit the synthetic webview `Origin`: the Tauri
+  HTTP plugin interprets an empty `Origin` as removal with its existing
+  `unsafe-headers` feature. The shared HTTP helper otherwise supplies
+  `http://localhost` for Ollama, which joycai-images rejects with HTTP 403.
+  MCP is a native client; no browser-origin allowlist is changed on the server.
+  Browser/Node requests do not receive this native-only header directive.
+- `client.ts`: one short-lived session per operation, no shared connection across
+  chats. Implements MCP 2025-03-26 / 2025-06-18 / 2025-11-25 initialization,
+  negotiated version/session headers, JSON and streamed SSE responses, cursor
+  pagination, cancellation, bounded responses and best-effort session DELETE.
+  Discovery is capped at 30 seconds; an approved operation at 120 seconds.
+  The parser completes as soon as the matching response arrives, even if SSE
+  remains open. Unsupported server requests fail explicitly.
+- No automatic retry or reconnection of calls. A lost response or HTTP 404 may
+  follow a billable submission; repeating it blindly can buy a second image.
+  Authentication/protocol errors never echo response bodies into the transcript.
+- `agent/toolTable/mcp.ts`: two compact resident tools, `discover_mcp_tools` and
+  `call_mcp_tool`. External schemas arrive as tool results on demand, never as
+  unbounded additions to every round's fixed header. Server names are selected
+  from configuration; the model cannot supply arbitrary endpoint URLs or headers.
+- `routing.ts`: explicit `mcp` surface opt-in, desktop environment, Beta enabled,
+  and at least one enabled server. Chat and non-batch Agent tasks opt in;
+  roleplay, batch jobs and subagents do not inherit the permission. Context
+  estimates price the same bridge tools. Off means absent.
+- `tools.ts`: discovery and proposal construction do not call external tools.
+  `proposalApply.ts` dispatches the approved call. It checks endpoint identity,
+  configuration revision and discovered tool schema again before execution;
+  changing any invalidates the pending approval. Calls serialize with other
+  approval tools. Existing run-scoped approval cleanup handles rejection/Stop.
+- `results.ts`: saves PNG/JPEG/WebP/GIF content blocks under unique
+  `assets/mcp/<uuid>-N.ext` filenames and a full text/structured result under
+  `.ai-writer/tmp/mcp/`. Tool history contains a bounded report and local paths,
+  not inline image base64. The first image is attached to the originating chat
+  turn through the existing image receipt; all image paths are in the report.
+  Unsupported binary content is reported. Resource links are not fetched, and
+  server-returned filenames are never used as write destinations. The app keeps
+  returned bytes even if Stop arrives after a successful response.
+
+## Validation and protocol references
+
+`lib/mcp/__tests__/` covers the JSON import shape, credential isolation, keyring
+failures, revision invalidation, protocol negotiation, JSON/SSE, pagination,
+request cancellation, no retry, approval/rejection, schema changes, error results,
+and asset persistence. Routing, preference, reset and context-budget guards cover
+integration with the app. `live.test.ts` is opt-in via `MCP_SMOKE_URL` and
+`MCP_SMOKE_TOKEN` and performs discovery only.
+
+Live checks on 2026-10-14:
+
+- joycai-images 1.0.0 negotiated 2025-11-25 and returned six tools through the
+  implemented client. The native macOS development app initially received 403
+  because of its synthetic Origin; the native-only omission above fixed this.
+- In an isolated project, imported the server through Settings (headers in the
+  keyring), passed Test connection, and asked the chat assistant for one red
+  apple on a pale blue background. Approved `list_models`, two
+  `get_model_schema` reads, exactly one `generate_image` (Nano Banana 2,
+  `imageSize: 1K`, `aspectRatio: 1:1`), `get_generation`, and
+  `read_generation_image` with `preview: false` through the normal cards.
+- Task `74be6d38-256c-49bb-9acf-36af2ad7bba4` completed with one 1024×1024 JPEG.
+  The app saved `assets/mcp/17dafecf-08ad-4a56-81d8-464ff99d62be-1.jpg`
+  (271,635 bytes), byte-for-byte identical to the server's original;
+  SHA-256 `c54083e93d3ddf03a5701d5a9b50ceb00aa29e4b2f0f8a3460786f5eeb0e10a0`.
+- Visually verified the chat thumbnail and full-resolution in-app lightbox,
+  then quit/relaunched the app and reopened the project: the saved conversation
+  and image preview remained available. This was a real generation, not a mock.
+  Credentials and generated test assets are not repository fixtures.
+- Regression run: 6,393 frontend tests passed (one skipped; opt-in live probes
+  excluded), TypeScript check and app/prototype production builds passed.
+
+Protocol: [Streamable HTTP 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports),
+[tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools).
+This implementation deliberately targets the server's negotiated session-based
+protocol family; it does not claim support for the newer stateless transport.

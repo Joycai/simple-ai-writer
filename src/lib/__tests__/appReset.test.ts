@@ -26,6 +26,7 @@ const h = vi.hoisted(() => ({
   clearAllPrefs: vi.fn(async () => {
     h.timeline.push("prefs:cleared");
   }),
+  mcp: [] as { id: string }[],
   serverUrl: "",
   providers: [{ id: "p1" }, { id: "p2" }] as { id: string }[],
 }));
@@ -47,6 +48,7 @@ vi.mock("../ai/configDb", () => ({
 vi.mock("../ai/capability/learned", () => ({ clearLearned: h.clearLearned }));
 vi.mock("../docx/presets", () => ({ loadCustomFormats: async () => [{ id: "f1" }] }));
 vi.mock("../keyStore", () => ({ clearAllSecrets: h.clearAllSecrets }));
+vi.mock("../mcp/config", () => ({ readMcpServers: () => h.mcp, mcpSecretAccount: (id: string) => `mcp:${id}` }));
 vi.mock("../prefs", () => ({
   clearAllPrefs: h.clearAllPrefs,
   prefEntries: () => [["app:theme", "dark"] as [string, string]],
@@ -165,4 +167,14 @@ describe("resetApp", () => {
     expect(summary.inventory).toMatchObject({ providers: 2, models: 3, prefs: 1 });
     expect(summary.secretsRemoved).toBe(2);
   });
+});
+
+
+it("includes MCP credentials in reset before their preference rows are cleared", async () => {
+  h.mcp = [{ id: "images" }];
+  try {
+    await resetApp();
+    expect(h.clearAllSecrets.mock.calls[0][0]).toContain("mcp:images");
+    expect(h.timeline.findIndex((x) => x.startsWith("secrets:"))).toBeLessThan(h.timeline.indexOf("prefs:cleared"));
+  } finally { h.mcp = []; }
 });
