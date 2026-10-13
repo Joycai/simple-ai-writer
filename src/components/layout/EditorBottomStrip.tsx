@@ -30,7 +30,15 @@ export function EditorBottomStrip({ paragraph, sentence, refsCount = 0 }: Props)
 
   return (
     <div className={styles.strip}>
-      <span className={styles.markGroup}>
+      <span
+        className={styles.markGroup}
+        // Like the formatting toolbar, marker controls must leave the editor's
+        // selection and focus intact. Refocusing an off-screen caret on the
+        // next document click can otherwise move the viewport under the pointer.
+        onMouseDown={(event) => {
+          if (event.button === 0) event.preventDefault();
+        }}
+      >
         {editorView && (
           <>
             <button

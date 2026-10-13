@@ -5,11 +5,17 @@ import { readFile, writeFile } from "../lib/fs/fileio";
 import type { AiTargetRange } from "../lib/editor/aiTarget";
 import { isSamePath } from "../lib/paths";
 
+import { createViewportCache } from "../lib/editor/viewport";
+
+export const editorViewport = createViewportCache();
+
 export type ViewMode = "split" | "editor" | "preview";
 /** Which of the breadcrumb's traces is showing — see `EditorState.crumbTrace`. */
 export type CrumbTraceKind = "closed" | "closeFailed" | "saveFailed";
 
 interface EditorState {
+  /** Changes even when reloading identical text at the same path. */
+  viewportRevision: number;
   content: string;
   filePath: string | null;
   headings: HeadingNode[];
@@ -100,6 +106,7 @@ function writeInOrder(path: string, content: string): Promise<void> {
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
+  viewportRevision: 0,
   content: "",
   filePath: null,
   headings: [],
@@ -146,6 +153,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (!isDirty || !prev || isSamePath(prev, path)) break;
       await get().saveNow();
     }
+
+    set({ viewportRevision: get().viewportRevision + 1 });
 
     // Whatever is still armed belongs to the buffer being replaced.
     const { saveTimer } = get();
@@ -236,6 +245,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   jumpToLine: (line) => {
+    editorViewport.clear();
     const { scrollToLine } = get();
     if (scrollToLine) scrollToLine(line - 1);
     else set({ pendingJump: line });
@@ -248,3 +258,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setDocCounts: (words, chars) =>
     set((s) => (s.wordCount === words && s.charCount === chars ? s : { wordCount: words, charCount: chars })),
 }));
+
+// Includes close/reset callers that clear the buffer via setState. A late
+// unmount from the old document cannot repopulate the new document's cache.
+editorViewport.sync(useEditorStore.getState());
+useEditorStore.subscribe((state) => editorViewport.sync(state));
