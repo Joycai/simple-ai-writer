@@ -51,6 +51,7 @@ import { getGlobalDb, getGlobalDbPath } from "./project";
 import { sqlTransaction } from "./sqlTx";
 import { fileExists, removeDir } from "./fs/fileio";
 import { fontsRoot } from "./theme/fontPacks";
+import { readMcpServers, mcpSecretAccount } from "./mcp/config";
 import { getServerUrl, syncTokenAccount } from "./sync/config";
 
 /** 将要被清掉的东西，按作者看得见的单位数出来。 */
@@ -109,7 +110,8 @@ export async function collectResetInventory(): Promise<ResetInventory> {
 /** 叫得出名字的钥匙串账户：每个供应商，加上同步服务器的 token。 */
 function secretAccounts(providerIds: string[]): string[] {
   const server = getServerUrl();
-  return server ? [...providerIds, syncTokenAccount(server)] : providerIds;
+  const accounts = [...providerIds, ...readMcpServers().map((s) => mcpSecretAccount(s.id))];
+  return server ? [...accounts, syncTokenAccount(server)] : accounts;
 }
 
 interface ResetSummary {

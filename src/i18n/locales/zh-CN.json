@@ -1,4 +1,25 @@
 {
+  "mcp": {
+    "enable": "启用 MCP 工具",
+    "title": "MCP 服务器（Beta）",
+    "description": "让助手调用外部工具。目前支持 Streamable HTTP；每次调用都需批准。",
+    "privacy": "请求头保存在系统钥匙串中。连接配置仅留在本机，不随配置备份同步。导入同名服务器会替换该连接及请求头。",
+    "desktopOnly": "MCP 连接需在桌面应用中使用。",
+    "importLabel": "服务器配置（JSON）",
+    "import": "导入配置",
+    "test": "测试连接",
+    "remove": "移除",
+    "stop": "停止连接测试",
+    "saved": "配置已保存。",
+    "removed": "服务器已移除。",
+    "working": "处理中…",
+    "failed": "操作未完成。请检查 JSON、服务器连接、凭据和钥匙串权限。目前仅支持 HTTPS 或本机 HTTP。",
+    "connected": "{{name}} 已连接 · {{count}} 个工具：{{tools}}",
+    "approvalTitle": "调用 MCP 工具",
+    "approvalNote": "以下参数将发送到外部服务器，可能修改文件或产生费用。外部费用未知，不计入应用用量。停止请求不一定会停止已提交的工作。",
+    "server": "服务器",
+    "tool": "工具"
+  },
   "common": {
     "loading": "读取中…",
     "close": "关闭",

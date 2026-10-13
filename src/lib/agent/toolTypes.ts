@@ -601,7 +601,19 @@ export interface LoreStepProposal extends ProposalBase {
  * fields it needs, so the approval card and the apply step both narrow instead
  * of guessing which optional fields are meaningful.
  */
+export interface McpProposal extends ProposalBase {
+  kind: "mcp";
+  serverId: string;
+  serverName: string;
+  serverUrl: string;
+  revision: string;
+  tool: string;
+  toolSchema: string;
+  arguments: Record<string, unknown>;
+}
+
 export type Proposal =
+  | McpProposal
   | EditProposal
   | RewriteProposal
   | AppendProposal
@@ -1052,6 +1064,8 @@ export interface RegisteredTool {
 }
 
 export type ToolId =
+  | "discover_mcp_tools"
+  | "call_mcp_tool"
   | "list_lore_entities"
   | "read_lore_entity"
   | "read_lore_image"

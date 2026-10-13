@@ -145,7 +145,7 @@ export function planForecast(input: ForecastInput): ContextForecast | null {
   const isContinue = !!runTask.continuation;
   const supportsExtras = !!runTask.referenceWindow;
   const preset = presetForTools(runTask.tools);
-  const toolSchemaTokens = plannedToolTokens(preset, subAgents, models, { providers });
+  const toolSchemaTokens = plannedToolTokens(preset, subAgents, models, { mcp: runTask.tools === "full", providers });
 
   // 工具说明也在系统层里（`aiTaskStore` 把它接在 basePrompt 后面），read 层的那
   // 份将近 400 tokens——续写是用得最多的任务，漏掉它就等于每次都少算一点。

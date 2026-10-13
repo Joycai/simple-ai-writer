@@ -940,7 +940,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // handoff schema on every round and the ceiling must know it.
       // providers: whether the search subagent is live depends on what its
       // model's platform sends (serverToolsSent) — the turn asks the same.
-      { handoff: true, packs: true, providers: useAiStore.getState().providers },
+      { handoff: true, packs: true, mcp: true, providers: useAiStore.getState().providers },
     );
 
     // Same repair a turn does before touching an inherited history: a turn

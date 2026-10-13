@@ -1,3 +1,4 @@
+import { McpServers } from "./McpServers";
 import { SemanticRetrieval } from "./SemanticRetrieval";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -98,6 +99,7 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
       <PaneHeader title={t("systemSettings.tabs.lab")} sub={t("systemSettings.lab.paneSub")} />
 
       <SemanticRetrieval />
+      <McpServers />
 
       <Section label={t("systemSettings.lab.groupExport")}>
         <Row top title={t("systemSettings.lab.pptxLabel")} desc={t("systemSettings.lab.pptxHint")}>

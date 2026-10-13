@@ -269,7 +269,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // and the schemas are English JSON on a different ratio entirely — see
     // ContextBudgetInput.toolSchemaTokens.
     const toolSchemaTokens = plannedToolTokens(
-      preset, useAiStore.getState().subAgents, models, { providers },
+      preset, useAiStore.getState().subAgents, models, { mcp: preset === AGENT_ASSIST_PRESET && opts?.fromBatch !== true, providers },
     );
 
     // System prompt: user-selected prompt (scene === "system"), else default
@@ -648,7 +648,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         const canAsk = preset === AGENT_ASSIST_PRESET && !inBatch;
         // commands: the same variable on purpose — a run that can show the
         // question card is exactly a run that can show a command's card.
-        const routed = routeTools(preset!, subAgents, workspace, models, { askAuthor: canAsk, commands: canAsk, providers });
+        const routed = routeTools(preset!, subAgents, workspace, models, { askAuthor: canAsk, commands: canAsk, mcp: canAsk, providers });
         const effectivePreset = {
           ...preset!,
           tools: routed.tools,

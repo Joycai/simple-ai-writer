@@ -18,6 +18,7 @@ import { renderMarkdown } from "../../lib/fs/markdown";
 import { isHtmlPath } from "../../lib/fs/images";
 import { HtmlFrame } from "../editor/HtmlPreview";
 import type {
+  McpProposal,
   AppendProposal,
   CopyProposal,
   CreateProposal,
@@ -118,6 +119,8 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
       return t("ai.approval.titleConvert", { defaultValue: "转换为 Markdown" });
     case "transcribe":
       return t("ai.approval.titleTranscribe", { defaultValue: "请求转写" });
+    case "mcp":
+      return t("mcp.approvalTitle");
     case "command":
       return t("ai.approval.titleCommand", { defaultValue: "运行命令" });
     case "loreStep":
@@ -188,6 +191,8 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
       // The size of what is about to be uploaded — the only number known
       // before the paid step (设计稿 02f 屏 1e: mono right column "2.4 MB").
       return formatBytes(proposal.bytes);
+    case "mcp":
+      return proposal.serverName;
     case "command":
       // The one number known before it runs: how long it may take before the
       // app kills it. Not the shell — that sits in the body next to the line.
@@ -1397,12 +1402,27 @@ function ProposalBody({
       return <ConvertBody proposal={proposal} />;
     case "transcribe":
       return <TranscribeBody proposal={proposal} />;
+    case "mcp":
+      return <McpBody proposal={proposal} />;
     case "command":
       return <CommandBody proposal={proposal} />;
     case "loreStep":
       return <LoreStepBody proposal={proposal} narrow={narrow} />;
   }
 }
+
+function McpBody({ proposal }: { proposal: McpProposal }) {
+  const { t } = useTranslation();
+  return <>
+    <div className={styles.emptyNote}>{t("mcp.approvalNote")}</div>
+    <div className={styles.specRows}>
+      <div className={styles.specRow}><span className={styles.specKey}>{t("mcp.server")}</span><span className={styles.specVal}>{proposal.serverName} · {proposal.serverUrl}</span></div>
+      <div className={styles.specRow}><span className={styles.specKey}>{t("mcp.tool")}</span><span className={styles.specVal}>{proposal.tool}</span></div>
+    </div>
+    <pre className={styles.commandBlock}>{JSON.stringify(proposal.arguments, null, 2)}</pre>
+  </>;
+}
+
 
 /**
  * 「要不要让它跑」。这张卡是命令行工具**唯一**的防线，所以正文的第一件事是

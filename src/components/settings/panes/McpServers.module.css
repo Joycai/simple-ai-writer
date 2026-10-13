@@ -1,0 +1,5 @@
+.content { display: flex; flex-direction: column; gap: var(--space-3); }
+.server { border-bottom: 1px solid var(--color-border); padding-bottom: var(--space-3); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.config { font-family: var(--font-mono); }
+.status { font-size: var(--font-size-sm); color: var(--color-text-secondary); overflow-wrap: anywhere; }

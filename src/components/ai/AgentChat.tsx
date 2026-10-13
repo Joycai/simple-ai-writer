@@ -741,7 +741,7 @@ export function AgentChat() {
     // carries the thin tier, and this bar is where the作者 sees that saving.
     // (Flag flips don't re-render this memo — the number catches up on the
     // next deps change or remount, same read-once tolerance as the briefing.)
-    () => plannedToolTokens(chatAgentPreset(), effectiveSubs, models, { handoff: true, packs: true, providers }),
+    () => plannedToolTokens(chatAgentPreset(), effectiveSubs, models, { handoff: true, packs: true, mcp: true, providers }),
     [effectiveSubs, models, providers],
   );
   const context = useMemo(

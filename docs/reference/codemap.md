@@ -189,6 +189,8 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 
 #### 实验室与上下文记忆
 
+- `McpServers` provides the MCP Beta switch, standard JSON import, per-server enable/remove and read-only connection testing. Header values go to the OS keyring and clear from the import field after save; no credentials are reloaded into the form.
+
 - `SemanticRetrieval` in Labs adds a project-scoped semantic retrieval Beta, shared retrieval-model registration and themed controls. Pipeline and bounds: [semantic-retrieval-beta.md](../feature/lore/semantic-retrieval-beta.md).
 
 - Under the AI group, 实验室 (`LabPane`) holds **every** Beta switch — each gates an assistant capability, so its neighbours are the panes an author configures next —
@@ -635,6 +637,10 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 #### 身份、关联与文档
 - 模型行的身份是类型 `asr`（界面「音频 ASR」；2026-09-14 之前是 `asrFormat` 标记，读旧行与旧备份时 `normalizeAsrIdentity` 升级，`asrFormat` 现在只表示走哪种接口，理由见 `00-research.md` §4.1 补记。照 `translateFormat`：`isAsrOnly` 是不变量的名字，`conversationalModels` 无条件排除），绑在 `asr` 子代理档位上（进 `SUBAGENT_KINDS` 不进 `DELEGATE_KINDS`——端点收的是音频 URL，没有对话可委托）
 - 轮询循环和 `image.ts` 的 `dashscopeAsyncImage` 是同一节奏但**没有抽共用**（§0 修正）。设计与实测：`docs/feature/asr/`，wire 事实在 `docs/api/qianwen-compat-plan.md` §1.4
+
+### `src/lib/mcp/`
+
+`config.ts` stores machine-local endpoints and keyring header credentials; `client.ts` owns bounded Streamable HTTP sessions, JSON/SSE and tool pagination; `tools.ts` bridges discovery and per-call approval; `results.ts` saves images to `assets/mcp` and bounded model reports with full cache files. MCP appears only on desktop approval surfaces with its Beta and an enabled server. The registry carries two compact bridge schemas; external tool schemas arrive on demand. Design, protocol limits and verification: [mcp-support.md](../feature/agent/mcp-support.md).
 
 ### `src/lib/cli/`
 

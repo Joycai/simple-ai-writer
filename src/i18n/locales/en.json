@@ -1,4 +1,25 @@
 {
+  "mcp": {
+    "enable": "Enable MCP tools",
+    "title": "MCP servers (Beta)",
+    "description": "Connect external tools to the assistant. Streamable HTTP servers only; every tool call asks for approval.",
+    "privacy": "Headers are stored in the OS keyring. Server connections stay on this computer and are excluded from configuration backups. Importing the same name replaces that server’s connection and headers.",
+    "desktopOnly": "MCP connections require the desktop app.",
+    "importLabel": "Server configuration (JSON)",
+    "import": "Import configuration",
+    "test": "Test connection",
+    "remove": "Remove",
+    "stop": "Stop connection test",
+    "saved": "Configuration saved.",
+    "removed": "Server removed.",
+    "working": "Working…",
+    "failed": "Could not complete the operation. Check the JSON, server connection, credentials and keyring access. Only HTTPS or localhost HTTP is supported.",
+    "connected": "{{name}} connected · tools ({{count}}): {{tools}}",
+    "approvalTitle": "Call an MCP tool",
+    "approvalNote": "These arguments will be sent to the external server. It may modify files or charge for work. External costs are unknown and are not recorded in app usage. Stopping the request may not stop work already submitted.",
+    "server": "Server",
+    "tool": "Tool"
+  },
   "common": {
     "loading": "Loading…",
     "close": "Close",

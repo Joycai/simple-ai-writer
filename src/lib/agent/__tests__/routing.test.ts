@@ -31,6 +31,8 @@ vi.mock("../packFlag", () => ({
 }));
 
 /** Same, for the 命令行 Beta — plus whether we are inside Tauri at all. */
+const mcp = { on: false, servers: [] as { enabled: boolean }[] };
+vi.mock("../../mcp/config", () => ({ isMcpEnabled: () => mcp.on, readMcpServers: () => mcp.servers }));
 const cliBeta = { on: false };
 vi.mock("../../cli/flag", () => ({ isCliEnabled: () => cliBeta.on }));
 const platform = { tauri: true };
@@ -871,5 +873,37 @@ describe("routeTools — run_command", () => {
       expect(routeTools(ROLEPLAY_PRESET, subAgentsFor("character", allDisabled), WS, MODELS).tools)
         .not.toContain("run_command");
     });
+  });
+});
+
+
+describe("MCP surface routing", () => {
+  const allDisabled: Record<SubAgentKind, SubAgentConfig> = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
+  };
+  it("requires Beta, an enabled server, Tauri and an approval surface, and prices the same tools", () => {
+    const tools = () => routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { mcp: true }).tools;
+    try {
+      expect(tools()).not.toContain("call_mcp_tool");
+      mcp.on = true;
+      expect(tools()).not.toContain("call_mcp_tool");
+      mcp.servers = [{ enabled: false }];
+      expect(tools()).not.toContain("call_mcp_tool");
+      mcp.servers = [{ enabled: true }];
+      expect(tools()).toContain("discover_mcp_tools");
+      expect(tools()).toContain("call_mcp_tool");
+      expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS, { mcp: true }).tools).toEqual(tools());
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).not.toContain("call_mcp_tool");
+      platform.tauri = false;
+      expect(tools()).not.toContain("call_mcp_tool");
+    } finally { mcp.on = false; mcp.servers = []; platform.tauri = true; }
   });
 });
