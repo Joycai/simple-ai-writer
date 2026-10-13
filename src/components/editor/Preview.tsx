@@ -40,6 +40,7 @@ export function Preview({ source, basePath, filePath = null }: Props) {
   const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const lastScroll = useRef({ top: 0, left: 0 });
   const viewportRevision = useEditorStore((s) => s.viewportRevision);
   const renderedDocument = useRef({ filePath, content: source, viewportRevision });
   const zoom = useAppStore((s) => s.previewZoom);
@@ -106,6 +107,7 @@ export function Preview({ source, basePath, filePath = null }: Props) {
     if (scrollerRef.current && (previous.filePath !== filePath || previous.viewportRevision !== viewportRevision)) {
       scrollerRef.current.scrollTop = 0;
       scrollerRef.current.scrollLeft = 0;
+      lastScroll.current = { top: 0, left: 0 };
     }
     renderedDocument.current = { filePath, content: shown, viewportRevision };
     // lineAnchors: the data-line stamps EditorArea's split-view scroll link
@@ -187,15 +189,11 @@ export function Preview({ source, basePath, filePath = null }: Props) {
     // second one would render the first one's pictures — or none at all.
   }, [shown, basePath, filePath, viewportRevision, scheme]);
 
-  // Capture before detachment, and only describe the text actually rendered
-  // (the preview can still be behind the buffer's typing debounce).
-  useLayoutEffect(() => {
-    const scroller = scrollerRef.current;
-    return () => {
-      if (scroller) editorViewport.savePreview(renderedDocument.current, {
-        top: scroller.scrollTop, left: scroller.scrollLeft,
-      });
-    };
+  // React removes the preceding Sidebar before this cleanup. Reading scrollTop
+  // here forces the now-wider preview to reflow and can clamp its position.
+  // Save the last on-screen scroll instead, with the text actually rendered.
+  useLayoutEffect(() => () => {
+    editorViewport.savePreview(renderedDocument.current, lastScroll.current);
   }, []);
 
   useEffect(() => {
@@ -211,6 +209,7 @@ export function Preview({ source, basePath, filePath = null }: Props) {
       if (stopped || editorViewport.preview(doc, useEditorStore.getState().pendingJump) !== saved) return;
       scroller.scrollTop = saved.top;
       scroller.scrollLeft = saved.left;
+      lastScroll.current = { top: scroller.scrollTop, left: scroller.scrollLeft };
     };
     const stop = () => {
       stopped = true;
@@ -254,6 +253,9 @@ export function Preview({ source, basePath, filePath = null }: Props) {
         className={styles.preview}
         data-preview-scroller
         ref={scrollerRef}
+        onScroll={(event) => {
+          lastScroll.current = { top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft };
+        }}
         // Consumed by .page for both the scale and the max-width that cancels
         // it out — see Preview.module.css.
         style={{ "--preview-zoom": zoom } as CSSProperties}

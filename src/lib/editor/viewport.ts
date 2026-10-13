@@ -42,3 +42,29 @@ export function createViewportCache() {
     },
   };
 }
+
+/** Attach split synchronization only after CodeMirror's restoration measure
+ * loop and its resulting scroll events. A stale measure must not reconnect a
+ * pane that was already unmounted or switched out of split mode. */
+export function afterViewportRestore(
+  view: Pick<EditorView, "requestMeasure">,
+  connect: () => () => void,
+): () => void {
+  let disposed = false;
+  let frame: number | undefined;
+  let disconnect: (() => void) | undefined;
+  view.requestMeasure({
+    read: () => null,
+    write: () => {
+      if (disposed) return;
+      frame = requestAnimationFrame(() => {
+        if (!disposed) disconnect = connect();
+      });
+    },
+  });
+  return () => {
+    disposed = true;
+    if (frame !== undefined) cancelAnimationFrame(frame);
+    disconnect?.();
+  };
+}
