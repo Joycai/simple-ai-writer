@@ -136,7 +136,9 @@ CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, ico
 
 `OutputRecoveryPanel` 是聊天与任务面板共用的「已保存的输出」入口，含纯文本续写与按作者大纲分节生成；数据属于项目，不随组件卸载丢失。设计与边界见 [`long-output-recovery.md`](../feature/agent/long-output-recovery.md)。
 
-Generate 的活动任务保存在 `composerStore.panelTask`，关闭 / 重开面板不重置，切项目时清空，能力包移除任务时回退到当前默认任务。重写结果的选区快照保存在 `aiTaskStore.outputEditTarget`，与结果一起清除；应用结果按该快照定位，不读当前标签或新的选区，避免面板重挂后把重写误作续写追加。快照不再是编辑器维护的实时标记，因此只接受原位置的精确文本或唯一的原文匹配，无法可靠定位时保留既有追加行为。
+Generate 的活动任务保存在 `composerStore.panelTask`，关闭 / 重开面板和重启应用均恢复；能力包移除任务时回退到当前默认任务。重写结果的选区快照保存在 `aiTaskStore.outputEditTarget`，与结果一起清除；应用结果按该快照定位，不读当前标签或新的选区，避免面板重挂后把重写误作续写追加。快照不再是编辑器维护的实时标记，因此只接受原位置的精确文本或唯一的原文匹配，无法可靠定位时保留既有追加行为。
+
+Generate 的请求选项通过 `prefs` 持久化：`composerStore.panelSettings` 保存输出长度、上下文范围和 Agent 模式；`panelDocuments` 按文档路径保存续写位置、独立开篇 / 承接模式及手选的承接文档。`app:generateSettings` 保存任务与通用选项，`app:generateDocuments` 保存按路径分开的文档选项。关闭、重启、切项目均保留，`resetAll()` 只清未发送文字。两个键都属 window-local，避免窗口聚焦时别的窗口改动当前选择；文档路径键还属 machine-local，不进配置备份。文档写入经 `writePrefMerged` 只合并当前文档，防止两个窗口互相覆盖其他文档的选择。配置导入通过 `reloadFromPrefs()` 恢复通用选项，解析时验证数值与枚举，坏值退回默认。文档选项分开存，避免关着面板换文件后把上一份文档的续写位置套到新文件上；未选择时仍按正文 / 选区推导默认位置。承接候选重新加载只验证手选路径，不覆盖它；候选移除或顺序变化使其失效时，回退到当前最近的前文。
 
 AiPanel (task UI, streaming output), ConsistencyCheck, 提示词库 (`SnippetPicker` 取用 + `SnippetSaveMenu` 右键存入 + `snippetTrace` 的确认痕迹)，以及执行日志与审批卡的这几件：
 
@@ -851,7 +853,7 @@ Zustand stores。一个 store 一个关注点，**存的是「现在是什么」
   - **拆分（P5，docs/feature/code-structure-plan.md）。** `agentStore.ts` 只留 store 本体（状态、动作、审批队列）；类型在 `stores/agent/types.ts`，一次聊天运行与多会话管线在 `stores/agent/chatJob.ts`（用 store 的 `set` / `get` 调，不 import store），给组件的纯读取在 `stores/agent/selectors.ts`，批准后的写盘在 `lib/agent/proposalApply.ts`（app 以 `ProposalApplyDeps` 传入，所以每一种提案都能单测）。这些名字由 `agentStore` 重新导出，组件的 import 一行不用改。**`stores/` 的子目录只放一个 store 的私有拆分**，以 store 名命名（`stores/agent/`），不放跨 store 的东西——跨 store 的编排是 `stores/` 根下的平铺文件（`projectLifecycle.ts`、`openDocument.ts`、`configImportRefresh.ts`、`toolAppState.ts`）。
 - **`navStore`** — 前进 / 后退历史，靠**观察**其他 store 记录——没有任何调用点登记什么。位置是作者真正在其间移动的那个三元组（哪个主视图 / 哪个文件 / 哪个条目）。
 - **`batchStore`** — 批处理（`batch: true` 的任务）：对拆出来的子句顺序循环调 `runTask`（带 `{ fromBatch: true }`——`aiTaskStore` 据此不出任何中途卡片，而不是反过来读 `batchStore.running`，那会成环），结果逐条追加进一个输出文件。
-- **`composerStore`** — 作者打了但还没发的内容。**按会话存，永不持久化**：AI 抽屉是 `AnimatePresence` 的子节点，关闭即卸载，原来放在 `useState` 里的半句话跟着一起死；而一句写了一半的指令属于作者，不属于正在显示它的那个界面。
+- **`composerStore`** — 作者未发送的文字与 Generate 偏好。**文字按会话存，不持久化；任务和请求选项走 prefs**：AI 抽屉是 `AnimatePresence` 的子节点，关闭即卸载，原来放在 `useState` 里的半句话跟着一起死；而一句写了一半的指令属于作者，不属于正在显示它的那个界面。
 - **`memoryStore`** — 每份文档的故事记忆片段（`lib/context/memory`）：覆盖范围、新鲜度、以及那次做摘要的运行。
 - **`imageStore`** — 一次对话式的图像会话（初次生成，然后在其上编辑，每轮产出候选供作者挑）。轮次链是**树，不是线**——作者经常退回两轮再岔出去——并且每一轮都记下走的是哪条 provider 路径。
 - **`docFormatStore`** — .docx 排版格式预设。**装机级，不是项目级**（一套公文格式要跨项目复用）：内置的在代码里，作者自建的落在 `config.db`，从一份 .docx 读出来的那一套只活在本次会话里。见 `docs/feature/docx/01-agent-design.md` §7。

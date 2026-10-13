@@ -15,6 +15,7 @@
  *      dependency on either.
  */
 
+import { useComposerStore } from "./composerStore";
 import { useAiStore } from "./aiStore";
 import { useAppStore } from "./appStore";
 import { useDocFormatStore } from "./docFormatStore";
@@ -24,5 +25,6 @@ export async function refreshAfterConfigImport(): Promise<void> {
   ai.reloadSelections();
   await ai.loadConfig();
   useAppStore.getState().reloadFromPrefs();
+  useComposerStore.getState().reloadFromPrefs();
   await useDocFormatStore.getState().reload();
 }

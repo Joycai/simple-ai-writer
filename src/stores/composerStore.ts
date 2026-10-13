@@ -1,5 +1,5 @@
 /**
- * What the author has typed but not yet sent.
+ * The author’s unsent input and persisted Generate settings.
  *
  * The AI drawer is an `AnimatePresence` child: closing it unmounts the whole
  * body, so anything the composer kept in `useState` died with it — half a
@@ -8,13 +8,15 @@
  * belongs to the author rather than to the surface that happens to be showing
  * it, so it outlives the mount.
  *
- * Per-session, not persisted: a draft is a sentence in progress, not a
+ * Drafts are session-only: a draft is a sentence in progress, not a
  * preference, and `prefs` would be writing to SQLite on every keystroke.
+ * Generate task/options are preferences, restored from config.db at startup.
  * Anything that is genuinely per-mount (scroll position, transcript folding)
  * stays in the component.
  */
 
 import { create } from "zustand";
+import { readPref, writePref, writePrefMerged } from "../lib/prefs";
 import type { AttachedItem } from "../lib/lore/aiTask";
 import { clearMentionReadFailures } from "../lib/agent/mentionReads";
 
@@ -23,6 +25,63 @@ type Update<T> = T | ((prev: T) => T);
 
 const apply = <T,>(update: Update<T>, prev: T): T =>
   typeof update === "function" ? (update as (p: T) => T)(prev) : update;
+
+export type ContinueMode = "opening" | "end" | "expand";
+
+interface PanelSettings {
+  continueLength: number;
+  contextChars: number;
+  agentMode: boolean;
+}
+
+interface PanelDocumentSettings {
+  pickedMode: ContinueMode | null;
+  openingMode: "bridge" | "standalone";
+  bridgePath: string | null;
+}
+
+const DEFAULT_PANEL_SETTINGS: PanelSettings = {
+  continueLength: 500, contextChars: 1000, agentMode: false,
+};
+const DEFAULT_PANEL_DOCUMENT: PanelDocumentSettings = {
+  pickedMode: null, openingMode: "bridge", bridgePath: null,
+};
+
+function objectFromJson(raw: string | null): Record<string, unknown> {
+  try {
+    const value: unknown = JSON.parse(raw ?? "null");
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown> : {};
+  } catch { return {}; }
+}
+
+function storedDocuments(raw: string | null): Record<string, PanelDocumentSettings> {
+  return Object.fromEntries(Object.entries(objectFromJson(raw)).flatMap(([path, value]) => {
+    if (!path || !value || typeof value !== "object" || Array.isArray(value)) return [];
+    const doc = value as Record<string, unknown>;
+    return [[path, {
+      pickedMode: doc.pickedMode === "opening" || doc.pickedMode === "end" || doc.pickedMode === "expand"
+        ? doc.pickedMode : null,
+      openingMode: doc.openingMode === "standalone" ? "standalone" : "bridge",
+      bridgePath: typeof doc.bridgePath === "string" && doc.bridgePath ? doc.bridgePath : null,
+    } as PanelDocumentSettings]];
+  }));
+}
+
+function prefBackedState() {
+  const saved = objectFromJson(readPref("app:generateSettings"));
+  return {
+    panelTask: typeof saved.task === "string" && saved.task ? saved.task : null,
+    panelSettings: {
+      continueLength: typeof saved.continueLength === "number" && [200, 500, 1000, 2000].includes(saved.continueLength)
+        ? saved.continueLength : DEFAULT_PANEL_SETTINGS.continueLength,
+      contextChars: typeof saved.contextChars === "number" && [0, 500, 1000, 2000].includes(saved.contextChars)
+        ? saved.contextChars : DEFAULT_PANEL_SETTINGS.contextChars,
+      agentMode: saved.agentMode === true,
+    },
+    panelDocuments: storedDocuments(readPref("app:generateDocuments")),
+  };
+}
 
 interface ComposerState {
   // ── 对话助手 (AgentChat) ──
@@ -39,8 +98,15 @@ interface ComposerState {
   clearChatComposer: (key: string) => void;
 
   // ── 生成 (AiPanel) ──
-  /** Session task choice survives closing Generate; null follows the active pack default. */
+  /** Request options survive app restarts through the preferences registry. */
+  panelSettings: PanelSettings;
+  setPanelSettings: (patch: Partial<PanelSettings>) => void;
+  /** Continuation choices belong to a document, never to the panel mount. */
+  panelDocuments: Record<string, PanelDocumentSettings>;
+  setPanelDocument: (path: string | null, patch: Partial<PanelDocumentSettings>) => void;
+  /** Saved task choice; null follows the active pack default. */
   panelTask: string | null;
+  reloadFromPrefs: () => void;
   setPanelTask: (task: string) => void;
   panelOutline: string;
   panelKnowledge: string;
@@ -83,6 +149,10 @@ export const chatComposerOf = (s: ComposerState, key: string): ChatComposer =>
 export const roleplayComposerOf = (s: ComposerState, agentId: string): RoleplayComposer =>
   s.roleplay[agentId] ?? EMPTY_ROLEPLAY;
 
+/** Stable defaults while no document is focused or this document has no choices yet. */
+export const panelDocumentOf = (s: ComposerState, path: string | null): PanelDocumentSettings =>
+  (path ? s.panelDocuments[path] : undefined) ?? DEFAULT_PANEL_DOCUMENT;
+
 export const useComposerStore = create<ComposerState>((set) => ({
   chat: {},
   setChatDraft: (key, update) => set((s) => {
@@ -99,8 +169,29 @@ export const useComposerStore = create<ComposerState>((set) => ({
     return { chat: rest };
   }),
 
-  panelTask: null,
-  setPanelTask: (panelTask) => set({ panelTask }),
+  ...prefBackedState(),
+  reloadFromPrefs: () => set(prefBackedState()),
+  setPanelSettings: (patch) => set((s) => {
+    const panelSettings = { ...s.panelSettings, ...patch };
+    writePref("app:generateSettings", JSON.stringify({ ...panelSettings, task: s.panelTask }));
+    return { panelSettings };
+  }),
+  setPanelDocument: (path, patch) => {
+    if (!path) return;
+    set((s) => {
+      const document = { ...panelDocumentOf(s, path), ...patch };
+      // Persist only this document's update, merging other windows' documents
+      // on the prefs write queue rather than overwriting their startup snapshot.
+      writePrefMerged("app:generateDocuments",
+        JSON.stringify({ ...storedDocuments(readPref("app:generateDocuments")), [path]: document }),
+        (previous) => JSON.stringify({ ...storedDocuments(previous), [path]: document }));
+      return { panelDocuments: { ...s.panelDocuments, [path]: document } };
+    });
+  },
+  setPanelTask: (panelTask) => set((s) => {
+    writePref("app:generateSettings", JSON.stringify({ ...s.panelSettings, task: panelTask }));
+    return { panelTask };
+  }),
   panelOutline: "",
   panelKnowledge: "",
   panelRequirement: "",
@@ -132,7 +223,6 @@ export const useComposerStore = create<ComposerState>((set) => ({
     clearMentionReadFailures();
     set({
       chat: {},
-      panelTask: null,
       panelOutline: "", panelKnowledge: "", panelRequirement: "", panelInstruction: "",
       roleplay: {},
     });

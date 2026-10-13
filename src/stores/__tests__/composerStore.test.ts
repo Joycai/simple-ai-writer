@@ -5,8 +5,16 @@
  * project switch empties the box.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
-import { chatComposerOf, useComposerStore } from "../composerStore";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+const savedPrefs = vi.hoisted(() => new Map<string, string>());
+vi.mock("../../lib/prefs", () => ({
+  readPref: (key: string) => savedPrefs.get(key) ?? null,
+  writePref: (key: string, value: string) => savedPrefs.set(key, value),
+  writePrefMerged: (key: string, value: string, merge: (old: string | null, next: string) => string) =>
+    savedPrefs.set(key, merge(savedPrefs.get(key) ?? null, value)),
+}));
+
+import { chatComposerOf, panelDocumentOf, useComposerStore } from "../composerStore";
 import { failMentionRead, mentionReadFailure } from "../../lib/agent/mentionReads";
 import type { AttachedLore } from "../../lib/lore/aiTask";
 import type { LoreEntity } from "../../lib/lore/model";
@@ -24,7 +32,11 @@ const loreRef = (id: string): AttachedLore => ({
 const s = () => useComposerStore.getState();
 
 describe("composerStore", () => {
-  beforeEach(() => s().resetAll());
+  beforeEach(() => {
+    savedPrefs.clear();
+    s().reloadFromPrefs();
+    s().resetAll();
+  });
 
   it("keeps the chat draft until the message is sent", () => {
     s().setChatDraft("c1", "这一章想写什么");
@@ -58,6 +70,63 @@ describe("composerStore", () => {
     const reopened = useComposerStore.subscribe(() => {});
     expect(s().panelTask).toBe("rewrite");
     reopened();
+  });
+
+  it("retains Generate settings through close/reopen and task changes", () => {
+    s().setPanelSettings({ continueLength: 2000, contextChars: 0, agentMode: true });
+    s().setPanelDocument("/p/a.md", { pickedMode: "opening", openingMode: "standalone" });
+    s().setPanelDocument("/p/a.md", { bridgePath: "/p/previous.md" });
+    const unsubscribe = useComposerStore.subscribe(() => {});
+    unsubscribe();
+    s().setPanelTask("rewrite");
+    s().setPanelSettings({ contextChars: 2000 });
+    s().setPanelTask("continue");
+    expect(s().panelSettings).toEqual({ continueLength: 2000, contextChars: 2000, agentMode: true });
+    expect(panelDocumentOf(s(), "/p/a.md")).toEqual({
+      pickedMode: "opening", openingMode: "standalone", bridgePath: "/p/previous.md",
+    });
+  });
+
+  it("isolates continuation choices per document, including switches while the panel is closed", () => {
+    s().setPanelDocument("/p/a.md", { pickedMode: "expand", bridgePath: "/p/previous.md" });
+    const original = panelDocumentOf(s(), "/p/a.md");
+    expect(panelDocumentOf(s(), "/p/b.md")).toEqual({
+      pickedMode: null, openingMode: "bridge", bridgePath: null,
+    });
+    s().setPanelDocument("/p/b.md", { openingMode: "standalone" });
+    expect(panelDocumentOf(s(), "/p/a.md")).toBe(original);
+    s().setPanelDocument(null, { pickedMode: "opening" });
+    expect(panelDocumentOf(s(), null).pickedMode).toBeNull();
+  });
+
+  it("restores saved options and document choices in a fresh app store", async () => {
+    s().setPanelTask("rewrite");
+    s().setPanelSettings({ continueLength: 1000, contextChars: 0, agentMode: true });
+    s().setPanelDocument("/p/a.md", { pickedMode: "opening", bridgePath: "/p/prev.md" });
+    s().setPanelDocument("/other/b.md", { openingMode: "standalone" });
+    s().setPanelInstruction("unsent instruction");
+    vi.resetModules();
+    const { useComposerStore: fresh } = await import("../composerStore");
+    expect(fresh.getState().panelTask).toBe("rewrite");
+    expect(fresh.getState().panelSettings).toEqual({ continueLength: 1000, contextChars: 0, agentMode: true });
+    expect(fresh.getState().panelDocuments).toEqual(s().panelDocuments);
+    expect(fresh.getState().panelInstruction).toBe("");
+    expect(savedPrefs.size).toBe(2);
+  });
+
+  it("validates malformed preferences and restores imported options without clearing drafts", () => {
+    savedPrefs.set("app:generateSettings", JSON.stringify({ continueLength: -1, contextChars: "2000", agentMode: "true", task: [] }));
+    savedPrefs.set("app:generateDocuments", "broken json");
+    s().reloadFromPrefs();
+    expect(s().panelSettings).toEqual({ continueLength: 500, contextChars: 1000, agentMode: false });
+    expect(s().panelTask).toBeNull();
+    expect(s().panelDocuments).toEqual({});
+    s().setPanelInstruction("keep this");
+    savedPrefs.set("app:generateSettings", '{"continueLength":2000,"contextChars":0,"task":"custom"}');
+    s().reloadFromPrefs();
+    expect(s().panelSettings.contextChars).toBe(0);
+    expect(s().panelTask).toBe("custom");
+    expect(s().panelInstruction).toBe("keep this");
   });
 
   it("accepts functional updates, like the useState setters it replaced", () => {
@@ -95,10 +164,12 @@ describe("composerStore", () => {
     expect("nobody" in s().roleplay).toBe(false);
   });
 
-  it("drops everything on a project switch", () => {
+  it("drops unsent input on a project switch but keeps saved Generate preferences", () => {
     s().setChatDraft("c1", "给这本书的问题");
     s().setRoleplayDraft("lin", "*推门进来*");
     s().setPanelTask("rewrite");
+    s().setPanelSettings({ continueLength: 2000, contextChars: 0, agentMode: true });
+    s().setPanelDocument("/p/a.md", { pickedMode: "opening", bridgePath: "/p/previous.md" });
     s().setPanelOutline("大纲");
     s().setPanelKnowledge("补充设定");
     s().setPanelRequirement("要求");
@@ -107,7 +178,9 @@ describe("composerStore", () => {
     s().resetAll();
 
     expect(s().chat).toEqual({});
-    expect(s().panelTask).toBeNull();
+    expect(s().panelTask).toBe("rewrite");
+    expect(s().panelSettings).toEqual({ continueLength: 2000, contextChars: 0, agentMode: true });
+    expect(panelDocumentOf(s(), "/p/a.md").bridgePath).toBe("/p/previous.md");
     expect(s().panelOutline).toBe("");
     expect(s().panelKnowledge).toBe("");
     expect(s().panelRequirement).toBe("");
