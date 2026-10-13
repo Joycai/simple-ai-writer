@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const fetchMock = vi.fn<typeof fetch>();
+vi.mock("../../platform", () => ({ IS_TAURI: true }));
 vi.mock("../../http", () => ({ fetch: (...args: Parameters<typeof fetch>) => fetchMock(...args) }));
 vi.mock("../config", async (original) => ({ ...await original<typeof import("../config")>(),
   mcpHeaders: async () => ({ Authorization: "Bearer test-secret" }) }));
@@ -25,6 +26,9 @@ describe("Streamable HTTP MCP", () => {
     expect(JSON.parse(String(requests[3].body)).params).toEqual({ cursor: "next" });
     expect(requests[4].method).toBe("DELETE");
     expect(requests[2]).toMatchObject({ redirect: "error", maxRedirections: 0 });
+    // The native plugin removes empty Origin; neither its webview origin nor
+    // http.ts's Ollama origin may be sent to a local MCP server.
+    expect(requests.every((request) => new Headers(request.headers).get("Origin") === "")).toBe(true);
   });
   it("returns an SSE result before the stream closes and cancels the reader", async () => {
     handshake(); const cancel = vi.fn();

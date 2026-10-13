@@ -3,6 +3,7 @@
  * a lost response can already have incurred a charge at the server.
  */
 import { fetch } from "../http";
+import { IS_TAURI } from "../platform";
 import { isObject, mcpHeaders, type McpServer } from "./config";
 
 interface McpTool {
@@ -44,7 +45,12 @@ export class McpClient {
   }
 
   private requestHeaders(): Record<string, string> {
-    return { ...this.headers, "Content-Type": "application/json", Accept: "application/json, text/event-stream",
+    // This is a native MCP client, not a browser origin. An explicit empty
+    // Origin tells the Tauri HTTP plugin to omit its synthetic webview Origin
+    // (and prevents http.ts's Ollama-specific localhost override). Local MCP
+    // servers correctly reject those browser origins under DNS-rebinding guards.
+    return { ...this.headers, ...(IS_TAURI ? { Origin: "" } : {}),
+      "Content-Type": "application/json", Accept: "application/json, text/event-stream",
       "MCP-Protocol-Version": this.version, ...(this.session ? { "Mcp-Session-Id": this.session } : {}) };
   }
 
