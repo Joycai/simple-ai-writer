@@ -51,6 +51,15 @@ describe("composerStore", () => {
     expect(chatComposerOf(s(), "c2").draft).toBe("另一段");
   });
 
+  it("keeps the Generate task when its panel subscriber unmounts", () => {
+    const unsubscribe = useComposerStore.subscribe(() => {});
+    s().setPanelTask("rewrite");
+    unsubscribe();
+    const reopened = useComposerStore.subscribe(() => {});
+    expect(s().panelTask).toBe("rewrite");
+    reopened();
+  });
+
   it("accepts functional updates, like the useState setters it replaced", () => {
     s().setChatDraft("c1", "第一行");
     s().setChatDraft("c1", (prev) => `${prev}\n第二行`);
@@ -89,6 +98,7 @@ describe("composerStore", () => {
   it("drops everything on a project switch", () => {
     s().setChatDraft("c1", "给这本书的问题");
     s().setRoleplayDraft("lin", "*推门进来*");
+    s().setPanelTask("rewrite");
     s().setPanelOutline("大纲");
     s().setPanelKnowledge("补充设定");
     s().setPanelRequirement("要求");
@@ -97,6 +107,7 @@ describe("composerStore", () => {
     s().resetAll();
 
     expect(s().chat).toEqual({});
+    expect(s().panelTask).toBeNull();
     expect(s().panelOutline).toBe("");
     expect(s().panelKnowledge).toBe("");
     expect(s().panelRequirement).toBe("");

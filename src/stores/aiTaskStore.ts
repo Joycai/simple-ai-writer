@@ -157,6 +157,8 @@ interface AiTaskState {
    * same focus snapshot as the run itself, and never touched afterwards.
    */
   sourceFilePath: string | null;
+  /** Immutable rewrite target belonging to the result, independent of panel tabs/live selection. */
+  outputEditTarget: { selection: string; range: SelectionRange | null } | null;
 
   setSelection: (s: string, range?: SelectionRange | null, source?: "marker" | "commit") => void;
   /** Drop the committed target, but only if `source` is the one that set it. */
@@ -216,6 +218,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   contextAlloc: null,
   lastMessages: null,
   sourceFilePath: null,
+  outputEditTarget: null,
 
   setSelection: (s, range = null, source = "commit") =>
     set({ selection: s, selectionRange: range, selectionSource: s ? source : null }),
@@ -294,6 +297,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const activeFilePath = focus.filePath;
     const selection = get().selection;
     const selectionRange = get().selectionRange;
+    const outputEditTarget = task.target === "replace"
+      ? { selection, range: selectionRange ? { ...selectionRange } : null }
+      : null;
     if (!focus.settled) { set({ error: i18n.t("ai.errors.focusNotReady") }); return; }
 
     // Story memory for the focused document (前情提要 layer). Read from disk so
@@ -509,7 +515,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       // Cleared with the log it belongs to: until this run creates its own
       // workspace a few lines down, the previous run's plan is not this run's.
       error: null, agentLog: [], taskWorkspace: null, loreReport: null, lastMessages: null,
-      sourceFilePath: activeFilePath,
+      sourceFilePath: activeFilePath, outputEditTarget,
       contextAlloc: {
         loreChars: plan.loreChars,
         memoryChars: memoryBudgetChars,
@@ -961,7 +967,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   clearOutput: () =>
     set({
       drafts: [], activeDraftId: null, error: null, agentLog: [], taskWorkspace: null,
-      loreReport: null, lastMessages: null, sourceFilePath: null,
+      loreReport: null, lastMessages: null, sourceFilePath: null, outputEditTarget: null,
     }),
 
   setActiveDraft: (id) => set({ activeDraftId: id }),

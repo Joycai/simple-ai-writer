@@ -39,6 +39,9 @@ interface ComposerState {
   clearChatComposer: (key: string) => void;
 
   // ── 生成 (AiPanel) ──
+  /** Session task choice survives closing Generate; null follows the active pack default. */
+  panelTask: string | null;
+  setPanelTask: (task: string) => void;
   panelOutline: string;
   panelKnowledge: string;
   panelRequirement: string;
@@ -96,6 +99,8 @@ export const useComposerStore = create<ComposerState>((set) => ({
     return { chat: rest };
   }),
 
+  panelTask: null,
+  setPanelTask: (panelTask) => set({ panelTask }),
   panelOutline: "",
   panelKnowledge: "",
   panelRequirement: "",
@@ -127,6 +132,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
     clearMentionReadFailures();
     set({
       chat: {},
+      panelTask: null,
       panelOutline: "", panelKnowledge: "", panelRequirement: "", panelInstruction: "",
       roleplay: {},
     });

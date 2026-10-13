@@ -63,7 +63,8 @@ vi.mock("../../lib/agent/plan", async (importOriginal) => ({
 
 // Context assembly is someone else's test; here it just has to be cheap and
 // identical for every draft.
-vi.mock("../../lib/context/rag", () => ({
+vi.mock("../../lib/context/rag", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/context/rag")>()),
   assembleContext: vi.fn(async () => ({ loreReport: { entries: [] } })),
   bundleToMessages: vi.fn(() => [{ role: "user", content: "prompt" }]),
   profileSystemPrompt: () => "system",
@@ -164,6 +165,7 @@ vi.mock("../appStore", () => ({
 }));
 
 import { useAiTaskStore } from "../aiTaskStore";
+import { resolveEditRange } from "../../lib/context/rag";
 import { MAX_DRAFTS, draftCountFor, totalUsage, type Draft } from "../../lib/ai/drafts";
 import { DEFAULT_TASKS, type TaskDef } from "../../lib/profile/model";
 import { useAiStore } from "../aiStore";
@@ -267,6 +269,41 @@ describe("runTask — single draft", () => {
     expect(h.runAgent).toHaveBeenCalledTimes(1);
     expect(drafts()).toHaveLength(1);
     expect(drafts()[0].text).toBe("agent text");
+  });
+});
+
+describe("runTask — rewrite result target", () => {
+  it("keeps the original replacement target after panel unmount and live selection changes", async () => {
+    const store = useAiTaskStore;
+    store.getState().setSelection("body", { from: 9, to: 13 });
+    // Change the live target while output is streaming, as when returning to
+    // the editor with Generate closed. The result still belongs to 'body'.
+    h.behaviour = async (_index, args) => {
+      store.getState().setSelection("document", { from: 0, to: 8 });
+      args.onChunk({ text: "replacement" });
+      args.onChunk({ done: true, inputTokens: 10, outputTokens: 5 });
+    };
+    await store.getState().runTask("rewrite");
+    const target = store.getState().outputEditTarget!;
+    expect(target).toEqual({ selection: "body", range: { from: 9, to: 13 } });
+    store.getState().clearSelectionFrom("commit");
+    const content = "document body";
+    const range = resolveEditRange(content, target.selection, target.range, "commit")!;
+    expect(content.slice(0, range.from) + drafts()[0].text + content.slice(range.to))
+      .toBe("document replacement");
+    // Snapshot offsets can relocate after unrelated typing, without relying
+    // on a mounted editor marker or the panel's current task.
+    expect(resolveEditRange("new " + content, target.selection, target.range, "commit"))
+      .toEqual({ from: 13, to: 17 });
+    store.getState().clearOutput();
+    expect(store.getState().outputEditTarget).toBeNull();
+  });
+
+  it("does not carry a rewrite target into a subsequent append run", async () => {
+    useAiTaskStore.getState().setSelection("body", { from: 9, to: 13 });
+    await useAiTaskStore.getState().runTask("rewrite");
+    await useAiTaskStore.getState().runTask("continue");
+    expect(useAiTaskStore.getState().outputEditTarget).toBeNull();
   });
 });
 
