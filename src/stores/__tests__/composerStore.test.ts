@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { chatComposerOf, useComposerStore } from "../composerStore";
+import { chatComposerOf, panelDocumentOf, useComposerStore } from "../composerStore";
 import { failMentionRead, mentionReadFailure } from "../../lib/agent/mentionReads";
 import type { AttachedLore } from "../../lib/lore/aiTask";
 import type { LoreEntity } from "../../lib/lore/model";
@@ -60,6 +60,33 @@ describe("composerStore", () => {
     reopened();
   });
 
+  it("retains Generate settings through close/reopen and task changes", () => {
+    s().setPanelSettings({ continueLength: 2000, contextChars: 0, agentMode: true });
+    s().setPanelDocument("/p/a.md", { pickedMode: "opening", openingMode: "standalone" });
+    s().setPanelDocument("/p/a.md", { bridgePath: "/p/previous.md" });
+    const unsubscribe = useComposerStore.subscribe(() => {});
+    unsubscribe();
+    s().setPanelTask("rewrite");
+    s().setPanelSettings({ contextChars: 2000 });
+    s().setPanelTask("continue");
+    expect(s().panelSettings).toEqual({ continueLength: 2000, contextChars: 2000, agentMode: true });
+    expect(panelDocumentOf(s(), "/p/a.md")).toEqual({
+      pickedMode: "opening", openingMode: "standalone", bridgePath: "/p/previous.md",
+    });
+  });
+
+  it("isolates continuation choices per document, including switches while the panel is closed", () => {
+    s().setPanelDocument("/p/a.md", { pickedMode: "expand", bridgePath: "/p/previous.md" });
+    const original = panelDocumentOf(s(), "/p/a.md");
+    expect(panelDocumentOf(s(), "/p/b.md")).toEqual({
+      pickedMode: null, openingMode: "bridge", bridgePath: null,
+    });
+    s().setPanelDocument("/p/b.md", { openingMode: "standalone" });
+    expect(panelDocumentOf(s(), "/p/a.md")).toBe(original);
+    s().setPanelDocument(null, { pickedMode: "opening" });
+    expect(panelDocumentOf(s(), null).pickedMode).toBeNull();
+  });
+
   it("accepts functional updates, like the useState setters it replaced", () => {
     s().setChatDraft("c1", "第一行");
     s().setChatDraft("c1", (prev) => `${prev}\n第二行`);
@@ -99,6 +126,8 @@ describe("composerStore", () => {
     s().setChatDraft("c1", "给这本书的问题");
     s().setRoleplayDraft("lin", "*推门进来*");
     s().setPanelTask("rewrite");
+    s().setPanelSettings({ continueLength: 2000, contextChars: 0, agentMode: true });
+    s().setPanelDocument("/p/a.md", { pickedMode: "opening", bridgePath: "/p/previous.md" });
     s().setPanelOutline("大纲");
     s().setPanelKnowledge("补充设定");
     s().setPanelRequirement("要求");
@@ -108,6 +137,8 @@ describe("composerStore", () => {
 
     expect(s().chat).toEqual({});
     expect(s().panelTask).toBeNull();
+    expect(s().panelSettings).toEqual({ continueLength: 500, contextChars: 1000, agentMode: false });
+    expect(s().panelDocuments).toEqual({});
     expect(s().panelOutline).toBe("");
     expect(s().panelKnowledge).toBe("");
     expect(s().panelRequirement).toBe("");

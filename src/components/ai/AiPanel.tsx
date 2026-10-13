@@ -34,7 +34,7 @@ import { useBatchStore } from "../../stores/batchStore";
 import { draftCountFor, totalUsage, useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { cardsForSurface } from "../../lib/agent/approvalRouting";
-import { useComposerStore } from "../../stores/composerStore";
+import { panelDocumentOf, useComposerStore, type ContinueMode } from "../../stores/composerStore";
 import { AgentLog } from "./AgentLog";
 import { TaskPanel } from "./TaskPanel";
 import { sumTokens, taskDocRevision } from "../../lib/agent/logModel";
@@ -133,13 +133,6 @@ function paragraphIndexAt(text: string, offset: number): number {
   if (offset <= 0) return 1;
   return text.slice(0, offset).split(/\n{2,}/).length;
 }
-
-/**
- * Where a continuation goes. Named by the author rather than inferred, because
- * the three answers are not distinguishable from document state alone: an
- * opening is offset 0 whether or not anything happens to be selected.
- */
-type ContinueMode = "opening" | "end" | "expand";
 
 /**
  * The mode to start from, when the author has not said.
@@ -904,8 +897,8 @@ export function AiPanel() {
   useEffect(() => {
     if (task.id !== selectedTask) setSelectedTask(task.id);
   }, [task.id, selectedTask, setSelectedTask]);
-  const [continueLength, setContinueLength] = useState(500);
-  const [contextChars, setContextChars] = useState(1000);
+  const { continueLength, contextChars, agentMode } = useComposerStore((s) => s.panelSettings);
+  const setPanelSettings = useComposerStore((s) => s.setPanelSettings);
   // Batch clause run (tasks declaring `batch`) — modal state only; the run
   // itself lives in batchStore and survives the modal being closed.
   const [showBatch, setShowBatch] = useState(false);
@@ -916,11 +909,10 @@ export function AiPanel() {
   // injected is the only prose in the prompt and "continue from the end" means
   // "continue the previous chapter". Below the threshold the author decides
   // explicitly instead of discovering it in the output.
-  const [openingMode, setOpeningMode] = useState<"bridge" | "standalone">("bridge");
-  const [bridgePath, setBridgePath] = useState<string | null>(null);
-  // Where the continuation attaches. Null means "still following the default" —
-  // the author has not overridden it for this file yet.
-  const [pickedMode, setPickedMode] = useState<ContinueMode | null>(null);
+  const { openingMode, bridgePath: savedBridgePath, pickedMode } = useComposerStore(
+    (s) => panelDocumentOf(s, activeFilePath),
+  );
+  const setPanelDocument = useComposerStore((s) => s.setPanelDocument);
   const [volumes, setVolumes] = useState<
     { name: string; chapters: { path: string; title: string }[] }[]
   >([]);
@@ -939,10 +931,6 @@ export function AiPanel() {
     // down — this block runs before it, and duplicating the read is cheaper than
     // hoisting the whole task-derived section above the state hooks.
     !!task.continuation && content.trim().length < BOOK_PREV_TAIL_NEAR_START_CHARS;
-
-  // The chosen position belongs to the chapter it was chosen in; a new file
-  // starts from the default again.
-  useEffect(() => { setPickedMode(null); }, [focus.filePath]);
 
   // The book's chapter spine, for the bridge picker. Loaded only when the
   // control can actually appear — resolveVolumes reads the outline off disk.
@@ -1008,12 +996,10 @@ export function AiPanel() {
     return idx < 0 ? [] : flat.slice(0, idx);
   })();
 
-  // Default to the chapter immediately before this one; re-evaluated whenever
-  // the spine or the focused document changes.
-  useEffect(() => {
-    setBridgePath(bridgeCandidates.length > 0 ? bridgeCandidates[bridgeCandidates.length - 1].path : null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [volumes, activeFilePath]);
+  // Preserve a manual bridge through remounts and asynchronous spine loading.
+  // If it no longer precedes this document, use the nearest valid predecessor.
+  const bridgePath = bridgeCandidates.find((c) => isSamePath(c.path, savedBridgePath))?.path
+    ?? bridgeCandidates[bridgeCandidates.length - 1]?.path ?? null;
 
   // Lore picker state — initialized from persisted pins, reloaded on project switch.
   const [selectedLorePaths, setSelectedLorePaths] = useState<string[]>(() =>
@@ -1044,7 +1030,6 @@ export function AiPanel() {
   const instrRef = useRef<HTMLTextAreaElement>(null);
   // Right-click → 存为片段 on the custom-instruction box.
   const snippetSave = useSnippetSave();
-  const [agentMode, setAgentMode] = useState(false);
   // 同 AgentChat：只渲染没有 surface 标记的卡片（lib/agent/approvalRouting）。
   const pendingApprovals = cardsForSurface(useAgentStore((s) => s.pending), null);
   const pendingPlans = cardsForSurface(useAgentStore((s) => s.pendingPlans), null);
@@ -1629,7 +1614,7 @@ export function AiPanel() {
                             <input
                               type="checkbox"
                               checked={agentMode}
-                              onChange={(e) => setAgentMode(e.target.checked)}
+                              onChange={(e) => setPanelSettings({ agentMode: e.target.checked })}
                             />
                             <span>{t("ai.panel.agentModeLabel", { kb: terms.kb })}</span>
                           </label>
@@ -1649,7 +1634,7 @@ export function AiPanel() {
                               <button
                                 key={len}
                                 className={`${styles.chip} ${continueLength === len ? styles.chipActive : ""}`}
-                                onClick={() => setContinueLength(len)}
+                                onClick={() => setPanelSettings({ continueLength: len })}
                               >
                                 {len >= 1000 ? `${len / 1000}k` : len}
                               </button>
@@ -1677,7 +1662,7 @@ export function AiPanel() {
                               <button
                                 key={mode}
                                 className={`${styles.chip} ${continueMode === mode ? styles.chipActive : ""}`}
-                                onClick={() => setPickedMode(mode)}
+                                onClick={() => setPanelDocument(activeFilePath, { pickedMode: mode })}
                                 title={t(`ai.panel.${key}Hint`, { defaultValue: hint, doc: terms.doc })}
                               >
                                 {t(`ai.panel.${key}`, { defaultValue: label })}
@@ -1716,7 +1701,7 @@ export function AiPanel() {
                             <div className={styles.chipGroup}>
                               <button
                                 className={`${styles.chip} ${openingMode === "standalone" ? styles.chipActive : ""}`}
-                                onClick={() => setOpeningMode("standalone")}
+                                onClick={() => setPanelDocument(activeFilePath, { openingMode: "standalone" })}
                                 title={t("ai.panel.openingStandaloneHint", {
                                   defaultValue: "不注入上一{{doc}}原文，本{{doc}}独立开头（{{priorAll}}与{{priorRecap}}照常提供）",
                                   doc: terms.doc,
@@ -1728,7 +1713,7 @@ export function AiPanel() {
                               </button>
                               <button
                                 className={`${styles.chip} ${openingMode === "bridge" ? styles.chipActive : ""}`}
-                                onClick={() => setOpeningMode("bridge")}
+                                onClick={() => setPanelDocument(activeFilePath, { openingMode: "bridge" })}
                                 title={t("ai.panel.openingBridgeHint", {
                                   defaultValue: "注入所选{{doc}}的结尾原文，用来衔接文风与内容",
                                   doc: terms.doc,
@@ -1741,7 +1726,7 @@ export function AiPanel() {
                               <Select
                                 className={styles.select}
                                 value={bridgePath ?? ""}
-                                onChange={(v) => setBridgePath(v || null)}
+                                onChange={(v) => setPanelDocument(activeFilePath, { bridgePath: v || null })}
                                 ariaLabel={t("ai.panel.openingBridge", { defaultValue: "承接前一{{doc}}", doc: terms.doc })}
                                 options={volumes.flatMap((v) =>
                                   v.chapters
@@ -1834,7 +1819,7 @@ export function AiPanel() {
                         <button
                           key={n}
                           className={`${styles.chip} ${contextChars === n ? styles.chipActive : ""}`}
-                          onClick={() => setContextChars(n)}
+                          onClick={() => setPanelSettings({ contextChars: n })}
                           title={t("ai.panel.contextRangeHint")}
                         >
                           {n === 0 ? t("ai.panel.contextRangeNone") : n >= 1000 ? `${n / 1000}k` : n}

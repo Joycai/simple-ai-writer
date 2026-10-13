@@ -1,5 +1,5 @@
 /**
- * What the author has typed but not yet sent.
+ * The author’s unsent input and Generate session settings.
  *
  * The AI drawer is an `AnimatePresence` child: closing it unmounts the whole
  * body, so anything the composer kept in `useState` died with it — half a
@@ -24,6 +24,27 @@ type Update<T> = T | ((prev: T) => T);
 const apply = <T,>(update: Update<T>, prev: T): T =>
   typeof update === "function" ? (update as (p: T) => T)(prev) : update;
 
+export type ContinueMode = "opening" | "end" | "expand";
+
+interface PanelSettings {
+  continueLength: number;
+  contextChars: number;
+  agentMode: boolean;
+}
+
+interface PanelDocumentSettings {
+  pickedMode: ContinueMode | null;
+  openingMode: "bridge" | "standalone";
+  bridgePath: string | null;
+}
+
+const DEFAULT_PANEL_SETTINGS: PanelSettings = {
+  continueLength: 500, contextChars: 1000, agentMode: false,
+};
+const DEFAULT_PANEL_DOCUMENT: PanelDocumentSettings = {
+  pickedMode: null, openingMode: "bridge", bridgePath: null,
+};
+
 interface ComposerState {
   // ── 对话助手 (AgentChat) ──
   /**
@@ -39,6 +60,12 @@ interface ComposerState {
   clearChatComposer: (key: string) => void;
 
   // ── 生成 (AiPanel) ──
+  /** Request options last for this project session, just like the unsent instructions. */
+  panelSettings: PanelSettings;
+  setPanelSettings: (patch: Partial<PanelSettings>) => void;
+  /** Continuation choices belong to a document, never to the panel mount. */
+  panelDocuments: Record<string, PanelDocumentSettings>;
+  setPanelDocument: (path: string | null, patch: Partial<PanelDocumentSettings>) => void;
   /** Session task choice survives closing Generate; null follows the active pack default. */
   panelTask: string | null;
   setPanelTask: (task: string) => void;
@@ -83,6 +110,10 @@ export const chatComposerOf = (s: ComposerState, key: string): ChatComposer =>
 export const roleplayComposerOf = (s: ComposerState, agentId: string): RoleplayComposer =>
   s.roleplay[agentId] ?? EMPTY_ROLEPLAY;
 
+/** Stable defaults while no document is focused or this document has no choices yet. */
+export const panelDocumentOf = (s: ComposerState, path: string | null): PanelDocumentSettings =>
+  (path ? s.panelDocuments[path] : undefined) ?? DEFAULT_PANEL_DOCUMENT;
+
 export const useComposerStore = create<ComposerState>((set) => ({
   chat: {},
   setChatDraft: (key, update) => set((s) => {
@@ -99,6 +130,15 @@ export const useComposerStore = create<ComposerState>((set) => ({
     return { chat: rest };
   }),
 
+  panelSettings: { ...DEFAULT_PANEL_SETTINGS },
+  setPanelSettings: (patch) => set((s) => ({ panelSettings: { ...s.panelSettings, ...patch } })),
+  panelDocuments: {},
+  setPanelDocument: (path, patch) => {
+    if (!path) return;
+    set((s) => ({
+      panelDocuments: { ...s.panelDocuments, [path]: { ...panelDocumentOf(s, path), ...patch } },
+    }));
+  },
   panelTask: null,
   setPanelTask: (panelTask) => set({ panelTask }),
   panelOutline: "",
@@ -132,6 +172,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
     clearMentionReadFailures();
     set({
       chat: {},
+      panelSettings: { ...DEFAULT_PANEL_SETTINGS }, panelDocuments: {},
       panelTask: null,
       panelOutline: "", panelKnowledge: "", panelRequirement: "", panelInstruction: "",
       roleplay: {},

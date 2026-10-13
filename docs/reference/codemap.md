@@ -138,6 +138,8 @@ CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, ico
 
 Generate 的活动任务保存在 `composerStore.panelTask`，关闭 / 重开面板不重置，切项目时清空，能力包移除任务时回退到当前默认任务。重写结果的选区快照保存在 `aiTaskStore.outputEditTarget`，与结果一起清除；应用结果按该快照定位，不读当前标签或新的选区，避免面板重挂后把重写误作续写追加。快照不再是编辑器维护的实时标记，因此只接受原位置的精确文本或唯一的原文匹配，无法可靠定位时保留既有追加行为。
 
+Generate 的请求选项也属于项目会话：`composerStore.panelSettings` 保存输出长度、上下文范围和 Agent 模式；`panelDocuments` 按文档路径保存续写位置、独立开篇 / 承接模式及手选的承接文档。关闭面板或切换生成任务不清空，切项目统一由 `resetAll()` 清空，不写入偏好库。文档选项分开存，避免关着面板换文件后把上一份文档的续写位置套到新文件上；未选择时仍按正文 / 选区推导默认位置。承接候选重新加载只验证手选路径，不覆盖它；候选移除或顺序变化使其失效时，回退到当前最近的前文。
+
 AiPanel (task UI, streaming output), ConsistencyCheck, 提示词库 (`SnippetPicker` 取用 + `SnippetSaveMenu` 右键存入 + `snippetTrace` 的确认痕迹)，以及执行日志与审批卡的这几件：
 
 - `PlanLedger.tsx`——执行日志里的方案账本。它在轮次**上方**单独一段，不塞进批准它的那一轮：结束的轮是折叠的，要从手风琴里挖出来的账没人读。
