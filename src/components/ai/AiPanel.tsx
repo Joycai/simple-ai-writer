@@ -833,7 +833,7 @@ export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
     isRunning, drafts, activeDraftId, error, agentLog, taskWorkspace,
-    loreReport, sourceFilePath, lastMessages,
+    loreReport, sourceFilePath, outputEditTarget, lastMessages,
     runTask, abort, clearOutput, setActiveDraft, selection, selectionRange, selectionSource,
     clearSelectionFrom, requestedTask, requestedInstruction, setRequestedTask,
   } = useAiTaskStore();
@@ -895,13 +895,15 @@ export function AiPanel() {
   // when the primary (which `useDocModel` etc. subscribe to) didn't change.
   const workspace = useProjectStore((s) => s.workspace);
   const taskGroups = visibleTaskGroups(workspace);
-  const [selectedTask, setSelectedTask] = useState<TaskKind>(() => defaultTask().id);
+  const panelTask = useComposerStore((s) => s.panelTask);
+  const setSelectedTask = useComposerStore((s) => s.setPanelTask);
+  const selectedTask = panelTask ?? defaultTask().id;
   // A profile switch can remove the selected task. Fall back rather than render
   // controls for a task that no longer exists (and can no longer be run).
   const task = findTask(selectedTask) ?? defaultTask();
   useEffect(() => {
     if (task.id !== selectedTask) setSelectedTask(task.id);
-  }, [task.id, selectedTask]);
+  }, [task.id, selectedTask, setSelectedTask]);
   const [continueLength, setContinueLength] = useState(500);
   const [contextChars, setContextChars] = useState(1000);
   // Batch clause run (tasks declaring `batch`) — modal state only; the run
@@ -1101,14 +1103,12 @@ export function AiPanel() {
   // part of that rule is a correctness limit, and two copies would drift.
   const maxDrafts = draftCountFor(runTaskDef, MAX_DRAFTS);
 
-  // Polish/rewrite edit a passage in place, so their result belongs *where the
-  // selection was* — appending it to the end of the document (the only thing
-  // this panel used to do) silently duplicated the passage instead. Resolved at
-  // apply time, not run time: the author may have kept typing while it streamed.
-  const replaceRange =
-    task.target === "replace"
-      ? resolveEditRange(content, selection, selectionRange, selectionSource)
-      : null;
+  // Apply belongs to the completed run, not the currently visible task or a
+  // newly selected passage. These offsets are a snapshot, so use the commit
+  // resolver's exact, unique-text fallback if the author has since typed.
+  const replaceRange = outputEditTarget
+    ? resolveEditRange(content, outputEditTarget.selection, outputEditTarget.range, "commit")
+    : null;
 
   // Where a continuation attaches — the author's chosen mode, resolved to one
   // offset that the label, the prompt's reference window, the budget and the

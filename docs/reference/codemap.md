@@ -136,6 +136,8 @@ CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, ico
 
 `OutputRecoveryPanel` 是聊天与任务面板共用的「已保存的输出」入口，含纯文本续写与按作者大纲分节生成；数据属于项目，不随组件卸载丢失。设计与边界见 [`long-output-recovery.md`](../feature/agent/long-output-recovery.md)。
 
+Generate 的活动任务保存在 `composerStore.panelTask`，关闭 / 重开面板不重置，切项目时清空，能力包移除任务时回退到当前默认任务。重写结果的选区快照保存在 `aiTaskStore.outputEditTarget`，与结果一起清除；应用结果按该快照定位，不读当前标签或新的选区，避免面板重挂后把重写误作续写追加。快照不再是编辑器维护的实时标记，因此只接受原位置的精确文本或唯一的原文匹配，无法可靠定位时保留既有追加行为。
+
 AiPanel (task UI, streaming output), ConsistencyCheck, 提示词库 (`SnippetPicker` 取用 + `SnippetSaveMenu` 右键存入 + `snippetTrace` 的确认痕迹)，以及执行日志与审批卡的这几件：
 
 - `PlanLedger.tsx`——执行日志里的方案账本。它在轮次**上方**单独一段，不塞进批准它的那一轮：结束的轮是折叠的，要从手风琴里挖出来的账没人读。
