@@ -71,6 +71,17 @@ const deleted = () =>
     .filter(([sql]) => sql.includes("DELETE FROM"))
     .map(([, args]) => (args as string[])[0]);
 
+it("backs up Generate options without exporting document paths", () => {
+  prefs.writePref("app:generateSettings", '{"continueLength":2000}');
+  prefs.writePref("app:generateDocuments", '{"/private/book/a.md":{}}');
+  expect(prefs.portablePrefEntries()).toContainEqual(["app:generateSettings", '{"continueLength":2000}']);
+  expect(prefs.portablePrefEntries().some(([key]) => key === "app:generateDocuments")).toBe(false);
+  expect(prefs.applyPrefEntries([["app:generateDocuments", "{}"]])).toBe(0);
+  expect(prefs.WINDOW_LOCAL_PREF_KEYS).toEqual(expect.arrayContaining([
+    "app:generateSettings", "app:generateDocuments",
+  ]));
+});
+
 describe("isPrefKey", () => {
   it("recognises the fixed keys", () => {
     expect(prefs.isPrefKey("app:theme")).toBe(true);

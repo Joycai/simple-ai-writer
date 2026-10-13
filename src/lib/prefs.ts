@@ -56,6 +56,8 @@ export const PREF_KEYS = [
   // 常量与解析在 lib/lore/readView（LORE_DETAIL_MODE_PREF）。
   "app:loreDetailMode",
   "app:draftCount",
+  "app:generateSettings",
+  "app:generateDocuments",
   "app:defaultMaxOutput",
   // Longest edge a picture may have when it is sent to a model; anything
   // over it is downscaled first. 0 = never resize. See lib/image/downscalePlan.
@@ -163,6 +165,8 @@ export const PREF_KEY_PREFIXES = [PINNED_LORE_PREFIX, LORE_SCOPE_PREFIX, SEMANTI
  * not another, and a first-run flag whose whole job is to be false once.
  */
 export const MACHINE_LOCAL_PREF_KEYS: readonly string[] = [
+  // Absolute document paths and their continuation choices stay on this machine.
+  "app:generateDocuments",
   "app:recentProjects",
   "app:pinnedProjects",
   "app:projectOpenedAt",
@@ -199,6 +203,8 @@ export const MACHINE_LOCAL_PREF_KEYS: readonly string[] = [
  * you are standing.
  */
 export const WINDOW_LOCAL_PREF_KEYS: readonly string[] = [
+  "app:generateSettings",
+  "app:generateDocuments",
   // The assistant drawer's tab (生成 / 聊天 / 一致性 / 扮演).
   "app:aiDrawerMode",
   // Layout the author drags: both side panels, preview zoom, and draft count.
