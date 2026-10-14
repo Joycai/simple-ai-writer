@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ImageCaps } from "../../../lib/ai/configDb";
 import { imageOutputSpec, type ImageParamSelection, type ImagePixelConstraints, type ImageSizingMode } from "../../../lib/ai/imageDialects";
@@ -6,6 +7,27 @@ import { Select } from "../../common/Select";
 import s from "./ModelDrawer.module.css";
 
 type OutputConfig = Pick<ImageCaps, "overrides" | "defaults">;
+
+/** Keep punctuation while typing, but publish parsed choices on every change
+ * so saving without leaving this field still uses the latest values.
+ */
+export function ImageOutputMenuInput({ label, values, onChange }: {
+  label: string;
+  values: string[] | undefined;
+  onChange: (values: string[]) => void;
+}) {
+  const [draft, setDraft] = useState(() => ({ values, text: values?.join(", ") ?? "" }));
+  // A replacement configuration resets the text; our own parsed array keeps
+  // its identity through the parent, preserving the author's unfinished edit.
+  if (draft.values !== values) setDraft({ values, text: values?.join(", ") ?? "" });
+  return <input className={s.input} aria-label={label} value={draft.text}
+    onChange={(e) => {
+      const text = e.target.value;
+      const next = [...new Set(text.split(",").map((x) => x.trim()).filter(Boolean))];
+      setDraft({ values: next, text });
+      onChange(next);
+    }} />;
+}
 
 /** Preset inheritance stays explicit; editing a menu never changes API field names. */
 export function ImageOutputFields({ dialect, value, onChange }: {
@@ -24,8 +46,8 @@ export function ImageOutputFields({ dialect, value, onChange }: {
   };
   const menu = (key: "aspects" | "resolutions" | "qualities") => (
     <Field label={t(`imageOutput.${key}`)} hint={t("imageOutput.listHint")}>
-      <input className={s.input} aria-label={t(`imageOutput.${key}`)} value={value.overrides?.[key]?.join(", ") ?? ""}
-        onChange={(e) => onChange({ ...value, overrides: { ...value.overrides, [key]: [...new Set(e.target.value.split(",").map((x) => x.trim()).filter(Boolean))] } })} />
+      <ImageOutputMenuInput label={t(`imageOutput.${key}`)} values={value.overrides?.[key]}
+        onChange={(next) => onChange({ ...value, overrides: { ...value.overrides, [key]: next } })} />
     </Field>
   );
   const defaultMenu = (key: "aspect" | "resolution" | "quality", choices: readonly string[]) => (

@@ -39,9 +39,13 @@ export async function discoverMcpTools(call: ToolCall, ctx: ToolContext): Promis
   // Small services are immediately callable. Large catalogues retain the
   // bounded name index and selective schema lookup instead of filling history.
   if (args.tool === undefined && content.length > 12_000) {
+    const next = "Request a tool by name for its input schema, then use call_mcp_tool.";
     content = JSON.stringify({ server: server.name,
-      tools: tools.map((t) => ({ name: t.name, description: t.description?.slice(0, 300) })),
-      next: "Request a tool by name for its input schema, then use call_mcp_tool." });
+      tools: tools.map((t) => ({ name: t.name, description: t.description?.slice(0, 300) })), next });
+    // The aggregate description budget can overflow even with each entry
+    // bounded. Preserve discoverable names rather than demand an unknown name.
+    if (content.length > 48_000) content = JSON.stringify({ server: server.name,
+      tools: tools.map((t) => ({ name: t.name })), next });
   }
   if (content.length > 48_000) throw new Error("MCP catalogue/schema is too large. Request one tool by name.");
   return { toolCallId: call.id, content };
