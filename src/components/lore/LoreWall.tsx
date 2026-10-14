@@ -524,11 +524,11 @@ export function LoreWall() {
     await deleteEntity(projectPath, e);
   };
 
-  const handleExport = async () => {
+  const handleExport = async (entries?: LoreEntity[]) => {
     if (!projectPath || transferBusy) return;
     setTransferBusy(true);
     try {
-      const saved = await exportLoreBundle(projectPath);
+      const saved = await exportLoreBundle(projectPath, entries?.map((e) => e.dirPath));
       // Show the bundle where it landed instead of an alert — and when that
       // fails, the alert after all, saying the export itself went through.
       if (saved) revealItemInDir(saved).catch((e) => {
@@ -637,6 +637,8 @@ export function LoreWall() {
         action: () => openDetail(e.dirPath) },
       { kind: "item", icon: <Pencil size={13} />, label: t("lore.detail.edit", { defaultValue: "编辑" }),
         action: () => openDetail(e.dirPath, true) },
+      { kind: "item", icon: <FileDown size={13} />, label: t("lore.transfer.export"),
+        disabled: !projectPath || transferBusy, action: () => void handleExport([e]) },
       { kind: "item", icon: <Camera size={13} />, label: t("lore.wall.changeAvatar", { defaultValue: "更换头像" }),
         action: () => void handleAvatarPick(e) },
       // 只在真有头像时出现：「移除」一个不存在的东西是空动作，留着只会让作者点一下
@@ -1128,6 +1130,15 @@ export function LoreWall() {
               </span>
               <span className={cs.selectBreakdown}>{selectedBreakdown}</span>
               <span style={{ flex: 1 }} />
+              <button
+                type="button"
+                className={`${cs.selectBtn} ${cs.selectBtnSecondary}`}
+                disabled={selectedEntities.length === 0 || transferBusy || !projectPath}
+                onClick={() => void handleExport(selectedEntities)}
+              >
+                <FileDown size={13} />
+                {t("lore.transfer.exportSelected")}
+              </button>
               {/* 分类在集合之前：第一根轴排在第二根轴左边，两颗集合按钮仍然连着。 */}
               <button
                 type="button"
