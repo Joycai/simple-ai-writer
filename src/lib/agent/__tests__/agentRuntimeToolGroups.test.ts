@@ -15,7 +15,7 @@ import type { AgentEvent } from "../events";
 import type { TaskPreset } from "../presets";
 import { runAgent, type AgentRuntimeOptions } from "../runtime";
 import { createPlanGate, type PlanGate } from "../plan";
-import { getToolDefinitions, partitionByGroup, type ToolId } from "../registry";
+import { getToolDefinitions, partitionByGroup, type ToolAppState, type ToolId } from "../registry";
 import { toolTokensOf } from "../toolCost";
 import { estimateMessagesTokens } from "../../ai/tokenEstimate";
 import type { LoreIndex } from "../../lore";
@@ -477,4 +477,31 @@ describe("searchable groups load on request", () => {
 
     expect(offered[0]).toEqual(["list_files", "search_tools", ...FILE_OPS]);
   });
+});
+
+
+it("sends the current image binding before loading tools and refreshes it on the next turn", async () => {
+  let edit = true;
+  const opts = makeOptions(undefined);
+  opts.preset = { ...PRESET, tools: ["generate_image", "edit_image"] };
+  opts.toolContext.appState = { aiSettings: () => ({
+    models: [{ id: "im", providerId: "p", modelId: "im-model", name: "Painter", type: "image", enabled: true,
+      priceIn: 0, priceCachedIn: 0, priceOut: 0, caps: { edit } }],
+    subAgents: { imagegen: { kind: "imagegen", enabled: true, modelId: "im" } },
+  }) } as unknown as ToolAppState;
+  queueRound([{ text: "ready" }, done]);
+  await runAgent(opts);
+  const firstTools = mockStream.mock.calls[0][0].tools!;
+  expect(firstTools.map((t) => t.function.name)).toEqual(["search_tools"]);
+  expect(firstTools[0].function.description).toContain("Input images: enabled");
+  expect(opts.events.find((e) => e.kind === "round-start")).toMatchObject({
+    toolTokens: toolTokensOf(["search_tools"], { image: ["generate_image", "edit_image"] }, false, {
+      id: "im", providerId: "p", modelId: "im-model", name: "Painter", type: "image", enabled: true,
+      priceIn: 0, priceCachedIn: 0, priceOut: 0, caps: { edit: true },
+    }),
+  });
+  edit = false;
+  queueRound([{ text: "ready" }, done]);
+  await runAgent({ ...opts, messages: [{ role: "user", content: "go" }] });
+  expect(mockStream.mock.calls[1][0].tools![0].function.description).toContain("disabled in this app configuration");
 });

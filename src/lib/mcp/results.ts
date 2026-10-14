@@ -33,7 +33,16 @@ export async function saveMcpResult(projectPath: string, result: McpResult): Pro
       parts.push(block.resource.text);
     } else parts.push(`Unsupported MCP content: ${String(block.type)} (not saved).`);
   }
-  if (result.structuredContent !== undefined) parts.push(JSON.stringify(result.structuredContent));
+  if (result.structuredContent !== undefined) {
+    const structured = JSON.stringify(result.structuredContent);
+    // MCP commonly returns the same JSON as both text and structuredContent.
+    // Keep distinct text, but pay for identical data only once in history/cache.
+    const repeated = result.content.some((block) => {
+      if (!isObject(block) || block.type !== "text" || typeof block.text !== "string") return false;
+      try { return JSON.stringify(JSON.parse(block.text)) === structured; } catch { return false; }
+    });
+    if (!repeated) parts.push(structured);
+  }
   const text = parts.join("\n\n");
   const dir = joinPath(projectPath, ".ai-writer/tmp/mcp");
   await makeDir(dir);

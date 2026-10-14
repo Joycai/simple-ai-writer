@@ -282,6 +282,25 @@ describe("edit_image", () => {
 // The model's cap is on input images, and the picture being changed is one:
 // Seedream 5.0 pro answers an eleventh with 400 "cannot exceed 10" — after
 // the author approved the card, had the source not been counted.
+describe("configured input-image support", () => {
+  it("uses source/references when enabled, without inferring a limitation from model names", async () => {
+    storeModels = [{ ...IMAGE_MODEL, caps: { edit: true } }];
+    const { ctx, seen } = ctxWith();
+    await editImageTool("edit", { source: "插图/参考.png", instruction: "change the hair" }, ctx);
+    expect(seen[0].sourcePath).toBe("/proj/插图/参考.png");
+    expect(generateImage).not.toHaveBeenCalled();
+  });
+  it("does not present disabled references as a universal model limitation or suggest silently dropping them", async () => {
+    storeModels = [{ ...IMAGE_MODEL, caps: { edit: false } }];
+    const { ctx, seen } = ctxWith();
+    const result = await generateImageTool("gen", { prompt: "same character", path: "第一章.md", references: ["插图/参考.png"] }, ctx);
+    expect(result.content).toContain("current app configuration");
+    expect(result.content).toContain("do not drop references");
+    expect(seen).toHaveLength(0);
+    expect(generateImage).not.toHaveBeenCalled();
+  });
+});
+
 describe("input-image cap", () => {
   beforeEach(() => {
     storeModels = [{ ...IMAGE_MODEL, caps: { edit: true, maxRefs: 2 } }];

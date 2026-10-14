@@ -25,7 +25,7 @@ import { effectiveInputCeiling } from "../context/budget";
 import type { TaskPreset } from "./presets";
 import { getToolDefinitions, partitionByGroup, type ToolId } from "./registry";
 import { routePlannedTools, type RouteOptions } from "./routing";
-import type { SubAgentConfig, SubAgentKind } from "./subagentModel";
+import { subAgentModel, type SubAgentConfig, type SubAgentKind } from "./subagentModel";
 import type { SearchableTools } from "./toolSearch";
 
 /**
@@ -45,13 +45,15 @@ export function toolTokensOf(
   searchable?: SearchableTools,
   /** Changes `delegate`'s description — see `RoutedTools.searchReadsPages`. */
   searchReadsPages = false,
+  imageModel?: Model | null,
 ): number {
   if (ids.length === 0) return 0;
   const catalogue = searchable ? JSON.stringify(searchable) : "*";
-  const key = `${ids.join(",")}|${loreCategoryIds().join(",")}|${catalogue}|${searchReadsPages ? "pages" : ""}`;
+  const imageKey = imageModel ? JSON.stringify([imageModel.name, imageModel.modelId, imageModel.caps?.edit, imageModel.caps?.maxRefs]) : "";
+  const key = `${imageKey}|${ids.join(",")}|${loreCategoryIds().join(",")}|${catalogue}|${searchReadsPages ? "pages" : ""}`;
   const hit = cache.get(key);
   if (hit !== undefined) return hit;
-  const tokens = estimateToolsTokens(getToolDefinitions(ids, searchable, searchReadsPages));
+  const tokens = estimateToolsTokens(getToolDefinitions(ids, searchable, searchReadsPages, imageModel));
   cache.set(key, tokens);
   return tokens;
 }
@@ -107,7 +109,7 @@ export function plannedToolTokens(
   const routed = routePlannedTools(preset, subs, models, options);
   const { resident, searchable } = partitionByGroup(routed.tools, preset.residentGroups);
   return (
-    toolTokensOf(resident, searchable, routed.searchReadsPages) +
+    toolTokensOf(resident, searchable, routed.searchReadsPages, subAgentModel("imagegen", models, subs)) +
     (routed.finishPolicy === "handoff" ? handoffToolTokens() : 0)
   );
 }

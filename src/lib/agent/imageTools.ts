@@ -38,7 +38,7 @@ let proposalCounter = 0;
  * routing, and it must name the actual switch rather than send the author
  * hunting through model settings.
  */
-function activeImageModel(ctx: ToolContext) {
+export function activeImageModel(ctx: ToolContext) {
   const settings = ctx.appState?.aiSettings();
   return settings ? subAgentModel("imagegen", settings.models, settings.subAgents) : null;
 }
@@ -132,7 +132,7 @@ async function proposeIllustration(
   if (spec.refPaths?.length && model.caps?.edit === false) {
     return {
       toolCallId,
-      content: `Error: the image model "${model.name}" is declared as not accepting input images, so references cannot be used. Call generate_image without references, describing the reference's look in the prompt instead.`,
+      content: `Error: the image model "${model.name}" is declared as not accepting input images, in the current app configuration. This is not a verdict about every endpoint for this model. Ask the author to check the bound model's input-image setting; do not drop references and substitute text-only generation without their agreement.`,
     };
   }
   // The limit is on input images, and an edit's source is one of them: it

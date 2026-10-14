@@ -22,11 +22,22 @@ closes the session. It never calls a tool or generates an image.
 ```
 
 Open a project and ask the chat assistant (or a non-batch Agent task) to use the
-server. It discovers names, asks for an individual tool's schema, and proposes a
+server. A sole enabled server is selected automatically; discovery returns all
+input schemas together when the catalogue fits 12,000 characters. Larger services
+return a compact index and accept individual schema requests. It then proposes a
 call with the exact server URL, tool, and arguments visible on an approval card.
-Every remote tool call requires approval, including reads and polling: server
-annotations are information from the remote party, not an author authorization.
-The normal prose/shell/image approval grants do not cover MCP.
+Remote calls ask by default, including reads and polling. The card also offers
+**Allow for this session** (or **Allow for this task** on a task panel) for this
+server's currently discovered tools, including paid calls. This dedicated grant
+is bound to the conversation/run, server identity, URL, configuration revision
+and each tool's definition. New or changed tools ask again; execution still checks
+the live definition. It survives chat turns, but is never persisted or restored;
+closing/clearing a conversation, switching projects or restarting clears it.
+The auto-approval indicator lists allowed servers and revokes grants in one click.
+As with existing grants, only one surface holds the active grant at a time.
+Server annotations never grant permission, and prose/shell/image grants do not
+cover MCP. This is deliberately an explicit server-wide author choice, since
+requiring repeated cards for model queries and job polling obscures the workflow.
 
 For joycai-images the sequence is `list_models` → `get_model_schema` →
 `generate_image` → `get_generation` → `read_generation_image`. The server owns
@@ -75,6 +86,9 @@ LLM usage ledger.
   roleplay, batch jobs and subagents do not inherit the permission. Context
   estimates price the same bridge tools. Off means absent.
 - `tools.ts`: discovery and proposal construction do not call external tools.
+  Catalogue requests share a run-scoped promise cache keyed by server identity,
+  URL and revision; failures are evicted and approval always rechecks live tools.
+  This saves connections without caching executions or retrying paid operations.
   `proposalApply.ts` dispatches the approved call. It checks endpoint identity,
   configuration revision and discovered tool schema again before execution;
   changing any invalidates the pending approval. Calls serialize with other
@@ -82,7 +96,8 @@ LLM usage ledger.
 - `results.ts`: saves PNG/JPEG/WebP/GIF content blocks under unique
   `assets/mcp/<uuid>-N.ext` filenames and a full text/structured result under
   `.ai-writer/tmp/mcp/`. Tool history contains a bounded report and local paths,
-  not inline image base64. The first image is attached to the originating chat
+  not inline image base64. Identical text JSON and structuredContent are included
+  only once, saving history tokens without dropping distinct text. The first image is attached to the originating chat
   turn through the existing image receipt; all image paths are in the report.
   Unsupported binary content is reported. Resource links are not fetched, and
   server-returned filenames are never used as write destinations. The app keeps
@@ -93,7 +108,8 @@ LLM usage ledger.
 `lib/mcp/__tests__/` covers the JSON import shape, credential isolation, keyring
 failures, revision invalidation, protocol negotiation, JSON/SSE, pagination,
 request cancellation, no retry, approval/rejection, schema changes, error results,
-and asset persistence. Routing, preference, reset and context-budget guards cover
+and asset persistence. Session-grant tests cover turn continuity, revocation,
+server/schema changes, new tools, surface isolation and task expiry. Routing, preference, reset and context-budget guards cover
 integration with the app. `live.test.ts` is opt-in via `MCP_SMOKE_URL` and
 `MCP_SMOKE_TOKEN` and performs discovery only.
 
@@ -118,6 +134,12 @@ Live checks on 2026-10-14:
   Credentials and generated test assets are not repository fixtures.
 - Regression run: 6,393 frontend tests passed (one skipped; opt-in live probes
   excluded), TypeScript check and app/prototype production builds passed.
+
+Discovery/session-grant regression (2026-10-14): 6,430 offline tests passed,
+including catalogue batching/fallback, run-cache isolation, result deduplication
+and explicit session grants. TypeScript and app/prototype production builds
+passed. Live provider probes were excluded; this change did not run a paid
+image-generation validation.
 
 Protocol: [Streamable HTTP 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports),
 [tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools).

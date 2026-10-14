@@ -6,7 +6,7 @@ import { fetch } from "../http";
 import { IS_TAURI } from "../platform";
 import { isObject, mcpHeaders, type McpServer } from "./config";
 
-interface McpTool {
+export interface McpTool {
   name: string;
   description?: string;
   inputSchema: Record<string, unknown>;

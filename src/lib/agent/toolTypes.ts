@@ -609,6 +609,8 @@ export interface McpProposal extends ProposalBase {
   revision: string;
   tool: string;
   toolSchema: string;
+  /** Snapshot of the tools covered by an explicit server/session grant. */
+  serverTools?: Record<string, string>;
   arguments: Record<string, unknown>;
 }
 
