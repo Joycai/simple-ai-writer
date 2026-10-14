@@ -19,14 +19,14 @@ import { ModalShell } from "../common/ModalShell";
 import { Combobox } from "../common/Combobox";
 import { canSeeImages, chatModels, imageCostFor } from "../../lib/ai/configDb";
 import { effectiveImageRoute } from "../../lib/ai/imageRoute";
-import { imageDialect } from "../../lib/ai/imageDialects";
+import { imageDialect, imageOutputSpec, imageSelection, validateImageSelection, ImageOutputValidationError, type ImageSizingMode } from "../../lib/ai/imageDialects";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { imageForModel } from "../../lib/image/normalize";
 import {
   generateImagePrompt,
   imageRequestParams,
+  imageSelectedSpec,
   specToPrompt,
-  IMAGE_ASPECTS,
 } from "../../lib/image";
 import { connOptions, resolveConn } from "../../lib/ai/conn";
 import { resolveVisionConn } from "../../lib/agent/subagentModel";
@@ -94,10 +94,11 @@ export function ImageGenModal({ target, onClose }: Props) {
   /**
    * The model's declared parameter dialect (lib/ai/imageDialects). With one,
    * the framing controls come from the dialect's own vocabulary — its aspect
-   * list, resolution tiers and quality tiers — and the free-text size box
-   * disappears, because the dialect computes the exact wire value itself.
+   * list, resolution tiers and quality tiers. Exact sizing is a separate
+   * mode so its pixel dimensions never compete with ratio/tier choices.
    */
-  const dialectSpec = imageDialect(imageModel?.caps?.dialect);
+  const dialectSpec = imageDialect(comfyRoute ? undefined : imageModel?.caps?.dialect);
+  const outputSpec = imageOutputSpec(imageModel?.caps);
 
   // Which model drafts the prompt. Separate from the image model and from the
   // app-wide active model: the author may want a strong writer here without
@@ -117,27 +118,31 @@ export function ImageGenModal({ target, onClose }: Props) {
   const [aspect, setAspect] = useState<string>("3:4");
   const [count, setCount] = useState(1);
   /**
-   * Explicit pixel size. Empty means "let the model's declared sizes decide",
-   * which is also the only correct request for endpoints that reject the
-   * parameter (xAI) or take a ratio instead (Gemini). Generic models only —
-   * a dialect computes the size itself and this box is hidden.
+   * Exact pixel dimensions. In ratio mode this field stays inactive.
+   * Models with native ratio/tier parameters do not expose exact sizing.
    */
   const [size, setSize] = useState("");
   /** Resolution tier from the dialect's list ("" = the dialect default). */
+  const [sizingMode, setSizingMode] = useState<ImageSizingMode>("ratio");
   const [resolution, setResolution] = useState("");
   /** Quality tier from the dialect's list ("" = send nothing). */
   const [quality, setQuality] = useState("");
 
-  const aspectChoices: readonly string[] = dialectSpec?.aspects ?? IMAGE_ASPECTS;
+  const aspectChoices: readonly string[] = outputSpec.aspects;
   // Keep the selections legal when the author switches to a model whose
   // dialect speaks a different vocabulary mid-session.
-  const dialectId = dialectSpec?.id ?? "";
+  const outputSignature = JSON.stringify(imageModel?.caps ?? {});
   useEffect(() => {
-    setResolution(dialectSpec?.resolutions[0] ?? "");
-    setQuality("");
-    setAspect((a) => (aspectChoices.includes(a) ? a : aspectChoices.includes("3:4") ? "3:4" : aspectChoices[0]));
+    const spec = imageOutputSpec(imageModel?.caps);
+    const selected = imageSelection(imageModel?.caps, {});
+    setSizingMode(spec.modes.includes(selected.sizingMode!) ? selected.sizingMode! : spec.modes[0]);
+    setResolution(selected.resolution ?? spec.resolutions[0] ?? "");
+    setQuality(selected.quality && spec.qualities.includes(selected.quality) ? selected.quality : "");
+    setAspect(selected.aspect && spec.aspects.includes(selected.aspect) ? selected.aspect : "");
+    setSize(selected.size ?? "1024x1024");
+    // Reset on model identity as well as capabilities: two models can share a dialect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dialectId]);
+  }, [imageModel?.id, outputSignature]);
   /** One line saying what the picture shows — alt text, and the gallery
    *  description where the target keeps one. */
   const [note, setNote] = useState("");
@@ -197,7 +202,14 @@ export function ImageGenModal({ target, onClose }: Props) {
   const effectiveCount = chatRoute ? 1 : count;
   // 带上作者选的规格：按尺寸 / 质量分档的组，不带规格会估成 $0，而卡上一个
   // 假的 0 比没有估价更糟。估和记共用 `priceSpec`，口径只有一份。
-  const estimateSpec = { size: size.trim() || resolution, quality };
+  const outputSelection = { sizingMode, aspect, resolution, quality, size };
+  let outputError = validateImageSelection(imageModel?.caps, outputSelection);
+  let resolvedSize: string | undefined;
+  if (!outputError) {
+    try { resolvedSize = imageRequestParams(imageModel?.caps, outputSelection).size; }
+    catch (e) { if (e instanceof ImageOutputValidationError) outputError = e.code; else throw e; }
+  }
+  const estimateSpec = imageSelectedSpec(imageModel?.caps, outputSelection);
   const estimatedCost = imageModel ? imageCostFor(imageModel, effectiveCount, undefined, estimateSpec) : 0;
 
   const handleBuildPrompt = async () => {
@@ -253,6 +265,7 @@ export function ImageGenModal({ target, onClose }: Props) {
       n: effectiveCount,
       // Raw choices — the store resolves them per call (an edit and a
       // generation resolve differently on several dialects).
+      sizingMode,
       aspect,
       resolution,
       quality,
@@ -269,7 +282,7 @@ export function ImageGenModal({ target, onClose }: Props) {
   const builtPrompt = () =>
     comfyRoute
       ? [prompt, style].map((s) => s.trim()).filter(Boolean).join("\n")
-      : specToPrompt({ prompt, style, negative, aspect, note: "" });
+      : specToPrompt({ prompt, style, negative, aspect: sizingMode === "ratio" ? aspect : "", note: "" });
 
   const handleGenerate = async () => {
     if (!imageModel || !prompt.trim()) return;
@@ -442,7 +455,7 @@ export function ImageGenModal({ target, onClose }: Props) {
         // The size that actually went to the wire — a dialect computes it, so
         // the empty size box must not record as "no size".
         size: imageModel
-          ? imageRequestParams(imageModel.caps, { aspect, resolution, quality, size }).size
+          ? imageRequestParams(imageModel.caps, { aspect, resolution, quality, size, sizingMode }).size
           : size.trim() || undefined,
         aspect,
         ...(currentTurn.degraded ? { degraded: true } : {}),
@@ -561,35 +574,42 @@ export function ImageGenModal({ target, onClose }: Props) {
 
               <div className={gen.fieldRow}>
                 <div className={gen.fieldNarrow}>
+                  <label className={styles.label}>{t("imageOutput.modes")}</label>
+                  <Select className={gen.selectInput} value={sizingMode} disabled={busy}
+                    onChange={(v) => setSizingMode(v as ImageSizingMode)}
+                    options={outputSpec.modes.map((v) => ({ value: v, label: t(`imageOutput.${v}`) }))}
+                    ariaLabel={t("imageOutput.modes")} />
+                </div>
+                {sizingMode === "ratio" && <div className={gen.fieldNarrow}>
                   <label className={styles.label}>{t("lore.imageGen.aspectLabel")}</label>
                   <Select className={gen.selectInput} value={aspect} disabled={busy}
                     onChange={(v) => setAspect(v)}
-                    options={aspectChoices.map((a) => ({ value: a, label: a }))}
+                    options={[{ value: "", label: t("imageOutput.default") }, ...aspectChoices.map((a) => ({ value: a, label: a }))]}
                     ariaLabel={t("lore.imageGen.aspectLabel")} />
-                </div>
+                </div>}
                 {/* With a dialect the resolution/quality tiers replace the
                     free-text size box: the dialect computes the exact wire
                     value, so offering both would invite contradictions. */}
-                {dialectSpec && (
+                {sizingMode === "ratio" && (dialectSpec || outputSpec.resolutions.some(Boolean)) && (
                   <div className={gen.fieldNarrow}>
                     <label className={styles.label}>{t("lore.imageGen.resolutionLabel")}</label>
                     <Select className={gen.selectInput} value={resolution} disabled={busy}
                       onChange={(v) => setResolution(v)}
-                      options={dialectSpec.resolutions.map((r) => ({
+                      options={[...new Set(["", ...outputSpec.resolutions])].map((r) => ({
                         value: r,
                         label: r || t("lore.imageGen.tierDefault"),
                       }))}
                       ariaLabel={t("lore.imageGen.resolutionLabel")} />
                   </div>
                 )}
-                {dialectSpec?.qualities && (
+                {outputSpec.qualities.length > 0 && (
                   <div className={gen.fieldNarrow}>
                     <label className={styles.label}>{t("lore.imageGen.qualityLabel")}</label>
                     <Select className={gen.selectInput} value={quality} disabled={busy}
                       onChange={(v) => setQuality(v)}
                       options={[
                         { value: "", label: t("lore.imageGen.tierDefault") },
-                        ...dialectSpec.qualities.map((q) => ({
+                        ...outputSpec.qualities.map((q) => ({
                           value: q,
                           label: t(`lore.imageGen.quality_${q}`, { defaultValue: q }),
                         })),
@@ -607,9 +627,9 @@ export function ImageGenModal({ target, onClose }: Props) {
                     }))}
                     ariaLabel={t("lore.imageGen.countLabel")} />
                 </div>
-                {!dialectSpec && (
+                {sizingMode === "exact" && (
                   <div className={gen.field}>
-                    <label className={styles.label}>{t("lore.imageGen.sizeLabel")}</label>
+                    <label className={styles.label}>{t("imageOutput.exact")}</label>
                     {/* A combobox, not a select: the accepted sizes differ per
                         model and per relay, so the common ones are suggestions
                         rather than the only options. */}
@@ -623,10 +643,13 @@ export function ImageGenModal({ target, onClose }: Props) {
                     />
                   </div>
                 )}
+                {sizingMode === "ratio" && resolvedSize && <div className={gen.costHint}>{resolvedSize}</div>}
                 {estimatedCost > 0 && (
                   <div className={gen.costHint}>{t("lore.imageGen.costHint", { cost: estimatedCost.toFixed(3) })}</div>
                 )}
               </div>
+
+              {outputError && <div role="alert" className={gen.hintInline}>{t(`imageOutput.errors.${outputError}`)}</div>}
 
               {/* 图库描述 (设计稿 03a 屏 18): 保存时写入的那一行文字，供纯文本模型阅读 */}
               <div className={styles.section}>
@@ -666,7 +689,7 @@ export function ImageGenModal({ target, onClose }: Props) {
                     <button
                       className={styles.btnSecondary}
                       onClick={calibrating ? () => abort.current?.abort() : handleCalibrate}
-                      disabled={!calibrating && (busy || !imageModel || !prompt.trim())}
+                      disabled={!calibrating && (busy || !!outputError || !imageModel || !prompt.trim())}
                     >
                       {calibrating ? t("lore.imageGen.calibrateStop") : t("lore.imageGen.calibrateBtn")}
                     </button>
@@ -749,7 +772,7 @@ export function ImageGenModal({ target, onClose }: Props) {
                     <button
                       className={styles.btnSecondary}
                       onClick={handleEdit}
-                      disabled={busy || !editDraft.trim()}
+                      disabled={busy || !!outputError || !editDraft.trim()}
                     >
                       <Wand2 size={13} strokeWidth={1.8} />
                       {generating ? t("lore.imageGen.editing") : t("lore.imageGen.editBtn")}
@@ -815,7 +838,7 @@ export function ImageGenModal({ target, onClose }: Props) {
             <button
               className={styles.btnPrimary}
               onClick={handleGenerate}
-              disabled={busy || !imageModel || !prompt.trim()}
+              disabled={busy || !!outputError || !imageModel || !prompt.trim()}
             >
               <Sparkles size={13} strokeWidth={1.8} />
               {generating

@@ -17,7 +17,7 @@ import { imageForModel } from "./normalize";
 import { loadApiKey } from "../keyStore";
 import { addLoreImage } from "../lore";
 import { imageMarkdown, saveDocumentAsset, saveImageInFolder } from "./assets";
-import { imageRequestParams, inputImageSize, mayBeTransparentPng, recordImageUsage } from "./index";
+import { imageRequestParams, imageSelectedSpec, inputImageSize, mayBeTransparentPng, recordImageUsage } from "./index";
 import { keepsTransparentBackground } from "../ai/imageDialects";
 import { recordGeneration } from "./session";
 import { providerFor } from "../ai/routes";
@@ -133,6 +133,7 @@ export async function runIllustration(
   // not to support it is retried as a plain generation rather than failing.
   let degraded = false;
   let result;
+  let sentParams = imageRequestParams(model.caps, sel);
   if (inputPaths.length && model.caps?.edit !== false) {
     const images: string[] = [];
     for (const p of inputPaths) images.push((await imageForModel(p)).dataUrl);
@@ -159,9 +160,11 @@ export async function runIllustration(
       ...(keepTransparent ? { transparentBackground: true } : {}),
     };
     try {
+      sentParams = editParams;
       result = await generateImage(conn, { ...editReq, images });
     } catch (err) {
       if (!isEditUnsupportedError(err)) throw err;
+      sentParams = imageRequestParams(model.caps, sel);
       result = await generateImage(conn, req);
       degraded = true;
     }
@@ -197,7 +200,8 @@ export async function runIllustration(
     path = await saveImageInFolder(proposal.dest.dir, bytes, ext);
   }
 
-  await recordImageUsage(projectPath, model, proposal.sourcePath ? "image-edit" : "image-gen", 1, result.usage);
+  const billedSpec = imageSelectedSpec(model.caps, sel);
+  await recordImageUsage(projectPath, model, proposal.sourcePath ? "image-edit" : "image-gen", 1, result.usage, billedSpec);
   // Awaited: the record file is a read-modify-write, and an agent approving two
   // illustrations in a row would otherwise lose one of the two entries.
   await recordGeneration(projectPath, {
@@ -205,12 +209,12 @@ export async function runIllustration(
     prompt: proposal.prompt,
     edits: [],
     model: model.modelId,
-    size: req.size,
+    size: sentParams.size ?? sentParams.imageSize,
     aspect: proposal.aspect,
     ...(degraded ? { degraded: true } : {}),
     createdAt: Date.now(),
     // `req.size` 是真正发出去的尺寸（方言解析之后），不是作者填的那个。
-    costUsd: imageCostFor(model, 1, result.usage, { size: req.size, quality: proposal.quality }),
+    costUsd: imageCostFor(model, 1, result.usage, billedSpec),
   });
 
   return { path, markdown, degraded };

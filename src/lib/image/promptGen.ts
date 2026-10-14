@@ -17,7 +17,7 @@ import type { ToolDefinition } from "../ai/types";
 import { promptParams } from "../profile/active";
 
 /** Aspect ratios offered to the model. Kept small — every backend supports these. */
-export const IMAGE_ASPECTS = ["1:1", "3:4", "4:3", "16:9", "9:16"] as const;
+const IMAGE_ASPECTS = ["1:1", "3:4", "4:3", "16:9", "9:16"] as const;
 export type ImageAspect = (typeof IMAGE_ASPECTS)[number];
 
 interface ImagePromptSpec {

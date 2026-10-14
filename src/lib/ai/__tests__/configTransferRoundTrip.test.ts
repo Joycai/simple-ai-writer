@@ -88,6 +88,8 @@ const provider: Required<Provider> = {
 };
 
 const caps: Required<ImageCaps> = {
+  overrides: { qualities: ["high"], modes: ["ratio", "exact"], pixels: { step: 64 } },
+  defaults: { aspect: "3:2", quality: "high", sizingMode: "ratio" },
   edit: true,
   dialect: "qwen-image",
   sizes: ["1024x1024", "1328x1328"],

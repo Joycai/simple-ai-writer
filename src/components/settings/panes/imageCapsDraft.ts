@@ -27,6 +27,8 @@ export interface ImageCapsDraft {
   sizes: string[];
   /** comfyui only: the imported workflow JSON, verbatim. */
   comfyWorkflow: string;
+  overrides?: ImageCaps["overrides"];
+  defaults?: ImageCaps["defaults"];
 }
 
 /** The draft a stored row opens as — the inverse of `imageCapsToSave` for every field the drawer shows. */
@@ -38,6 +40,8 @@ export function draftFromCaps(caps: ImageCaps | undefined): ImageCapsDraft {
     asyncTask: caps?.asyncTask ?? false,
     sizes: caps?.sizes ?? [],
     comfyWorkflow: caps?.comfy?.workflow ?? "",
+    ...(caps?.overrides ? { overrides: caps.overrides } : {}),
+    ...(caps?.defaults ? { defaults: caps.defaults } : {}),
   };
 }
 
@@ -132,6 +136,8 @@ export function imageCapsToSave(
     // switching back to 通用 restores it untouched.
     ...(draft.sizes.length ? { sizes: draft.sizes } : {}),
     ...(draft.route ? { route: draft.route } : {}),
+    ...(draft.overrides ? { overrides: draft.overrides } : {}),
+    ...(draft.defaults ? { defaults: draft.defaults } : {}),
     // Saved exactly when the switch is on screen and on: only while the call
     // goes to DashScope native — by the effective route, so 自动 on the native
     // route keeps it and a move off it clears it.

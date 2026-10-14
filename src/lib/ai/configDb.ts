@@ -13,7 +13,7 @@ import type { GeminiSafetySettings } from "./safety";
 import {
   authModesFor, familyOf, parseTextVerbosity, type ApiStandard, type AuthMode, type ImageRoute, type TextVerbosity,
 } from "./types";
-import type { ImageDialect } from "./imageDialects";
+import { parseImageOutputCaps, type ImageDialect, type ImageCapabilityOverrides, type ImageParamSelection } from "./imageDialects";
 import { effectiveImageRoute, routeConventions } from "./imageRoute";
 import {
   parseReasoningEffort, parseThinkingCategory,
@@ -89,6 +89,8 @@ export type AsrFormat = "dashscope-filetrans" | "dashscope-sync";
  * runtime degrades visibly when a request proves the declaration wrong.
  */
 export interface ImageCaps {
+  overrides?: ImageCapabilityOverrides;
+  defaults?: ImageParamSelection;
   /** Accepts input images — editing / img2img. False for generate-only endpoints. */
   edit?: boolean;
   /**
@@ -1472,7 +1474,7 @@ const IMAGE_ROUTES: Record<ImageRoute, true> = {
   "images-api": true, chat: true, gemini: true, dashscope: true, comfyui: true, ark: true,
 };
 const IMAGE_DIALECT_IDS: Record<ImageDialect, true> = {
-  nanobanana: true, "gpt-image-2": true, "wan2.7": true, "qwen-image": true,
+  nanobanana: true, "gpt-image-2": true, "gpt-image-2.5": true, "grok-imagine": true, "wan2.7": true, "qwen-image": true,
   "seedream-5-pro": true, "seedream-5-lite": true, "seedream-4": true,
 };
 
@@ -1502,7 +1504,7 @@ export function parseImageCaps(raw: unknown): ImageCaps | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const r = value as Record<string, unknown>;
 
-  const caps: ImageCaps = {};
+  const caps: ImageCaps = { ...parseImageOutputCaps(r) };
   if (typeof r.edit === "boolean") caps.edit = r.edit;
   if (listed(IMAGE_DIALECT_IDS, r.dialect)) caps.dialect = r.dialect as ImageDialect;
   // An empty list is kept: it means "send no size", which absent does not.

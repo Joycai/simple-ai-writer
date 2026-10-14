@@ -782,6 +782,7 @@ a document's illustrations: where they land and what links them
 - Which of the three readers a call site wants is decided by where the bytes end up, not by what the file is — `imageForModel` for the wire, `imageToDataUrl` for rendering, `readImageBytes` for writing to disk — and getting that wrong is silent in both directions (a downscaled preview, or a permanently re-encoded avatar). See `docs/feature/image-normalize-plan.md`.
 
 #### 图片生成与图集
+- Image output capabilities/defaults live in `ImageCaps.overrides`/`defaults` over `lib/ai/imageDialects`; `imageRequestParams` validates and resolves mutually exclusive ratio/tier and exact-pixel modes, and `imageSelectedSpec` supplies their active billing key. Both the model drawer and `ImageGenModal` read `imageOutputSpec`. Rationale and preset limits: `docs/feature/image-generation-plan.md` → 2026-10-14.
 - Generation itself runs through the `imagegen` subagent (bound model, `generate_image`/`edit_image` tools — not a delegate conversation), configured in `SubAgentsPane.tsx`; design: `docs/feature/image-generation-plan.md`.
 - Lore entities use `lib/lore/gallery.ts` instead — they own a folder, a document is one file
 

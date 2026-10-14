@@ -5,7 +5,7 @@
  */
 
 import { type ImageCaps, type Model } from "../ai/configDb";
-import { imageDialect, type ImageParamOptions, type ImageWireParams } from "../ai/imageDialects";
+import { imageDialect, imageSelection, validateImageSelection, validateImageOutputConfig, ImageOutputValidationError, type ImageParamSelection, type ImageParamOptions, type ImageWireParams } from "../ai/imageDialects";
 import { readImageHeader } from "./imageSize";
 import { recordUsage } from "../ai/usageRow";
 import type { ImageAspect } from "./promptGen";
@@ -24,16 +24,67 @@ export * from "./promptGen";
  */
 export function imageRequestParams(
   caps: ImageCaps | undefined,
-  sel: { aspect?: string; resolution?: string; quality?: string; size?: string },
+  sel: ImageParamSelection,
   /** `edit` marks an image-conditioned call — see ImageDialectSpec.params. */
   opts?: ImageParamOptions,
 ): ImageWireParams {
   const spec = imageDialect(caps?.dialect);
-  if (spec) return spec.params(sel, opts);
+  if (!spec && !caps?.overrides && !caps?.defaults && !sel.sizingMode) {
+    return { aspect: sel.aspect, size: sel.size?.trim() || sizeForAspect(sel.aspect ?? "1:1", caps?.sizes) };
+  }
+  // Old generic callers pass a size without a mode; declared dialects used
+  // to ignore that field and must keep doing so until exact is explicit.
+  const configError = caps && validateImageOutputConfig(caps);
+  if (configError) throw new ImageOutputValidationError(configError);
+  const selection = imageSelection(caps, {
+    ...sel,
+    ...(!spec && sel.size && !sel.sizingMode ? { sizingMode: "exact" as const } : {}),
+  });
+  const error = validateImageSelection(caps, selection);
+  if (error) throw new ImageOutputValidationError(error);
+  if (selection.sizingMode === "exact") {
+    if (caps?.dialect === "nanobanana") throw new ImageOutputValidationError("mode");
+    if (caps?.dialect === "wan2.7" && opts?.edit) {
+      const editError = validateImageSelection({ ...caps, overrides: {
+        ...caps.overrides, pixels: { ...caps.overrides?.pixels, maxEdge: Math.min(caps.overrides?.pixels?.maxEdge ?? 2048, 2048) },
+      } }, selection);
+      if (editError) throw new ImageOutputValidationError(editError);
+    }
+    return {
+      ...(!sel.sizingMode && !spec && sel.aspect ? { aspect: sel.aspect } : {}),
+      size: selection.size!.trim().replace(/[x*]/, caps?.dialect === "wan2.7" || caps?.dialect === "qwen-image" ? "*" : "x"),
+      ...(selection.quality ? { quality: selection.quality } : {}),
+    };
+  }
+  if (spec) {
+    const params = spec.params(selection, opts);
+    if (params.size && /^\d+[x*]\d+$/.test(params.size)) {
+      const dimensionError = validateImageSelection(caps, { sizingMode: "exact", size: params.size }, false);
+      // Pixel constraints apply to computed output too, independent of mode availability.
+      if (dimensionError) throw new ImageOutputValidationError(dimensionError);
+    }
+    return params;
+  }
   return {
-    aspect: sel.aspect,
-    size: sel.size?.trim() || sizeForAspect(sel.aspect ?? "1:1", caps?.sizes),
+    aspect: selection.aspect,
+    size: selection.resolution || sizeForAspect(selection.aspect ?? "1:1", caps?.sizes),
+    ...(selection.quality ? { quality: selection.quality } : {}),
   };
+}
+
+/** Same selected spec for estimates and usage; inactive sizing fields are removed. */
+export function imageSelectedSpec(caps: ImageCaps | undefined, sel: ImageParamSelection): { size?: string; quality?: string } {
+  const selected = imageSelection(caps, sel);
+  // Resolve implicit preset sizes too, while keeping an explicitly picked tier
+  // as the billing key. Invalid input has no estimate and is rejected on submit.
+  let implicitSize: string | undefined;
+  try {
+    const wire = imageRequestParams(caps, sel);
+    implicitSize = wire.imageSize ?? wire.size;
+  } catch (e) {
+    if (!(e instanceof ImageOutputValidationError)) throw e;
+  }
+  return { size: selected.sizingMode === "exact" ? selected.size : selected.resolution || implicitSize, quality: selected.quality };
 }
 
 /**
