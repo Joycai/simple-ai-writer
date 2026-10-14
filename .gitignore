@@ -36,3 +36,8 @@ __pycache__/
 
 # dev-workflow 阶段产物（设计稿归档另行提交）
 .claude/tasks/
+
+# Machine-local dependency cache and knowledge-base transfer scratch file.
+# Preserve useful scratch material outside the repository before cleaning it.
+/.pnpm-store/
+/.kb-input-tmp.md

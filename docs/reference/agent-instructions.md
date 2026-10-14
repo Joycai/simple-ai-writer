@@ -38,3 +38,20 @@ This is a documentation and repository-tooling change: application behavior,
 local skills, version manifests, and Rust crates are unaffected. Validation is
 the instruction/documentation guards followed by the normal frontend
 TypeScript, Vitest, and build checks described in [ci.md](ci.md).
+
+## Personal skills and temporary artifacts — 2026-10-14
+
+Keep project-required skills and their installation records in this repository.
+Personal service integrations belong in the user's skill directory instead:
+`~/.agents/skills/`, with links under `~/.claude/skills/` when needed. For example,
+the `getcargohq/cargo-skills` bundle operates the Cargo service; it is unrelated
+to Rust's Cargo build tool and is not a dependency of this application. Keeping
+that bundle personal avoids distributing unrelated integration instructions and
+duplicate copies in every checkout. Remove its project lock entries together
+with the local installation, preserving other skill records.
+
+The root `.pnpm-store/` is a regenerable local cache, and `.kb-input-tmp.md` is
+scratch material used to transfer knowledge-base updates; both are ignored.
+Before cleaning temporary notes or redundant skill copies, archive them outside
+the repository and verify the retained skills. Do not ignore all skill directories
+or a generic `agent/` directory: that could conceal future project-owned files.
