@@ -18,9 +18,10 @@ import { create } from "zustand";
 import { nanoid } from "nanoid";
 
 import { generateImage, imageConnOf, isEditUnsupportedError, type ImageResult } from "../lib/ai/image";
+import type { ImageSizingMode } from "../lib/ai/imageDialects";
 import type { Model, Provider } from "../lib/ai/configDb";
 import { imageForModel } from "../lib/image/normalize";
-import { imageRequestParams, inputImageSize, recordImageUsage } from "../lib/image";
+import { imageRequestParams, imageSelectedSpec, inputImageSize, recordImageUsage } from "../lib/image";
 import { discardSession, sweepScratch, writeCandidates } from "../lib/image/session";
 
 /** One calibration verdict attached to a turn (lib/image/calibrate.ts). */
@@ -64,9 +65,10 @@ export interface RunContext {
    * differently on several dialects (see ImageDialectSpec.params).
    */
   aspect?: string;
-  /** Explicit pixel size the author typed — generic (dialect-less) models only. */
+  /** Explicit pixel dimensions, used only in exact sizing mode. */
   size?: string;
   /** Resolution tier from the model's dialect ("1K"/"2K"/"4K"…). */
+  sizingMode?: ImageSizingMode;
   resolution?: string;
   /** Quality tier from the model's dialect ("low"/"medium"/"high"). */
   quality?: string;
@@ -285,7 +287,7 @@ function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<I
       n: ctx.n ?? 1,
       ...imageRequestParams(
         ctx.model.caps,
-        { aspect: ctx.aspect, resolution: ctx.resolution, quality: ctx.quality, size: ctx.size },
+        { aspect: ctx.aspect, resolution: ctx.resolution, quality: ctx.quality, size: ctx.size, sizingMode: ctx.sizingMode },
         // The first input is the picture being edited; its size lets a
         // dialect keep the framing at the requested tier (qwen-image).
         { edit: images.length > 0, ...(images[0] ? { inputSize: inputImageSize(images[0]) } : {}) },
@@ -314,7 +316,7 @@ function bill(ctx: RunContext, task: "image-gen" | "image-edit", result: ImageRe
  * 用的是**请求的**值。
  */
 function specOf(ctx: RunContext): { size?: string; quality?: string } {
-  return { size: ctx.size || ctx.resolution, quality: ctx.quality };
+  return imageSelectedSpec(ctx.model.caps, { ...ctx, sizingMode: ctx.sizingMode ?? (ctx.size && !ctx.model.caps?.dialect ? "exact" : undefined) });
 }
 
 /**

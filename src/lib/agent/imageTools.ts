@@ -11,6 +11,7 @@
  * cost them money by the time they see it.
  */
 
+import { imageSelectedSpec } from "../image";
 import { imageCostFor } from "../ai/configDb";
 import { keepsTransparentBackground } from "../ai/imageDialects";
 import { fileExists } from "../fs/fileio";
@@ -110,7 +111,7 @@ async function proposeIllustration(
     modelId: model.id,
     modelName: model.name,
     // 规格一并交上去：按尺寸 / 质量分档的组，不带规格会在卡上估成 $0。
-    costUsd: imageCostFor(model, 1, undefined, { size: spec.resolution, quality: spec.quality }),
+    costUsd: imageCostFor(model, 1, undefined, imageSelectedSpec(model.caps, spec)),
     aspect: spec.aspect,
     resolution: spec.resolution,
     quality: spec.quality,

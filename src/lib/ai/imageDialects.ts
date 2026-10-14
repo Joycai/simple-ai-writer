@@ -59,7 +59,7 @@
 
 /** The declared dialect ids. Absent = generic (free-form size list). */
 export type ImageDialect =
-  | "nanobanana" | "gpt-image-2" | "wan2.7" | "qwen-image"
+  | "nanobanana" | "gpt-image-2" | "gpt-image-2.5" | "grok-imagine" | "wan2.7" | "qwen-image"
   | "seedream-5-pro" | "seedream-5-lite" | "seedream-4";
 
 /** The generic wire fields a dialect resolves the author's choices into. */
@@ -72,10 +72,12 @@ export interface ImageWireParams {
   imageSize?: string;
   /** OpenAI quality tier ("low" | "medium" | "high"). */
   quality?: string;
+  /** Native fields for an OpenAI-shaped images endpoint, e.g. xAI. */
+  extraBody?: Record<string, unknown>;
 }
 
 /** What the author picked in the UI; the dialect turns it into wire fields. */
-interface ImageParamSelection {
+export interface ImageParamSelection {
   /**
    * Requested aspect ratio, or undefined when nobody asked for one. The
    * difference matters most on edits: an explicit aspect means "recompose to
@@ -88,10 +90,178 @@ interface ImageParamSelection {
   resolution?: string;
   /** Quality tier from the dialect's own list. "" = send nothing. */
   quality?: string;
+  sizingMode?: ImageSizingMode;
+  size?: string;
+}
+
+export type ImageSizingMode = "ratio" | "exact";
+
+export interface ImagePixelConstraints {
+  step?: number;
+  minEdge?: number;
+  maxEdge?: number;
+  minPixels?: number;
+  maxPixels?: number;
+  maxRatio?: number;
+}
+
+/** Per-model menus replace preset menus; absent fields inherit the preset. */
+export interface ImageCapabilityOverrides {
+  modes?: ImageSizingMode[];
+  aspects?: string[];
+  resolutions?: string[];
+  qualities?: string[];
+  pixels?: ImagePixelConstraints;
+}
+
+interface ImageOutputCaps {
+  dialect?: ImageDialect;
+  overrides?: ImageCapabilityOverrides;
+  defaults?: ImageParamSelection;
+}
+
+interface ImageOutputSpec {
+  modes: readonly ImageSizingMode[];
+  aspects: readonly string[];
+  resolutions: readonly string[];
+  qualities: readonly string[];
+  pixels: ImagePixelConstraints;
+}
+
+/** Menus and validation are shared by configuration, the dialog and callers. */
+export function imageOutputSpec(caps?: ImageOutputCaps): ImageOutputSpec {
+  const preset = imageDialect(caps?.dialect);
+  const overrides = caps?.overrides;
+  return {
+    modes: overrides?.modes ?? preset?.modes ?? (!preset ? ["ratio", "exact"] : ["ratio"]),
+    aspects: overrides?.aspects ?? preset?.aspects ?? WIDE_ASPECTS,
+    resolutions: overrides?.resolutions ?? preset?.resolutions ?? [""],
+    qualities: overrides?.qualities ?? preset?.qualities ?? [],
+    pixels: { ...preset?.pixels, ...overrides?.pixels },
+  };
+}
+
+/** Explicit blanks mean endpoint default; only undefined inherits a model default. */
+export function imageSelection(caps: ImageOutputCaps | undefined, selection: ImageParamSelection): ImageParamSelection {
+  const spec = imageOutputSpec(caps);
+  const result = { ...caps?.defaults };
+  for (const key of ["aspect", "resolution", "quality", "size", "sizingMode"] as const) {
+    if (selection[key] !== undefined) Object.assign(result, { [key]: selection[key] });
+  }
+  if (selection.sizingMode === undefined && (selection.aspect !== undefined || selection.resolution !== undefined)) result.sizingMode = "ratio";
+  result.sizingMode ??= spec.modes[0];
+  // Inactive fields must not influence requests or billing.
+  if (result.sizingMode === "exact") {
+    delete result.aspect;
+    delete result.resolution;
+  } else {
+    delete result.size;
+  }
+  return result;
+}
+
+type ImageOutputError = "mode" | "aspect" | "resolution" | "quality" | "dimensions" | "step" | "edge" | "pixels" | "ratio";
+
+export class ImageOutputValidationError extends Error {
+  constructor(readonly code: ImageOutputError) {
+    super(`Invalid image output parameter: ${code}`);
+    this.name = "ImageOutputValidationError";
+  }
+}
+
+export function validateImageSelection(caps: ImageOutputCaps | undefined, sel: ImageParamSelection, checkMode = true): ImageOutputError | undefined {
+  const spec = imageOutputSpec(caps);
+  if (checkMode && sel.sizingMode && !spec.modes.includes(sel.sizingMode)) return "mode";
+  if (sel.sizingMode === "exact" && (caps?.dialect === "nanobanana" || caps?.dialect === "grok-imagine")) return "mode";
+  if (sel.quality && !spec.qualities.includes(sel.quality)) return "quality";
+  if (sel.sizingMode !== "exact") {
+    // Legacy callers retain dialect fallback behaviour; overrides are strict.
+    if (sel.aspect && caps?.overrides?.aspects && !spec.aspects.includes(sel.aspect)) return "aspect";
+    if (sel.resolution && caps?.overrides?.resolutions && !spec.resolutions.includes(sel.resolution)) return "resolution";
+    return undefined;
+  }
+  const match = /^(\d+)[x*](\d+)$/.exec(sel.size?.trim() ?? "");
+  if (!match) return "dimensions";
+  const [w, h] = match.slice(1).map(Number);
+  if (![w, h].every((n) => Number.isSafeInteger(n) && n > 0)) return "dimensions";
+  const p = spec.pixels;
+  if (p.step && (w % p.step || h % p.step)) return "step";
+  if ((p.minEdge && Math.min(w, h) < p.minEdge) || (p.maxEdge && Math.max(w, h) > p.maxEdge)) return "edge";
+  if ((p.minPixels && w * h < p.minPixels) || (p.maxPixels && w * h > p.maxPixels)) return "pixels";
+  if (p.maxRatio && Math.max(w, h) / Math.min(w, h) > p.maxRatio) return "ratio";
+  return undefined;
+}
+
+/** Reject inconsistent editable configuration before saving, without paid probes. */
+export function validateImageOutputConfig(caps: ImageOutputCaps): ImageOutputError | undefined {
+  const spec = imageOutputSpec(caps);
+  const p = spec.pixels;
+  if (!spec.modes.length) return "mode";
+  // Gemini has no pixel-size field. An override cannot invent an API spelling.
+  if ((caps.dialect === "nanobanana" || caps.dialect === "grok-imagine") && spec.modes.includes("exact")) return "mode";
+  if (spec.aspects.some((a) => a !== "auto" && (!/^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(a) || a.split(":").some((n) => Number(n) <= 0)))) return "aspect";
+  const preset = imageDialect(caps.dialect);
+  // Table-backed/computed dialects cannot gain tiers without a conversion rule.
+  if (preset && caps.dialect !== "nanobanana" && caps.dialect !== "grok-imagine" && spec.resolutions.some((r) => r && !preset.resolutions.includes(r))) return "resolution";
+  for (const [key, n] of Object.entries(p)) {
+    if (!Number.isFinite(n) || n < 1 || (key !== "maxRatio" && !Number.isSafeInteger(n))) return "dimensions";
+  }
+  if (p.minEdge && p.maxEdge && p.minEdge > p.maxEdge) return "edge";
+  if (p.minPixels && p.maxPixels && p.minPixels > p.maxPixels) return "pixels";
+  const defaults = caps.defaults;
+  if (!defaults) return undefined;
+  if (defaults.aspect && !spec.aspects.includes(defaults.aspect)) return "aspect";
+  if (defaults.resolution && !spec.resolutions.includes(defaults.resolution)) return "resolution";
+  if (defaults.quality && !spec.qualities.includes(defaults.quality)) return "quality";
+  if (defaults.size) {
+    const error = validateImageSelection(caps, { sizingMode: "exact", size: defaults.size });
+    if (error) return error;
+  }
+  return validateImageSelection(caps, imageSelection(caps, {}));
+}
+
+/** Untrusted config backups are narrowed field by field, including empty menus. */
+export function parseImageOutputCaps(raw: Record<string, unknown>): Pick<ImageOutputCaps, "overrides" | "defaults"> {
+  const result: Pick<ImageOutputCaps, "overrides" | "defaults"> = {};
+  const object = (v: unknown): Record<string, unknown> | undefined =>
+    v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : undefined;
+  const o = object(raw.overrides);
+  if (o) {
+    const overrides: ImageCapabilityOverrides = {};
+    for (const key of ["aspects", "resolutions", "qualities"] as const) {
+      if (Array.isArray(o[key])) overrides[key] = [...new Set(o[key].filter((v): v is string => typeof v === "string"))];
+    }
+    if (Array.isArray(o.modes)) {
+      const modes = o.modes.filter((v): v is ImageSizingMode => v === "ratio" || v === "exact");
+      if (modes.length) overrides.modes = [...new Set(modes)];
+    }
+    const p = object(o.pixels);
+    if (p) {
+      const pixels: ImagePixelConstraints = {};
+      for (const key of ["step", "minEdge", "maxEdge", "minPixels", "maxPixels", "maxRatio"] as const) {
+        const n = p[key];
+        if (typeof n === "number" && Number.isFinite(n) && n > 0 && (key === "maxRatio" ? n >= 1 : Number.isSafeInteger(n))) pixels[key] = n;
+      }
+      if (Object.keys(pixels).length) overrides.pixels = pixels;
+    }
+    if (Object.keys(overrides).length) result.overrides = overrides;
+  }
+  const d = object(raw.defaults);
+  if (d) {
+    const defaults: ImageParamSelection = {};
+    for (const key of ["aspect", "resolution", "quality", "size"] as const) {
+      if (typeof d[key] === "string") defaults[key] = d[key];
+    }
+    if (d.sizingMode === "ratio" || d.sizingMode === "exact") defaults.sizingMode = d.sizingMode;
+    if (Object.keys(defaults).length) result.defaults = defaults;
+  }
+  return result;
 }
 
 export interface ImageDialectSpec {
   id: ImageDialect;
+  modes?: readonly ImageSizingMode[];
+  pixels?: ImagePixelConstraints;
   /** Aspect ratios this dialect's models accept, in display order. */
   aspects: readonly string[];
   /** Resolution tiers offered. "" renders as "default" and sends nothing. */
@@ -131,7 +301,8 @@ const WIDE_ASPECTS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "
  * documented presets exactly; 2K tops out at the documented non-experimental
  * ceiling (2560x1440 at 16:9); 4K at the hard maximum (3840x2160 at 16:9).
  */
-const GPT_SHORT_SIDE: Record<string, number> = { "1K": 1024, "2K": 1440, "4K": 2160 };
+// 1.5K is an app convenience tier (1280 short-side), not an API enum.
+const GPT_SHORT_SIDE: Record<string, number> = { "1K": 1024, "1.5K": 1280, "2K": 1440, "4K": 2160 };
 const GPT_MAX_LONG = 3840;
 
 const round16 = (n: number): number => Math.max(16, Math.round(n / 16) * 16);
@@ -173,8 +344,10 @@ const NANOBANANA: ImageDialectSpec = {
 
 const GPT_IMAGE_2: ImageDialectSpec = {
   id: "gpt-image-2",
+  modes: ["ratio", "exact"],
+  pixels: { step: 16, maxEdge: 3840, maxPixels: 3840 * 2160, maxRatio: 3 },
   aspects: WIDE_ASPECTS,
-  resolutions: ["1K", "2K", "4K"],
+  resolutions: ["1K", "1.5K", "2K", "4K"],
   qualities: ["low", "medium", "high"],
   params: (sel, opts) => ({
     // The aspect rides along untouched: the images route ignores it, but the
@@ -191,6 +364,27 @@ const GPT_IMAGE_2: ImageDialectSpec = {
     ...(opts?.edit && !sel.aspect
       ? {}
       : { size: gptImageSize(sel.aspect ?? "1:1", sel.resolution || "1K") }),
+    ...(sel.quality ? { quality: sel.quality } : {}),
+  }),
+};
+
+// Official API reference checked 2026-10-14: 2.5 additionally accepts xhigh/max.
+const GPT_IMAGE_2_5: ImageDialectSpec = {
+  ...GPT_IMAGE_2, id: "gpt-image-2.5", qualities: ["low", "medium", "high", "xhigh", "max"],
+};
+
+// xAI's native fields live in extraBody, never in Gemini's imageConfig.
+const GROK_IMAGINE: ImageDialectSpec = {
+  id: "grok-imagine",
+  aspects: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "2:1", "1:2", "19.5:9", "9:19.5", "20:9", "9:20", "21:9", "5:2"],
+  resolutions: ["", "1K", "2K"],
+  qualities: ["low", "medium", "auto"],
+  params: (sel) => ({
+    ...(sel.aspect ? { aspect: sel.aspect } : {}),
+    extraBody: {
+      ...(sel.aspect ? { aspect_ratio: sel.aspect } : {}),
+      ...(sel.resolution ? { resolution: sel.resolution.toLowerCase() } : {}),
+    },
     ...(sel.quality ? { quality: sel.quality } : {}),
   }),
 };
@@ -229,6 +423,8 @@ export function wanImageSize(aspect: string, tier: string): string {
 
 const WAN_2_7: ImageDialectSpec = {
   id: "wan2.7",
+  modes: ["ratio", "exact"],
+  pixels: { minEdge: 768, maxEdge: 4096 },
   aspects: WIDE_ASPECTS,
   // 1K first as the cost-safe default; the endpoint's own default is 2K, and
   // 4K only exists on wan2.7-image-pro — a plain wan2.7-image answers a 4K
@@ -275,6 +471,8 @@ export function qwenImageSize(aspect: string, tier: string): string {
 
 const QWEN_IMAGE: ImageDialectSpec = {
   id: "qwen-image",
+  modes: ["ratio", "exact"],
+  pixels: { minPixels: 512 * 512, maxPixels: 2048 * 2048 },
   aspects: WIDE_ASPECTS,
   // 1K first and no "default" entry: the endpoint's default is the 2K tier at
   // twice the price, so "send nothing" is the one choice this dialect never
@@ -346,6 +544,10 @@ function seedreamDialect(id: ImageDialect, table: SeedreamTable): ImageDialectSp
   const tiers = Object.keys(table);
   return {
     id,
+    modes: ["ratio", "exact"],
+    pixels: id === "seedream-5-pro"
+      ? { minPixels: 921600, maxPixels: 4624220 }
+      : { minPixels: 3686400, maxPixels: 16777216 },
     aspects: SEEDREAM_ASPECTS,
     resolutions: tiers,
     params: (sel) => {
@@ -368,7 +570,7 @@ const SEEDREAM_4 = seedreamDialect("seedream-4", SEEDREAM_4X);
 export const SEEDREAM_DIALECTS: readonly ImageDialect[] = ["seedream-5-pro", "seedream-5-lite", "seedream-4"];
 
 export const IMAGE_DIALECTS: readonly ImageDialectSpec[] = [
-  NANOBANANA, GPT_IMAGE_2, WAN_2_7, QWEN_IMAGE, SEEDREAM_5_PRO, SEEDREAM_5_LITE, SEEDREAM_4,
+  NANOBANANA, GPT_IMAGE_2, GPT_IMAGE_2_5, GROK_IMAGINE, WAN_2_7, QWEN_IMAGE, SEEDREAM_5_PRO, SEEDREAM_5_LITE, SEEDREAM_4,
 ];
 
 /** The spec for a declared dialect, or null for generic / unknown values. */

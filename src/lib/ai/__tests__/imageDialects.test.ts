@@ -164,7 +164,7 @@ describe("dialect params", () => {
 
   it("every dialect's aspect list stays within the shared vocabulary", () => {
     for (const spec of IMAGE_DIALECTS) {
-      for (const a of spec.aspects) expect(a).toMatch(/^\d+:\d+$/);
+      for (const a of spec.aspects) expect(a).toMatch(/^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/);
       // The prompt-drafting step only ever proposes these five; every dialect
       // must accept them or a drafted aspect would be unselectable.
       for (const a of ["1:1", "3:4", "4:3", "16:9", "9:16"]) {

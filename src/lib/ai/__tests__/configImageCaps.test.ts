@@ -30,6 +30,8 @@ const { parseConfigBundle, CONFIG_BACKUP_KIND } = await import("../configTransfe
 type ImageCaps = import("../configDb").ImageCaps;
 
 const full: Required<ImageCaps> = {
+  overrides: { qualities: ["high"], modes: ["ratio", "exact"], pixels: { step: 64 } },
+  defaults: { aspect: "3:2", quality: "high", sizingMode: "ratio" },
   edit: false,
   dialect: "gpt-image-2",
   sizes: ["1024x1024", "1536x1024"],
@@ -53,7 +55,7 @@ describe("parseImageCaps", () => {
       route: "ftp",
       dialect: "dall-e-9",
     });
-    expect(out).toEqual({ edit: false, asyncTask: false, comfy: full.comfy });
+    expect(out).toEqual({ overrides: full.overrides, defaults: full.defaults, edit: false, asyncTask: false, comfy: full.comfy });
   });
 
   it("keeps only the text entries of a mixed size list", () => {

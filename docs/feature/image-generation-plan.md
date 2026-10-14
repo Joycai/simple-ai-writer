@@ -16,6 +16,60 @@
 
 ---
 
+## 2026-10-14: per-model output capabilities and sizing modes
+
+Image output remains one declared capability system: `ImageCaps.dialect` selects
+the API parameter vocabulary, `overrides` replaces individual capability menus
+or pixel limits, and `defaults` supplies request choices. They travel in the
+existing caps JSON through config backup/import; no database migration is needed.
+Keeping these separate prevents a relay's narrower menu from changing every
+model in that family, and prevents a UI label from inventing an API field.
+
+- Omitted override fields inherit the preset. An explicit empty menu removes its
+  choices. Numeric constraints inherit field by field; an absent limit does not
+  override a preset limit. Defaults distinguish undefined (inherit) from an
+  explicit blank (use the preset/endpoint default behaviour).
+- The generation dialog reads the effective capabilities and resets on model
+  identity **and** caps changes, including switches between two models sharing a
+  dialect. The model drawer exposes menus, constraints, defaults, and a switch
+  restoring preset inheritance. Changing dialect clears the old overrides and
+  defaults because their vocabulary belongs to the old preset.
+- `ratio` and `exact` are mutually exclusive selections. Ratio mode removes
+  explicit pixels; exact mode removes ratio and resolution tier, retaining
+  quality. Explicit ratio choices from another caller supersede an exact-mode
+  default. Exact dimensions are validated rather than rounded. Step, minimum and
+  maximum edge/area, and maximum long/short ratio are shared by the dialog and
+  request resolver; declared pixel limits also check computed ratio output.
+- `lib/image.imageRequestParams` is the request seam used by interactive sessions
+  and approved illustrations. `imageSelectedSpec` supplies the active size and
+  quality to estimates and usage accounting so hidden/inactive fields and model
+  defaults cannot produce different billing keys. Existing fee groups, prices,
+  snapshots, and `costOf` remain authoritative.
+- GPT presets support both modes. GPT's 1K/1.5K/2K/4K choices are app conversion
+  tiers, not upstream enums: their short sides are 1024/1280/1440/2160 before
+  ratio calculation, rounding and the edge cap. Seedream keeps its documented
+  tier-by-ratio lookup; unsupported table tiers cannot be added through a menu
+  override. Gemini and Grok use native ratio/tier fields and have no exact-pixel
+  mode. Wan, Qwen and Seedream support exact pixels with their preset bounds;
+  Wan edits additionally cap each side at 2048. Generic legacy callers retain
+  their prior free-form size behaviour until they explicitly select a new mode.
+
+The added GPT Image 2.5 preset shares GPT sizing but adds `xhigh`/`max` qualities.
+The Grok Imagine 2.0 preset sends `aspect_ratio` and lowercase `resolution` through
+the existing images API extra-body path, with `low`/`medium`/`auto` quality; it
+seeds the images route without automatically declaring edit support. This is
+generation parameter support, not a new native xAI edit adapter.
+
+Official references checked on 2026-10-14 (documentation, no paid capability
+probes): [OpenAI image API](https://developers.openai.com/api/reference/resources/images/methods/generate)
+documents a step of 16 and the GPT 2.5 qualities;
+[xAI image generation](https://docs.x.ai/developers/model-capabilities/images/generation)
+documents 1k/2k and its separate ratio/resolution fields. Author-declared relay
+overrides can differ; they remain local to that model and do not rewrite API
+parameter mappings.
+
+---
+
 ## 1. 现状盘点
 
 ### 1.1 已经存在的地基

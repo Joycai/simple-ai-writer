@@ -70,11 +70,12 @@ import {
 } from "../../../lib/ai/configDb";
 import { clampVideoFps, MAX_VIDEO_FPS, MIN_VIDEO_FPS } from "../../../lib/ai/videoInput";
 import { ASR_DEFAULT_MODEL_ID, asrIdMismatch } from "../../../lib/asr/formats";
-import { SEEDREAM_DIALECTS, type ImageDialect } from "../../../lib/ai/imageDialects";
+import { validateImageOutputConfig, SEEDREAM_DIALECTS, type ImageDialect } from "../../../lib/ai/imageDialects";
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
 import { ChipDivider, DashChip, Field, Fold, Hint, Note, Section, Subhead, ToggleField } from "./ModelDrawerBits";
 import { Select } from "../../common/Select";
+import { ImageOutputFields } from "./ImageOutputFields";
 import styles from "../settingsCommon.module.css";
 import hub from "./ProvidersModels.module.css";
 import s from "./ModelDrawer.module.css";
@@ -153,6 +154,8 @@ const DIALECT_LABEL_KEY: Record<string, string> = {
   "": "aiConfig.models.capsDialectGeneric",
   "nanobanana": "aiConfig.models.capsDialectNanobanana",
   "gpt-image-2": "aiConfig.models.capsDialectGptImage2",
+  "gpt-image-2.5": "imageOutput.gpt25",
+  "grok-imagine": "imageOutput.grok",
   "wan2.7": "aiConfig.models.capsDialectWan27",
   "qwen-image": "aiConfig.models.capsDialectQwenImage",
   "seedream-5-pro": "aiConfig.models.capsDialectSeedream5Pro",
@@ -298,6 +301,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     capsRoute: stored.route || (comfySeed ? "comfyui" : ""),
     // "" = generic (the free-form sizes list); otherwise a declared dialect.
     capsDialect: stored.dialect,
+    imageOutput: { overrides: stored.overrides, defaults: stored.defaults },
     reasoningEffort: existing?.reasoningEffort ?? ("default" as ReasoningEffort),
     // "auto" ↔ stored undefined.
     thinkingCategory: (existing?.thinkingCategory ?? "auto") as ThinkingCategoryId | "auto",
@@ -622,6 +626,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     asyncTask: capsAsync,
     sizes,
     comfyWorkflow,
+    ...form.imageOutput,
   };
   const asyncShown = showsAsyncToggle(provider?.apiStandard, imageDraft);
 
@@ -728,6 +733,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             standard: channel ? routeProvider(channel, activeFamily(existing, channel))?.apiStandard : undefined,
           })
         : undefined;
+      const outputError = caps && validateImageOutputConfig(caps);
+      if (outputError) { setError(t(`imageOutput.errors.${outputError}`)); return; }
       const shared = {
         retrieval: existing?.retrieval,
         providerId,
@@ -989,6 +996,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               ...(form.capsRoute ? { route: form.capsRoute as ImageRoute } : {}),
               ...(!isComfy && form.capsDialect ? { dialect: form.capsDialect as ImageDialect } : {}),
               ...(sizes.length ? { sizes } : {}),
+              ...form.imageOutput,
             }
           : undefined,
       }, provider.apiStandard, provider.baseUrl, provider.platform, upstreamChoice, catalogId)
@@ -1905,6 +1913,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                     { value: "", label: t("aiConfig.models.capsDialectGeneric") },
                     { value: "nanobanana", label: t("aiConfig.models.capsDialectNanobanana") },
                     { value: "gpt-image-2", label: t("aiConfig.models.capsDialectGptImage2") },
+                    { value: "gpt-image-2.5", label: t("imageOutput.gpt25") },
+                    { value: "grok-imagine", label: t("imageOutput.grok") },
                     { value: "wan2.7", label: t("aiConfig.models.capsDialectWan27") },
                     { value: "qwen-image", label: t("aiConfig.models.capsDialectQwenImage") },
                     { value: "seedream-5-pro", label: t("aiConfig.models.capsDialectSeedream5Pro") },
@@ -1916,10 +1926,12 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                     setForm((f) => ({
                       ...f,
                       capsDialect: v as ImageDialect | "",
+                      imageOutput: { overrides: undefined, defaults: undefined },
                       // Wan only exists behind DashScope's native protocol, so
                       // picking the dialect answers the route question too.
                       // Only fills a blank — an explicit route choice stands.
                       ...(v === "wan2.7" && !f.capsRoute ? { capsRoute: "dashscope" } : {}),
+                      ...(v === "grok-imagine" && !f.capsRoute ? { capsRoute: "images-api" } : {}),
                       // Same for Seedream: its body only exists on the ark route.
                       ...(SEEDREAM_DIALECTS.includes(v as ImageDialect) && !f.capsRoute ? { capsRoute: "ark" } : {}),
                     }));
@@ -1927,7 +1939,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                     // images (Nano Banana natively, GPT-Image via /images/edits,
                     // Wan up to 9 refs) — seed the capability so the common
                     // case needs no thought.
-                    if (v) setCapsEdit(true);
+                    if (v) setCapsEdit(v !== "grok-imagine");
                   }} />
               </Field>
             </Fold>
@@ -1984,6 +1996,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                   onChange={(e) => setForm({ ...form, capsSizes: e.target.value })} />
               </Field>
             </Fold>
+            <ImageOutputFields dialect={isComfy ? undefined : form.capsDialect || undefined}
+              value={form.imageOutput} onChange={(imageOutput) => setForm((f) => ({ ...f, imageOutput: { overrides: imageOutput.overrides, defaults: imageOutput.defaults } }))} />
             <Fold open={asyncShown}>
               <ToggleField
                 title={t("aiConfig.models.capsAsyncLabel")}
