@@ -30,6 +30,7 @@
  * key they pass (see agentStore.AutoApproveState).
  */
 
+import type { McpProposal } from "./toolTypes";
 import type { Proposal } from "./registry";
 
 /**
@@ -85,6 +86,8 @@ export interface AutoApproveState {
    * next message. This mirrors `illustrateRun`.
    */
   commandRun?: unknown;
+  /** Explicit MCP-only grants; never inferred from manuscript approval. */
+  mcpServers?: McpSessionGrant[];
 }
 
 /** The part of a command proposal a grant is judged on. */
@@ -225,4 +228,16 @@ export function grantsCommand(
 /** How the button and the indicator chip should word themselves. */
 export function autoApproveScope(key: unknown): "session" | "run" {
   return isChatAutoApproveKey(key) ? "session" : "run";
+}
+
+/** One server's discovered definitions, authorised only on this live surface. */
+type McpSessionGrant = Pick<McpProposal, "serverId" | "serverName" | "serverUrl" | "revision"> & {
+  tools: Record<string, string>;
+};
+
+export function grantsMcp(state: AutoApproveState | null, key: unknown, proposal: McpProposal): boolean {
+  if (!state || key === undefined || state.key !== key) return false;
+  return !!state.mcpServers?.some((grant) => grant.serverId === proposal.serverId
+    && grant.serverUrl === proposal.serverUrl && grant.revision === proposal.revision
+    && Object.prototype.hasOwnProperty.call(grant.tools, proposal.tool) && grant.tools[proposal.tool] === proposal.toolSchema);
 }

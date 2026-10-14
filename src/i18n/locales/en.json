@@ -2,7 +2,7 @@
   "mcp": {
     "enable": "Enable MCP tools",
     "title": "MCP servers (Beta)",
-    "description": "Connect external tools to the assistant. Streamable HTTP servers only; every tool call asks for approval.",
+    "description": "Connect external tools to the assistant. Streamable HTTP only; approve each call or allow a server for this session.",
     "privacy": "Headers are stored in the OS keyring. Server connections stay on this computer and are excluded from configuration backups. Importing the same name replaces that server’s connection and headers.",
     "desktopOnly": "MCP connections require the desktop app.",
     "importLabel": "Server configuration (JSON)",
@@ -18,7 +18,12 @@
     "approvalTitle": "Call an MCP tool",
     "approvalNote": "These arguments will be sent to the external server. It may modify files or charge for work. External costs are unknown and are not recorded in app usage. Stopping the request may not stop work already submitted.",
     "server": "Server",
-    "tool": "Tool"
+    "tool": "Tool",
+    "allowSession": "Allow for this session",
+    "allowRun": "Allow for this task",
+    "allowSessionHint": "Allow currently discovered tools on {{server}} for this session/task, including calls that may charge or modify files. Connection or tool changes require new approval. Revoke using the auto-approval indicator.",
+    "sessionChip": "MCP allowed · {{servers}}",
+    "revokeSession": "{{servers}} can run automatically (including paid calls); click to revoke all auto-approval"
   },
   "common": {
     "loading": "Loading…",

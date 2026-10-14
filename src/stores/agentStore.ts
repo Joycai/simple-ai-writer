@@ -73,7 +73,7 @@ import { sessionLabel } from "../lib/agent/sessionDb";
 import { appendAgentEventTo } from "../lib/agent/events";
 import { undoWrites } from "../lib/agent/undo";
 import { turnWrites } from "../lib/agent/planLedger";
-import { COMMAND_GRANT_MAX, ILLUSTRATE_GRANT_MAX, grants, grantsAppend, grantsCommand, grantsIllustrate, isAutoApprovable, isChatAutoApproveKey } from "../lib/agent/autoApprove";
+import { COMMAND_GRANT_MAX, ILLUSTRATE_GRANT_MAX, grants, grantsAppend, grantsCommand, grantsIllustrate, grantsMcp, isAutoApprovable, isChatAutoApproveKey } from "../lib/agent/autoApprove";
 import type { PlanDecision } from "../lib/agent/plan";
 import { markTaskAborted, markTaskPaused, markTaskResumed } from "../lib/agent/taskWorkspace";
 import { chatAgentPreset } from "../lib/agent/packs";
@@ -264,6 +264,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           illustrateRun: held?.illustrateRun,
           commandLeft: held?.commandLeft ?? 0,
           commandRun: held?.commandRun,
+          mcpServers: held?.mcpServers,
         },
       };
     }),
@@ -285,6 +286,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           illustrateRun: held?.illustrateRun,
           commandLeft: held?.commandLeft ?? 0,
           commandRun: held?.commandRun,
+          mcpServers: held?.mcpServers,
         },
       };
     }),
@@ -304,6 +306,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           // number picked on this card is the whole remaining authorisation.
           commandLeft: Math.max(1, Math.min(COMMAND_GRANT_MAX, Math.floor(count))),
           commandRun: runId,
+          mcpServers: held?.mcpServers,
         },
       };
     }),
@@ -323,9 +326,25 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           illustrateRun: runId,
           commandLeft: held?.commandLeft ?? 0,
           commandRun: held?.commandRun,
+          mcpServers: held?.mcpServers,
         },
       };
     }),
+
+  grantMcpServer: (key, proposal) => set((s) => {
+    if (key === undefined || !proposal.serverTools) return {};
+    const held = s.autoApprove?.key === key ? s.autoApprove : null;
+    return { autoApprove: {
+      key, proposals: !!held?.proposals, plans: !!held?.plans,
+      appendPaths: held?.appendPaths ?? [], illustrateLeft: held?.illustrateLeft ?? 0,
+      illustrateRun: held?.illustrateRun, commandLeft: held?.commandLeft ?? 0,
+      commandRun: held?.commandRun,
+      mcpServers: [...(held?.mcpServers ?? []).filter((g) => g.serverId !== proposal.serverId), {
+        serverId: proposal.serverId, serverName: proposal.serverName, serverUrl: proposal.serverUrl,
+        revision: proposal.revision, tools: { ...proposal.serverTools },
+      }],
+    } };
+  }),
 
   clearAutoApprove: () => set({ autoApprove: null }),
 
@@ -343,7 +362,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // Counted command batch. Read commands never enter this queue;
         // dangerous-looking writes are re-judged and always get a card.
         || (proposal.kind === "command"
-          && grantsCommand(get().autoApprove, item.autoApproveKey, runId, proposal));
+          && grantsCommand(get().autoApprove, item.autoApproveKey, runId, proposal))
+        || (proposal.kind === "mcp" && grantsMcp(get().autoApprove, item.autoApproveKey, proposal));
       if (covered) {
         if (proposal.kind === "command") {
           // Spend before starting: two proposals can arrive close together.

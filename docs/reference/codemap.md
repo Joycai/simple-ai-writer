@@ -640,7 +640,7 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 
 ### `src/lib/mcp/`
 
-`config.ts` stores machine-local endpoints and keyring header credentials; `client.ts` owns bounded Streamable HTTP sessions, JSON/SSE and tool pagination; `tools.ts` bridges discovery and per-call approval; `results.ts` saves images to `assets/mcp` and bounded model reports with full cache files. MCP appears only on desktop approval surfaces with its Beta and an enabled server. The registry carries two compact bridge schemas; external tool schemas arrive on demand. Design, protocol limits and verification: [mcp-support.md](../feature/agent/mcp-support.md).
+`config.ts` stores machine-local endpoints and keyring header credentials; `client.ts` owns bounded Streamable HTTP sessions, JSON/SSE and tool pagination; `tools.ts` returns bounded complete schemas for small services, caches discovery per run, and bridges approval (per-call by default, or an explicit revocable server/session grant); `results.ts` saves images to `assets/mcp` and bounded model reports with full cache files. MCP appears only on desktop approval surfaces with its Beta and an enabled server. The registry carries two compact bridge schemas; external tool schemas arrive on demand. Design, protocol limits and verification: [mcp-support.md](../feature/agent/mcp-support.md).
 
 ### `src/lib/cli/`
 

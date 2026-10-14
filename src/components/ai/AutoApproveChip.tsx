@@ -45,7 +45,8 @@ export function AutoApproveChip({ owner, absent = false, variant = "chip" }: {
   const appendCount = mine ? mine.appendPaths.length : 0;
   const illustrateLeft = mine ? mine.illustrateLeft : 0;
   const commandLeft = mine ? mine.commandLeft : 0;
-  if (!mine || (!blanket && appendCount === 0 && illustrateLeft === 0 && commandLeft === 0)) {
+  const mcpServers = mine?.mcpServers ?? [];
+  if (!mine || (!blanket && appendCount === 0 && illustrateLeft === 0 && commandLeft === 0 && mcpServers.length === 0)) {
     if (!absent) return null;
     // Not a control: a grant is given on a card, never from here.
     return (
@@ -79,6 +80,9 @@ export function AutoApproveChip({ owner, absent = false, variant = "chip" }: {
     commandLeft > 0
       ? t("ai.autoApprove.chipCommands", { defaultValue: "命令连批 · 剩 {{n}} 条", n: commandLeft })
       : "",
+    mcpServers.length > 0
+      ? t("mcp.sessionChip", { servers: mcpServers.map((s) => s.serverName).join(" · ") })
+      : "",
   ].filter(Boolean);
   const label = parts.join(" · ");
 
@@ -88,7 +92,9 @@ export function AutoApproveChip({ owner, absent = false, variant = "chip" }: {
       className={footer ? styles.footerChip : styles.chip}
       onClick={clearAutoApprove}
       title={
-        blanket
+        mcpServers.length > 0
+          ? t("mcp.revokeSession", { servers: mcpServers.map((s) => s.serverName).join(" · ") })
+          : blanket
           ? t("ai.autoApprove.off", { defaultValue: "点击恢复逐条审批" })
           : appendCount > 0
             ? t("ai.autoApprove.offAppend", {

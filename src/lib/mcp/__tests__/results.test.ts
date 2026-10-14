@@ -18,6 +18,17 @@ describe("MCP results", () => {
     expect(result.report).toContain("reported an error"); expect(result.report).toContain("Truncated");
     expect(result.report.length).toBeLessThan(13_000); expect(write.mock.calls[0][1]).toContain(long);
   });
+  it("includes identical text/structured JSON only once while keeping distinct text", async () => {
+    const data = { modelId: 241, parameters: ["size"] };
+    const result = await saveMcpResult("/project", { content: [
+      { type: "text", text: JSON.stringify(data, null, 2) }, { type: "text", text: "Keep this note." },
+    ], structuredContent: data });
+    expect(result.report.match(/modelId/g)).toHaveLength(1);
+    expect(result.report).toContain("Keep this note.");
+    expect(write.mock.calls[0][1].match(/modelId/g)).toHaveLength(1);
+    const distinct = await saveMcpResult("/project", { content: [{ type: "text", text: "Summary" }], structuredContent: data });
+    expect(distinct.report).toContain(JSON.stringify(data));
+  });
   it("does not fetch remote links or accept server-controlled file paths", async () => {
     const result = await saveMcpResult("/project", { content: [{ type: "resource_link", uri: "file:///etc/passwd" }, { type: "image", mimeType: "image/svg+xml", data: btoa("<svg/>") }] });
     expect(writeBinary).not.toHaveBeenCalled(); expect(result.report).toContain("not fetched");

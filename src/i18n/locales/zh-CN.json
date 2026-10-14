@@ -2,7 +2,7 @@
   "mcp": {
     "enable": "启用 MCP 工具",
     "title": "MCP 服务器（Beta）",
-    "description": "让助手调用外部工具。目前支持 Streamable HTTP；每次调用都需批准。",
+    "description": "让助手连接外部工具。仅支持 Streamable HTTP；默认每次审批，也可在卡上允许本次会话。",
     "privacy": "请求头保存在系统钥匙串中。连接配置仅留在本机，不随配置备份同步。导入同名服务器会替换该连接及请求头。",
     "desktopOnly": "MCP 连接需在桌面应用中使用。",
     "importLabel": "服务器配置（JSON）",
@@ -18,7 +18,12 @@
     "approvalTitle": "调用 MCP 工具",
     "approvalNote": "以下参数将发送到外部服务器，可能修改文件或产生费用。外部费用未知，不计入应用用量。停止请求不一定会停止已提交的工作。",
     "server": "服务器",
-    "tool": "工具"
+    "tool": "工具",
+    "allowSession": "本次会话都允许",
+    "allowRun": "本次任务都允许",
+    "allowSessionHint": "允许 {{server}} 当前公布的工具在本次会话／任务中直接调用，包括可能收费或修改文件的操作。连接配置或工具定义变更后重新审批。点击自动批准标记可撤销。",
+    "sessionChip": "MCP 已允许 · {{servers}}",
+    "revokeSession": "{{servers}} 可自动调用（含收费操作）；点击撤销全部自动批准"
   },
   "common": {
     "loading": "读取中…",

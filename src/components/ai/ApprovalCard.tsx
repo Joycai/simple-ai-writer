@@ -1582,7 +1582,7 @@ function TranscribeBody({ proposal }: { proposal: TranscribeProposal }) {
 export function ApprovalCard({ item }: { item: PendingApproval }) {
   const { t } = useTranslation();
   const terms = useTerms();
-  const { approve, reject, enableAutoApprove, grantAppendPath, grantIllustrations, grantCommands } = useAgentStore();
+  const { approve, reject, enableAutoApprove, grantAppendPath, grantIllustrations, grantCommands, grantMcpServer } = useAgentStore();
   const [rejectReason, setRejectReason] = useState("");
   const [deciding, setDeciding] = useState(false);
   /** How many follow-up pictures or commands 批准并连批 covers. */
@@ -1675,6 +1675,20 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
         >
           {proposal.kind === "loreStep" ? t("ai.approval.loreStep.skip") : t("ai.approval.reject")}
         </button>
+        {proposal.kind === "mcp" && autoApproveKey !== undefined && proposal.serverTools && (
+          <button
+            className={styles.btnApproveAlways}
+            onClick={() => {
+              setDeciding(true);
+              grantMcpServer(autoApproveKey, proposal);
+              void approve(proposal.id);
+            }}
+            disabled={deciding}
+            title={t("mcp.allowSessionHint", { server: proposal.serverName })}
+          >
+            {t(autoApproveScope(autoApproveKey) === "session" ? "mcp.allowSession" : "mcp.allowRun")}
+          </button>
+        )}
         {/* Building one deliverable is a dozen appends to the same file, and a
             dozen identical cards is how an author learns to stop reading them.
             Narrower than 本次都批准 on both axes — this file, appends only —

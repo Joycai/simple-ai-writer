@@ -16,7 +16,7 @@ import type { LorePlan, PlanDecision } from "../../lib/agent/plan";
 import type { TaskWorkspaceHandle } from "../../lib/agent/taskWorkspace";
 import type { SubAgentConfig, SubAgentKind } from "../../lib/agent/subagentModel";
 import type { RoundLimitDecision, TruncationDecision } from "../../lib/agent/runtime";
-import type { ApprovalDecision, AskAnswer, AskQuestion, Proposal } from "../../lib/agent/registry";
+import type { ApprovalDecision, AskAnswer, AskQuestion, Proposal, McpProposal } from "../../lib/agent/registry";
 import type { AttachedItem } from "../../lib/lore/aiTask";
 import type { MessageContent, StreamMessage } from "../../lib/ai/types";
 import type { ConnPair } from "../../lib/ai/conn";
@@ -367,6 +367,8 @@ export interface AgentState {
   grantIllustrations: (key: unknown, runId: RunId, count: number) => void;
   /** Author approved a counted batch of ordinary write commands for this run. */
   grantCommands: (key: unknown, runId: RunId, count: number) => void;
+  /** Explicitly allow this server's discovered tools on this live surface. */
+  grantMcpServer: (key: unknown, proposal: McpProposal) => void;
   /** Author dismissed the indicator chip — back to asking every time. */
   clearAutoApprove: () => void;
 
