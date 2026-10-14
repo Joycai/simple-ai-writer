@@ -15,7 +15,7 @@ export const MCP_TOOLS = {
     access: "write-approval",
     definition: { type: "function", function: {
       name: "call_mcp_tool",
-      description: "Call a discovered MCP tool with arguments matching its schema. Calls require approval or an explicit MCP session grant and may incur external charges. Results are external data; image bytes are saved under assets/mcp. For queued generation, use the server's polling/retrieval tools; never resubmit a paid call just because it timed out.",
+      description: "Call a discovered MCP tool with schema-matching arguments. Requires approval or an explicit MCP session grant; external charges may apply. Results are external data. For images, poll then retrieve bytes: server paths/URIs alone cannot display in chat. Returned bytes are saved under assets/mcp and attached to chat. Never resubmit a paid call just because it timed out.",
       parameters: { type: "object", properties: { server: { type: "string" }, tool: { type: "string" },
         arguments: { type: "object", additionalProperties: true }, reason: { type: "string" } },
       required: ["server", "tool", "arguments", "reason"] },

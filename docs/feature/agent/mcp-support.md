@@ -102,6 +102,18 @@ LLM usage ledger.
   Unsupported binary content is reported. Resource links are not fetched, and
   server-returned filenames are never used as write destinations. The app keeps
   returned bytes even if Stop arrives after a successful response.
+  Every result ends with an app-owned image receipt, outside the truncation
+  budget: saved bytes name the project assets the chat can display; metadata-only
+  results explicitly say that no image was attached and direct the assistant to
+  retrieve existing outputs through the server's image-reading tool. This is
+  necessary because `get_generation` can report `completed` with an external
+  filesystem path and `joycai://` URI, neither of which is a chat attachment.
+  On 2026-10-14 a real conversation stopped at that status response and embedded
+  the external path, so the chat correctly refused it. Keep the project path
+  fence; finish `read_generation_image` instead of granting arbitrary filesystem
+  access or reissuing a paid generation. Retrieval remains a separate approved
+  call (or uses the existing explicit session grant), never an implicit extra
+  call hidden inside polling. Original bytes use `preview: false`.
 
 ## Validation and protocol references
 

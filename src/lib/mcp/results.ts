@@ -49,6 +49,13 @@ export async function saveMcpResult(projectPath: string, result: McpResult): Pro
   const reportPath = joinPath(dir, `${id}.txt`);
   await writeFile(reportPath, text);
   const report = text.length > 12_000 ? `${text.slice(0, 12_000)}\n[Truncated; full result: ${reportPath}]` : text;
-  return { report: `${report}\n\n${images.map((p) => `Saved image: ${p}`).join("\n")}\nFull result: ${reportPath}`,
+  // This receipt describes what the app actually received, not what a server
+  // says it generated. In particular get_generation returns paths on the
+  // server; embedding those bypasses retrieval and fails the chat's path fence.
+  // Keep it after truncation so even a large status response cannot hide it.
+  const receipt = images.length
+    ? `Images attached to this chat turn (task panels have no chat attachment):\n${images.map((p) => `Saved image: ${p}`).join("\n")}\nUse these saved paths for Markdown previews.`
+    : "No image bytes were received or attached to chat by this call. Server paths and resource URIs are metadata, not chat previews; do not embed them as images. If an image output is available, call the server's image retrieval tool (e.g. read_generation_image with the returned taskId/outputId, preview:false for original bytes). Retrieve the existing output; do not generate again. Otherwise keep polling if needed.";
+  return { report: `${report}\n\n${receipt}\nFull result: ${reportPath}`,
     imagePath: images[0] };
 }
