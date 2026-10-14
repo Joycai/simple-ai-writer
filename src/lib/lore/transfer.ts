@@ -17,7 +17,7 @@ import { readSchemaProfile, validateSchemaForProfile, parseLoreSchema, mergeLore
  */
 
 import { getVersion } from "@tauri-apps/api/app";
-import { fileExists, makeDir, readDir, readFile, removeDir, renamePath } from "../fs/fileio";
+import { copyPath, fileExists, makeDir, readDir, readFile, removeDir, renamePath } from "../fs/fileio";
 import { zipExportDialog, zipImportDialog } from "../fs/transfer";
 import { parseFrontmatter } from "../fs/markdown";
 import { activeWorkspace, loreCategoryIds } from "../profile/active";
@@ -109,11 +109,28 @@ async function walkLoreTree(root: string): Promise<{ category: string; id: strin
 
 /**
  * Export the project's lore tree as a zip bundle via the native save dialog.
+ * Optional selectedPaths exports only those entry folders and their category definitions.
  * Returns the saved path, or null when the user cancelled.
  */
-export async function exportLoreBundle(projectPath: string): Promise<string | null> {
+export async function exportLoreBundle(projectPath: string, selectedPaths?: readonly string[]): Promise<string | null> {
   const root = loreRoot(projectPath);
-  const entities = await walkLoreTree(root);
+  const allEntities = await walkLoreTree(root);
+  const selected = selectedPaths === undefined ? undefined : new Set(selectedPaths);
+  const entities = selected === undefined ? allEntities : allEntities.filter(
+    (e) => selected.has(`${root}/${e.category}/${e.id}`),
+  );
+  // Refuse stale/foreign paths rather than silently exporting fewer entries.
+  if (selected && (!selected.size || entities.length !== selected.size)) {
+    throw new Error("The selected entries changed; refresh the knowledge base and select them again.");
+  }
+  const schema = (await readSchemaProfile(projectPath)).schema;
+  if (selected) {
+    const categories = new Set(entities.map((e) => e.category));
+    schema.categories = schema.categories.filter((c) => categories.has(c.id));
+    schema.categoryExtensions = Object.fromEntries(
+      Object.entries(schema.categoryExtensions).filter(([id]) => categories.has(id)),
+    );
+  }
 
   let appVersion = "";
   try {
@@ -123,7 +140,7 @@ export async function exportLoreBundle(projectPath: string): Promise<string | nu
   }
 
   const manifest: LoreBundleManifest = {
-    schema: (await readSchemaProfile(projectPath)).schema,
+    schema,
     kind: LORE_BUNDLE_KIND,
     version: LORE_BUNDLE_VERSION,
     exportedAt: new Date().toISOString(),
@@ -136,12 +153,27 @@ export async function exportLoreBundle(projectPath: string): Promise<string | nu
 
   const projectName = baseName(projectPath) || "project";
   const date = new Date().toISOString().slice(0, 10);
-  return zipExportDialog(
-    root,
+  const save = (source: string) => zipExportDialog(
+    source,
     "lore",
     JSON.stringify(manifest, null, 2),
-    `lore-${projectName}-${date}.zip`,
+    `lore-${projectName}-${selected ? "selected-" : ""}${date}.zip`,
   );
+  if (!selected) return save(root);
+
+  // Copy whole entry folders, including binary assets. A private snapshot keeps
+  // unrelated files out of the archive without changing the native ZIP API.
+  const tempDir = `${projectPath}/.ai-writer/tmp/lore-export-${crypto.randomUUID()}`;
+  try {
+    await makeDir(tempDir);
+    for (const e of entities) {
+      await makeDir(`${tempDir}/${e.category}`);
+      await copyPath(`${root}/${e.category}/${e.id}`, `${tempDir}/${e.category}/${e.id}`);
+    }
+    return await save(tempDir);
+  } finally {
+    await cancelLoreImport(tempDir);
+  }
 }
 
 /**

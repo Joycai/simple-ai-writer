@@ -3351,6 +3351,7 @@
       "cardCounts": "{{facets}} 特征 · {{images}} 配图"
     },
     "transfer": {
+      "exportSelected": "导出所选…",
       "export": "导出",
       "import": "导入",
       "exportFailed": "导出{{kb}}失败：",

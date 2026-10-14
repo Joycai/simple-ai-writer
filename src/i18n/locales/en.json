@@ -3360,6 +3360,7 @@
       "cardCounts": "{{facets}} facets · {{images}} images"
     },
     "transfer": {
+      "exportSelected": "Export selected…",
       "export": "Export",
       "import": "Import",
       "exportFailed": "Failed to export the {{kb}} bundle:",

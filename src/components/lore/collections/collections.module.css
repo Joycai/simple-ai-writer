@@ -629,6 +629,7 @@
   border-top: 3px double var(--color-border-accent);
   background: var(--color-bg-base);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   flex-shrink: 0;
