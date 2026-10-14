@@ -397,7 +397,7 @@ export async function applyProposal(
             ? `Place it with propose_edit using exactly:\n${outcome.markdown.trim()}`
             : "",
           outcome.degraded
-            ? "NOTE: this model cannot edit an existing picture, so it was regenerated from the instruction — it will not resemble the original. Tell the author."
+            ? "NOTE: this request was regenerated from text without its input images, because input images were disabled in the current configuration or this endpoint rejected the edit request. Tell the author the source/references were not used. This does not establish that the model or another endpoint can never edit; do not carry that claim into later turns."
             : "",
         ].filter(Boolean).join("\n"),
       };

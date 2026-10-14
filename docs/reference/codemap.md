@@ -426,6 +426,10 @@ unified agent runtime 的各模块：
 - `htmlTools.ts` the `inspect_html` verifier —— 这条链上唯一一个**验**而不是**写**的工具：模型看不见自己画出来的页面，所以把它渲进 `lib/pptx/harvest` 那个离屏沙箱，回报盒子有没有掉出幻灯片、有没有一页什么都没画、有没有图没加载上（判定在纯的 `lib/pptx/inspect.ts`）。**一行 `harvester.js` 都不用改**——每个盒子本来就带着相对本页的 box，`canvas` 就是第一张幻灯片自己的矩形，所以「超边界」只是两次比较；而没有分节的长页面是一张和自己一样高的幻灯片，因此**不会**把整页误报成溢出。见 `docs/feature/agent/edit-loop-plan.md` §6
 - `splitTools.ts` the facet-split collector — the only tools that write nothing anywhere, existing purely so the split arrives as one tool call per facet instead of one hand-escaped JSON blob
 
+#### 内置生图能力在场
+
+`registry.getToolDefinitions` 在本轮实际携带图片工具时，向 `search_tools`（常驻图片工具时向首个图片工具）追加一次当前绑定模型的能力摘要。来源与执行器相同，都是 `activeImageModel` 读本次 `appState`；`caps.edit` 的 true / false / 未声明分别表示启用输入图、配置关闭、未知，不从型号名称推断。`toolCost` 的缓存键及运行日志同时计入这段摘要。理由：静态工具只写「可能不支持」会让助手猜能力；一次端点降级也不能被说成「模型永久不支持编辑」。降级回执只陈述本次未用输入图，参考图被配置拒绝时不引导助手自行换成文生图。
+
 #### 图片历史
 
 - `imageHistory.ts` the message-level predicates for pictures and clips in the wire history; the part rule it applies (the words stay, only the payload goes) is `lib/ai/mediaParts.ts` `withoutParts`

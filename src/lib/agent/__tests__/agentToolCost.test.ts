@@ -37,7 +37,7 @@ import {
 } from "../toolCost";
 import { WORKING_FLOOR_SHARE } from "../../context/budget";
 import { AGENT_ASSIST_PRESET, CONTINUE_PRESET, LORE_GENERATE_PRESET } from "../presets";
-import { partitionByGroup } from "../registry";
+import { getToolDefinitions, partitionByGroup } from "../registry";
 import { routePlannedTools } from "../routing";
 import { resetActiveWorkspace, setActiveWorkspace } from "../../profile/active";
 import { resolveWorkspace } from "../../profile/resolve";
@@ -163,5 +163,47 @@ describe("messageCeilingForTools", () => {
 
   it("shares the floor of 1", () => {
     expect(messageCeilingForTools(1_000, 0.5, AGENT_ASSIST_PRESET.tools)).toBe(1);
+  });
+});
+
+
+describe("live built-in image binding", () => {
+  const model = { id: "image", providerId: "p", modelId: "image-model", name: "Painter", type: "image",
+    enabled: true, priceIn: 0, priceCachedIn: 0, priceOut: 0, caps: { edit: true, maxRefs: 3 } } as const;
+  const ids = ["search_tools", "generate_image", "edit_image", "redraw_lore_image"] as const;
+  const searchable = { image: ["generate_image", "edit_image", "redraw_lore_image"] as import("../registry").ToolId[] };
+  it("supplies the configured capability once, before loading image tools, without mutating definitions", () => {
+    const definitions = getToolDefinitions(ids, searchable, false, model);
+    const text = JSON.stringify(definitions);
+    expect(text.match(/Current built-in image binding/g)).toHaveLength(1);
+    expect(definitions[0].function.description).toContain("Input images: enabled");
+    expect(text).toContain("At most 3 input images total, including the source");
+    expect(text).toContain("Reading images in this chat");
+    expect(JSON.stringify(getToolDefinitions(ids, searchable))).not.toContain("Current built-in image binding");
+  });
+  it("distinguishes undeclared input support from a disabled configuration and follows binding changes", () => {
+    const first = getToolDefinitions(ids, searchable, false, { ...model, caps: {} });
+    expect(first[0].function.description).toContain("undeclared, not unsupported");
+    const next = getToolDefinitions(ids, searchable, false, { ...model, caps: { edit: false } });
+    expect(next[0].function.description).toContain("disabled in this app configuration");
+    expect(next[0].function.description).toContain("not proof");
+    expect(getToolDefinitions(ids, searchable, false, model)[0].function.description).toContain("Input images: enabled");
+  });
+  it("does not advertise an image binding on a surface without image tools", () => {
+    const defs = getToolDefinitions(["list_files", "search_tools"], { file_ops: ["copy_file"] }, false, model);
+    expect(JSON.stringify(defs)).not.toContain("Current built-in image binding");
+  });
+  it("prices the same live description and includes capability changes in the memo key", () => {
+    const base = toolTokensOf(["search_tools"], searchable);
+    const enabled = toolTokensOf(["search_tools"], searchable, false, model);
+    const disabled = toolTokensOf(["search_tools"], searchable, false, { ...model, caps: { edit: false } });
+    expect(enabled).toBeGreaterThan(base);
+    expect(enabled - base).toBeLessThan(200);
+    expect(disabled).not.toBe(enabled);
+    const subs = { ...NO_SUBS, imagegen: { kind: "imagegen" as const, modelId: "image", enabled: true } };
+    const routed = routePlannedTools(AGENT_ASSIST_PRESET, subs, [model]);
+    const { resident, searchable: groups } = partitionByGroup(routed.tools);
+    expect(plannedToolTokens(AGENT_ASSIST_PRESET, subs, [model]))
+      .toBe(toolTokensOf(resident, groups, routed.searchReadsPages, model));
   });
 });

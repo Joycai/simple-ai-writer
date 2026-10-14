@@ -25,6 +25,7 @@ import { isOnOffCategory, type NativeReasoning } from "../ai/reasoning";
 import { effortMenuOnWire, resolveThinkingCategory } from "../ai/capabilities";
 import { wireOf } from "../ai/platforms";
 import { capabilityModelOf } from "../ai/relayUpstream";
+import { activeImageModel } from "./imageTools";
 import type {
   AccumulatedToolCall, ContentPart, ResponseItemCarry, StreamMessage, ThinkingBlockCarry,
 } from "../ai/types";
@@ -893,7 +894,10 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // Rebuilt per round because `activeTools` grows. `getToolDefinitions` also
     // re-patches the active profile's lore categories, which is free to redo
     // and wrong to cache across a project switch.
-    const toolDefinitions = getToolDefinitions(activeTools, searchable, opts.toolContext.searchReadsPages);
+    const imageModel = searchable.image?.length
+      || activeTools.some((id) => id === "generate_image" || id === "edit_image" || id === "redraw_lore_image")
+      ? activeImageModel(runToolContext) : null;
+    const toolDefinitions = getToolDefinitions(activeTools, searchable, opts.toolContext.searchReadsPages, imageModel);
 
     // On the final round of a force-text task: inject a "write now" instruction
     // and omit tools so the model must produce text without further tool calls.
@@ -1130,7 +1134,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       ? handoffToolTokens()
       : withholdTools
         ? 0
-        : toolTokensOf(activeTools, searchable, opts.toolContext.searchReadsPages) + (handoffPreset ? handoffToolTokens() : 0);
+        : toolTokensOf(activeTools, searchable, opts.toolContext.searchReadsPages, imageModel) + (handoffPreset ? handoffToolTokens() : 0);
     opts.onEvent({
       kind: "round-start",
       round,

@@ -190,6 +190,15 @@ describe("applyProposal — kinds whose approval is the work", () => {
     expect(out.imagePath).toBe("/p/pic.png");
   });
 
+  it("reports text-only fallback for this request without declaring permanent model incapability", async () => {
+    const { deps } = makeDeps();
+    runIllustration.mockResolvedValueOnce({ path: "/p/pic.png", markdown: "", degraded: true });
+    const out = await apply({ kind: "illustrate", dest: { kind: "document", path: OPEN } }, deps);
+    expect(out.report).toContain("this request was regenerated from text without its input images");
+    expect(out.report).toContain("does not establish");
+    expect(out.report).not.toContain("this model cannot edit");
+  });
+
   it("illustrate into the knowledge base rescans when the index has lost the folder", async () => {
     const { deps, lore } = makeDeps();
     await apply({ kind: "illustrate", dest: { kind: "lore", entityDir: "/p/.ai-writer/lore/x" } }, deps);

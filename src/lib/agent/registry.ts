@@ -19,6 +19,7 @@
 
 
 import type { ToolDefinition } from "../ai/types";
+import type { Model } from "../ai/configDb";
 import i18n from "../../i18n";
 import { loreCategories, loreCategoryIds } from "../profile/active";
 import { categoryRef } from "../profile/model";
@@ -196,6 +197,20 @@ export function toolNeedsProject(id: ToolId): boolean {
   return !REGISTRY[id].projectFree;
 }
 
+/** Current binding, not model-name folklore or a verdict from a past request. */
+function imageBindingDescription(model: Model): string {
+  const edit = model.caps?.edit;
+  const capability = edit === true
+    ? "Input images: enabled (editing/img2img and visual references). Use the image tools for an existing picture; do not claim editing is unsupported."
+    : edit === false
+      ? "Input images: disabled in this app configuration. An edit would regenerate without the source; explain this before approval. This is not proof that the model or other endpoints cannot edit."
+      : "Input images: undeclared, not unsupported. The image tools may submit them with approval; do not infer a limitation from the model name or a past failed request.";
+  const max = model.caps?.maxRefs;
+  return `Current built-in image binding: ${JSON.stringify({ name: model.name, modelId: model.modelId })}. ${capability}`
+    + (max && max > 0 ? ` At most ${max} input images total, including the source.` : "")
+    + " Reading images in this chat and editing through this image binding are separate capabilities. A previous fallback describes that request only.";
+}
+
 /** Resolve wire definitions for a preset's toolset, preserving order. */
 export function getToolDefinitions(
   ids: readonly ToolId[],
@@ -207,15 +222,26 @@ export function getToolDefinitions(
   searchable?: SearchableTools,
   /** `ToolContext.searchReadsPages` — see `describeDelegate`. */
   searchReadsPages = false,
+  /** The live built-in image binding; omitted for schema-only callers. */
+  imageModel?: Model | null,
 ): ToolDefinition[] {
   let describeCtx: DescribeContext | undefined;
+  // Once per request, including before the image group is loaded. Only name
+  // capabilities when this run actually carries the corresponding tools.
+  const imageIds = ["generate_image", "edit_image", "redraw_lore_image"] as const;
+  const imageTarget = ids.includes("search_tools") && searchable?.image?.length
+    ? "search_tools" : ids.find((id) => imageIds.some((imageId) => id === imageId));
   return ids.map((id) => {
     const tool = REGISTRY[id];
     if (tool.describe) describeCtx ??= { searchable: searchable ?? allSearchable(), searchReadsPages };
     const definition = tool.describe && describeCtx
       ? { ...tool.definition, function: { ...tool.definition.function, description: tool.describe(describeCtx) } }
       : tool.definition;
-    return withProfileCategories(definition, tool.profileCategoryParams);
+    const described = imageModel && id === imageTarget
+      ? { ...definition, function: { ...definition.function,
+        description: `${definition.function.description}\n${imageBindingDescription(imageModel)}` } }
+      : definition;
+    return withProfileCategories(described, tool.profileCategoryParams);
   });
 }
 
