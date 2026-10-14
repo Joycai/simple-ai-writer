@@ -68,6 +68,15 @@ documents 1k/2k and its separate ratio/resolution fields. Author-declared relay
 overrides can differ; they remain local to that model and do not rewrite API
 parameter mappings.
 
+Regression fixes (2026-10-14): capability-list inputs retain their raw text while
+publishing parsed choices on every keystroke. This preserves trailing commas and
+spaces without delaying a save until blur; replacing the configuration resets
+the draft. GPT's blank default aspect is resolved as square for generation so
+the selected resolution still determines pixels (4K → 2160×2160), rather than
+falling through to the malformed-ratio 1024×1024 fallback. Edits with no requested
+framing still omit size and follow the source. Regression tests cover incremental
+list editing, clearing/paste/reset, and all GPT tiers with blank framing.
+
 ---
 
 ## 1. 现状盘点

@@ -363,7 +363,7 @@ const GPT_IMAGE_2: ImageDialectSpec = {
     // input's framing because size was dropped wholesale.
     ...(opts?.edit && !sel.aspect
       ? {}
-      : { size: gptImageSize(sel.aspect ?? "1:1", sel.resolution || "1K") }),
+      : { size: gptImageSize(sel.aspect || "1:1", sel.resolution || "1K") }),
     ...(sel.quality ? { quality: sel.quality } : {}),
   }),
 };

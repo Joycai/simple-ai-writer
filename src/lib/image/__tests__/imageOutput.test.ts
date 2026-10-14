@@ -3,6 +3,17 @@ import { imageRequestParams, imageSelectedSpec } from "../index";
 import { ImageOutputValidationError } from "../../ai/imageDialects";
 
 describe("shared image request resolution", () => {
+  it.each(["gpt-image-2", "gpt-image-2.5"] as const)("honours every %s resolution with the dialog's default blank aspect", (dialect) => {
+    const sizes = { "1K": "1024x1024", "1.5K": "1280x1280", "2K": "1440x1440", "4K": "2160x2160" };
+    for (const [resolution, size] of Object.entries(sizes)) {
+      const selection = { sizingMode: "ratio" as const, aspect: "", resolution };
+      expect(imageRequestParams({ dialect }, selection)).toEqual({ size });
+      expect(imageSelectedSpec({ dialect }, selection).size).toBe(resolution);
+      // Blank framing on an edit still means follow the input, not square it.
+      expect(imageRequestParams({ dialect }, selection, { edit: true })).toEqual({});
+    }
+  });
+
   it("applies per-model defaults to every caller", () => {
     expect(imageRequestParams({ dialect: "nanobanana", defaults: { aspect: "3:2", resolution: "2K" } }, {}))
       .toEqual({ aspect: "3:2", imageSize: "2K" });

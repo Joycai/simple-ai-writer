@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { McpTool } from "../client";
 const server = { id: "1", name: "images", url: "http://localhost:39287/mcp", enabled: true, revision: "1" };
 let servers = [server];
 const definition = { name: "generate_image", inputSchema: { type: "object", properties: { prompt: { type: "string" } } } };
-const listTools = vi.fn(async () => [definition]);
+const listTools = vi.fn<() => Promise<McpTool[]>>(async () => [definition]);
 const callTool = vi.fn(async () => ({ content: [] }));
 const save = vi.fn(async () => ({ report: "saved", imagePath: "/project/assets/mcp/image.png" }));
 vi.mock("../config", async (original) => ({ ...await original<typeof import("../config")>(),
@@ -81,6 +82,27 @@ describe("MCP approvals", () => {
     expect(listTools).toHaveBeenCalledTimes(2);
     await discoverMcpTools({ ...call, arguments: "{}" }, { ...ctx, signal: new AbortController().signal });
     expect(listTools).toHaveBeenCalledTimes(3);
+  });
+  it("keeps every tool discoverable when aggregate descriptions exceed the index budget", async () => {
+    const tools = Array.from({ length: 256 }, (_, i) => ({ ...definition,
+      name: `tool_${i}`, description: "Long description. ".repeat(30),
+    }));
+    listTools.mockResolvedValue(tools);
+    const ctx = { ...context, signal: new AbortController().signal };
+    const list = await discoverMcpTools({ ...call, arguments: "{}" }, ctx);
+    expect(list.content.length).toBeLessThanOrEqual(48_000);
+    expect(JSON.parse(list.content).tools).toEqual(tools.map(({ name }) => ({ name })));
+    const chosen = tools[255];
+    const schema = await discoverMcpTools({ ...call, arguments: JSON.stringify({ server: "images", tool: chosen.name }) }, ctx);
+    expect(JSON.parse(schema.content).tools).toEqual([chosen]);
+    expect(listTools).toHaveBeenCalledTimes(1);
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it("still rejects an individual schema exceeding the response budget", async () => {
+    listTools.mockResolvedValue([{ ...definition, description: "x".repeat(49_000) }]);
+    await expect(discoverMcpTools({ ...call, arguments: JSON.stringify({ server: "images", tool: definition.name }) }, context))
+      .rejects.toThrow("too large");
   });
   it("does not reuse discovery after configuration changes or a failed lookup", async () => {
     const ctx = { ...context, signal: new AbortController().signal };

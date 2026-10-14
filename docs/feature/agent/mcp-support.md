@@ -89,6 +89,12 @@ LLM usage ledger.
   Catalogue requests share a run-scoped promise cache keyed by server identity,
   URL and revision; failures are evicted and approval always rechecks live tools.
   This saves connections without caching executions or retrying paid operations.
+  If the compact index's combined descriptions exceed 48,000 characters, it
+  falls back to tool names only. A per-description cap alone is insufficient
+  for a 256-tool server; throwing before returning names would ask the assistant
+  to select a name it has never received. Individual schema lookups retain the
+  response limit and full definitions. A 256-tool regression covers the fallback
+  and subsequent selective schema lookup through the same run cache.
   `proposalApply.ts` dispatches the approved call. It checks endpoint identity,
   configuration revision and discovered tool schema again before execution;
   changing any invalidates the pending approval. Calls serialize with other
