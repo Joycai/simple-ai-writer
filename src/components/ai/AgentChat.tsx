@@ -1,3 +1,5 @@
+import { ChatError } from "./ChatError";
+import { canRetryChat } from "../../stores/agent/selectors";
 import { OutputRecoveryPanel } from "./OutputRecoveryPanel";
 /**
  * 对话助手 — the stage-two conversational surface of the unified agent.
@@ -135,6 +137,8 @@ export function AgentChat() {
   const dequeueChat = useAgentStore((s) => s.dequeueChat);
   const promoteChat = useAgentStore((s) => s.promoteChat);
   const chatError = useActiveChat((c) => c.error);
+  const retryChat = useAgentStore((s) => s.retryChat);
+  const retryAvailable = useAgentStore((s) => canRetryChat(s, s.activeChatKey));
   const allPending = useAgentStore((s) => s.pending);
   const allPlans = useAgentStore((s) => s.pendingPlans);
   const allRoundLimits = useAgentStore((s) => s.pendingRoundLimits);
@@ -958,7 +962,13 @@ export function AgentChat() {
         </div>
       )}
 
-      {chatError && <div className={styles.error}>{chatError}</div>}
+      {chatError && (
+        <ChatError
+          key={`${activeKey}:${chatError}`}
+          error={chatError}
+          onRetry={retryAvailable ? () => { void retryChat(activeKey); } : undefined}
+        />
+      )}
 
       {/* Lore plans + manuscript edits + questions + round-cap cards — the loop is blocked on these */}
       {(pendingPlans.length > 0 || pending.length > 0 || pendingRoundLimits.length > 0

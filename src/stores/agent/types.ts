@@ -441,6 +441,8 @@ export interface AgentState {
    */
   ensureChatStash: (key?: string) => string;
 
+  /** Continue a failed run, retaining completed tool results. */
+  retryChat: (key?: string) => Promise<void>;
   /** Send to the active conversation. */
   sendChat: (
     text: string, quote?: string, refs?: AttachedItem[], opts?: SendChatOptions,

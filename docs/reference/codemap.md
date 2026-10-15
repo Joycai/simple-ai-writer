@@ -136,6 +136,8 @@ CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, ico
 
 ### `src/components/ai/`
 
+聊天请求失败时，`ChatError` 默认只显示短摘要与「重试」；原始错误作为纯文本放在可折叠、限高滚动的详情内，避免网关 HTML 挤掉输入区。`retryChat` 只接受最新一轮的运行错误，忙碌时拒绝；重试作为新的继续请求保留协议历史和成功的工具结果，不回退重放整轮，以减少重复写入。继续请求要求助手先核对已完成操作，仍走正常审批流程；这不是传输层逐请求重放。
+
 `OutputRecoveryPanel` 是聊天与任务面板共用的「已保存的输出」入口，含纯文本续写与按作者大纲分节生成；数据属于项目，不随组件卸载丢失。设计与边界见 [`long-output-recovery.md`](../feature/agent/long-output-recovery.md)。
 
 Generate 的活动任务保存在 `composerStore.panelTask`，关闭 / 重开面板和重启应用均恢复；能力包移除任务时回退到当前默认任务。重写结果的选区快照保存在 `aiTaskStore.outputEditTarget`，与结果一起清除；应用结果按该快照定位，不读当前标签或新的选区，避免面板重挂后把重写误作续写追加。快照不再是编辑器维护的实时标记，因此只接受原位置的精确文本或唯一的原文匹配，无法可靠定位时保留既有追加行为。

@@ -86,7 +86,7 @@ import { messageCeilingFor } from "../lib/agent/toolCost";
 import { useAiStore } from "./aiStore";
 import type { PendingApproval, ChatTurn, LiveChat, AgentState } from "./agent/types";
 import { newChatKey, freshChat, chatFromSnapshot, patchChat, openSessionIds, refreshSessionList, sweepStashFor, noteCardFor, endGrantFor, pump, workspaceForSnapshot, buildResumeSeed } from "./agent/chatJob";
-import { activeChat, type ChatStateInputs, pickChatStateInputs, chatStateOf } from "./agent/selectors";
+import { canRetryChat, activeChat, type ChatStateInputs, pickChatStateInputs, chatStateOf } from "./agent/selectors";
 import { applyProposal, flushEditor, type ProposalApplyDeps } from "../lib/agent/proposalApply";
 import { useEditorStore } from "./editorStore";
 import { useLoreStore } from "./loreStore";
@@ -742,6 +742,17 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const id = newStashId();
     patchChat(set, k, { stashId: id });
     return id;
+  },
+
+  retryChat: async (key) => {
+    const k = key ?? get().activeChatKey;
+    if (!canRetryChat(get(), k)) return;
+    // Consume the failure synchronously so repeated clicks cannot queue retries.
+    // Keep history and completed tool results; rewinding could repeat writes.
+    patchChat(set, k, { error: null });
+    await get().sendChatTo(k, i18n.t("ai.chat.retryInstruction"), undefined, [], {
+      displayText: i18n.t("ai.chat.retryTurn"),
+    });
   },
 
   sendChat: (text, quote, refs = [], opts) =>
