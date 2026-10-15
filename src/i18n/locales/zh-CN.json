@@ -2087,6 +2087,12 @@
       "countImage": "{{scope}}里有 {{n}} 张"
     },
     "chat": {
+      "errorTitle": "请求失败",
+      "errorDetails": "错误详情",
+      "retryHint": "保留已有进度，继续处理未完成的请求",
+      "retry": "重试",
+      "retryTurn": "重试上次请求",
+      "retryInstruction": "上次请求因错误中断。请结合已有对话和工具结果继续完成未完成的请求；先确认已完成的操作，不要重复执行已经成功的写入。",
       "tab": "助手",
       "title": "对话助手",
       "newSession": "新会话",

@@ -95,3 +95,13 @@ export const chatQueuePosition = (s: ChatStateInputs, key: string) =>
 /** Generating, folding or waiting for a slot — no new exclusive work may start. */
 export const isChatBusy = (s: ChatStateInputs, key: string) =>
   ownerBusy(key, s.runningChats, s.compactingChats, s.chatQueue);
+
+/** Only a failed latest run can be continued; unrelated UI errors cannot. */
+export function canRetryChat(s: AgentState, key: string): boolean {
+  const chat = s.chats[key];
+  if (!chat?.error || !chat.history?.length || ownerBusy(key, s.runningChats, s.compactingChats, s.chatQueue)) return false;
+  const last = chat.turns[chat.turns.length - 1];
+  return last?.role === "assistant" && last.log.some(
+    (event) => event.kind === "run-error" && event.message === chat.error,
+  );
+}

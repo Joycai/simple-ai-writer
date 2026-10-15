@@ -2091,6 +2091,12 @@
       "countImage": "{{n}} in {{scope}}"
     },
     "chat": {
+      "errorTitle": "Request failed",
+      "errorDetails": "Error details",
+      "retryHint": "Keep existing progress and continue the unfinished request",
+      "retry": "Retry",
+      "retryTurn": "Retry last request",
+      "retryInstruction": "The previous request was interrupted by an error. Continue the unfinished request using the existing conversation and tool results. Check completed operations first and do not repeat successful writes.",
       "tab": "Assistant",
       "title": "Assistant",
       "newSession": "New session",

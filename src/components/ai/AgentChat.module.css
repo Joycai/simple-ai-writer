@@ -284,15 +284,6 @@
   animation: spin 0.8s linear infinite;
 }
 
-.error {
-  font: 400 12px/1.65 var(--font-sans);
-  color: var(--color-error-body);
-  background: var(--color-error-surface);
-  border-left: 2px solid var(--color-error-node);
-  padding: var(--space-2) var(--space-3);
-  margin: 0 var(--space-6) var(--space-2);
-  word-break: break-word;
-}
 
 /* Docked above the composer (the loop is blocked on these, so they must stay put
    while the transcript scrolls) but indented onto the assistant content track,
