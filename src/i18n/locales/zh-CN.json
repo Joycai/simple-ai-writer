@@ -3076,7 +3076,9 @@
       "vision": "视觉理解",
       "image": "图片生成",
       "video": "视频",
-      "asr": "音频 ASR"
+      "asr": "音频 ASR",
+      "embedding": "向量",
+      "rerank": "重排"
     },
     "platforms": {
       "openai": "OpenAI 官方",
@@ -4983,27 +4985,17 @@
     "unavailableModel": "已选模型不可用",
     "chooseModel": "请至少选择一个模型。在此之前仍使用关键词匹配。",
     "transferHint": "会将当前请求与取材范围内{{entry}}的名称、概要及自动特征标签发送给所选服务。每次最多检索 256 份描述，补充 5 项。请求可能产生费用；使用本地服务时，这一步在本地完成。",
-    "models": "检索模型库",
-    "modelsHint": "在此添加和管理模型，供各项目选择使用。渠道在「渠道与模型」中添加。",
-    "add": "添加检索模型",
-    "edit": "编辑检索模型",
-    "channel": "渠道",
-    "noChannel": "请先在「渠道与模型」中添加渠道。本地服务可使用无 API Key 的渠道。",
-    "modelId": "Model ID",
-    "name": "显示名称",
     "protocol": "接口格式",
     "path": "接口路径",
     "pathHint": "默认 /v1/embeddings 会沿用渠道的 API 前缀；其他路径从渠道主机根地址开始。使用渠道已保存的 API Key。",
     "queryPrefix": "查询前缀（可选）",
     "documentPrefix": "材料前缀（可选）",
-    "feeGroup": "计费组",
-    "cancel": "取消",
-    "save": "保存模型",
-    "saveFailed": "无法保存模型，请重试。",
     "format": {
       "openai-embedding": "OpenAI 兼容向量接口",
       "ollama-embedding": "Ollama 向量接口",
-      "cohere-rerank": "Cohere 兼容重排接口"
+      "cohere-rerank": "Cohere 兼容重排接口",
+      "dashscope-multimodal-embedding": "DashScope 多模态向量接口（千问）",
+      "dashscope-rerank": "DashScope 重排接口（千问）"
     },
     "match": "语义命中 · {{score}}",
     "complete": "语义检索：补充 {{n}} 项，检索 {{considered}} 份描述。",
@@ -5017,16 +5009,7 @@
     "matchesLimited": "{{n}} 项其他命中未进入前五项。",
     "projectSettings": "项目检索配置",
     "projectOnly": "仅本项目",
-    "shared": "跨项目共用",
-    "existing": "已添加模型 · {{count}}",
-    "empty": "还没有检索模型。添加向量或重排模型后，在上方项目配置中选择使用。",
-    "selectedHere": "本项目已选",
     "unavailableChannel": "渠道不可用",
-    "editNamed": "编辑 {{name}}",
-    "deleteNamed": "删除 {{name}}",
-    "deleteConfirm": "将从共用模型库中移除此模型，并清除本项目对它的选择。其他使用它的项目需要重新选择模型。不会删除服务端的模型文件。",
-    "deleteFailed": "模型删除失败，请重试。",
-    "editAction": "编辑",
     "failure": {
       "http": "服务返回 HTTP {{status}}。请检查接口路径、模型 ID 和渠道凭据。",
       "network": "无法连接检索服务。请检查服务地址及运行状态。",
@@ -5048,7 +5031,10 @@
     "indexReadFailed": "无法读取缓存。请检查所选模型与项目访问权限，然后重新打开此设置。",
     "indexFailed": "准备失败或超时。已完成的批次已保存，可再次准备以继续。",
     "indexHttp": "服务返回 HTTP {{status}}。已完成的批次已保存。",
-    "indexStopped": "已停止，已完成的批次已保存。"
+    "indexStopped": "已停止，已完成的批次已保存。",
+    "manageModelsHint": "在「渠道与模型」中添加或编辑向量、重排类型的模型，再在此选择。",
+    "invalidPath": "接口路径必须以 / 开头，且不能包含主机地址、查询参数或反斜杠。",
+    "invalidEndpoint": "接口地址不可用，请检查渠道和接口路径。"
   },
   "imageOutput": {
     "customize": "自定义输出能力",

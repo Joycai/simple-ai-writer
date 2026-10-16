@@ -74,7 +74,7 @@ export interface ConnOptions {
   platform?: PlatformId;
   /** Dedicated retrieval wire; never sent to conversational adapters. */
   retrieval?: {
-    format: "openai-embedding" | "ollama-embedding" | "cohere-rerank";
+    format: "openai-embedding" | "ollama-embedding" | "dashscope-multimodal-embedding" | "cohere-rerank" | "dashscope-rerank";
     path: string;
     queryPrefix?: string;
     documentPrefix?: string;

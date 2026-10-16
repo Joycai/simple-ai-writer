@@ -597,3 +597,12 @@
   .list { padding: var(--space-4) var(--space-4) var(--space-8); }
   .groupUrl { display: none; }
 }
+
+.modelType[data-type="embedding"] {
+  background: var(--color-type-vision-bg);
+  color: var(--color-type-vision-fg);
+}
+.modelType[data-type="rerank"] {
+  background: var(--color-type-multimodal-bg);
+  color: var(--color-type-multimodal-fg);
+}

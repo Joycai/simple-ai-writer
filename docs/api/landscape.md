@@ -329,7 +329,7 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
 | New API（自建中继，公开文档） | 一（① 文档）· 三（④ 文档）· 五（③ 文档） | ① ③ ④ | 2026-08 |
 | New API（中转站实例，逐渠道实测） | 八（② `[Pro]`）· 九（两条生图路由）· 十（另一台，② `[Plus]`）· 十五（Kiro 渠道的 Claude）· 十六（Claude 五个渠道）· 十七（GPT-5.6-sol 四个上游）· 二十三（思考字段、上游 400、断开后计费） | ① ② ③ ④ | 2026-09-03 – 09-28 |
 | MiniMax | 二（①）· 四（④） | ① ④ | 2026-08，交错思考补测 2026-09-28 |
-| 阿里千问AI平台（百炼 / DashScope） | 六（① ④ 逐模型）· 二十一（换地址、原生格式对话面）· 二十二（思考不设时的强制 `tool_choice`） | ① ④ + 原生 | 2026-09-03 / 09-28 |
+| 阿里千问AI平台（百炼 / DashScope） | 六（① ④ 逐模型）· 二十一（换地址、原生格式对话面）· 二十二（思考不设时的强制 `tool_choice`）· 二十四（向量与原生重排） | ① ④ + 原生 + 向量 | 2026-09-03 / 09-28 / 10-16 |
 | OrcaRouter | 七（探测与免费档）· 十八（付费，三家官方协议经一台网关） | ① ② ③ ④ | 2026-09 / 09-26 |
 | xAI Grok | 十一 | ② | 2026-09-14 |
 | 火山方舟 | 十二（Agent / Coding Plan）· 十三（Seedream 出图） | ① ② ④ + 出图 | 2026-09-18 |
@@ -2557,6 +2557,16 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
    去逐字段排查，只适合连接测试这种一次性场合。
 3. **可中止的请求要用流式**：中转站把客户端断开传给上游的前提是流式；非流式请求被中止，照付全款。
 4. `thinking` 块的有无在流式与非流式之间可能相反（与第六个样本对照），④ 客户端也要切 `<think>`。
+
+### 第二十四个样本：千问 Qwen3-VL-Embedding 原生向量接口（2026-10-16）
+
+官方文档：[模型页](https://www.qianwenai.com/models/qwen3-vl-embedding#overview) 与 [HTTP API](https://www.alibabacloud.com/help/en/model-studio/multimodal-embedding-api-reference)（2026-10-16 核对）。原生 `input.contents` → `output.embeddings[]`，与 OpenAI 向量接口不同；独立模式每项一向量，默认 2560 维，单请求最多 20 项。
+
+先用四条虚构短文本验证官方 `maas.qianwenaiapi.com` 原生端点返回 200，再由 `live.qwen-embedding.test.ts` 验证 20 项批次、索引与维数、输入用量和一次相关性对照。完整报文契约与测量值仅记在 [retrieval.md](retrieval.md#qwen3-vl-native-text-embeddings--2026-10-16)，此处保留样本索引。未测试图片、视频及融合模式。
+
+同日补测 `qwen3.7-text-embedding-flash`：官方 [向量指南](https://platform.qianwenai.com/docs/developer-guides/embeddings/embedding) 声明支持 OpenAI 兼容接口、每批 20 条、默认 1024 维。应用适配器的 20 条虚构短文本实测通过；它使用 `/compatible-mode/v1/embeddings`，无需多模态的 `input.contents`。测量边界见 [retrieval.md](retrieval.md#qwen37-text-embedding-flash--2026-10-16)。
+
+同日补测 `qwen3.7-text-rerank`：先核对 [原生接口](https://platform.qianwenai.com/docs/api-reference/rerank/dashscope-rerank) 与 [兼容接口](https://platform.qianwenai.com/docs/api-reference/rerank/openai-rerank) 的模型支持范围，确认需使用原生 `input` / `parameters` 结构。`live.qwen-rerank.test.ts` 通过应用适配器对三条虚构描述重排成功，相关描述第一、289 个输入 token；具体数值与边界见 [retrieval.md](retrieval.md#qwen37-native-text-rerank--2026-10-16)。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
 

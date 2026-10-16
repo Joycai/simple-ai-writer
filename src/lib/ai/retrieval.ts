@@ -20,9 +20,15 @@ export function retrievalUrl(conn: RetrievalConnection): string {
   }
   return new URL(path, base.origin).href;
 }
-/** Endpoint limits measured in docs/api/retrieval.md; do not infer them from model names. */
+/** Documented/measured limits: protocol or endpoint + model, never names across providers. */
 export function embeddingLimits(conn: RetrievalConnection): { batchSize: number; timeoutMs: number } {
+  if (conn.retrieval?.format === "dashscope-multimodal-embedding") return { batchSize: 20, timeoutMs: 20_000 };
   const url = new URL(retrievalUrl(conn));
+  const qwenText = conn.retrieval?.format === "openai-embedding"
+    && url.hostname === "maas.qianwenaiapi.com"
+    && url.pathname === "/compatible-mode/v1/embeddings"
+    && ["qwen3.7-text-embedding", "qwen3.7-text-embedding-flash"].includes(conn.modelId);
+  if (qwenText) return { batchSize: 20, timeoutMs: 20_000 };
   const arkPlan = conn.retrieval?.format === "openai-embedding"
     && url.hostname === "ark.cn-beijing.volces.com"
     && url.pathname === "/api/plan/v3/embeddings";
@@ -57,7 +63,7 @@ async function request(conn: RetrievalConnection, body: object, signal: AbortSig
   const usage = data.usage as Record<string, unknown> | undefined;
   const meta = data.meta as { billed_units?: { search_units?: unknown } } | undefined;
   // Record successful billed requests even if their vectors/scores are malformed.
-  onUsage?.({ promptTokens: number(usage?.prompt_tokens ?? usage?.total_tokens ?? data.prompt_eval_count),
+  onUsage?.({ promptTokens: number(usage?.prompt_tokens ?? usage?.input_tokens ?? usage?.total_tokens ?? data.prompt_eval_count),
     outputUnits: number(meta?.billed_units?.search_units) || undefined });
   return data;
 }
@@ -69,15 +75,21 @@ function vector(raw: unknown): number[] {
 }
 export async function embed(conn: RetrievalConnection, input: string[], signal: AbortSignal, onUsage?: UsageListener): Promise<number[][]> {
   const native = conn.retrieval?.format === "ollama-embedding";
-  const data = await request(conn, { input, ...(native ? { truncate: false } : { encoding_format: "float" }) }, signal, onUsage);
+  const dashscope = conn.retrieval?.format === "dashscope-multimodal-embedding";
+  // Independent text embeddings: never fuse a catalog batch into one vector.
+  const body = dashscope
+    ? { input: { contents: input.map((text) => ({ text })) } }
+    : { input, ...(native ? { truncate: false } : { encoding_format: "float" }) };
+  const data = await request(conn, body, signal, onUsage);
   let result: number[][];
   if (native) {
     if (!Array.isArray(data.embeddings)) throw new Error("Missing embeddings");
     result = data.embeddings.map(vector);
   } else {
-    if (!Array.isArray(data.data)) throw new Error("Missing embeddings");
+    const rows = dashscope ? object(data.output).embeddings : data.data;
+    if (!Array.isArray(rows)) throw new Error("Missing embeddings");
     const indexed = new Map<number, number[]>();
-    for (const raw of data.data) {
+    for (const raw of rows) {
       const row = object(raw);
       const i = row.index;
       if (!Number.isInteger(i) || Number(i) < 0 || Number(i) >= input.length || indexed.has(Number(i))) throw new Error("Invalid embedding index");
@@ -97,10 +109,15 @@ export function cosine(a: number[], b: number[]): number {
   return score;
 }
 export async function rerank(conn: RetrievalConnection, query: string, documents: string[], signal: AbortSignal, onUsage?: UsageListener): Promise<{ index: number; score: number }[]> {
-  const data = await request(conn, { query, documents, top_n: documents.length }, signal, onUsage);
-  if (!Array.isArray(data.results)) throw new Error("Missing rerank results");
+  const native = conn.retrieval?.format === "dashscope-rerank";
+  const body = native
+    ? { input: { query, documents }, parameters: { top_n: documents.length } }
+    : { query, documents, top_n: documents.length };
+  const data = await request(conn, body, signal, onUsage);
+  const results = native ? object(data.output).results : data.results;
+  if (!Array.isArray(results)) throw new Error("Missing rerank results");
   const seen = new Set<number>();
-  return data.results.map((raw) => {
+  return results.map((raw) => {
     const r = object(raw), index = Number(r.index), score = r.relevance_score;
     if (typeof r.index !== "number" || !Number.isInteger(index) || index < 0 || index >= documents.length || seen.has(index)
       || typeof score !== "number" || !Number.isFinite(score)) throw new Error("Invalid rerank result");

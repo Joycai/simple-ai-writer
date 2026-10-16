@@ -112,9 +112,8 @@ const model: Required<Omit<Model, "fee">> = {
   providerId: "p1",
   modelId: "qwen3.8-max",
   name: "Qwen",
-  // `asr` because `asrFormat` is set: `normalizeAsrIdentity` would otherwise
-  // retype the row, and the test would be about normalization, not loss.
-  type: "asr",
+  // Retrieval identity takes precedence for this all-fields persistence fixture.
+  type: "embedding",
   priceIn: 1.5,
   priceCachedIn: 0.3,
   priceOut: 6,
@@ -213,6 +212,17 @@ describe("config backup · every field round-trips", () => {
     expect(parsed.models).toEqual([model]);
     expect(parsed.prompts).toEqual([prompt]);
     expect(parsed.feeGroups).toEqual([feeGroup]);
+  });
+
+  it.each(["openai-embedding", "ollama-embedding", "dashscope-multimodal-embedding", "cohere-rerank", "dashscope-rerank"] as const)("upgrades legacy %s through both DB and backup readers", async (format) => {
+    const legacy = { ...model, type: "text" as const, asrFormat: undefined,
+      retrieval: { format, path: "/custom", queryPrefix: "query: " } };
+    const expected = { ...legacy, type: (format === "cohere-rerank" || format === "dashscope-rerank") ? "rerank" : "embedding" };
+    expect(await throughDb(modelUpsert(legacy, "restored"), (db) => listModels(db))).toEqual(expected);
+    const parsed = parseConfigBundle(JSON.parse(JSON.stringify({
+      kind: CONFIG_BACKUP_KIND, version: 3, providers: [provider], models: [legacy], prompts: [], feeGroups: [feeGroup],
+    })), []);
+    expect(parsed.models).toEqual([expected]);
   });
 
   it("writes back the same rows the restore read", async () => {
