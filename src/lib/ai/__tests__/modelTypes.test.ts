@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  canAutoSelectAsChat, canSeeImages, chatModels, conversationalModels, isAsrOnly, MODEL_TYPES, normalizeAsrIdentity, parseModelType,
+  canAutoSelectAsChat, canSeeImages, chatModels, conversationalModels, isAsrOnly, MODEL_TYPES, normalizeAsrIdentity, normalizeModelIdentity, parseModelType,
   type Model,
 } from "../configDb";
 import { chainCanSeeImages, subAgentModel, SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "../../agent/subagentModel";
@@ -115,5 +115,24 @@ describe("asr is the type, asrFormat the endpoint", () => {
 
   it("carries no declaration marks on the list row", () => {
     expect(declarationMarks({ type: "asr", thinkingCategory: "qwen-budget" })).toEqual([]);
+  });
+});
+
+
+describe("retrieval model identity", () => {
+  it.each(["embedding", "rerank"] as const)("keeps %s out of every chat picker even without a format", (type) => {
+    const m = model({ type });
+    expect(parseModelType(type)).toBe(type);
+    expect(conversationalModels([m])).toEqual([]);
+    expect(chatModels([m])).toEqual([]);
+    expect(canAutoSelectAsChat(m)).toBe(false);
+    const normalized = normalizeModelIdentity(m);
+    expect(normalized.retrieval?.format).toBe(type === "rerank" ? "cohere-rerank" : "openai-embedding");
+    expect(normalizeModelIdentity(normalized)).toEqual(normalized);
+  });
+
+  it.each(["openai-embedding", "ollama-embedding", "cohere-rerank", "dashscope-rerank"] as const)("upgrades legacy %s registrations without changing bindings or transport", (format) => {
+    const legacy = model({ id: "selected-model", retrieval: { format, path: "/custom", queryPrefix: "query: " } });
+    expect(normalizeModelIdentity(legacy)).toEqual({ ...legacy, type: (format === "cohere-rerank" || format === "dashscope-rerank") ? "rerank" : "embedding" });
   });
 });

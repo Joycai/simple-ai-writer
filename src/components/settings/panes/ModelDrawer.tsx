@@ -21,6 +21,8 @@
  * The 「将发送」 line above the buttons is built by `lib/ai/modelSummary` from
  * the adapters' own body functions, so it cannot drift from the request.
  */
+import { retrievalUrl } from "../../../lib/ai/retrieval";
+import { RETRIEVAL_PATHS, isRerankFormat, validRetrievalPath, type RetrievalConfig } from "../../../lib/ai/retrievalConfig";
 import { Fragment, useRef, useState, useSyncExternalStore } from "react";
 import { learnedVersion, subscribeLearned } from "../../../lib/ai/capability/learned";
 import { useTranslation } from "react-i18next";
@@ -280,6 +282,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
 
   // The stored image section, as the draft the drawer edits.
   const stored = draftFromCaps(existing?.caps);
+  const [retrieval, setRetrieval] = useState<RetrievalConfig>(existing?.retrieval ?? { format: "openai-embedding", path: RETRIEVAL_PATHS["openai-embedding"] });
   const [form, setForm] = useState({
     // ComfyUI takes no model id on the wire (it takes a whole node graph), but
     // the column is required and the save button gates on it — so seed it
@@ -534,6 +537,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // one per-second cell, and 「将发送」 lists the file endpoint (设计稿 02f 屏 1b).
   // The type is the identity (configDb isAsrOnly); asrFormat only names the endpoint.
   const isAsrModel = form.type === "asr";
+  const isRetrievalModel = form.type === "embedding" || form.type === "rerank";
   // The three vision capabilities, asked of the table with the model's type:
   // each exists only for a model that reads pictures. Hi-res and clip fps are
   // DashScope's private knobs — 智谱 takes both and ignores them — and fps also
@@ -708,7 +712,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   };
 
   const handleSave = async () => {
-    if (!form.modelId) return;
+    if (!form.modelId.trim()) return;
+    if (isRetrievalModel && !validRetrievalPath(retrieval.path)) { setError(t("semantic.invalidPath")); return; }
     setSaving(true);
     setError(null);
     try {
@@ -736,10 +741,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
       const outputError = caps && validateImageOutputConfig(caps);
       if (outputError) { setError(t(`imageOutput.errors.${outputError}`)); return; }
       const shared = {
-        retrieval: existing?.retrieval,
+        retrieval: isRetrievalModel ? retrieval : undefined,
         providerId,
-        modelId: form.modelId,
-        name: form.name || form.modelId,
+        modelId: form.modelId.trim(),
+        name: form.name.trim() || form.modelId.trim(),
         type: form.type,
         feeGroupId: form.feeGroupId || undefined,
         // 旧的价格列不再被任何算钱的路径读（`lib/ai/configDb.feeOf`），
@@ -775,7 +780,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // a switch to ④ and back must not make the author declare it again
         // (plan §3). Whether it is usable is asked per route (`readsPdf`).
         // Only on a model type that converses; false stores as absent.
-        pdfInput: !isImageModel && !isAsrModel && pdfInput ? true : undefined,
+        pdfInput: !isImageModel && !isAsrModel && !isRetrievalModel && pdfInput ? true : undefined,
         // Same clearing rule: only where the switch is shown.
         vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
         // A model declaration like the PDF one: kept across routes, and
@@ -919,7 +924,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // 身份 · 计费 · 出图, everything else the four text sections. The index and
   // the band's one-line description are both read off this list, so neither
   // can name a section the body doesn't show.
-  const isTextLike = !isImageModel && !isAsrModel;
+  const isTextLike = !isImageModel && !isAsrModel && !isRetrievalModel;
   const sectionIndex: { key: SectionKey; has: boolean }[] = [
     { key: "price", has: priceHas },
     ...(isTextLike
@@ -933,7 +938,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     ...(isAsrModel ? [{ key: "asr" as const, has: true }] : []),
     ...(isImageModel ? [{ key: "image" as const, has: imageHas }] : []),
   ];
-  const typeSections = [t("aiConfig.models.idx_identity"), ...sectionIndex.map((x) => t(`aiConfig.models.idx_${x.key}`))]
+  const typeSections = [t("aiConfig.models.idx_identity"), ...sectionIndex.map((x) => t(`aiConfig.models.idx_${x.key}`)), ...(isRetrievalModel ? [t("semantic.protocol")] : [])]
     .join(" · ");
   const typeLine = [
     isTextLike ? typeSections : t("aiConfig.models.typeLineOnly", { sections: typeSections }),
@@ -972,7 +977,15 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     : asrFormatNow === "dashscope-sync"
     ? t("aiConfig.models.asrSyncHintOn")
     : t("aiConfig.models.asrFormatHintOn");
-  const wire = isAsrModel
+  const wire: WireItem[] = isRetrievalModel
+    ? (() => {
+        if (!provider) return [];
+        try {
+          return [{ key: "POST", value: retrievalUrl({ baseUrl: provider.baseUrl, modelId: form.modelId, apiKey: "", retrieval }) },
+            { key: "model", value: form.modelId.trim() }];
+        } catch { return []; }
+      })()
+    : isAsrModel
     ? asrWire
     : provider
     ? wireSummary({
@@ -988,7 +1001,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
         videoInput: videoWire && videoInput ? true : undefined,
         videoFps,
-        pdfInput: !isImageModel && !isAsrModel && pdfInput ? true : undefined,
+        pdfInput: !isImageModel && !isAsrModel && !isRetrievalModel && pdfInput ? true : undefined,
         prefix: form.prefix,
         caps: isImageModel
           ? {
@@ -1131,7 +1144,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
           configured. A click shows what changes (屏 06) before switching. Image
           and transcription rows pick a dedicated endpoint instead (plan §5.1.2),
           so the strip is for the conversational types only. ────────────── */}
-      {channel && route && multiRoute && !isImageModel && !isAsrModel && (
+      {channel && route && multiRoute && !isImageModel && !isAsrModel && !isRetrievalModel && (
         <div className={r.strip}>
           <div className={r.stripHead}>
             <span className={r.stripLabel}>{t("aiConfig.models.routeLabel")}</span>
@@ -1207,7 +1220,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               key={type}
               label={t(`aiConfig.modelTypes.${type}`)}
               active={form.type === type}
-              swatch={`var(--color-type-${type}-fg)`}
+              swatch={`var(--color-type-${type === "embedding" ? "vision" : type === "rerank" ? "multimodal" : type}-fg)`}
               onClick={() => {
                 // Seed from the provider's protocol the first time this
                 // becomes an image model, so the common case needs no
@@ -1215,6 +1228,12 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 // wire only serves Gemini image models, so the dialect is
                 // known there; elsewhere (dall-e vs gpt-image vs a relay)
                 // it stays the author's call.
+                if (type === "embedding" || type === "rerank") {
+                  const format = type === "rerank"
+                    ? isRerankFormat(retrieval.format) ? retrieval.format : "cohere-rerank"
+                    : isRerankFormat(retrieval.format) ? "openai-embedding" : retrieval.format;
+                  setRetrieval((config) => config.format === format ? config : { format, path: RETRIEVAL_PATHS[format] });
+                }
                 const seedDialect =
                   type === "image" && !existing && !form.capsDialect && family === "gemini";
                 // Becoming a transcription model picks its (only) endpoint
@@ -1363,6 +1382,29 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             />
           </Field>
         </Section>
+
+        {isRetrievalModel && <Section label={t("semantic.protocol")} open summary="" unset={false}>
+          <Field label={t("semantic.protocol")} hint="">
+            <Select className={s.fieldSelect} value={retrieval.format}
+              options={Object.keys(RETRIEVAL_PATHS).filter((f) => isRerankFormat(f as RetrievalConfig["format"]) === (form.type === "rerank"))
+                .map((value) => ({ value, label: t(`semantic.format.${value}`) }))}
+              ariaLabel={t("semantic.protocol")} onChange={(value) => {
+                const format = value as RetrievalConfig["format"];
+                setRetrieval({ ...retrieval, format, path: RETRIEVAL_PATHS[format] });
+              }} />
+          </Field>
+          <Field label={t("semantic.path")} hint={t("semantic.pathHint")}>
+            <input aria-label={t("semantic.path")} className={inputCls(false)} value={retrieval.path} onChange={(e) => setRetrieval({ ...retrieval, path: e.target.value })} />
+          </Field>
+          {form.type === "embedding" && <>
+            <Field label={t("semantic.queryPrefix")} hint="">
+              <input aria-label={t("semantic.queryPrefix")} className={inputCls(false)} value={retrieval.queryPrefix ?? ""} onChange={(e) => setRetrieval({ ...retrieval, queryPrefix: e.target.value })} />
+            </Field>
+            <Field label={t("semantic.documentPrefix")} hint="">
+              <input aria-label={t("semantic.documentPrefix")} className={inputCls(false)} value={retrieval.documentPrefix ?? ""} onChange={(e) => setRetrieval({ ...retrieval, documentPrefix: e.target.value })} />
+            </Field>
+          </>}
+        </Section>}
 
         {/* ── Text-model sections: 限额 / 思考 / 能力 / 采样 ──────────────────── */}
         <Fold open={isTextLike}>
@@ -2032,7 +2074,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
       <div className={s.wire}>
         <span className={s.wireLabel}>{t("aiConfig.models.willSend")}</span>
         {wire.length === 0 ? (
-          <span className={s.wireEmpty}><span className={s.dashMark} />{t("aiConfig.models.willSendEmpty")}</span>
+          <span className={s.wireEmpty}><span className={s.dashMark} />{t(isRetrievalModel ? "semantic.invalidEndpoint" : "aiConfig.models.willSendEmpty")}</span>
         ) : (
           wire.map((w) => (
             <span key={w.key} className={s.wireItem}>
@@ -2050,7 +2092,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         <span className={hub.escHint}>{t("aiConfig.hub.escToClose")}</span>
         <span className={hub.footSpacer} />
         <button className={styles.btnSecondary} onClick={onClose}>{t("aiConfig.models.cancel")}</button>
-        <button className={styles.btnPrimary} onClick={handleSave} disabled={!form.modelId || saving}>
+        <button className={styles.btnPrimary} onClick={handleSave} disabled={!form.modelId.trim() || saving}>
           {saving
             ? (existing ? t("aiConfig.models.editing") : t("aiConfig.models.saving"))
             : (existing ? t("aiConfig.models.edit") : t("aiConfig.models.add"))}

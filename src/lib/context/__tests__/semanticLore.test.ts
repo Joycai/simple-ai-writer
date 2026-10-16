@@ -49,6 +49,19 @@ describe("semantic catalog retrieval", () => {
     expect(result.matches.map((m) => m.entity.name)).toEqual(["Compass"]);
     expect(vi.mocked(rerank).mock.calls[0][2]).toEqual([catalogText(index.custom[0])]);
   });
+  it("routes a native DashScope reranker as ranking, never as an embedding model", async () => {
+    enable();
+    const native = { ...args, models: [{ ...models[1], type: "rerank" as const,
+      retrieval: { format: "dashscope-rerank" as const, path: "/api/v1/services/rerank/text-rerank/text-rerank" } }] };
+    vi.mocked(rerank).mockResolvedValue([{ index: 0, score: 0.9 }]);
+    const result = await retrieveSemantic("sneak inside", index, ["wanted"], new Set(), native);
+    expect(result.matches.map((m) => m.entity.name)).toEqual(["Compass"]);
+    expect(vi.mocked(rerank).mock.calls[0][0].retrieval?.format).toBe("dashscope-rerank");
+    expect(embed).not.toHaveBeenCalled();
+    enable("r", "");
+    expect((await retrieveSemantic("sneak inside", index, ["wanted"], new Set(), native)).report?.status).toBe("unavailable");
+    expect(embed).not.toHaveBeenCalled();
+  });
   it("reuses vectors but invalidates changed descriptions and keeps query requests fresh", async () => {
     enable("e", ""); vi.mocked(embed).mockImplementation(async (_c, texts) => texts.map(() => [1, 0]));
     await retrieveSemantic("sneak", index, ["wanted"], new Set(), args);

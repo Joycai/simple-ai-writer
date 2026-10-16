@@ -52,6 +52,20 @@ describe("index preparation", () => {
     const other = { ...args, models: [{ ...models[0], modelId: "new-model" }] };
     expect(await indexStatus(other, "e", changed, ["wanted"])).toEqual({ ready: 0, total: 1 });
   });
+  it.each(["dashscope-multimodal-embedding", "openai-embedding"] as const)("prepares a Qwen %s catalog in 20-item batches and reuses its own namespace", async (format) => {
+    const native: SemanticRequest = { ...args,
+      providers: [{ id: "p", baseUrl: "https://maas.qianwenaiapi.com/compatible-mode/v1" }] as Provider[],
+      models: [{ ...models[0], type: "embedding", modelId: format === "openai-embedding" ? "qwen3.7-text-embedding-flash" : "qwen3-vl-embedding",
+        retrieval: { format, path: format === "openai-embedding" ? "/v1/embeddings" : "/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding" } }] };
+    const all = { custom: Array.from({ length: 41 }, (_, i) => entity(`qwen-item-${i}`)) };
+    vi.mocked(embed).mockImplementation(async (_c, texts) => texts.map(() => [1, 0]));
+    await prepareIndex(native, "e", all, null, new AbortController().signal, () => {});
+    expect(vi.mocked(embed).mock.calls.map((call) => call[1].length)).toEqual([20, 20, 1]);
+    expect(await indexStatus(native, "e", all, null)).toEqual({ ready: 41, total: 41 });
+    await prepareIndex(native, "e", all, null, new AbortController().signal, () => {});
+    expect(embed).toHaveBeenCalledTimes(3);
+    expect(await indexStatus(args, "e", all, null)).toEqual({ ready: 0, total: 41 });
+  });
   it("saves completed batches on cancellation and resumes only the missing entries", async () => {
     const all = { custom: Array.from({ length: 40 }, (_, i) => entity(`item-${i}`)) };
     const controller = new AbortController();

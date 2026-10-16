@@ -4,8 +4,15 @@ export type RetrievalConfig = NonNullable<ConnOptions["retrieval"]>;
 export const RETRIEVAL_PATHS: Record<RetrievalConfig["format"], string> = {
   "openai-embedding": "/v1/embeddings",
   "ollama-embedding": "/api/embed",
+  "dashscope-multimodal-embedding": "/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding",
+  "dashscope-rerank": "/api/v1/services/rerank/text-rerank/text-rerank",
   "cohere-rerank": "/v2/rerank",
 };
+
+/** Protocol purpose is shared by persistence, the drawer and retrieval routing. */
+export function isRerankFormat(format: RetrievalConfig["format"]): boolean {
+  return format === "cohere-rerank" || format === "dashscope-rerank";
+}
 
 /** Paths are same-origin, so a model cannot redirect a channel's credential. */
 export function validRetrievalPath(path: string): boolean {

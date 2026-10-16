@@ -1,4 +1,5 @@
 /** Shared indexing path for on-demand retrieval and explicit preparation. */
+import { isRerankFormat } from "../ai/retrievalConfig";
 import type { Model, Provider } from "../ai/configDb";
 import { providerFor } from "../ai/routes";
 import { embed, embeddingLimits, retrievalUrl, RetrievalError, type RetrievalConnection } from "../ai/retrieval";
@@ -16,7 +17,7 @@ export function catalogText(e: LoreEntity): string {
 function indexConnection(args: IndexConfig, id: string, ranking = false) {
   const model = args.models.find((m) => m.id === id && m.enabled);
   const provider = model && providerFor(model, args.providers);
-  if (!model?.retrieval || !provider || (model.retrieval.format === "cohere-rerank") !== ranking) throw new RetrievalError("model");
+  if (!model?.retrieval || !provider || isRerankFormat(model.retrieval.format) !== ranking) throw new RetrievalError("model");
   const conn: RetrievalConnection = { baseUrl: provider.baseUrl, modelId: model.modelId, retrieval: model.retrieval, apiKey: "" };
   return { model, provider, conn };
 }

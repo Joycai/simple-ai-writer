@@ -4,7 +4,7 @@
  */
 
 import type { ConnOptions } from "./conn";
-import { parseRetrievalConfig } from "./retrievalConfig";
+import { isRerankFormat, parseRetrievalConfig } from "./retrievalConfig";
 import Database from "@tauri-apps/plugin-sql";
 
 import type { ComfyWorkflowConfig } from "../comfy/workflow";
@@ -51,7 +51,7 @@ import {
  * specialist that is not offered as a writer. `image` / `video` *generate*.
  * `asr` transcribes and never converses (`isAsrOnly`).
  */
-export type ModelType = "text" | "multimodal" | "vision" | "image" | "video" | "asr";
+export type ModelType = "text" | "multimodal" | "vision" | "image" | "video" | "asr" | "embedding" | "rerank";
 
 /**
  * The fixed prompt format a dedicated translation model was trained on.
@@ -581,6 +581,22 @@ export function normalizeAsrIdentity(m: Model): Model {
   return m;
 }
 
+/** Shared DB/backup normalization, preserving stable model ids and bindings. */
+export function normalizeModelIdentity(m: Model): Model {
+  // Legacy retrieval registrations used type=text. Keep ids and project bindings.
+  if (m.retrieval) return { ...m, type: isRerankFormat(m.retrieval.format) ? "rerank" : "embedding" };
+  if (m.type === "embedding" || m.type === "rerank") {
+    const format = m.type === "rerank" ? "cohere-rerank" : "openai-embedding";
+    return { ...m, retrieval: { format, path: format === "cohere-rerank" ? "/v2/rerank" : "/v1/embeddings" } };
+  }
+  return normalizeAsrIdentity(m);
+}
+
+/** Dedicated retrieval endpoints cannot accept conversational messages. */
+export function isRetrievalOnly(m: Pick<Model, "type" | "retrieval">): boolean {
+  return m.type === "embedding" || m.type === "rerank" || !!m.retrieval;
+}
+
 /**
  * 能拿来对话的模型 —— 任何"选一个模型来干活"的列表都该走这里。
  *
@@ -594,7 +610,7 @@ export function normalizeAsrIdentity(m: Model): Model {
 export function conversationalModels(models: readonly Model[]): Model[] {
   // 转写模型同样无条件排除：它的端点收的是一个音频 URL，不是 messages，作为
   // 主模型会让对话在第一轮就死掉（asr 执行方案 §1 不变量 1）。
-  return models.filter((m) => !isTranslateOnly(m) && !isAsrOnly(m) && !m.retrieval);
+  return models.filter((m) => !isTranslateOnly(m) && !isAsrOnly(m) && !isRetrievalOnly(m));
 }
 
 /**
@@ -1368,7 +1384,7 @@ export async function deletePrompt(
 }
 
 function rowToModel(r: Record<string, unknown>): Model {
-  return normalizeAsrIdentity({
+  return normalizeModelIdentity({
     id: r.id as string,
     providerId: r.provider_id as string,
     modelId: r.model_id as string,
@@ -1418,7 +1434,7 @@ function rowToModel(r: Record<string, unknown>): Model {
  * used to keep their own copies, and a type added to one of four is a row that
  * saves fine and reads back as "text".
  */
-export const MODEL_TYPES: readonly ModelType[] = ["text", "multimodal", "vision", "image", "video", "asr"];
+export const MODEL_TYPES: readonly ModelType[] = ["text", "multimodal", "vision", "image", "video", "asr", "embedding", "rerank"];
 
 /**
  * Narrow a stored `type` to the union instead of asserting it, for the same

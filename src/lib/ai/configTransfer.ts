@@ -28,7 +28,7 @@ import {
   listPrompts,
   listProviders,
   modelUpsert,
-  normalizeAsrIdentity,
+  normalizeModelIdentity,
   parseModelType,
   parseTranslateFormat,
   parseAsrFormat,
@@ -314,7 +314,7 @@ export function parseConfigBundle(
     );
     // Normalised like a DB row: a backup from before `asr` was a type carries
     // the identity on `asrFormat` alone and must not land in the chat pickers.
-    models.push(normalizeAsrIdentity({
+    models.push(normalizeModelIdentity({
       id,
       providerId,
       modelId,

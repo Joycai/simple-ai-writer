@@ -1,3 +1,4 @@
+import { isRerankFormat } from "../../../lib/ai/retrievalConfig";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -7,7 +8,7 @@ import {
 import { useAiStore } from "../../../stores/aiStore";
 import { useAppStore } from "../../../stores/appStore";
 import { useProjectStore } from "../../../stores/projectStore";
-import { isAsrOnly, MODEL_TYPES, type Model, type ModelType } from "../../../lib/ai/configDb";
+import { isAsrOnly, isRetrievalOnly, MODEL_TYPES, type Model, type ModelType } from "../../../lib/ai/configDb";
 import { resolvePlatform, type PlatformId } from "../../../lib/ai/platforms";
 import { serverToolsSent } from "../../../lib/ai/serverTools";
 import { declarationMarks, isMeasured } from "../../../lib/ai/modelSummary";
@@ -270,7 +271,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
         p.id, p.name,
         channelEndpoints(p).map((e) => ({
           family: e.family,
-          inUse: mine.some((m) => !isAsrOnly(m) && m.type !== "image" && activeFamily(m, p) === e.family),
+          inUse: mine.some((m) => !isAsrOnly(m) && !isRetrievalOnly(m) && m.type !== "image" && activeFamily(m, p) === e.family),
         })),
         resolvePlatform(p.platform, p.baseUrl, p.apiStandard), p.host || p.baseUrl || null,
         mine,
@@ -294,7 +295,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
    */
   const unsentGrants = useMemo(() => models.flatMap((m) => {
     const provider = providerFor(m, providers);
-    if (!provider || !m.serverTools?.length || m.type === "asr") return [];
+    if (!provider || !m.serverTools?.length || (m.type === "asr" || isRetrievalOnly(m))) return [];
     const sent = serverToolsSent(m, providers) ?? [];
     const unsent = m.serverTools.filter((id) => !sent.includes(id));
     return unsent.length ? [t("aiConfig.hub.serverToolsNotSentItem", {
@@ -617,12 +618,12 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                       )}
                       {/* The route this row's requests take, in full (§6.1). Image and
                           transcription rows pick a dedicated endpoint, not a route. */}
-                      {!isOrphan && !m.retrieval && m.type !== "image" && !isAsrOnly(m) && (() => {
+                      {!isOrphan && !isRetrievalOnly(m) && m.type !== "image" && !isAsrOnly(m) && (() => {
                         const channel = providers.find((p) => p.id === m.providerId);
                         return channel ? <span className={`${r.badge} ${r.badgeOn}`}>{ROUTE_LONG[activeFamily(m, channel)]}</span> : null;
                       })()}
                       <span className={hub.modelType} data-type={m.type}>
-                        {m.retrieval ? t(m.retrieval.format === "cohere-rerank" ? "semantic.reranker" : "semantic.embedding") : t(`aiConfig.modelTypes.${m.type}`)}
+                        {m.retrieval ? t(isRerankFormat(m.retrieval.format) ? "semantic.reranker" : "semantic.embedding") : t(`aiConfig.modelTypes.${m.type}`)}
                       </span>
                       <button
                         className={`${hub.iconBtn} ${hub.iconBtnDanger}`}
