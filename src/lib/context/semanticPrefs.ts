@@ -3,12 +3,13 @@ import { toPosixPath } from "../paths";
 
 export interface SemanticPrefs {
   enabled: boolean;
+  documentEnabled?: boolean;
   embeddingModelId: string;
   rerankerModelId: string;
   minScore: number;
 }
 const DEFAULT_SEMANTIC_PREFS: SemanticPrefs = {
-  enabled: false, embeddingModelId: "", rerankerModelId: "", minScore: 0.5,
+  enabled: false, documentEnabled: false, embeddingModelId: "", rerankerModelId: "", minScore: 0.5,
 };
 const key = (project: string) => SEMANTIC_LORE_PREFIX + toPosixPath(project);
 export function semanticPrefs(project: string | null): SemanticPrefs {
@@ -17,6 +18,7 @@ export function semanticPrefs(project: string | null): SemanticPrefs {
     const r = JSON.parse(readPref(key(project)) ?? "null");
     return {
       enabled: r?.enabled === true,
+      documentEnabled: r?.documentEnabled === true,
       embeddingModelId: typeof r?.embeddingModelId === "string" ? r.embeddingModelId : "",
       rerankerModelId: typeof r?.rerankerModelId === "string" ? r.rerankerModelId : "",
       minScore: typeof r?.minScore === "number" && Number.isFinite(r.minScore)

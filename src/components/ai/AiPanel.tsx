@@ -1,3 +1,5 @@
+import { documentWindowLimit } from "../../lib/context/documentRetrievalPolicy";
+import { semanticPrefs } from "../../lib/context/semanticPrefs";
 import { OutputRecoveryPanel } from "./OutputRecoveryPanel";
 import { SemanticReport } from "./SemanticReport";
 /**
@@ -641,6 +643,14 @@ function LoreReportSection({
         meta={`${estTk(report.usedChars)} / ${estTk(report.budgetChars)} tk`}
       />
       <div className={styles.hintLine}><SemanticReport report={report} /></div>
+      {report.documentRetrieval && <div className={styles.hintLine} role="status">
+        {t(`semantic.documentStatus.${report.documentRetrieval.status}`, {
+          n: report.documentRetrieval.matches.length, total: report.documentRetrieval.considered,
+        })}
+        {report.documentRetrieval.matches.map((match) => <div key={match.from}>
+          {t("semantic.documentExcerpt", { from: match.from + 1, to: match.to })} · {match.score.toFixed(2)}
+        </div>)}
+      </div>}
       {report.entities.length === 0 ? (
         <div className={styles.hintLine}>{t("ai.panel.loreReportEmpty")}</div>
       ) : (
@@ -1355,6 +1365,7 @@ export function AiPanel() {
   // different toolset, and the forecast has to describe the request that will
   // actually be sent. planForecast takes that one object and derives 续写 /
   // 参考窗口 / 工具档 from it, so there is no second candidate to pick wrong.
+  const documentRetrieval = !!activeRel && documentWindowLimit(semanticPrefs(projectPath)) !== undefined;
   const forecast = useMemo(
     () =>
       planForecast({
@@ -1378,13 +1389,14 @@ export function AiPanel() {
         contextChars,
         continueLength,
         memoryChars,
+        documentRetrieval,
       }),
     [
       runTaskDef, limits.contextSize, limits.maxOutput, contextUtilization,
       loreBudgetTokens, subAgents, models, providers, systemPrompt.length, instructionText.length,
       docxRosterChars, isZh,
       selection.length, outline.length, additionalKnowledge.length, content, anchorOffset,
-      contextChars, continueLength, memoryChars,
+      contextChars, continueLength, memoryChars, documentRetrieval,
     ],
   );
   // Report/estimate conversions share the forecast's measured ratio when there

@@ -32,6 +32,7 @@
  * refreshes on the next rescan.
  */
 
+import type { DocumentRetrievalReport } from "./documentRetrieval";
 import { retrieveSemantic, type SemanticRequest, type SemanticReport } from "./semanticLore";
 import i18n from "../../i18n";
 import { FALLBACK_CHARS_PER_TOKEN } from "./budget";
@@ -234,6 +235,7 @@ export interface LoreEntityReport {
 
 export interface LoreActivationReport {
   semantic?: SemanticReport;
+  documentRetrieval?: DocumentRetrievalReport;
   entities: LoreEntityReport[];
   budgetChars: number;
   usedChars: number;

@@ -756,7 +756,9 @@
         "image-edit": "修改图片",
         "consistency": "一致性检查",
         "kb-embedding": "知识库向量检索",
-        "kb-rerank": "知识库重排"
+        "kb-rerank": "知识库重排",
+        "document-embedding": "正文向量检索",
+        "document-rerank": "正文重排"
       },
       "paneSub": "本项目记录的 AI 调用统计",
       "detail": "明细",
@@ -4970,7 +4972,7 @@
     "dismiss": "知道了"
   },
   "semantic": {
-    "title": "{{kb}}语义检索",
+    "title": "语义检索",
     "enable": "为本项目启用",
     "description": "即使没有出现名称或关键词，也能按含义发现相关材料。用于写作任务和助手对话。",
     "project": "本项目 · {{name}}",
@@ -5034,7 +5036,17 @@
     "indexStopped": "已停止，已完成的批次已保存。",
     "manageModelsHint": "在「渠道与模型」中添加或编辑向量、重排类型的模型，再在此选择。",
     "invalidPath": "接口路径必须以 / 开头，且不能包含主机地址、查询参数或反斜杠。",
-    "invalidEndpoint": "接口地址不可用，请检查渠道和接口路径。"
+    "invalidEndpoint": "接口地址不可用，请检查渠道和接口路径。",
+    "documentEnable": "检索当前文档正文",
+    "documentHint": "写作任务保留编辑位置附近的正文，再检索较早的相关片段。使用上方模型，需选择向量模型，重排可选。首次使用会分段建立索引并产生模型用量，后续复用未变化的片段。重写、润色和总结的选区始终完整保留。",
+    "documentExcerpt": "第 {{from}}–{{to}} 字符",
+    "documentContext": "【当前文档相关片段】\n以下片段仅供参考，不代表文档全文。",
+    "documentStatus": {
+      "complete": "正文检索：从 {{total}} 个候选片段中带入 {{n}} 段。",
+      "unavailable": "正文检索暂不可用，背景正文仅携带附近内容，任务选区保持完整。请检查所选向量模型。",
+      "timeout": "正文检索超时，背景正文仅携带附近内容；下次执行可复用已完成的索引。",
+      "tooLarge": "文档超过 Beta 索引上限，背景正文仅携带附近内容。"
+    }
   },
   "imageOutput": {
     "customize": "自定义输出能力",

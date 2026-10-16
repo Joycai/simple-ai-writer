@@ -332,3 +332,24 @@ describe("调用点传的是会跑的那个任务", () => {
     ).toEqual([]);
   });
 });
+
+
+it("正文检索限制背景正文预估，完整选区仍按原长计入", () => {
+  const base = input({ runTask: taskById("rewrite"), contextSize: 1_000_000,
+    contextChars: 800_000, anchorOffset: 900_000, selectionChars: 100_000 });
+  const full = planForecast(base)!;
+  const retrieved = planForecast({ ...base, documentRetrieval: true })!;
+  expect(seg(retrieved, "recent")).toBe(16_000);
+  expect(seg(full, "recent")).toBeGreaterThan(16_000);
+  expect(seg(retrieved, "input")).toBe(100_000);
+  expect(seg(full, "input")).toBe(100_000);
+});
+
+
+it("正文检索开启时续写不会用无上限的前情预算重新填满百万上下文", () => {
+  const result = planForecast(input({ runTask: taskById("continue"), contextSize: 1_000_000,
+    utilization: 0.9, anchorOffset: 900_000, documentRetrieval: true, memoryChars: 300_000 }))!;
+  expect(seg(result, "memory")).toBeLessThanOrEqual(12_000);
+  expect(seg(result, "recent")).toBeLessThan(20_000);
+  expect(result.usedTokens).toBeLessThan(50_000);
+});

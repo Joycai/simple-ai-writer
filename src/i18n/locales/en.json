@@ -759,7 +759,9 @@
         "image-edit": "Image edit",
         "consistency": "Consistency check",
         "kb-embedding": "Knowledge Base embeddings",
-        "kb-rerank": "Knowledge Base reranking"
+        "kb-rerank": "Knowledge Base reranking",
+        "document-embedding": "Document embeddings",
+        "document-rerank": "Document reranking"
       },
       "paneSub": "AI calls recorded for this project",
       "detail": "Breakdown",
@@ -4979,7 +4981,7 @@
     "dismiss": "Got it"
   },
   "semantic": {
-    "title": "Semantic {{kb}} retrieval",
+    "title": "Semantic retrieval",
     "enable": "Enable for this project",
     "description": "Find relevant material even when names and keywords are absent. Applies to writing tasks and assistant chat.",
     "project": "This project · {{name}}",
@@ -5043,7 +5045,17 @@
     "indexStopped": "Stopped. Completed batches are saved.",
     "manageModelsHint": "Add or edit Embedding and Rerank models in Channels & Models, then select them here.",
     "invalidPath": "Use a path beginning with /, without a host, query parameters or backslashes.",
-    "invalidEndpoint": "Endpoint unavailable. Check the channel and endpoint path."
+    "invalidEndpoint": "Endpoint unavailable. Check the channel and endpoint path.",
+    "documentEnable": "Retrieve from the current document",
+    "documentHint": "Writing tasks keep nearby text and retrieve relevant earlier passages. Uses the models above; an embedding model is required and reranking is optional. First use indexes the document and incurs model usage; later runs reuse unchanged passages. Edit and summary selections are always kept in full.",
+    "documentExcerpt": "Characters {{from}}–{{to}}",
+    "documentContext": "【Relevant passages from the current document】\nThese excerpts are background references, not the complete document.",
+    "documentStatus": {
+      "complete": "Document retrieval: {{n}} passages included from {{total}} candidates.",
+      "unavailable": "Document retrieval unavailable. Only nearby background text is included; the task selection is unchanged. Check the selected embedding model.",
+      "timeout": "Document retrieval timed out. Only nearby background text is included; cached batches can be reused on the next run.",
+      "tooLarge": "The document exceeds the Beta indexing limit. Only nearby background text is included."
+    }
   },
   "imageOutput": {
     "customize": "Customize output capabilities",
