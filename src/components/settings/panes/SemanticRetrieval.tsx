@@ -51,6 +51,9 @@ function ProjectRetrieval({ project }: { project: string | null }) {
       <Row title={t("semantic.reranker")} desc={t("semantic.rerankerHint")}>
         <Select value={prefs.rerankerModelId} options={options(true, prefs.rerankerModelId)} onChange={(rerankerModelId) => update({ rerankerModelId })} ariaLabel={t("semantic.reranker")} className={common.rowSelect} />
       </Row>
+      <Row title={t("semantic.documentEnable")} desc={t("semantic.documentHint")}>
+        <Toggle on={prefs.documentEnabled === true} onChange={(documentEnabled) => update({ documentEnabled })} label={t("semantic.documentEnable")} />
+      </Row>
       <Row title={t("semantic.threshold")} desc={t("semantic.thresholdHint")}>
         <input className={`${common.input} ${common.rowNumber}`} aria-label={t("semantic.threshold")} type="number" min={-1} max={1} step={0.05} defaultValue={prefs.minScore}
           onBlur={(e) => { const n = Number(e.target.value); if (Number.isFinite(n)) { const minScore = Math.max(-1, Math.min(1, n)); update({ minScore }); e.target.value = String(minScore); } }} />

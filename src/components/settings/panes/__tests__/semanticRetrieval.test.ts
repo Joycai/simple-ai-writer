@@ -10,6 +10,7 @@ const fixture = vi.hoisted(() => ({
   prefs: { enabled: true, embeddingModelId: "", rerankerModelId: "", minScore: 0.5 } as SemanticPrefs,
   choices: {} as Record<string, { options: Choice[]; onChange: (value: string) => void }>,
   save: vi.fn(),
+  toggles: {} as Record<string, (on: boolean) => void>,
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("../../../../stores/projectStore", () => ({
@@ -25,6 +26,13 @@ vi.mock("../../../common/Select", () => ({ Select: (props: { ariaLabel: string; 
   return null;
 } }));
 vi.mock("../SemanticIndexPanel", () => ({ SemanticIndexPanel: () => null }));
+vi.mock("../bits", async (original) => ({
+  ...await original<typeof import("../bits")>(),
+  Toggle: (props: { label: string; onChange: (on: boolean) => void }) => {
+    fixture.toggles[props.label] = props.onChange;
+    return null;
+  },
+}));
 import { SemanticRetrieval } from "../SemanticRetrieval";
 
 const model = (id: string, type: Model["type"], extra: Partial<Model> = {}): Model => ({
@@ -35,7 +43,7 @@ beforeEach(() => {
   fixture.models = [model("vectors", "embedding"), model("ranking", "rerank"), model("chat", "text"),
     model("disabled", "embedding", { enabled: false }), model("orphan", "embedding", { providerId: "missing" })];
   fixture.prefs = { enabled: true, embeddingModelId: "", rerankerModelId: "", minScore: 0.5 };
-  fixture.choices = {};
+  fixture.choices = {}; fixture.toggles = {};
   fixture.save.mockClear();
 });
 describe("Labs retrieval model selection", () => {
@@ -54,4 +62,17 @@ describe("Labs retrieval model selection", () => {
     expect(fixture.choices["semantic.embedding"].options).toContainEqual({ value: id, label: "semantic.unavailableModel" });
     expect(fixture.save).not.toHaveBeenCalled();
   });
+});
+
+
+it("saves the current-document opt-in without changing model selection", () => {
+  renderToStaticMarkup(createElement(SemanticRetrieval));
+  fixture.toggles["semantic.documentEnable"](true);
+  expect(fixture.save).toHaveBeenCalledWith("/fictional-project", { ...fixture.prefs, documentEnabled: true });
+});
+
+it("hides document retrieval controls when the parent project opt-in is off", () => {
+  fixture.prefs.enabled = false;
+  renderToStaticMarkup(createElement(SemanticRetrieval));
+  expect(fixture.toggles["semantic.documentEnable"]).toBeUndefined();
 });

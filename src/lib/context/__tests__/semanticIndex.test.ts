@@ -1,5 +1,6 @@
+import { recordUsage } from "../../ai/usageRow";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { prepareIndex, indexStatus } from "../semanticIndex";
+import { prepareIndex, indexStatus, resolveIndexConnection } from "../semanticIndex";
 import type { SemanticRequest } from "../semanticLore";
 import { embed } from "../../ai/retrieval";
 import type { LoreEntity, LoreIndex } from "../../lore";
@@ -103,4 +104,18 @@ describe("index preparation", () => {
     await vi.advanceTimersByTimeAsync(20_001);
     expect(await result).toBeInstanceOf(Error);
   });
+});
+
+
+it("records document retrieval usage with the selected model in the existing ledger", async () => {
+  const conn = await resolveIndexConnection(args, "e", new AbortController().signal, false, "document");
+  conn.usage({ promptTokens: 123 });
+  expect(recordUsage).toHaveBeenCalledWith("/p", expect.objectContaining({
+    model: models[0], task: "document-embedding", promptTokens: 123,
+  }));
+  const rank = await resolveIndexConnection(args, "r", new AbortController().signal, true, "document");
+  rank.usage({ promptTokens: 45 });
+  expect(recordUsage).toHaveBeenCalledWith("/p", expect.objectContaining({
+    model: models[1], task: "document-rerank", promptTokens: 45,
+  }));
 });

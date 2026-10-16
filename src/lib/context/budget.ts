@@ -255,12 +255,16 @@ export interface ContextBudgetInput {
   /**
    * Verbatim-window size the task explicitly asked for (the 「参考上下文范围」
    * picker on polish/rewrite/summary, including an explicit 0). When present it
-   * is an author decision and is honored exactly — never grown, never trimmed
-   * except by a window that physically can't hold it. Omit for tasks with no
-   * picker (continue/custom): the window then becomes a plannable layer that
+   * is an author decision and is never grown. It is capped only by a window
+   * that physically cannot hold it, or an explicitly enabled retrieval limit.
+   * Omit for tasks with no picker (continue/custom): the window then becomes a plannable layer that
    * grows with the model, floored at RECENT_WINDOW_MIN_CHARS.
    */
   recentWindowChars?: number;
+  /** Opt-in retrieval caps background prose without shrinking the edit selection. */
+  recentWindowLimitChars?: number;
+  /** Combined memory/book recap cap for opt-in document retrieval. */
+  recapLimitChars?: number;
   /**
    * How much text actually precedes the anchor. Caps the recent window's growth
    * so a short chapter doesn't reserve space it can never fill.
@@ -317,7 +321,8 @@ export function planContextBudget(input: ContextBudgetInput): ContextBudgetPlan 
     : FALLBACK_CHARS_PER_TOKEN;
   // `?? ` not `||`: an explicit 0 means "send no recent context", not "unset".
   const explicitRecent = input.recentWindowChars;
-  const recentFloor = Math.max(0, explicitRecent ?? RECENT_WINDOW_MIN_CHARS);
+  const recentLimit = Math.max(0, input.recentWindowLimitChars ?? Infinity);
+  const recentFloor = Math.min(recentLimit, Math.max(0, explicitRecent ?? RECENT_WINDOW_MIN_CHARS));
 
   if (!input.contextSize || input.contextSize <= 0) {
     // No declared window → no dynamic plan and no pre-flight gate downstream, so
@@ -328,8 +333,10 @@ export function planContextBudget(input: ContextBudgetInput): ContextBudgetPlan 
     );
     return {
       loreChars: Math.floor(staticLoreTokens * charsPerToken),
-      memoryChars: MEMORY_BUDGET_CHARS,
-      bookPriorChars: input.includeBookContext ? BOOK_PRIOR_BUDGET_CHARS : 0,
+      memoryChars: Math.min(MEMORY_BUDGET_CHARS, input.recapLimitChars ?? Infinity),
+      bookPriorChars: input.includeBookContext
+        ? Math.min(BOOK_PRIOR_BUDGET_CHARS, Math.max(0, (input.recapLimitChars ?? Infinity) - MEMORY_BUDGET_CHARS))
+        : 0,
       recentWindowChars: recentFloor,
       dynamic: false,
       inputCeilingTokens: 0,
@@ -379,7 +386,7 @@ export function planContextBudget(input: ContextBudgetInput): ContextBudgetPlan 
   // Grow the verbatim window with half of what's left — but only when the task
   // has no explicit picker, and never past the text that actually exists.
   if (explicitRecent === undefined) {
-    const room = Math.max(0, (input.availableRecentChars ?? Infinity) - recentWindowChars);
+    const room = Math.max(0, Math.min(recentLimit, input.availableRecentChars ?? Infinity) - recentWindowChars);
     const grow = Math.min(room, Math.floor(rest * RECENT_WEIGHT));
     recentWindowChars += grow;
     rest -= grow;
@@ -388,6 +395,7 @@ export function planContextBudget(input: ContextBudgetInput): ContextBudgetPlan 
   // A layer that cannot contribute yields its whole share up front. The other
   // direction — the book layer underspending its share — can only be known once
   // it's actually built, and reflows via reflowMemoryBudget().
+  rest = Math.min(rest, Math.max(0, input.recapLimitChars ?? Infinity));
   let memoryChars: number;
   let bookPriorChars: number;
   if (!input.includeBookContext) {

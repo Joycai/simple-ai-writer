@@ -1,5 +1,5 @@
 /**
- * RAG context assembly for V1 — alias-based keyword matching (no embeddings).
+ * RAG context assembly — keyword matching with optional semantic retrieval.
  * Scans lore entity aliases and names against selected text / recent content,
  * then assembles a 4-layer context string:
  *   Layer 1 – System prompt (from active prompt)
@@ -12,6 +12,9 @@
  *   Layer 5 – Current selection / task instruction
  */
 
+import { retrieveDocument } from "./documentRetrieval";
+import { documentWindowLimit } from "./documentRetrievalPolicy";
+import { semanticPrefs } from "./semanticPrefs";
 import type { SemanticRequest } from "./semanticLore";
 import i18n from "../../i18n";
 import type { MessageContent } from "../ai/types";
@@ -32,6 +35,8 @@ const MAX_CONTEXT_CHARS = RECENT_WINDOW_MIN_CHARS;
 /** Extra options available for AI tasks (continue / polish / rewrite / summary). */
 export interface TaskExtras {
   semantic?: SemanticRequest;
+  /** Writing-task snapshot only; never infer scope from the whole project tree. */
+  documentFile?: string;
   /**
    * The pack that declared the task being assembled (`ResolvedTask.packId`) —
    * scopes the 【…】 block labels to that pack's wording. Omitted (base tasks,
@@ -149,6 +154,7 @@ interface ContextBundle {
   /** Compacted story-memory summary of text before the verbatim window. */
   storySummary: string;
   recentContext: string;
+  documentExcerpts?: string;
   /** Project-relative path of the current document (tool-using tasks only). */
   currentFilePath?: string;
   /** The current document described rather than injected — see TaskExtras. */
@@ -364,7 +370,9 @@ export async function assembleContext(
   // Crucially, when a selection exists but can't be located (e.g. preview-mode
   // rendered text that doesn't match the markdown source), we DO NOT fall back
   // to the document tail — that used to make edits silently target the ending.
-  const span = extras?.contextChars ?? MAX_CONTEXT_CHARS;
+  const documentLimit = extras?.documentFile && extras.semantic
+    ? documentWindowLimit(semanticPrefs(extras.semantic.projectPath)) : undefined;
+  const span = Math.min(extras?.contextChars ?? MAX_CONTEXT_CHARS, documentLimit ?? Infinity);
   const appendMode = extras?.appendMode ?? false;
   let endIdx: number;
   const rangeMatches =
@@ -402,10 +410,23 @@ export async function assembleContext(
   // Layer 4: recent context — the text immediately *before* the selection, used
   // only to keep the model's continuation/edit coherent (it is NOT the edit
   // target).
-  const recentContext =
+  let recentContext =
     endIdx >= 0 && span > 0
       ? documentText.slice(Math.max(0, endIdx - span), endIdx).trim()
       : "";
+
+  let documentExcerpts: string | undefined;
+  if (documentLimit !== undefined && extras?.semantic && extras.documentFile && endIdx >= 0 && span > 0) {
+    const query = [extras.requirement?.slice(0, 600), extras.outline?.slice(0, 600),
+      taskInstruction.slice(0, 600), selection.slice(0, 1200),
+      documentText.slice(Math.max(0, endIdx - 1000), endIdx)].filter(Boolean).join("\n");
+    const found = await retrieveDocument(extras.semantic, extras.documentFile, documentText, endIdx, span, query);
+    recentContext = found.local;
+    loreReport.documentRetrieval = found.report;
+    documentExcerpts = found.excerpts.map((chunk) =>
+      i18n.t("semantic.documentExcerpt", { from: chunk.from + 1, to: chunk.to }) + "\n" + chunk.text,
+    ).join("\n\n") || undefined;
+  }
 
   // Story memory: summaries of everything before the verbatim window. Only
   // segments *before* the window are eligible — for a mid-document selection
@@ -448,12 +469,12 @@ export async function assembleContext(
   const total =
     systemPrompt.length + loreSnippets.length + priorChaptersSummary.length +
     prevChapterTail.length + storySummary.length + recentContext.length +
-    taskText.length + (outline?.length ?? 0) + (additionalKnowledge?.length ?? 0);
+    taskText.length + (documentExcerpts?.length ?? 0) + (outline?.length ?? 0) + (additionalKnowledge?.length ?? 0);
   const estimatedTokens = Math.ceil(total / APPROX_CHARS_PER_TOKEN);
 
   return {
     systemPrompt, loreSnippets, loreReport, priorChaptersSummary, prevChapterTail,
-    prevChapterTitle, storySummary, recentContext, taskText, outline,
+    prevChapterTitle, storySummary, recentContext, documentExcerpts, taskText, outline,
     additionalKnowledge, estimatedTokens, currentFilePath: extras?.currentFilePath,
     documentBrief: extras?.documentBrief,
     packId,
@@ -516,6 +537,9 @@ function bundleContextSections(bundle: ContextBundle): string[] {
       ? `【${prevTail}·${bundle.prevChapterTitle}】`
       : `【${prevTail}】`;
     parts.push(`${label}\n${bundle.prevChapterTail}`);
+  }
+  if (bundle.documentExcerpts) {
+    parts.push(i18n.t("semantic.documentContext") + "\n" + bundle.documentExcerpts);
   }
   if (bundle.recentContext) {
     parts.push(`【${sectionLabel("recent", bundle.packId)}】\n${bundle.recentContext}`);

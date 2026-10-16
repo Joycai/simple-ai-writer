@@ -1,3 +1,5 @@
+import { semanticPrefs } from "../lib/context/semanticPrefs";
+import { documentWindowLimit, DOCUMENT_RECAP_CHARS } from "../lib/context/documentRetrievalPolicy";
 import { trackOutput, recoveryRequest } from "./outputRecoveryStore";
 import { create } from "zustand";
 import i18n from "../i18n";
@@ -295,6 +297,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const focus = getWritingFocus();
     const documentText = focus.text;
     const activeFilePath = focus.filePath;
+    const documentFile = activeFilePath ? projectRelativePath(projectPath, activeFilePath) ?? undefined : undefined;
     const selection = get().selection;
     const selectionRange = get().selectionRange;
     const outputEditTarget = task.target === "replace"
@@ -432,6 +435,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // that assumed a different ceiling than the wire sent is how a "context
     // budget" stops describing what actually happened.
     const limits = plannedLimits({ model, provider });
+    const retrievalLimit = documentFile ? documentWindowLimit(semanticPrefs(projectPath)) : undefined;
     const plan = planContextBudget({
       contextSize: limits.contextSize,
       maxOutputTokens: limits.maxOutput,
@@ -455,6 +459,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       // verbatim window with the model. Polish/rewrite/summary pass the author's
       // explicit 「参考上下文范围」 choice, which is honored as-is.
       recentWindowChars: extras?.contextChars,
+      recentWindowLimitChars: retrievalLimit,
+      recapLimitChars: retrievalLimit !== undefined ? DOCUMENT_RECAP_CHARS : undefined,
       availableRecentChars: Math.max(0, anchorOffset),
       hasMemory: !!memory && memory.segments.length > 0,
       includeBookContext: useBookContext,
@@ -509,7 +515,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     let recoveryContext: string | undefined;
     const recoveryTruncated = new Set<string>();
     const controller = new AbortController();
-    extras = { ...extras, semantic: { projectPath, models, providers, signal: controller.signal } };
+    extras = { ...extras, documentFile,
+      semantic: { projectPath, models, providers, signal: controller.signal } };
     set({
       isRunning: true, drafts, activeDraftId: drafts[0].id,
       // Cleared with the log it belongs to: until this run creates its own

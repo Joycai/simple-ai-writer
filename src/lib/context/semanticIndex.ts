@@ -21,12 +21,12 @@ function indexConnection(args: IndexConfig, id: string, ranking = false) {
   const conn: RetrievalConnection = { baseUrl: provider.baseUrl, modelId: model.modelId, retrieval: model.retrieval, apiKey: "" };
   return { model, provider, conn };
 }
-export async function resolveIndexConnection(args: IndexConfig, id: string, signal: AbortSignal, ranking = false) {
+export async function resolveIndexConnection(args: IndexConfig, id: string, signal: AbortSignal, ranking = false, purpose: "kb" | "document" = "kb") {
   const { model, provider, conn } = indexConnection(args, id, ranking);
   conn.apiKey = await loadApiKey(provider.id) ?? "";
   signal.throwIfAborted();
   return { conn, usage: (usage: { promptTokens: number; outputUnits?: number }) => {
-    void recordUsage(args.projectPath, { model, reportedCost: null, task: ranking ? "kb-rerank" : "kb-embedding", ...usage });
+    void recordUsage(args.projectPath, { model, reportedCost: null, task: `${purpose}-${ranking ? "rerank" : "embedding"}`, ...usage });
   } };
 }
 const indexEntries = (index: LoreIndex, scope: LoreScope) => Object.values(index).flat()

@@ -21,6 +21,7 @@ project.db   chat_sessions (id, preview, data, pinned, title, stash_id, created_
                           -- 对话助手会话，每条一个 JSON blob（lib/agent/sessionDb）
 project.db   kb_embeddings (namespace, entry, hash, vector) -- disposable persistent retrieval cache (lib/context/embeddingCache)
 project.db   output_recovery (id, data, updated_at) -- 长输出正文检查点（lib/agent/outputRecovery）
+project.db   document_embeddings (namespace, entry, hash, vector) -- 当前文档正文检索的派生向量缓存，不存原文，与知识库缓存分表
 config.db    token_usage 同上 + project          -- 总账：比任何一个项目活得久
 config.db    fee_groups  (id, name, vendor, billing_mode, input_price, cache_input_price,
                           output_price, request_price, output_unit, output_rates,

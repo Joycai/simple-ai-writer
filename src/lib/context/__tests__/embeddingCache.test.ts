@@ -3,7 +3,7 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readEmbeddings, writeEmbeddings, pruneEmbeddings, invalidateEmbeddings, removeEmbeddings, digest } from "../embeddingCache";
+import { readEmbeddings, writeEmbeddings, pruneEmbeddings, invalidateEmbeddings, removeEmbeddings, digest, documentEmbeddingCache } from "../embeddingCache";
 
 const state = vi.hoisted(() => ({ db: null as DatabaseSync | null }));
 vi.mock("../../project", () => ({ getDb: async () => ({
@@ -42,5 +42,24 @@ describe("project embedding storage", () => {
     expect((await readEmbeddings(dir, "b")).size).toBe(0);
     state.db!.prepare("UPDATE kb_embeddings SET vector = ?").run("bad json");
     expect((await readEmbeddings(dir, "b")).size).toBe(0);
+  });
+});
+
+
+describe("document vector isolation", () => {
+  it("survives KB pruning and only removes stale chunks from its own document namespace", async () => {
+    await writeEmbeddings(dir, "kb", [{ entry: "lore/a", hash: "h", vector: [1] }]);
+    for (const namespace of ["document-a", "document-b"]) {
+      await documentEmbeddingCache.writeEmbeddings(dir, namespace, [
+        { entry: "keep", hash: "h", vector: [2] }, { entry: "old", hash: "h", vector: [3] },
+      ]);
+    }
+    await pruneEmbeddings(dir, []);
+    expect((await documentEmbeddingCache.readEmbeddings(dir, "document-a")).size).toBe(2);
+    await documentEmbeddingCache.pruneNamespace(dir, "document-a", ["keep"]);
+    expect((await documentEmbeddingCache.readEmbeddings(dir, "document-a")).size).toBe(1);
+    expect((await documentEmbeddingCache.readEmbeddings(dir, "document-b")).size).toBe(2);
+    await documentEmbeddingCache.invalidateEmbeddings(dir, "document-a");
+    expect((await documentEmbeddingCache.readEmbeddings(dir, "document-b")).size).toBe(2);
   });
 });

@@ -27,6 +27,7 @@
  * 就是这个模块存在的理由——见 `docs/feature/agent/context-meters.md`。
  */
 
+import { DOCUMENT_CONTEXT_CHARS, DOCUMENT_RECAP_CHARS } from "./documentRetrievalPolicy";
 import type { Model, Provider } from "../ai/configDb";
 import { presetForTools, toolBriefingFor } from "../agent/presets";
 import { plannedToolTokens } from "../agent/toolCost";
@@ -131,6 +132,7 @@ export interface ForecastInput {
   /** 作者选的续写长度；非续写任务本函数忽略它。 */
   continueLength: number | undefined;
   memoryChars: number;
+  documentRetrieval?: boolean;
 }
 
 export function planForecast(input: ForecastInput): ContextForecast | null {
@@ -184,6 +186,8 @@ export function planForecast(input: ForecastInput): ContextForecast | null {
     fixedChars,
     // 没有选择器的任务（续写/自定义）不传，参考窗口就成为一个可规划的层。
     recentWindowChars: supportsExtras ? input.contextChars : undefined,
+    recentWindowLimitChars: input.documentRetrieval ? DOCUMENT_CONTEXT_CHARS : undefined,
+    recapLimitChars: input.documentRetrieval ? DOCUMENT_RECAP_CHARS : undefined,
     availableRecentChars: Math.max(0, anchorOffset),
     hasMemory: memoryChars > 0,
     includeBookContext: isContinue,
