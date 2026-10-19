@@ -96,10 +96,12 @@ export function effortOnWire(
   wire: Wire,
   model: CapabilityModel,
   withTools: boolean,
+  catalogId?: string,
 ): ReasoningEffort | undefined {
   if (!effortLadderWire(wire)) return effort;
+  const at = catalogId ? { ...model, catalogId } : model;
   if (withTools && !hasCapability("effortWithTools", wire, model)) return "off";
-  if (effort === "off" && !hasCapability("reasoningOff", wire, model)) return "low";
+  if (effort === "off" && !hasCapability("reasoningOff", wire, at)) return "low";
   if (effort === "max" && !hasCapability("effortMax", wire, model)) return "xhigh";
   if (effort === "minimal" && !hasCapability("effortMinimal", wire, model)) return "low";
   return effort;
@@ -122,9 +124,11 @@ export function effortMenuOnWire(
   menu: readonly ReasoningEffort[],
   wire: Wire | undefined,
   model: CapabilityModel,
+  catalogId?: string,
 ): ReasoningEffort[] {
   if (!wire || !effortLadderWire(wire)) return [...menu];
-  const refused = new Set(LEVEL_CELLS.filter(([, id]) => !hasCapability(id, wire, model)).map(([level]) => level));
+  const at = catalogId ? { ...model, catalogId } : model;
+  const refused = new Set(LEVEL_CELLS.filter(([, id]) => !hasCapability(id, wire, at)).map(([level]) => level));
   return menu.filter((e) => !refused.has(e));
 }
 

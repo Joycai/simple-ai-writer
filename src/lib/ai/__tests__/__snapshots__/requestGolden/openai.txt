@@ -303,13 +303,13 @@ POST https://api.openai.com/v1/chat/completions
 {"model":"openai/gpt-6-astra","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
 
 ### openai/gpt-6-astra · effortOff
-summary: reasoning_effort=none structured:response_format=json_schema
+summary: reasoning_effort=low structured:response_format=json_schema
 - plain
 POST https://api.openai.com/v1/chat/completions
-{"model":"openai/gpt-6-astra","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+{"model":"openai/gpt-6-astra","reasoning_effort":"low","stream":true,"stream_options":{"include_usage":true}}
 - tools+required
 POST https://api.openai.com/v1/chat/completions
-{"model":"openai/gpt-6-astra","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+{"model":"openai/gpt-6-astra","reasoning_effort":"low","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
 
 ### openai/gpt-6-astra · effortMax
 summary: reasoning_effort=max structured:response_format=json_schema
@@ -845,13 +845,13 @@ POST https://api.openai.com/v1/responses
 {"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
 
 ### openai/gpt-6-astra · effortOff
-summary: reasoning.effort=none structured:text.format=json_schema
+summary: reasoning.effort=low reasoning.summary=auto structured:text.format=json_schema
 - plain
 POST https://api.openai.com/v1/responses
-{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","reasoning":{"effort":"none"},"store":false,"stream":true}
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","reasoning":{"effort":"low","summary":"auto"},"store":false,"stream":true}
 - tools+required
 POST https://api.openai.com/v1/responses
-{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+{"instructions":"Be brief. Answer in JSON.","model":"openai/gpt-6-astra","reasoning":{"effort":"low","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
 
 ### openai/gpt-6-astra · effortMax
 summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_schema

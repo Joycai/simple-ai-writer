@@ -16,7 +16,7 @@
  * The readout beside it is the caller's: the value is the truth, the slider
  * is its mirror, so the same number can also arrive from a typed field.
  */
-import { useCallback, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useCallback, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import styles from "./Slider.module.css";
 
 export interface SliderTick {
@@ -29,9 +29,13 @@ type SliderStep = number | ((value: number) => number);
 
 interface Props {
   value: number;
+  /** Measured caller width; leaves the settings slider's default size intact. */
+  width?: number;
   min: number;
   max: number;
   onChange: (value: number) => void;
+  /** Persist the final pointer value (including a click on the current stop), or a keyboard step. */
+  onCommit?: (value: number) => void;
   scale?: "linear" | "log2";
   ticks?: SliderTick[];
   /** Land on a tick when the pointer is within 4px of it. */
@@ -48,13 +52,14 @@ interface Props {
 const SNAP_PX = 4;
 
 export function Slider({
-  value, min, max, onChange, scale = "linear", ticks = [], snapToTicks = false,
+  value, width, min, max, onChange, onCommit, scale = "linear", ticks = [], snapToTicks = false,
   step, shiftMultiplier = 1, disabled = false, ariaLabel, valueText,
 }: Props) {
   const trackRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const [snapping, setSnapping] = useState(false);
+  const pointerValue = useRef(value);
 
   const stepAt = useCallback(
     (v: number) => (typeof step === "function" ? step(v) : step),
@@ -88,6 +93,7 @@ export function Slider({
     const r = track.getBoundingClientRect();
     const p = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
     const next = resolve(p, r.width);
+    pointerValue.current = next.value;
     setSnapping(next.snapped);
     if (next.value !== value) onChange(next.value);
   };
@@ -96,6 +102,7 @@ export function Slider({
     if (disabled) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     setDragging(true);
+    pointerValue.current = value;
     // Keyboard takes over from where the pointer left off.
     thumbRef.current?.focus({ preventScroll: true });
     applyPointer(e);
@@ -108,6 +115,7 @@ export function Slider({
     if (!dragging) return;
     setDragging(false);
     setSnapping(false);
+    onCommit?.(pointerValue.current);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -132,19 +140,21 @@ export function Slider({
     const v = clamp(next);
     setSnapping(ticks.some((t) => t.value === v));
     if (v !== value) onChange(v);
+    onCommit?.(v);
   };
 
   const pct = toPos(clamp(value)) * 100;
 
   return (
-    <div className={`${styles.slider} ${disabled ? styles.disabled : ""}`}>
+    <div className={`${styles.slider} ${disabled ? styles.disabled : ""}`}
+      style={width === undefined ? undefined : { "--slider-w": `${width}px` } as CSSProperties}>
       <div
         ref={trackRef}
         className={styles.track}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
+        onPointerCancel={() => { setDragging(false); setSnapping(false); }}
       >
         <div className={styles.rail} />
         <div

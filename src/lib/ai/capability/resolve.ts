@@ -11,6 +11,7 @@ import type { ModelType } from "../configDb";
 import type { PlatformId, Wire } from "../platforms";
 import type { RelayUpstreamId } from "../relayUpstream";
 import type { CapabilityId, CapabilityReason, CapabilityStatus, CapabilityVerdict } from "./facts";
+import { catalogFact } from "./cells/catalog";
 import { CAPABILITY_RULES } from "./rules";
 import { PLATFORM_CELLS, platformCell } from "./cells/platform";
 import { UPSTREAM_CELLS } from "./cells/upstream";
@@ -26,6 +27,8 @@ import { patternMatches, rawModelKey } from "./modelId";
  */
 export interface CapabilityModel extends RequestContext {
   modelId?: string;
+  /** Normalized catalog lookup key, when a relay prefixes the public id. */
+  catalogId?: string;
   type?: ModelType;
   /**
    * The relay upstream behind the model, already resolved
@@ -98,6 +101,11 @@ export function familyVerdict(
   // No cell, or rows that single other ids out: the rule below decides.
 
   if (!rule.families.includes(family)) return verdict("no", "family");
+  // A route measurement wins above; otherwise honor the documented native ladder.
+  if (id === "reasoningOff" && model.modelId &&
+    catalogFact("reasoningOff", model.catalogId ?? model.modelId) === false) {
+    return verdict("no", "model");
+  }
   if (rule.official === "yes" && official) return verdict("yes", "protocol");
   if (rule.origin === "private") {
     return rule.relay && PLATFORM_CELLS[platform]?.relay

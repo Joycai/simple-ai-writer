@@ -1571,7 +1571,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                         />
                       </>
                     ) : (
-                      effortMenuOnWire(formCategory.menu, curWire, capModel).map((e) => (
+                      effortMenuOnWire(formCategory.menu, curWire, capModel, catalogId).map((e) => (
                         <DashChip
                           key={e}
                           label={effortLabel(e)}

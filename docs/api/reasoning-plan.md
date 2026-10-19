@@ -13,6 +13,38 @@
 
 ---
 
+## 0.1 模型自适应力度滑块（2026-10-19）
+
+聊天底部、任务面板和紧凑控件改用同一个离散滑块。每个停点是一个实际可发送的 effort，
+不是连续数值；「跟随默认」是独立按钮，因为它表示省略字段，不能排在低与高之间。
+切换模型或线路时重新解析档位，不把旧模型的拖动草稿带过去；拖动结束或键盘调节才保存
+模型行，拖动过程中只更新本地读数。复用应用唯一的 Slider，保留键盘和屏幕阅读器语义，
+按容器实际宽度绘制。开关类和 token 预算类仍使用原控件。
+
+档位事实放在全局模型目录的 effortProfile（协议族 + 档位），仍用统一 ModelPattern 匹配、
+规范化模型 id。只细化匹配协议的标准力度类目，不替换作者声明的开关、预算或禁用类目。
+未知模型继续使用类目菜单。设置抽屉和运行时读取同一解析结果，线路实测的档位限制继续生效。
+
+本次官方文档核对（2026-10-19，未做付费端点实测）：
+- GPT-5.6 Sol / Terra / Luna、GPT-6 Sol / Luna：none / low / medium / high / xhigh / max。
+- GPT-6 Astra、GPT-6.1 Sol：low / medium / high / xhigh / max。目录缺省参与 reasoningOff
+  能力裁决；没有线路实测覆盖时，旧的 off 保存值在请求中降为 low。
+- Opus 4.6：low / medium / high / max；Opus 4.7、4.8、5、5.5 增加 xhigh。
+  不再为已识别的 Claude adaptive 模型展示原来实际发送 low 的「关闭」重复项；
+  旧 off 值仍保持既有线上行为，聊天读数显示低。默认力度仍由端点决定，
+  不把 Opus 5.5 的 medium 或其他代次的 high 硬存进模型行。
+- Claude 经 Chat Completions 兼容线路时不推断原生 Messages 的开关语义。
+
+依据：[GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol)、
+[Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra)、
+[Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna)、
+[GPT-6 / 6.1](https://developers.openai.com/api/docs/guides/latest-model)、
+[Anthropic effort](https://platform.claude.com/docs/en/build-with-claude/effort)、
+[Anthropic thinking](https://platform.claude.com/docs/en/build-with-claude/thinking)。
+
+本次不增加 pro mode，也不改已有 Chat Completions 工具轮的降级策略。滑块表达模型行的
+力度意图；实际线路的工具限制继续由请求计划裁决。
+
 ## 0. 更新（2026-09）：思考参数按类目
 
 **变更**：写侧的作者选择从「一个抽象六值 `reasoningEffort`（默认/关/低/中/高/最高，

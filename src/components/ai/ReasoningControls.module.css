@@ -175,15 +175,11 @@
   transform-origin: bottom right;
 }
 
-.compactItem {
-  padding: 7px 12px;
-  font: 400 12px/1 var(--font-sans);
-  text-align: left;
-  background: transparent;
-  border: none;
-  color: var(--color-text-soft);
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-.compactItem:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
-.compactItemActive { color: var(--color-accent-text); background: var(--color-bg-accent-wash); }
+/* Ordinal effort stops reuse the app's keyboard-accessible Slider. */
+.effortSlider { width: min(260px, 100%); min-width: 0; }
+.effortReadout { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.effortReadout span { font: 400 11px/1.5 var(--font-mono); color: var(--color-text-soft); }
+.effortEnds { display: flex; justify-content: space-between; font: 400 10px/1.5 var(--font-mono); color: var(--color-text-muted); }
+.footerPopover:has(.effortSlider) { width: min(286px, calc(100vw - 32px)); }
+
+.compactPopover:has(.effortSlider) { width: min(286px, calc(100vw - 32px)); padding: 10px 12px; }

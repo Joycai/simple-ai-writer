@@ -24,6 +24,7 @@
  */
 
 import { bySpecificity, canonicalModelId, prefix, rowSetting, type ModelPattern } from "../modelId";
+import type { ReasoningEffort } from "../../reasoning";
 
 interface IntrinsicFacts {
   maxOutput?: number;
@@ -31,6 +32,10 @@ interface IntrinsicFacts {
   contextSize?: number;
   strictSchemaModel?: true;
   reasons?: false;
+  /** Native reasoning cannot be disabled; route measurements may override this default. */
+  reasoningOff?: false;
+  /** Official effort ladder; parameter spelling remains the category's job. */
+  effortProfile?: { family: "openai" | "anthropic"; levels: readonly ReasoningEffort[] };
 }
 
 interface CatalogRow {
@@ -40,8 +45,20 @@ interface CatalogRow {
 
 const row = (p: string, set: IntrinsicFacts): CatalogRow => ({ match: prefix(p), set });
 const STRICT = { strictSchemaModel: true } as const;
+const GPT_LEVELS: readonly ReasoningEffort[] = ["off", "low", "medium", "high", "xhigh", "max"];
+const ALWAYS_LEVELS = GPT_LEVELS.filter((e) => e !== "off");
+const CLAUDE_LEVELS = ["low", "medium", "high", "max"] as const;
 
 const MODEL_CATALOG: readonly CatalogRow[] = bySpecificity<CatalogRow>([
+  // Official model/effort docs checked 2026-10-19; reasoning-plan.md §0.1.
+  row("gpt-5.6", { effortProfile: { family: "openai", levels: GPT_LEVELS } }),
+  row("gpt-6-sol", { effortProfile: { family: "openai", levels: GPT_LEVELS } }),
+  row("gpt-6-luna", { effortProfile: { family: "openai", levels: GPT_LEVELS } }),
+  row("gpt-6-astra", { reasoningOff: false, effortProfile: { family: "openai", levels: ALWAYS_LEVELS } }),
+  row("gpt-6.1-sol", { reasoningOff: false, effortProfile: { family: "openai", levels: ALWAYS_LEVELS } }),
+  ...["claude-opus-4-6", "claude-opus-4.6"].map((p) => row(p, { effortProfile: { family: "anthropic", levels: CLAUDE_LEVELS } })),
+  ...["claude-opus-4-7", "claude-opus-4.7", "claude-opus-4-8", "claude-opus-4.8", "claude-opus-5"]
+    .map((p) => row(p, { effortProfile: { family: "anthropic", levels: ALWAYS_LEVELS } })),
   // ── OpenAI ──
   // GPT-6: 128K, the same as GPT-5 (OrcaRouter's catalog for all three, 2026-09-26).
   // gpt-6 held an enum the prompt contradicted, on ① and ② (landscape.md §7 第十八个样本).

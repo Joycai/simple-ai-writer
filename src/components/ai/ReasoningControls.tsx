@@ -9,7 +9,7 @@
  *
  * **The dial adapts to the model's thinking category.** Each per-vendor
  * category (`resolveThinkingCategory`) declares its own legal menu, so this
- * renders exactly what the endpoint accepts: level chips for a `levels`
+ * renders the supported effort stops in a discrete slider for a `levels`
  * category (Gemini's low/medium/high, Qwen-Max's xhigh, …), an on/off
  * toggle for a switch-style one (MiniMax, Qwen's enable_thinking), and a token
  * field for a `budget` one (Claude extended, Qwen). The label follows what the
@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Slider } from "../common/Slider";
 import { ChevronDown } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { usePopoverDismiss } from "./usePopoverDismiss";
@@ -27,9 +28,9 @@ import {
 } from "../../lib/ai/reasoning";
 import styles from "./ReasoningControls.module.css";
 import { providerFor } from "../../lib/ai/routes";
-import { effortMenuOnWire, resolveThinkingCategory } from "../../lib/ai/capabilities";
+import { canonicalModelId, effortMenuOnWire, effortOnWire, resolveThinkingCategory } from "../../lib/ai/capabilities";
 import { providerWire } from "../../lib/ai/platforms";
-import { capabilityModelOf } from "../../lib/ai/relayUpstream";
+import { capabilityModelOf, isRelayPlatform } from "../../lib/ai/relayUpstream";
 
 function labelKeyFor(e: ReasoningEffort): string {
   return `aiConfig.models.reasoningEffort${e[0].toUpperCase()}${e.slice(1)}`;
@@ -96,7 +97,9 @@ export function ReasoningControls({ variant }: Props) {
 
   if (!model || !provider) return null;
 
-  const cat = resolveThinkingCategory(model, provider.apiStandard, providerWire(provider).platform);
+  const wire = providerWire(provider);
+  const catalogId = canonicalModelId(model.modelId, isRelayPlatform(wire.platform) ? { prefixes: provider.upstreamPrefixes } : undefined);
+  const cat = resolveThinkingCategory(model, provider.apiStandard, wire.platform, catalogId);
   // A category with no control (the `off` category, or a model that resolves to
   // it) gets no row at all, rather than a dead one: a control that never lights
   // up is worse than its absence.
@@ -106,9 +109,13 @@ export function ReasoningControls({ variant }: Props) {
   // — prose, tool calls and thinking together — so "thinking depth" understates
   // what the author is changing.
   const wholeResponse = !!cat.governsWholeResponse;
-  const label = wholeResponse ? t("ai.panel.effortLabel") : t("ai.panel.thinkingLabel");
+  const label = cat.shape === "levels" ? t("ai.panel.effortLabel") : t("ai.panel.thinkingLabel");
 
-  const current = model.reasoningEffort ?? "default";
+  const capabilityModel = capabilityModelOf({ modelId: model.modelId, relayUpstream: model.relayUpstream });
+  const stored = model.reasoningEffort ?? "default";
+  const current = cat.shape === "levels"
+    ? (stored === "off" && cat.offSpelling === "lowest" ? "low" : effortOnWire(stored, wire, capabilityModel, false, catalogId) ?? "default")
+    : stored;
   const set = (e: ReasoningEffort) => {
     // "default" is stored as absent — one representation for "send nothing".
     void updateModel({ ...model, reasoningEffort: e === "default" ? undefined : e });
@@ -127,7 +134,7 @@ export function ReasoningControls({ variant }: Props) {
   const levels = cat.shape === "levels";
   // The levels this model takes on this wire — the category's menu, less the
   // ones it refuses (capabilities.ts `reasoningOff` / `effortMax` / `effortMinimal`).
-  const menu = effortMenuOnWire(cat.menu, providerWire(provider), capabilityModelOf({ modelId: model.modelId, relayUpstream: model.relayUpstream }));
+  const menu = effortMenuOnWire(cat.menu, wire, capabilityModel, catalogId);
 
   const onOffChips = (
     <div className={styles.chipGroup}>
@@ -171,17 +178,10 @@ export function ReasoningControls({ variant }: Props) {
           </div>
         )}
         {levels && (
-          <div className={styles.chipGroup}>
-            {menu.map((e) => (
-              <button
-                key={e}
-                className={`${styles.chip} ${current === e ? styles.chipActive : ""}`}
-                onClick={() => set(e)}
-              >
-                {t(labelKeyFor(e))}
-              </button>
-            ))}
-          </div>
+          <EffortSlider
+            key={model.id + provider.apiStandard + provider.baseUrl + cat.id + menu.join()}
+            label={label} current={current} options={menu} onPick={set}
+          />
         )}
       </FooterDial>
     );
@@ -194,6 +194,7 @@ export function ReasoningControls({ variant }: Props) {
         {hasBudget && budgetField}
         {levels && (
           <CompactDial
+            key={model.id + provider.apiStandard + provider.baseUrl + cat.id + menu.join()}
             label={label}
             value={t(labelKeyFor(current))}
             options={menu}
@@ -211,17 +212,10 @@ export function ReasoningControls({ variant }: Props) {
         <span className={styles.label}>{label}</span>
         {onOff && onOffChips}
         {levels && (
-          <div className={styles.chipGroup}>
-            {menu.map((e) => (
-              <button
-                key={e}
-                className={`${styles.chip} ${current === e ? styles.chipActive : ""}`}
-                onClick={() => set(e)}
-              >
-                {t(labelKeyFor(e))}
-              </button>
-            ))}
-          </div>
+          <EffortSlider
+            key={model.id + provider.apiStandard + provider.baseUrl + cat.id + menu.join()}
+            label={label} current={current} options={menu} onPick={set}
+          />
         )}
         {hasBudget && budgetField}
       </div>
@@ -233,6 +227,60 @@ export function ReasoningControls({ variant }: Props) {
             : t("ai.panel.thinkingHint")}
       </div>
     </>
+  );
+}
+
+/** Discrete effort stops; persist once per gesture rather than per pointer move. */
+function EffortSlider({ label, current, options, onPick }: {
+  label: string;
+  current: ReasoningEffort;
+  options: ReasoningEffort[];
+  onPick: (effort: ReasoningEffort) => void;
+}) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState(current);
+  const root = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(260);
+  useEffect(() => {
+    if (!root.current) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(Math.max(16, entry.contentRect.width)));
+    observer.observe(root.current);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => { setDraft(current); }, [current]);
+  // Default is not an ordinal level. Its parked thumb is only an affordance;
+  // the readout and pressed button explicitly say the endpoint chooses.
+  const index = Math.max(0, options.indexOf(draft));
+  if (!options.length) return null;
+  return (
+    <div className={styles.effortSlider} ref={root}
+      onPointerCancel={() => setDraft(current)}>
+      <div className={styles.effortReadout}>
+        <button type="button" className={`${styles.chip} ${draft === "default" ? styles.chipActive : ""}`}
+          aria-pressed={draft === "default"}
+          onClick={() => { setDraft("default"); onPick("default"); }}>
+          {t(labelKeyFor("default"))}
+        </button>
+        <span aria-live="polite">{t(labelKeyFor(draft))}</span>
+      </div>
+      <Slider ariaLabel={label} valueText={t(labelKeyFor(draft))} width={width}
+        min={0} max={Math.max(1, options.length - 1)} value={index} step={1}
+        ticks={options.map((_, i) => ({ value: i, label: "" }))} snapToTicks
+        disabled={options.length < 2}
+        onChange={(i) => {
+          const value = options[i];
+          if (value) setDraft(value);
+        }}
+        onCommit={(i) => {
+          const value = options[i];
+          if (value) { setDraft(value); if (value !== current) onPick(value); }
+        }}
+      />
+      <div className={styles.effortEnds} aria-hidden>
+        <span>{t(labelKeyFor(options[0]))}</span>
+        <span>{t(labelKeyFor(options[options.length - 1]))}</span>
+      </div>
+    </div>
   );
 }
 
@@ -261,7 +309,7 @@ function FooterDial({ label, value, children }: {
         type="button"
         className={styles.footerTrigger}
         onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-expanded={open}
       >
         {label}
@@ -269,7 +317,7 @@ function FooterDial({ label, value, children }: {
         <ChevronDown size={9} className={styles.footerCaret} aria-hidden />
       </button>
       {open && (
-        <div className={styles.footerPopover} role="menu">
+        <div className={styles.footerPopover} role="dialog" aria-label={label}>
           <div className={styles.footerHead}>
             <span className={styles.footerHeadLabel}>{label}</span>
             <span className={styles.footerHeadFill} />
@@ -292,7 +340,6 @@ function CompactDial({ label, value, options, current, onPick }: {
   current: ReasoningEffort;
   onPick: (e: ReasoningEffort) => void;
 }) {
-  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
@@ -321,7 +368,7 @@ function CompactDial({ label, value, options, current, onPick }: {
       <button
         className={styles.compactTrigger}
         onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-expanded={open}
       >
         {label}
@@ -329,18 +376,8 @@ function CompactDial({ label, value, options, current, onPick }: {
         <ChevronDown size={11} className={styles.compactCaret} />
       </button>
       {open && (
-        <div className={styles.compactPopover} role="menu">
-          {options.map((e) => (
-            <button
-              key={e}
-              className={`${styles.compactItem} ${current === e ? styles.compactItemActive : ""}`}
-              role="menuitemradio"
-              aria-checked={current === e}
-              onClick={() => { onPick(e); setOpen(false); }}
-            >
-              {t(labelKeyFor(e))}
-            </button>
-          ))}
+        <div className={styles.compactPopover} role="dialog" aria-label={label}>
+          <EffortSlider label={label} current={current} options={options} onPick={onPick} />
         </div>
       )}
     </div>
