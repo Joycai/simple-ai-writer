@@ -34,8 +34,10 @@ interface IntrinsicFacts {
   reasons?: false;
   /** Native reasoning cannot be disabled; route measurements may override this default. */
   reasoningOff?: false;
+  /** Documented maximum thinking budget; only refines an existing budget control. */
+  maxThinkingBudget?: number;
   /** Official effort ladder; parameter spelling remains the category's job. */
-  effortProfile?: { family: "openai" | "anthropic"; levels: readonly ReasoningEffort[] };
+  effortProfile?: { family: "openai" | "anthropic"; levels: readonly ReasoningEffort[]; category?: "deepseek" | "qwen-effort" | "doubao" };
 }
 
 interface CatalogRow {
@@ -59,6 +61,16 @@ const MODEL_CATALOG: readonly CatalogRow[] = bySpecificity<CatalogRow>([
   ...["claude-opus-4-6", "claude-opus-4.6"].map((p) => row(p, { effortProfile: { family: "anthropic", levels: CLAUDE_LEVELS } })),
   ...["claude-opus-4-7", "claude-opus-4.7", "claude-opus-4-8", "claude-opus-4.8", "claude-opus-5"]
     .map((p) => row(p, { effortProfile: { family: "anthropic", levels: ALWAYS_LEVELS } })),
+  // Native ladders, not compatibility aliases; reasoning-plan.md §0.2.
+  ...["deepseek-flash", "deepseek-v4-flash"].map((p) => row(p, {
+    effortProfile: { family: "openai", category: "deepseek", levels: ["off", "low", "high", "max"] },
+  })),
+  ...["qwen3.8-max", "qwen3.8-flash", "qwen3.8-27b"].map((p) => row(p, {
+    effortProfile: { family: "openai", category: "qwen-effort", levels: ["off", "low", "medium", "xhigh"] },
+  })),
+  ...["doubao-seed-2-0-pro", "doubao-seed-2-0-lite", "doubao-seed-2.0-pro", "doubao-seed-2.0-lite"]
+    .map((p) => row(p, { effortProfile: { family: "openai", category: "doubao", levels: ["off", "low", "medium", "high"] } })),
+  row("qwen3.7-plus", { maxThinkingBudget: 262_144 }),
   // ── OpenAI ──
   // GPT-6: 128K, the same as GPT-5 (OrcaRouter's catalog for all three, 2026-09-26).
   // gpt-6 held an enum the prompt contradicted, on ① and ② (landscape.md §7 第十八个样本).

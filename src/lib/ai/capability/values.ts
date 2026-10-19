@@ -123,8 +123,12 @@ export function thinkingCategoryOf(m: ThinkingDeclaration, at: Omit<ValueSubject
 
 /** Refine standard ladders without replacing author-declared switch/budget dialects. */
 function modelEffortCategory(category: ThinkingCategory, modelId: string | undefined): ThinkingCategory {
-  if (!["openai-generic", "responses-effort", "claude-adaptive"].includes(category.id)) return category;
+  if (category.id === "qwen-budget" && category.budget && modelId) {
+    const max = catalogFact("maxThinkingBudget", modelId);
+    return max ? { ...category, budget: { ...category.budget, max } } : category;
+  }
   const profile = modelId ? catalogFact("effortProfile", modelId) : undefined;
+  if (!["openai-generic", "responses-effort", "claude-adaptive"].includes(category.id) && category.id !== profile?.category) return category;
   const nativeFamily = category.id === "claude-adaptive" ? "anthropic" : "openai";
   return profile?.family === nativeFamily ? { ...category, menu: [...profile.levels] } : category;
 }

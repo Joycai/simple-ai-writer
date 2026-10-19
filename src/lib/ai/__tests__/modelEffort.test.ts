@@ -26,6 +26,73 @@ describe("model-specific effort ladders", () => {
     expect(resolveThinkingCategory({ modelId: modelId as string }, "anthropic").menu).toEqual(expected);
   });
 
+  it.each([
+    ["deepseek-flash", ["off", "low", "high", "max"]],
+    ["deepseek-v4-flash", ["off", "low", "high", "max"]],
+    ["deepseek-v4-flash-0731", ["off", "low", "high", "max"]],
+    ["qwen3.8-max-0902", ["off", "low", "medium", "xhigh"]],
+    ["qwen3.8-flash", ["off", "low", "medium", "xhigh"]],
+    ["Qwen/Qwen3.8-27B", ["off", "low", "medium", "xhigh"]],
+    ["doubao-seed-2-0-pro-260215", ["off", "low", "medium", "high"]],
+    ["doubao-seed-2.0-lite", ["off", "low", "medium", "high"]],
+  ])("%s trims compatibility aliases on Chat and Responses", (modelId, expected) => {
+    for (const standard of ["openai_compat", "openai_responses_compat"] as ApiStandard[]) {
+      expect(resolveThinkingCategory({ modelId: modelId as string }, standard).menu).toEqual(expected);
+    }
+  });
+
+  it.each(["dashscope", "dashscope-intl"] as const)("%s selects Qwen effort automatically on Chat and native routes", (platform) => {
+    for (const standard of ["openai_compat", "dashscope"] as ApiStandard[]) {
+      for (const modelId of ["qwen3.8-max", "qwen3.8-flash", "qwen3.8-27b"]) {
+        const category = resolveThinkingCategory({ modelId }, standard, platform);
+        expect(category.id).toBe("qwen-effort");
+        expect(category.menu).toEqual(["off", "low", "medium", "xhigh"]);
+        expect(reasoningBody(category, "xhigh", 1000)).toEqual({ enable_thinking: true, reasoning_effort: "xhigh" });
+        expect(reasoningBody(category, "off")).toEqual({ enable_thinking: false });
+        expect(reasoningBody(category, undefined)).toBeUndefined();
+      }
+    }
+  });
+
+  it.each([
+    ["deepseek", "deepseek-v4-flash-0731", "deepseek"],
+    ["deepseek", "deepseek-flash", "deepseek"],
+    ["volcengine", "doubao-seed-2-0-pro-260215", "doubao"],
+    ["volcengine-plan", "doubao-seed-2.0-lite", "doubao"],
+    ["volcengine-plan", "doubao-seed-2-0-lite-260428", "doubao"],
+  ] as const)("%s selects the native switch for %s", (platform, modelId, id) => {
+    const category = resolveThinkingCategory({ modelId }, "openai_compat", platform);
+    expect(category.id).toBe(id);
+    for (const effort of category.menu) {
+      expect(reasoningBody(category, effort)).toEqual(effort === "off"
+        ? { thinking: { type: "disabled" } } : { reasoning_effort: effort });
+    }
+  });
+
+  it("keeps Qwen 3.7 Plus as a budget control and uses its documented ceiling", () => {
+    for (const standard of ["openai_compat", "dashscope"] as ApiStandard[]) {
+      const category = resolveThinkingCategory({ modelId: "qwen3.7-plus-2026-05-26" }, standard, "dashscope");
+      expect(category.id).toBe("qwen-budget");
+      expect(category.shape).toBe("budget");
+      expect(category.budget?.max).toBe(262144);
+      expect(reasoningBody(category, "high", 262144)).toEqual({ enable_thinking: true, thinking_budget: 262144 });
+      expect(reasoningBody(category, "off", 262144)).toEqual({ enable_thinking: false });
+    }
+  });
+
+  it("keeps explicit controls, unrelated models, and other protocol faces intact", () => {
+    expect(resolveThinkingCategory({ modelId: "qwen3.8-max", thinkingCategory: "off" }, "openai_compat", "dashscope").shape).toBe("none");
+    expect(resolveThinkingCategory({ modelId: "qwen3.8-max", thinkingCategory: "qwen-budget" }, "openai_compat", "dashscope").shape).toBe("budget");
+    expect(resolveThinkingCategory({ modelId: "gpt-6-sol", thinkingCategory: "deepseek" }, "openai").menu).toEqual(["off", "low", "high", "max"]);
+    expect(resolveThinkingCategory({ modelId: "qwen3.8-omni-flash" }, "openai_compat", "dashscope").id).toBe("openai-generic");
+    expect(resolveThinkingCategory({ modelId: "doubao-seedance-2-0-pro" }, "openai_compat", "volcengine").id).toBe("openai-generic");
+    expect(resolveThinkingCategory({ modelId: "qwen3.8-max" }, "anthropic").menu).toContain("max");
+    const category = resolveThinkingCategory({ modelId: "qwen3.8-max" }, "openai_responses_compat", "dashscope");
+    for (const effort of category.menu) {
+      expect(reasoningBody(category, effort)).toEqual({ reasoning: effort === "off" ? { effort: "none" } : { effort, summary: "auto" } });
+    }
+  });
+
   it("keeps unknown models and author-declared switch/budget dialects intact", () => {
     expect(resolveThinkingCategory({ modelId: "custom" }, "openai").menu).toEqual(["off", "low", "medium", "high", "max"]);
     expect(resolveThinkingCategory({ modelId: "gpt-6-sol", thinkingCategory: "qwen-budget" }, "openai").shape).toBe("budget");
