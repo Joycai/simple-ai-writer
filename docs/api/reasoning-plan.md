@@ -45,6 +45,43 @@
 本次不增加 pro mode，也不改已有 Chat Completions 工具轮的降级策略。滑块表达模型行的
 力度意图；实际线路的工具限制继续由请求计划裁决。
 
+## 0.2 Seed、DeepSeek Flash 与 Qwen 控件（2026-10-19）
+
+在 §0.1 的统一目录中追加模型档位：
+
+| 模型（含日期后缀、vendor 命名空间） | 独立停点 |
+| --- | --- |
+| Doubao Seed 2.0 Pro / Lite（点号与连字符 id） | 关闭 / low / medium / high |
+| deepseek-flash、deepseek-v4-flash | 关闭 / low / high / max |
+| qwen3.8-max、qwen3.8-flash、qwen3.8-27b | 关闭 / low / medium / xhigh |
+| qwen3.7-plus | Chat / DashScope 原生使用开关 + token 预算，上限 262144；不是离散力度档位 |
+
+理由：只显示有独立语义的停点，避免 Qwen 的 high / max 实际都映射为 xhigh、
+DeepSeek 的 medium 实际映射为 high。Seed 的 minimal 本身就是关闭，沿用现有
+「关闭」停点和原生 disable switch，不增加重复停点。Seedance 是视频模型，不匹配此表。
+
+自动类目在**平台表**补齐，目录只持有档位和数值：百炼国内/国际 Chat 与原生路由的
+Qwen 3.8 选 qwen-effort，3.7 Plus 选 qwen-budget；DeepSeek 官方 Chat 的 V4 Flash
+选 deepseek；火山按量及套餐 Chat 的 Seed 2.0 Pro/Lite 选 doubao。这样 Qwen 3.8
+自动显示力度滑块，也不会同时发送 thinking_budget 与 reasoning_effort。
+作者显式的预算、开关、关闭等声明继续优先。Responses 仍用自身的 reasoning.effort
+序列化，只裁剪已知模型的档位，不借用 Chat 的私有开关。Qwen 3.7 Plus 的 Responses
+保留线路既有菜单；当前参考文档没有为它单列可去重的档位表，不从 3.8 类推。
+兼容中继的类目拼写仍由作者/线路声明，不从模型名猜中继是否透传原生私有字段。
+
+目录的档位现在也细化匹配的原生 levels 类目（deepseek / qwen-effort / doubao），
+不细化其他模型借用的类目。Qwen 3.7 Plus 的文档预算上限只细化既有 qwen-budget
+类目，不改变手填 token 值或默认预算。新增平台行仅声明参数类目，不宣称实测能力。
+
+依据（2026-10-19 官方文档，未付费实测）：
+[火山深度思考](https://docs.volcengine.com/docs/ark/deep-thinking?lang=zh)、
+[DeepSeek thinking](https://api-docs.deepseek.com/guides/thinking_mode/)、
+[V4 正式版新增 low 档](https://api-docs.deepseek.com/news/news260813/)、
+[百炼 Chat 参数](https://www.alibabacloud.com/help/en/model-studio/qwen-api-via-openai-chat-completions)、
+[百炼 Responses 参数](https://www.alibabacloud.com/help/en/model-studio/qwen-api-via-openai-responses)、
+[Qwen3.8-27B 模型卡](https://huggingface.co/Qwen/Qwen3.8-27B)、
+[Qwen3.7 Plus 预算上限](https://www.alibabacloud.com/help/en/model-studio/coding-plan-faq)。
+
 ## 0. 更新（2026-09）：思考参数按类目
 
 **变更**：写侧的作者选择从「一个抽象六值 `reasoningEffort`（默认/关/低/中/高/最高，

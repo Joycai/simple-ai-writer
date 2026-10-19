@@ -69,28 +69,28 @@ POST https://maas.qianwenaiapi.com/compatible-mode/v1/chat/completions
 {"model":"qwen3.8-flash","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
 
 ### qwen3.8-flash · effortHigh
-summary: reasoning_effort=high structured:response_format=json_schema
+summary: enable_thinking=true reasoning_effort=high structured:response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/compatible-mode/v1/chat/completions
-{"model":"qwen3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+{"enable_thinking":true,"model":"qwen3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
 - tools+required
 POST https://maas.qianwenaiapi.com/compatible-mode/v1/chat/completions
-{"model":"qwen3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+{"enable_thinking":true,"model":"qwen3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
 
 ### qwen3.8-flash · effortOff
-summary: reasoning_effort=none structured:response_format=json_schema
+summary: enable_thinking=false structured:response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/compatible-mode/v1/chat/completions
-{"model":"qwen3.8-flash","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+{"enable_thinking":false,"model":"qwen3.8-flash","stream":true,"stream_options":{"include_usage":true}}
 - tools+required
 POST https://maas.qianwenaiapi.com/compatible-mode/v1/chat/completions
-{"model":"qwen3.8-flash","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+{"enable_thinking":false,"model":"qwen3.8-flash","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
 
 ### qwen3.8-flash · effortMax
-summary: reasoning_effort=max structured:response_format=json_schema
+summary: enable_thinking=true reasoning_effort=max structured:response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/compatible-mode/v1/chat/completions
-{"model":"qwen3.8-flash","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+{"enable_thinking":true,"model":"qwen3.8-flash","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
 
 ### no-such-model · bare
 summary: structured:response_format=json_object
@@ -1695,13 +1695,13 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"qwen3.8-flash","parameters":{"incremental_output":true,"response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"result_format":"message"}}
 
 ### qwen3.8-flash · effortHigh
-summary: enable_thinking=true thinking_budget=8000 structured:response_format=json_schema
+summary: enable_thinking=true reasoning_effort=high structured:response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
-{"model":"qwen3.8-flash","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000}}
+{"model":"qwen3.8-flash","parameters":{"enable_thinking":true,"incremental_output":true,"reasoning_effort":"high","result_format":"message"}}
 - tools+required
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
-{"model":"qwen3.8-flash","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message","thinking_budget":8000,"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
+{"model":"qwen3.8-flash","parameters":{"enable_thinking":true,"incremental_output":true,"reasoning_effort":"high","result_format":"message","tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### qwen3.8-flash · effortOff
 summary: enable_thinking=false structured:response_format=json_schema
@@ -1713,10 +1713,10 @@ POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/ge
 {"model":"qwen3.8-flash","parameters":{"enable_thinking":false,"incremental_output":true,"result_format":"message","tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}}
 
 ### qwen3.8-flash · effortMax
-summary: enable_thinking=true structured:response_format=json_schema
+summary: enable_thinking=true reasoning_effort=max structured:response_format=json_schema
 - plain
 POST https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation
-{"model":"qwen3.8-flash","parameters":{"enable_thinking":true,"incremental_output":true,"result_format":"message"}}
+{"model":"qwen3.8-flash","parameters":{"enable_thinking":true,"incremental_output":true,"reasoning_effort":"max","result_format":"message"}}
 
 ### no-such-model · bare
 summary: structured:response_format=json_object

@@ -91,6 +91,15 @@ interface PlatformCells {
   families?: Partial<Record<ProtocolFamily | "all", FamilyCells>>;
 }
 
+/** Documented control spellings (2026-10-19), not measured capability flags. */
+const QWEN_THINKING: readonly PlatformModelRow[] = [
+  { match: /^qwen3\.8-(?:max|flash|27b)(?:$|-)/, set: { thinkingCategory: "qwen-effort" } },
+  { match: /^qwen3\.7-plus(?:$|-)/, set: { thinkingCategory: "qwen-budget" } },
+];
+const SEED_THINKING: readonly PlatformModelRow[] = [
+  { match: /^doubao-seed-2(?:-0|\.0)-(?:pro|lite)(?:$|-)/, set: { thinkingCategory: "doubao" } },
+];
+
 /** A released id's tail: nothing, a date stamp, a four-digit snapshot, or `-preview`. */
 const SNAPSHOT = String.raw`(?:-(?:\d{4}-\d{2}-\d{2}|\d{4}|preview))?`;
 
@@ -173,7 +182,7 @@ const DASHSCOPE: PlatformCells = {
       // A clip read, and `fps` changes the bill (第六个样本「视觉理解」, 第十九个样本).
       videoInput: true,
       videoFps: true,
-      models: DASHSCOPE_CODE_INTERPRETER.openai,
+      models: [...DASHSCOPE_CODE_INTERPRETER.openai, ...QWEN_THINKING],
     },
     // Built-in `tools[]` entries; the two image searches exist on this wire only.
     responses: {
@@ -190,6 +199,7 @@ const DASHSCOPE: PlatformCells = {
     // (landscape.md §7 第二十一个样本). Only the domestic host lists the route,
     // so the international deployment never reaches this.
     dashscope: {
+      models: QWEN_THINKING,
       jsonSchema: true,
       web_search: true,
     },
@@ -239,6 +249,7 @@ const ZHIPU_MODELS: readonly PlatformModelRow[] = [
  */
 const DEEPSEEK_MODELS: readonly PlatformModelRow[] = [
   cal("deepseek-flash", { thinkingCategory: "deepseek", contextSize: 1_048_576, maxOutput: 393_216 }, MULTIMODAL),
+  { match: /^deepseek-v4-flash(?:$|-)/, set: { thinkingCategory: "deepseek" } },
   cal("deepseek-v4-pro", { thinkingCategory: "deepseek", contextSize: 1_048_576, maxOutput: 393_216 }),
 ];
 
@@ -349,7 +360,7 @@ export const PLATFORM_CELLS: Record<PlatformId, PlatformCells> = {
     },
   },
   minimax: { families: { anthropic: { web_search: true } } },
-  volcengine: {},
+  volcengine: { families: { openai: { models: SEED_THINKING } } },
   // The first platform whose Anthropic `document` block was seen reaching the
   // model (landscape.md §7 第十二个样本); Anthropic's own and OrcaRouter's
   // verbatim route followed (第十八个样本「再补测」).
@@ -366,7 +377,7 @@ export const PLATFORM_CELLS: Record<PlatformId, PlatformCells> = {
       // A `video_url` clip read right on doubao-seed-2.0-mini; `fps` left no
       // mark on a 4-second clip's bill in either spelling, which a clip that
       // short cannot tell from a frame floor — so no `videoFps` cell (第十九个样本).
-      openai: { jsonSchema: true, videoInput: true },
+      openai: { jsonSchema: true, videoInput: true, models: SEED_THINKING },
       responses: { web_search: true, jsonSchema: true },
       anthropic: {
         web_search: true,

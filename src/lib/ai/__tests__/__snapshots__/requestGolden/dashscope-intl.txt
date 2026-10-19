@@ -69,28 +69,28 @@ POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
 {"model":"qwen3.8-flash","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
 
 ### qwen3.8-flash · effortHigh
-summary: reasoning_effort=high structured:response_format=json_schema
+summary: enable_thinking=true reasoning_effort=high structured:response_format=json_schema
 - plain
 POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
-{"model":"qwen3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+{"enable_thinking":true,"model":"qwen3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
 - tools+required
 POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
-{"model":"qwen3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+{"enable_thinking":true,"model":"qwen3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
 
 ### qwen3.8-flash · effortOff
-summary: reasoning_effort=none structured:response_format=json_schema
+summary: enable_thinking=false structured:response_format=json_schema
 - plain
 POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
-{"model":"qwen3.8-flash","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+{"enable_thinking":false,"model":"qwen3.8-flash","stream":true,"stream_options":{"include_usage":true}}
 - tools+required
 POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
-{"model":"qwen3.8-flash","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+{"enable_thinking":false,"model":"qwen3.8-flash","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
 
 ### qwen3.8-flash · effortMax
-summary: reasoning_effort=max structured:response_format=json_schema
+summary: enable_thinking=true reasoning_effort=max structured:response_format=json_schema
 - plain
 POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
-{"model":"qwen3.8-flash","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+{"enable_thinking":true,"model":"qwen3.8-flash","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
 
 ### no-such-model · bare
 summary: structured:response_format=json_object
