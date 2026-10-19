@@ -303,13 +303,13 @@ POST https://api.minimaxi.com/v1/chat/completions
 {"model":"openai/gpt-6-astra","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
 
 ### openai/gpt-6-astra · effortOff
-summary: reasoning_effort=none structured:response_format=json_object
+summary: reasoning_effort=low structured:response_format=json_object
 - plain
 POST https://api.minimaxi.com/v1/chat/completions
-{"model":"openai/gpt-6-astra","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+{"model":"openai/gpt-6-astra","reasoning_effort":"low","stream":true,"stream_options":{"include_usage":true}}
 - tools+required
 POST https://api.minimaxi.com/v1/chat/completions
-{"model":"openai/gpt-6-astra","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+{"model":"openai/gpt-6-astra","reasoning_effort":"low","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
 
 ### openai/gpt-6-astra · effortMax
 summary: reasoning_effort=max structured:response_format=json_object

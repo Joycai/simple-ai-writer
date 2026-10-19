@@ -115,10 +115,18 @@ interface ThinkingDeclaration {
 export function thinkingCategoryOf(m: ThinkingDeclaration, at: Omit<ValueSubject, "modelId">): Sourced<ThinkingCategory> {
   const family: ProtocolFamily = familyOf(at.standard);
   const declared = m.thinkingCategory ? THINKING_CATEGORIES[m.thinkingCategory] : undefined;
-  if (declared && fitsFamily(declared, family)) return { value: declared, source: "author" };
+  if (declared && fitsFamily(declared, family)) return { value: modelEffortCategory(declared, at.canonicalModelId ?? m.modelId), source: "author" };
   // Every family has a default, so the table always answers.
   const table = tableValue("thinkingCategory", { ...at, modelId: m.modelId }, (id) => fitsFamily(THINKING_CATEGORIES[id], family))!;
-  return { value: THINKING_CATEGORIES[table.value], source: table.source };
+  return { value: modelEffortCategory(THINKING_CATEGORIES[table.value], at.canonicalModelId ?? m.modelId), source: table.source };
+}
+
+/** Refine standard ladders without replacing author-declared switch/budget dialects. */
+function modelEffortCategory(category: ThinkingCategory, modelId: string | undefined): ThinkingCategory {
+  if (!["openai-generic", "responses-effort", "claude-adaptive"].includes(category.id)) return category;
+  const profile = modelId ? catalogFact("effortProfile", modelId) : undefined;
+  const nativeFamily = category.id === "claude-adaptive" ? "anthropic" : "openai";
+  return profile?.family === nativeFamily ? { ...category, menu: [...profile.levels] } : category;
 }
 
 /**
@@ -130,6 +138,7 @@ export function resolveThinkingCategory(
   m: ThinkingDeclaration,
   standard: ApiStandard,
   platform?: PlatformId,
+  canonicalModelId?: string,
 ): ThinkingCategory {
-  return thinkingCategoryOf(m, { standard, platform }).value;
+  return thinkingCategoryOf(m, { standard, platform, canonicalModelId }).value;
 }

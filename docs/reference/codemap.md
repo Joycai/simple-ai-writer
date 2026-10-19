@@ -136,6 +136,11 @@ CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, ico
 
 ### `src/components/ai/`
 
+ReasoningControls 的力度档位使用共用 Slider 的离散停点，跟随默认单独恢复；档位按当前模型、
+协议与线路限制解析，拖动结束才保存模型行。模型目录细化标准类目，未知模型保留类目菜单，
+理由和官方依据见 reasoning-plan.md §0.1。
+
+
 聊天请求失败时，`ChatError` 默认只显示短摘要与「重试」；原始错误作为纯文本放在可折叠、限高滚动的详情内，避免网关 HTML 挤掉输入区。`retryChat` 只接受最新一轮的运行错误，忙碌时拒绝；重试作为新的继续请求保留协议历史和成功的工具结果，不回退重放整轮，以减少重复写入。继续请求要求助手先核对已完成操作，仍走正常审批流程；这不是传输层逐请求重放。
 
 `OutputRecoveryPanel` 是聊天与任务面板共用的「已保存的输出」入口，含纯文本续写与按作者大纲分节生成；数据属于项目，不随组件卸载丢失。设计与边界见 [`long-output-recovery.md`](../feature/agent/long-output-recovery.md)。

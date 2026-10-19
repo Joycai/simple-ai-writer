@@ -4116,9 +4116,9 @@ orcarouter openai reasoningOff "openai/gpt-6-sol-2026-01-01" yes protocol
 orcarouter openai reasoningOff "[x]openai/gpt-6-sol" yes protocol
 orcarouter openai reasoningOff "openai/gpt-6-astra" no model
 orcarouter openai reasoningOff "  OPENAI/GPT-6-ASTRA  " no model
-orcarouter openai reasoningOff "vendor/openai/gpt-6-astra" yes protocol
-orcarouter openai reasoningOff "openai/gpt-6-astra-2026-01-01" yes protocol
-orcarouter openai reasoningOff "[x]openai/gpt-6-astra" yes protocol
+orcarouter openai reasoningOff "vendor/openai/gpt-6-astra" no model
+orcarouter openai reasoningOff "openai/gpt-6-astra-2026-01-01" no model
+orcarouter openai reasoningOff "[x]openai/gpt-6-astra" no model
 orcarouter openai reasoningOff "openai/gpt-5.6-luna" yes protocol
 orcarouter openai reasoningOff "  OPENAI/GPT-5.6-LUNA  " yes protocol
 orcarouter openai reasoningOff "vendor/openai/gpt-5.6-luna" yes protocol
@@ -5529,9 +5529,9 @@ orcarouter responses reasoningOff "openai/gpt-6-sol-2026-01-01" yes protocol
 orcarouter responses reasoningOff "[x]openai/gpt-6-sol" yes protocol
 orcarouter responses reasoningOff "openai/gpt-6-astra" no model
 orcarouter responses reasoningOff "  OPENAI/GPT-6-ASTRA  " no model
-orcarouter responses reasoningOff "vendor/openai/gpt-6-astra" yes protocol
-orcarouter responses reasoningOff "openai/gpt-6-astra-2026-01-01" yes protocol
-orcarouter responses reasoningOff "[x]openai/gpt-6-astra" yes protocol
+orcarouter responses reasoningOff "vendor/openai/gpt-6-astra" no model
+orcarouter responses reasoningOff "openai/gpt-6-astra-2026-01-01" no model
+orcarouter responses reasoningOff "[x]openai/gpt-6-astra" no model
 orcarouter responses reasoningOff "openai/gpt-5.6-luna" yes protocol
 orcarouter responses reasoningOff "  OPENAI/GPT-5.6-LUNA  " yes protocol
 orcarouter responses reasoningOff "vendor/openai/gpt-5.6-luna" yes protocol

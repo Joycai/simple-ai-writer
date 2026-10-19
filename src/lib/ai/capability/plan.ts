@@ -209,13 +209,13 @@ export function mediaProjection(opts: MediaPlanInput): (messages: readonly Strea
 export function planRequest(opts: PlanInput): RequestPlan {
   const wire = wireOf(opts);
   const model = planModel(opts);
-  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory, modelId: opts.modelId }, opts.standard, wire.platform);
+  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory, modelId: opts.modelId }, opts.standard, wire.platform, opts.canonicalModelId);
   const functionTools = !!opts.tools?.length;
   // The row's effort as this wire takes it: `off` beside function tools where
   // the wire refuses any other effort there, the nearest level the model takes
   // where it refuses `off` / `max` / `minimal`. Unchanged everywhere else, so
   // an unset model still sends nothing.
-  const effort = effortOnWire(opts.reasoningEffort, wire, model, functionTools);
+  const effort = effortOnWire(opts.reasoningEffort, wire, model, functionTools, opts.canonicalModelId);
   const state = wireThinks(category, effort);
   // What the request's conditions read (`capability/conditions.ts`).
   const request: CapabilityModel = { ...model, thinking: state, functionTools };
