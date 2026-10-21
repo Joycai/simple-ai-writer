@@ -21,7 +21,9 @@ export function documentChunks(text: string, end: number): DocumentChunk[] {
   for (let from = 0; from < end;) {
     let to = Math.min(end, from + CHUNK_CHARS);
     if (to < end) {
-      const boundary = text.lastIndexOf("\n\n", to);
+      // Search only this chunk: scanning the whole prefix is quadratic when
+      // a long document has no paragraph breaks. Include both delimiter chars.
+      const boundary = from + text.slice(from, to + 2).lastIndexOf("\n\n");
       if (boundary > from + CHUNK_CHARS / 2) to = Math.min(end, boundary + 2);
       // Never split a UTF-16 surrogate pair.
       if (/[\uD800-\uDBFF]/.test(text[to - 1])) to--;

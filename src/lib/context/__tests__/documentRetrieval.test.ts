@@ -46,6 +46,24 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("current document retrieval", () => {
+  it("bounds paragraph searches even when the document has no paragraph breaks", () => {
+    const search = vi.spyOn(String.prototype, "lastIndexOf");
+    try {
+      const text = "x".repeat(12000);
+      const chunks = documentChunks(text, text.length);
+      expect(chunks[chunks.length - 1]?.to).toBe(text.length);
+      expect(search).toHaveBeenCalled();
+      expect(search.mock.contexts.every((window) => String(window).length <= 1202)).toBe(true);
+    } finally {
+      search.mockRestore();
+    }
+  });
+  it.each([600, 601, 1199, 1200])("preserves paragraph boundaries at offset %i", (boundary) => {
+    const text = "x".repeat(boundary) + "\n\n" + "y".repeat(2400);
+    const chunks = documentChunks(text, text.length);
+    expect(chunks[0].to).toBe(boundary > 600 ? boundary + 2 : 1200);
+    chunks.forEach((chunk) => expect(chunk.text).toBe(text.slice(chunk.from, chunk.to)));
+  });
   it("splits bounded overlapping excerpts with accurate source offsets and never crosses the anchor", () => {
     const text = manuscript + "FUTURE_SECRET";
     const chunks = documentChunks(text, manuscript.length);
