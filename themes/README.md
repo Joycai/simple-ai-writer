@@ -39,6 +39,12 @@ The pairing is not a binding: neither typography theme writes a literal colour �
 
 ---
 
+## 莫兰迪花园 / Morandi Garden
+
+[`morandi-garden-light.css`](morandi-garden-light.css)（浅色外观 / light appearance）与 [`morandi-garden.css`](morandi-garden.css)（排版 / typography）是一组豆绿与暖棕主题。安装、出处与适配取舍见 [Morandi Garden guide](morandi-garden.md)。
+
+---
+
 ## 安装 / Install
 
 1. 下载 `.css` 文件（有同名文件夹的一起下）。
