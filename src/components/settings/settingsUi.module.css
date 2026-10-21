@@ -332,6 +332,7 @@
 /* ─── Mono badge (prompt scene, API standard, version pill) ──────────────── */
 
 .badge {
+  display: inline-block;
   flex: none;
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
