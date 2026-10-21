@@ -24,7 +24,7 @@
   --theme-name: 莫兰迪花园 · 排版;
   --theme-kind: markdown;
   --theme-extends: clean;
-  --theme-version: 1;
+  --theme-version: 2;
   --theme-author: Codex / Kitsunee-CN (design inspiration);
 }
 
@@ -42,15 +42,15 @@
   --md-h-space-bottom: 0.65em;
   --md-h1-size: 2.2em;
   --md-h1-weight: 700;
-  --md-h1-letter: 0.055em;
+  --md-h1-letter: 0.02em;
   --md-h1-align: left;
-  --md-h2-size: 1.8em;
+  --md-h2-size: 1.55em;
   --md-h2-align: left;
-  --md-h3-size: 1.5em;
-  --md-h4-size: 1.3em;
+  --md-h3-size: 1.25em;
+  --md-h4-size: 1.1em;
   --md-list-indent: 1.8em;
-  --md-quote-style: italic;
-  --md-quote-border: 0.25em solid var(--color-amber);
+  --md-quote-style: normal;
+  --md-quote-border: 3px solid var(--md-color-accent);
   --md-quote-bg: color-mix(in srgb, var(--md-color-accent) 7%, var(--color-bg-base));
   --md-hr-line: none;
   --md-hr-mark: "";
@@ -59,7 +59,8 @@
   --morandi-purple: color-mix(in oklab, var(--color-type-image-fg) 65%, var(--md-color-dim));
   --morandi-blue: color-mix(in oklab, var(--color-type-video-fg) 60%, var(--md-color-dim));
   --morandi-rose: var(--color-type-asr-fg);
-  --morandi-table-rule: color-mix(in srgb, var(--md-color-accent) 45%, var(--color-bg-base));
+  --morandi-list-rule: color-mix(in srgb, var(--md-color-accent) 22%, var(--color-bg-base));
+  --morandi-table-rule: color-mix(in srgb, var(--md-color-accent) 16%, var(--color-bg-base));
 }
 
 /* 标题层级 / Heading hierarchy */
@@ -70,9 +71,10 @@
 .md-body h5,
 .md-body h6 {
   line-height: 1.4;
-  letter-spacing: 0.055em;
+  letter-spacing: 0.015em;
 }
 .md-body h1 {
+  letter-spacing: var(--md-h1-letter);
   color: var(--color-amber);
   border-bottom: 0.075em solid var(--md-color-border);
   padding-bottom: 0.3em;
@@ -81,14 +83,14 @@
   color: var(--md-color-accent);
   border-left: 0.15em solid var(--md-color-accent);
   padding-left: 0.45em;
-  font-weight: 800;
+  font-weight: 700;
 }
 .md-body h3 { color: var(--morandi-purple); padding-left: 0.25em; }
-.md-body h4 { color: var(--morandi-blue); }
+.md-body h4 { color: var(--md-color-text); }
 .md-body h5 {
   color: color-mix(in oklab, var(--color-amber) 65%, var(--md-color-dim));
   font-size: 1.1em;
-  font-style: italic;
+  font-style: normal;
 }
 .md-body h6 { color: var(--md-color-dim); font-size: 1em; font-weight: 400; }
 
@@ -109,11 +111,12 @@
   letter-spacing: 0.025em;
 }
 .md-body pre {
-  background: var(--md-quote-bg);
+  background: var(--md-color-surface);
   padding: 1.2em;
   border: 1px solid var(--md-color-border);
-  border-radius: 0.6em;
-  line-height: 1.8;
+  border-radius: 0.5em;
+  line-height: 1.65;
+  overflow-x: auto;
 }
 .md-body pre code {
   color: var(--md-color-text);
@@ -132,15 +135,11 @@
   margin-top: 0.5em;
   margin-bottom: 0.5em;
   margin-left: 0.15em;
-  border-left: 1px solid var(--morandi-purple);
+  border-left: 1px solid var(--morandi-list-rule);
   padding-left: 1.5em;
 }
 .md-body ul ul { list-style-type: circle; }
 .md-body ul ul ul { list-style-type: square; }
-.md-body li > ul ul,
-.md-body li > ol ol { border-left-color: var(--md-color-accent); }
-.md-body li > ul ul ul,
-.md-body li > ol ol ol { border-left-color: var(--color-amber); }
 
 /* 圆角引文：层级越深底色越淡 / Rounded quotes, lighter nested washes */
 .md-body blockquote {
@@ -162,11 +161,19 @@
 /* 表格与分隔线 / Tables and rules */
 .md-body table { margin: 2em 0; font-size: 0.95em; }
 .md-body th,
-.md-body td { border: 1px solid var(--morandi-table-rule); padding: 0.8em 1em; }
+.md-body td {
+  border: none;
+  border-bottom: 1px solid var(--morandi-table-rule);
+  padding: 0.7em 1em;
+}
 .md-body th {
   background: color-mix(in srgb, var(--md-color-accent) 10%, var(--color-bg-base));
   color: var(--md-color-accent);
   font-weight: 700;
+  border-bottom: 2px solid var(--morandi-table-rule);
+}
+.md-body tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--md-color-accent) 3%, var(--color-bg-base));
 }
 .md-body tbody tr:hover { background: var(--md-quote-bg); }
 .md-body hr {

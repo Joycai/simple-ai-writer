@@ -44,7 +44,7 @@
   --theme-name: 物理猫 · 灯带;  /* 网格里显示的名字 / the name the grid shows */
   --theme-kind: markdown;       /* 排版主题 / a typography theme (not ui) */
   --theme-extends: clean;       /* 没写到的旋钮从「素雅」取 / knobs left out come from Clean */
-  --theme-version: 1;
+  --theme-version: 2;
   --theme-author: Phycat (sumruler) · simple-ai-writer;
 }
 
@@ -182,7 +182,7 @@
   border-radius: 10px;
   border: var(--glass-border);
   background: var(--color-bg-surface);
-  overflow: hidden;
+  overflow-x: auto;
 }
 .md-body pre::before {
   content: "";

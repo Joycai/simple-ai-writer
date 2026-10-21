@@ -28,3 +28,9 @@ The source ground, body, sage and clay colours are retained. Other shell colours
 node .claude/skills/make-theme/scripts/check-theme.mjs themes/morandi-garden-light.css
 node .claude/skills/make-theme/scripts/check-theme.mjs themes/morandi-garden.css --preview --with themes/morandi-garden-light.css
 ```
+
+## 排版优化 / Typography refinement
+
+标题保留暖棕、豆绿与柔紫，缩小二、三级标题并收紧字距，四级以下回到更克制的正文色系。引文用直立文字与浅豆绿底；代码块使用中性底色，便于区分不同内容。表格改用轻横线和淡隔行底色，嵌套列表引导线降低对比度，减少长文中的视觉干扰。所有颜色仍由应用令牌推导，适配明暗外观。
+
+Smaller section headings and tighter tracking preserve the clay, sage and muted-purple identity while giving prose more room. Upright quotes use a sage wash; code uses a neutral surface. Light horizontal table rules, subtle alternating rows and quieter nested-list guides make dense documents easier to scan. Colours remain token-based for light and dark appearances.
