@@ -25,6 +25,6 @@ The source ground, body, sage and clay colours are retained. Other shell colours
 校验与预览 / Validate and preview:
 
 ```bash
-node .claude/skills/make-theme/scripts/check-theme.mjs theme/morandi-garden-light.css
-node .claude/skills/make-theme/scripts/check-theme.mjs theme/morandi-garden.css --preview --with theme/morandi-garden-light.css
+node .claude/skills/make-theme/scripts/check-theme.mjs themes/morandi-garden-light.css
+node .claude/skills/make-theme/scripts/check-theme.mjs themes/morandi-garden.css --preview --with themes/morandi-garden-light.css
 ```

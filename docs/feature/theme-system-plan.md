@@ -274,7 +274,7 @@ S1 是最大也最值钱的一片：它本身就是对今天「176 个只在两�
 
 ### 13.1 Morandi Garden 主题文件（2026-10-02）
 
-按作者指定目录，主题保存在根目录 `theme/`：`morandi-garden-light.css` 是外观主题，`morandi-garden.css` 是排版主题；安装步骤与出处在 [`theme/README.md`](../../theme/README.md)。这是可手动安装的文件组，不注册为应用内置主题。
+主题统一保存在根目录 `themes/`，与其他可下载主题放在一起，避免重复目录：`morandi-garden-light.css` 是外观主题，`morandi-garden.css` 是排版主题；安装步骤与出处在 [`themes/morandi-garden.md`](../../themes/morandi-garden.md)。这是可手动安装的文件组，不注册为应用内置主题。
 
 参考 [Kitsunee-CN/MorandiGarden](https://github.com/Kitsunee-CN/MorandiGarden)（原仓库 README 声明 MIT），重新编写适配规则。保留近白底 `#FBFDFB`、深褐灰正文 `#403C3C`、豆绿强调 `#506956` 和暖棕陪衬 `#7A5F52`；其它外观令牌使用 `make-theme` 生成器的明度台阶，避免只换正文却留下基底主题的界面颜色。强调色对底 5.88:1、正文 10.65:1、六组模型标签全部 ≥4.5:1。
 
