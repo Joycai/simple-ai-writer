@@ -299,3 +299,7 @@ S1 是最大也最值钱的一片：它本身就是对今天「176 个只在两�
 3. **导出的深色块要不要**：收件人的系统是深色时，公众号排版带品牌色 + 作者的夜间调色板可能不好看。备选：导出只带浅色（今天的行为），深色块作为导出对话框的一个开关。倾向：默认带，开关可关。
 4. **排版主题自带字体与 `data-font` 的关系**：排版主题 `.md-body { font-family: … }` 会压过字体方案（后者只改 `--font-serif`）。这是预期（Typora 的主题就是带字体的），设置页在卡上标「自带字体 · 不随字体方案变」——S3 已做；判定是「值里没有 `var(`」，引用 `var(--font-serif)` 的不算自带。
 5. **旧偏好值**：`app:theme` 从未存过 `paper`/`night`（它是模式），无迁移；`app:markdownTheme` 存的五个 id 全部保留为内置保留字，无迁移。唯一要动的是把 `design-system.md` 里那句 `localStorage` 改掉。
+
+### Markdown example polish (2026-10-21)
+
+Morandi Garden now uses a tighter heading scale and tracking, upright tinted quotes, neutral code surfaces, softer nested-list guides and horizontal table rules with subtle alternating rows. These distinguish content types without making every block compete with the headings; colours still derive from appearance tokens. See `themes/morandi-garden.md`. Phycat Neon restores `overflow-x: auto` on code blocks: its decorative clipping previously overrode the shared Markdown scrolling rule and hid long lines.
