@@ -47,7 +47,7 @@
   --theme-kind: markdown;          /* 排版主题 / a typography theme (not ui) */
   --theme-extends: clean;          /* 没写到的旋钮从这套内置取：manuscript | clean | magazine | wechat | typewriter
                                       knobs left out come from this built-in */
-  --theme-version: 1;
+  --theme-version: 2;
   --theme-author: simple-ai-writer;
 }
 
@@ -76,8 +76,8 @@
   --md-h4-size: 1em;
 
   --md-quote-style: normal;                /* 引文不用斜体 / quotes upright, not italic */
-  --md-quote-border: 2px solid var(--md-color-border);
-  --md-quote-bg: transparent;
+  --md-quote-border: 2px solid var(--md-color-accent);
+  --md-quote-bg: color-mix(in oklab, var(--md-color-accent) 5%, var(--color-bg-base));
   --md-hr-line: 1px solid var(--md-color-border);
   --md-hr-mark: "";                        /* 分隔线不带装饰字符 / no ornament on rules */
 
@@ -107,7 +107,12 @@
 
 /* ── 篇名与正文 / Title and body ───────────────────────────────────────────── */
 .md-body h1 { margin-bottom: 1.2em; }
-.md-body h2 { letter-spacing: 0.01em; }
+.md-body h2 {
+  letter-spacing: 0.01em;
+  color: var(--md-color-accent);
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--md-color-border);
+}
 .md-body h5, .md-body h6 { font-family: var(--md-font-heading); }
 
 /* 两端对齐；列表和引文里保持左齐，短行两端对齐会拉出大空隙。
@@ -124,10 +129,11 @@
 
 /* 引文缩进成一段「摘要」的样子 / quotes indent like an abstract */
 .md-body blockquote {
-  margin: 0 2em var(--md-para-gap);
-  padding: 0 0 0 1em;
-  font-size: 0.94em;
+  margin: 0 0 var(--md-para-gap);
+  padding: 0.85em 1.1em;
+  font-size: 0.96em;
 }
+.md-body blockquote > :last-child { margin-bottom: 0; }
 
 /* ── 三线表 / Booktabs tables ──────────────────────────────────────────────
    顶线、栏目线、底线三条；格子之间不画竖线。
@@ -139,12 +145,13 @@
 }
 .md-body th, .md-body td {
   border: none;
-  border-bottom: 1px solid var(--md-color-border);
-  padding: 7px 10px;
+  padding: 0.65em 0.85em;
 }
 .md-body th {
   font-family: var(--md-font-heading);
   font-weight: 600;
+  background: transparent;
+  color: var(--md-color-accent);
   border-bottom: 1px solid var(--md-color-text);
 }
 .md-body tbody tr:last-child td { border-bottom: none; }
@@ -153,7 +160,10 @@
 .md-body pre {
   border: none;
   border-left: 3px solid var(--md-color-border);
-  font-size: 0.82em;
+  font-size: 0.85em;
+  background: var(--md-color-surface);
+  line-height: 1.65;
+  overflow-x: auto;
 }
 .md-body img { margin-left: auto; margin-right: auto; }
 
@@ -163,6 +173,10 @@
 @media print {
   .md-body h1, .md-body h2, .md-body h3, .md-body h4 { break-after: avoid; }
   .md-body pre, .md-body table, .md-body blockquote, .md-body img { break-inside: avoid; }
+  .md-body blockquote {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 /* ── 进阶 · 自带颜色 / Advanced · own colours ─────────────────────────────

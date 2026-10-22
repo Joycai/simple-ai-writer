@@ -52,7 +52,7 @@
   --theme-name: 物理猫 · 气泡;  /* 网格里显示的名字 / the name the grid shows */
   --theme-kind: markdown;       /* 排版主题 / a typography theme (not ui) */
   --theme-extends: clean;       /* 没写到的旋钮从「素雅」取 / knobs left out come from Clean */
-  --theme-version: 1;
+  --theme-version: 2;
   --theme-author: Phycat (sumruler) · simple-ai-writer;
 }
 
@@ -78,12 +78,12 @@
 
   --md-quote-style: normal;
   --md-quote-border: none;
-  --md-quote-bg: var(--color-accent-tint);
-  --md-hr-line: 3px dashed var(--md-color-accent);
+  --md-quote-bg: color-mix(in oklab, var(--md-color-accent) 7%, var(--color-bg-base));
+  --md-hr-line: 2px dashed var(--md-color-accent);
   --md-hr-mark: "";
 
   /* 这套主题自己的两个旋钮 / this theme's own two knobs */
-  --phycat-radius: 14px;   /* 气泡、代码块、表格的圆角 / the corner radius everywhere */
+  --phycat-radius: 0.7em;   /* 气泡、代码块、表格的圆角 / the corner radius everywhere */
   --phycat-quote-mark: "✦";  /* 引文左上角那个符号；换成 "✨" 就是原主题的样子
                                 the mark in a quote's corner; "✨" is the original's */
 }
@@ -126,8 +126,10 @@
 .md-body h2 {
   width: fit-content;
   max-width: 100%;
-  padding: 0.26em 0.7em;
-  border-radius: 9px;
+  padding: 0.3em 0.75em;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  border-radius: 0.5em;
   color: var(--color-on-accent);
   /* background-image，不写 background 简写：带 var() 的简写后面再跟一条
      background-size，WebKit 序列化不回来，整块底就丢了，只剩反白字。
@@ -141,13 +143,14 @@
     var(--color-accent-hover)
   );
   background-size: 200% auto;
-  box-shadow: 0 2px 8px var(--color-accent-tint-strong);
+  box-shadow: var(--shadow-sm);
 }
 
 /* ── 三、四级标题：竖条与圆点 / h3, h4: a rule and a dot ─────────────────── */
 .md-body h3 {
   position: relative;
   padding-left: 0.62em;
+  color: var(--md-color-accent);
 }
 .md-body h3::before {
   content: "";
@@ -175,7 +178,7 @@
 }
 .md-body h5,
 .md-body h6 {
-  color: var(--md-color-accent);
+  color: var(--md-color-text);
   font-weight: 600;
 }
 
@@ -184,6 +187,7 @@
   position: relative;
   padding: 1em 1.15em 1em 2.5em;
   border-radius: var(--phycat-radius);
+  color: var(--md-color-text);
 }
 .md-body blockquote::before {
   content: var(--phycat-quote-mark);
@@ -208,10 +212,13 @@
   border-radius: var(--phycat-radius);
   border: 1px solid var(--md-color-border);
   background: var(--color-bg-stream);
+  line-height: 1.65;
+  overflow-x: auto;
 }
 .md-body pre code {
   padding: 0;
   border-radius: 0;
+  background: none;
 }
 
 /* ── 列表 / Lists ────────────────────────────────────────────────────────── */
@@ -238,17 +245,17 @@
 .md-body th,
 .md-body td {
   border: none;
-  border-right: 1px solid var(--md-color-border);
   border-bottom: 1px solid var(--md-color-border);
-  padding: 8px 12px;
+  padding: 0.65em 0.85em;
 }
-.md-body th:last-child,
-.md-body td:last-child { border-right: none; }
 .md-body tbody tr:last-child td { border-bottom: none; }
+.md-body tbody tr:nth-child(even) {
+  background: color-mix(in oklab, var(--md-color-accent) 3%, var(--color-bg-base));
+}
 .md-body th {
   background: var(--color-accent-tint);
   color: var(--md-color-accent);
-  white-space: nowrap;
+  white-space: normal;
 }
 
 /* ── 分隔线、图、链接、着重 / Rules, images, links, emphasis ─────────────── */
@@ -298,7 +305,7 @@
   .md-body h3:hover::before { width: 7px; }
   .md-body hr:hover { opacity: 1; transform: scaleX(1); }
   .md-body a:hover { background: var(--color-accent-tint); }
-  .md-body code:hover { background: var(--color-accent-tint-strong); }
+  .md-body :not(pre) > code:hover { background: var(--color-accent-tint-strong); }
   .md-body img:hover { box-shadow: var(--shadow-md); }
 }
 
