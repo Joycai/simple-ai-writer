@@ -11,6 +11,10 @@ describe("chat error disclosure", () => {
     expect(errorPreview("x".repeat(2000))).toHaveLength(180);
   });
 
+  it.each(["<center>Bad gateway</center>", '<?xml version="1.0"?><error/>', "<div class='error'>Down</div>"])("omits markup starting with %s", (body) => {
+    expect(errorPreview("HTTP 502: " + body)).toBe("HTTP 502:");
+  });
+
   it("starts collapsed and escapes the full response", () => {
     const html = renderToStaticMarkup(createElement(ChatError, { error: gateway, onRetry: () => {} }));
     expect(html).toContain("<details");

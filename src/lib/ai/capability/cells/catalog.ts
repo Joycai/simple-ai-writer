@@ -45,7 +45,14 @@ interface CatalogRow {
   set: IntrinsicFacts;
 }
 
-const row = (p: string, set: IntrinsicFacts): CatalogRow => ({ match: prefix(p), set });
+const row = (p: string, set: IntrinsicFacts): CatalogRow => ({
+  // Effort profiles identify a model generation, not any numeric continuation
+  // (gpt-5.6 must not claim gpt-5.60). Keep broad limit families unchanged.
+  match: set.effortProfile
+    ? new RegExp(`^${p.replace(/\./g, "\\.")}(?:$|[.-])`)
+    : prefix(p),
+  set,
+});
 const STRICT = { strictSchemaModel: true } as const;
 const GPT_LEVELS: readonly ReasoningEffort[] = ["off", "low", "medium", "high", "xhigh", "max"];
 const ALWAYS_LEVELS = GPT_LEVELS.filter((e) => e !== "off");

@@ -26,6 +26,12 @@ export function semanticPrefs(project: string | null): SemanticPrefs {
     };
   } catch { return { ...DEFAULT_SEMANTIC_PREFS }; }
 }
+const listeners = new Set<() => void>();
+export function subscribeSemanticPrefs(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
 export function saveSemanticPrefs(project: string, value: SemanticPrefs): void {
   writePref(key(project), JSON.stringify(value));
+  listeners.forEach((listener) => listener());
 }

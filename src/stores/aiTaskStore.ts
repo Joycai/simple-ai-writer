@@ -435,7 +435,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // that assumed a different ceiling than the wire sent is how a "context
     // budget" stops describing what actually happened.
     const limits = plannedLimits({ model, provider });
-    const retrievalLimit = documentFile ? documentWindowLimit(semanticPrefs(projectPath)) : undefined;
+    const retrievalPrefs = semanticPrefs(projectPath);
+    const retrievalLimit = documentFile ? documentWindowLimit(retrievalPrefs) : undefined;
     const plan = planContextBudget({
       contextSize: limits.contextSize,
       maxOutputTokens: limits.maxOutput,
@@ -516,7 +517,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const recoveryTruncated = new Set<string>();
     const controller = new AbortController();
     extras = { ...extras, documentFile,
-      semantic: { projectPath, models, providers, signal: controller.signal } };
+      semantic: { projectPath, models, providers, signal: controller.signal, prefs: retrievalPrefs } };
     set({
       isRunning: true, drafts, activeDraftId: drafts[0].id,
       // Cleared with the log it belongs to: until this run creates its own

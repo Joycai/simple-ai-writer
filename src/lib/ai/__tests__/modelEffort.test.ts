@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { effortMenuOnWire, effortOnWire, resolveThinkingCategory } from "../capabilities";
+import { catalogFact } from "../capability/cells/catalog";
+import { hasCapability } from "../capabilities";
 import { reasoningBody, thinkingBody } from "../reasoning";
 import type { ApiStandard } from "../types";
 
@@ -127,4 +129,32 @@ describe("model-specific effort ladders", () => {
       thinking: { type: "adaptive", display: "summarized" },
     });
   });
+});
+
+
+it.each(["gpt-5.60-sol", "gpt-6-astra2", "claude-opus-50", "qwen3.8-max2"])("does not apply a nearby generation's effort profile to %s", (modelId) => {
+  expect(catalogFact("effortProfile", modelId)).toBeUndefined();
+});
+
+it.each([
+  ["deepseek", "deepseek-flash"], ["deepseek", "deepseek-v4-flash"],
+  ["dashscope", "qwen3.8-max"], ["dashscope-intl", "qwen3.8-flash"],
+  ["dashscope", "qwen3.8-27b"], ["volcengine", "doubao-seed-2-0-pro"],
+  ["volcengine-plan", "doubao-seed-2.0-lite"],
+] as const)("keeps %s platform categories aligned with catalog profiles for %s", (platform, id) => {
+  for (const modelId of id === "deepseek-flash" ? [id] : [id, id + "-20261001"]) {
+    expect(resolveThinkingCategory({ modelId }, "openai_compat", platform).id)
+      .toBe(catalogFact("effortProfile", modelId)?.category);
+  }
+});
+
+it("does not turn always-reasoning models off on any currently restricted tools route", () => {
+  for (const platform of ["openai", "orcarouter", "newapi"] as const) {
+    for (const id of ["gpt-6-astra", "gpt-6.1-sol"]) {
+      const modelId = platform === "orcarouter" ? "openai/" + id : id;
+      const wire = { platform, standard: "openai_compat" as const };
+      expect(hasCapability("effortWithTools", wire, { modelId })).toBe(true);
+      expect(effortOnWire("high", wire, { modelId }, true)).toBe("high");
+    }
+  }
 });

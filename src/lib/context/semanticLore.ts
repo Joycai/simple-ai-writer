@@ -2,13 +2,15 @@
 import type { Model, Provider } from "../ai/configDb";
 import { embed, rerank, cosine, embeddingLimits, RetrievalError } from "../ai/retrieval";
 import { inScope, type LoreEntity, type LoreIndex, type LoreScope } from "../lore";
-import { semanticPrefs } from "./semanticPrefs";
+import { semanticPrefs, type SemanticPrefs } from "./semanticPrefs";
 import { catalogText, resolveIndexConnection, indexedVectors, indexIdentity } from "./semanticIndex";
 import { invalidateEmbeddings } from "./embeddingCache";
 export { catalogText } from "./semanticIndex";
 
 export interface SemanticRequest {
   projectPath: string;
+  /** One task snapshot shared by budget planning and both retrieval paths. */
+  prefs?: SemanticPrefs;
   models: readonly Model[];
   providers: Provider[];
   signal?: AbortSignal;
@@ -33,7 +35,7 @@ export async function retrieveSemantic(
   exclude: ReadonlySet<string>, args: SemanticRequest,
 ): Promise<{ matches: SemanticMatch[]; report?: SemanticReport }> {
   target = args.query ?? target;
-  const prefs = semanticPrefs(args.projectPath);
+  const prefs = args.prefs ?? semanticPrefs(args.projectPath);
   if (!prefs.enabled || !target.trim()) return { matches: [] };
   const all = Object.values(index).flat().filter((e) => !exclude.has(e.dirPath) && inScope(e, scope ?? null))
     .sort((a, b) => a.dirPath.localeCompare(b.dirPath));

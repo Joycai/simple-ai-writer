@@ -16,7 +16,7 @@
  * level governs — the whole response on Anthropic, thinking alone elsewhere.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Slider } from "../common/Slider";
 import { ChevronDown } from "lucide-react";
@@ -109,7 +109,7 @@ export function ReasoningControls({ variant }: Props) {
   // — prose, tool calls and thinking together — so "thinking depth" understates
   // what the author is changing.
   const wholeResponse = !!cat.governsWholeResponse;
-  const label = cat.shape === "levels" ? t("ai.panel.effortLabel") : t("ai.panel.thinkingLabel");
+  const label = wholeResponse ? t("ai.panel.effortLabel") : t("ai.panel.thinkingLabel");
 
   const capabilityModel = capabilityModelOf({ modelId: model.modelId, relayUpstream: model.relayUpstream });
   const stored = model.reasoningEffort ?? "default";
@@ -241,8 +241,9 @@ function EffortSlider({ label, current, options, onPick }: {
   const [draft, setDraft] = useState(current);
   const root = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(260);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!root.current) return;
+    setWidth(Math.max(16, root.current.clientWidth));
     const observer = new ResizeObserver(([entry]) => setWidth(Math.max(16, entry.contentRect.width)));
     observer.observe(root.current);
     return () => observer.disconnect();

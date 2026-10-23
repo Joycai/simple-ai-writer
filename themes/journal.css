@@ -47,7 +47,7 @@
   --theme-kind: markdown;          /* 排版主题 / a typography theme (not ui) */
   --theme-extends: clean;          /* 没写到的旋钮从这套内置取：manuscript | clean | magazine | wechat | typewriter
                                       knobs left out come from this built-in */
-  --theme-version: 2;
+  --theme-version: 3;
   --theme-author: simple-ai-writer;
 }
 
@@ -173,7 +173,7 @@
 @media print {
   .md-body h1, .md-body h2, .md-body h3, .md-body h4 { break-after: avoid; }
   .md-body pre, .md-body table, .md-body blockquote, .md-body img { break-inside: avoid; }
-  .md-body blockquote {
+  .md-body blockquote, .md-body pre {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }

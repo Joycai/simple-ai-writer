@@ -59,11 +59,13 @@ export async function retrieveDocument(args: SemanticRequest, file: string, text
   args.signal?.throwIfAborted();
   const localStart = Math.max(0, end - Math.min(DOCUMENT_LOCAL_CHARS, budget));
   const local = text.slice(localStart, end).trim();
+  // Failed or empty retrieval must still use the planned, anchor-bounded window.
+  const fallback = () => text.slice(Math.max(0, end - Math.max(0, budget)), end).trim();
   const chunks = documentChunks(text, localStart);
   const report: DocumentRetrievalReport = { status: "complete", considered: chunks.length, matches: [] };
-  if (!chunks.length || !query.trim() || budget <= DOCUMENT_LOCAL_CHARS) return { local, excerpts: [] };
-  if (chunks.length > MAX_CHUNKS) return { local, excerpts: [], report: { ...report, status: "tooLarge" } };
-  const prefs = semanticPrefs(args.projectPath);
+  if (!chunks.length || !query.trim() || budget <= DOCUMENT_LOCAL_CHARS) return { local: fallback(), excerpts: [] };
+  if (chunks.length > MAX_CHUNKS) return { local: fallback(), excerpts: [], report: { ...report, status: "tooLarge" } };
+  const prefs = args.prefs ?? semanticPrefs(args.projectPath);
   const controller = new AbortController();
   const abort = () => controller.abort(args.signal?.reason);
   args.signal?.addEventListener("abort", abort, { once: true });
@@ -129,12 +131,12 @@ export async function retrieveDocument(args: SemanticRequest, file: string, text
     }
     picked.sort((a, b) => a.chunk.from - b.chunk.from);
     report.matches = picked.map((r) => ({ from: r.chunk.from, to: r.chunk.to, score: r.score }));
-    return { local, excerpts: picked.map((r) => r.chunk), report };
+    return { local: picked.length ? local : fallback(), excerpts: picked.map((r) => r.chunk), report };
   };
   try { return await Promise.race([run(), stopped]); }
   catch (error) {
     if (args.signal?.aborted) throw error;
-    return { local, excerpts: [], report: { ...report, status: timedOut ? "timeout" as const : "unavailable" as const } };
+    return { local: fallback(), excerpts: [], report: { ...report, status: timedOut ? "timeout" as const : "unavailable" as const } };
   } finally {
     clearTimeout(timer); signal.removeEventListener("abort", stop);
     args.signal?.removeEventListener("abort", abort);
