@@ -117,19 +117,22 @@ describe("current document retrieval", () => {
     vi.mocked(embed).mockImplementation(async (_c, texts) => texts.map((t) => t === "query" ? [-1, 0] : [1, 0]));
     const result = await retrieveDocument(args, "draft.md", manuscript, manuscript.length, 16000, "query");
     expect(result.report?.status).toBe("complete"); expect(result.excerpts).toEqual([]);
+    expect(result.local).toBe(manuscript.slice(-16000).trim());
     expect(rerank).not.toHaveBeenCalled();
   });
   it("reports an unavailable embedding model without silently sending all prose", async () => {
     state.prefs.embeddingModelId = "";
     const result = await retrieveDocument(args, "draft.md", manuscript, manuscript.length, 16000, "query");
-    expect(result.report?.status).toBe("unavailable"); expect(result.local.length).toBeLessThanOrEqual(6000);
+    expect(result.report?.status).toBe("unavailable"); expect(result.local).toBe(manuscript.slice(-16000).trim());
     expect(embed).not.toHaveBeenCalled();
   });
   it("times out even when a transport ignores cancellation", async () => {
     vi.useFakeTimers(); vi.mocked(embed).mockImplementation(() => new Promise(() => {}));
     const pending = retrieveDocument(args, "draft.md", manuscript, manuscript.length, 16000, "query");
     await vi.advanceTimersByTimeAsync(60001);
-    expect((await pending).report?.status).toBe("timeout");
+    const result = await pending;
+    expect(result.report?.status).toBe("timeout");
+    expect(result.local).toBe(manuscript.slice(-16000).trim());
     vi.mocked(embed).mockImplementation(async (_c, texts) => texts.map(() => [1, 0]));
     expect((await retrieveDocument(args, "draft.md", manuscript, manuscript.length, 16000, "retry")).report?.status).toBe("complete");
   });
@@ -177,6 +180,7 @@ it("bounds an oversized catalog explicitly instead of silently indexing a prefix
   const text = "x".repeat(4_500_000);
   const result = await retrieveDocument(args, "huge.md", text, text.length, 16000, "query");
   expect(result.report?.status).toBe("tooLarge");
+  expect(result.local).toBe(text.slice(-16000));
   expect(embed).not.toHaveBeenCalled();
 });
 
@@ -186,6 +190,7 @@ it("invalidates a changed vector dimension instead of mixing vector spaces", asy
   const result = await retrieveDocument(args, "draft.md", manuscript, manuscript.length, 16000, "query");
   expect(result.report?.status).toBe("unavailable");
   expect(state.cache.size).toBe(0);
+  expect(result.local).toBe(manuscript.slice(-16000).trim());
 });
 
 
@@ -200,4 +205,23 @@ it("lets reranking recover a low-cosine passage before applying the final score 
   expect(result.excerpts).toHaveLength(1);
   expect(result.excerpts[0].text).toContain("hidden antidote");
   expect(result.report?.matches[0].score).toBe(0.95);
+});
+
+
+it.each([0, 2000, 8000, 16000])("bounds failure fallback to %i chars before a mid-document anchor", async (budget) => {
+  state.prefs.embeddingModelId = "";
+  const end = 20000;
+  const result = await retrieveDocument(args, "draft.md", manuscript.slice(0, end) + "FUTURE_SECRET", end, budget, "query");
+  expect(result.local).toBe(manuscript.slice(end - budget, end).trim());
+  expect(result.excerpts).toEqual([]);
+  expect(result.local).not.toContain("FUTURE_SECRET");
+});
+
+it("uses the task's preference snapshot even if settings change before assembly", async () => {
+  const prefs = { ...state.prefs, documentEnabled: false };
+  const bundle = await assembleContext("system", {}, manuscript, "", "Continue", {
+    documentFile: "draft.md", semantic: { ...args, prefs }, contextChars: 20000,
+  });
+  expect(bundle.recentContext).toBe(manuscript.slice(-20000).trim());
+  expect(embed).not.toHaveBeenCalled();
 });

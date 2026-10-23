@@ -1,6 +1,6 @@
 import { recordUsage } from "../../ai/usageRow";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { prepareIndex, indexStatus, resolveIndexConnection } from "../semanticIndex";
+import { prepareIndex, indexStatus, resolveIndexConnection, indexIdentity } from "../semanticIndex";
 import type { SemanticRequest } from "../semanticLore";
 import { embed } from "../../ai/retrieval";
 import type { LoreEntity, LoreIndex } from "../../lore";
@@ -118,4 +118,16 @@ it("records document retrieval usage with the selected model in the existing led
   expect(recordUsage).toHaveBeenCalledWith("/p", expect.objectContaining({
     model: models[1], task: "document-rerank", promptTokens: 45,
   }));
+});
+
+
+it("isolates every editable retrieval protocol field in the cache identity", async () => {
+  const conn = { baseUrl: "http://localhost:8000", modelId: "embed", apiKey: "",
+    retrieval: { format: "openai-embedding" as const, path: "/v1/embeddings", queryPrefix: "query: ", documentPrefix: "doc: " } };
+  const original = await indexIdentity(conn);
+  for (const change of [{ format: "dashscope-multimodal-embedding" as const }, { path: "/other" },
+    { queryPrefix: "question: " }, { documentPrefix: "passage: " }]) {
+    expect(await indexIdentity({ ...conn, retrieval: { ...conn.retrieval, ...change } })).not.toBe(original);
+  }
+  expect(await indexIdentity({ ...conn, apiKey: "rotated" })).toBe(original);
 });

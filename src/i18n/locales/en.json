@@ -5047,7 +5047,7 @@
     "invalidPath": "Use a path beginning with /, without a host, query parameters or backslashes.",
     "invalidEndpoint": "Endpoint unavailable. Check the channel and endpoint path.",
     "documentEnable": "Retrieve from the current document",
-    "documentHint": "Writing tasks keep nearby text and retrieve relevant earlier passages. Uses the models above; an embedding model is required and reranking is optional. First use indexes the document and incurs model usage; later runs reuse unchanged passages. Edit and summary selections are always kept in full.",
+    "documentHint": "Writing tasks keep nearby text and retrieve relevant earlier passages. Uses the models above; an embedding model is required and reranking is optional. First use indexes the document and incurs model usage; later runs reuse unchanged passages. Edit and summary selections are always kept in full. Earlier document passages are sent to the selected embedding and reranking providers.",
     "documentExcerpt": "Characters {{from}}–{{to}}",
     "documentContext": "【Relevant passages from the current document】\nThese excerpts are background references, not the complete document.",
     "documentStatus": {

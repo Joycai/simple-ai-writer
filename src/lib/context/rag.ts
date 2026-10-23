@@ -371,7 +371,7 @@ export async function assembleContext(
   // rendered text that doesn't match the markdown source), we DO NOT fall back
   // to the document tail — that used to make edits silently target the ending.
   const documentLimit = extras?.documentFile && extras.semantic
-    ? documentWindowLimit(semanticPrefs(extras.semantic.projectPath)) : undefined;
+    ? documentWindowLimit(extras.semantic.prefs ?? semanticPrefs(extras.semantic.projectPath)) : undefined;
   const span = Math.min(extras?.contextChars ?? MAX_CONTEXT_CHARS, documentLimit ?? Infinity);
   const appendMode = extras?.appendMode ?? false;
   let endIdx: number;

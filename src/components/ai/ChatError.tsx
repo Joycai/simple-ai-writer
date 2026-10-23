@@ -3,7 +3,7 @@ import styles from "./ChatError.module.css";
 
 /** Keep gateway HTML out of the summary; preserve the raw response as text. */
 export function errorPreview(error: string): string {
-  return error.split(/<(?:!doctype|html|head|body|style|script)\b/i)[0]
+  return error.split(/<(?:[a-z][\w:-]*(?:\s|\/?>)|!doctype\b|\?xml\b)/i)[0]
     .replace(/\s+/g, " ").trim().slice(0, 180);
 }
 

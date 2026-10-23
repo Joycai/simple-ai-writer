@@ -202,6 +202,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 
 | Doc | Status | What is open |
 |---|---|---|
+| [review-790-799.md](issues/review-790-799.md) | `open` | Review verification, shipped fixes, rejected claims and remaining retrieval/cache/UX follow-ups |
 | [thinking-verification.md](issues/thinking-verification.md) | `open` | Thinking support is implemented and unit-tested across three families, but unit tests prove *what we sent*, not *what the endpoint did*. MiniMax-M3 cleared part of §2.6; the rest stands |
 | [css-modules-global-keyframes.md](issues/css-modules-global-keyframes.md) | `fixed` | CSS Modules 哈希化 animation-name、global.css 的 keyframes 悬空 —— 40+ 处入场/spinner 动画从未播过。已切 LightningCSS（`cssModules.animation: false`）修复；待一轮真机目检 |
 | [css-module-dangling-class.md](issues/css-module-dangling-class.md) | `fixed` | `styles.foo` 指向 `.module.css` 里没有的类时会拼出字面量类名 `"undefined"`，元素一点样式都没有，三道门禁全绿。全库 11 处已清：九处是从未存在过规则的死类名，一处（`FeeGroupDrawer` 的 `.input` / `.unset`）是真缺陷——从 `ModelDrawer` 复制时抄错了模块前缀，修法与「为什么不借 `settingsCommon`」在文内。已上 AST 门禁 `cssModuleClassRefs.test.ts`，零误报怎么做到的、为什么不生成 `.d.ts`，同文 |

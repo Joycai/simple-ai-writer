@@ -1,5 +1,5 @@
 import { documentWindowLimit } from "../../lib/context/documentRetrievalPolicy";
-import { semanticPrefs } from "../../lib/context/semanticPrefs";
+import { semanticPrefs, subscribeSemanticPrefs } from "../../lib/context/semanticPrefs";
 import { OutputRecoveryPanel } from "./OutputRecoveryPanel";
 import { SemanticReport } from "./SemanticReport";
 /**
@@ -19,7 +19,7 @@ import { SemanticReport } from "./SemanticReport";
  * it instead of guessing.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import {
@@ -1365,7 +1365,8 @@ export function AiPanel() {
   // different toolset, and the forecast has to describe the request that will
   // actually be sent. planForecast takes that one object and derives 续写 /
   // 参考窗口 / 工具档 from it, so there is no second candidate to pick wrong.
-  const documentRetrieval = !!activeRel && documentWindowLimit(semanticPrefs(projectPath)) !== undefined;
+  const documentRetrieval = useSyncExternalStore(subscribeSemanticPrefs,
+    () => !!activeRel && documentWindowLimit(semanticPrefs(projectPath)) !== undefined);
   const forecast = useMemo(
     () =>
       planForecast({
