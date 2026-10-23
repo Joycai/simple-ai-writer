@@ -15,24 +15,58 @@ export interface DocumentRetrievalReport {
 const CHUNK_CHARS = 1200;
 const OVERLAP = 160;
 const MAX_CHUNKS = 4096;
+const CHUNK_VERSION = "document-cdc-v2";
+const HASH_WINDOW = 32;
+const ANCHOR_RADIUS = 240;
+// A rolling polynomial over the preceding 32 UTF-16 units forgets an edit
+// after that window. Keep it rolling across cuts, so offsets aren't anchors.
+const HASH_POWER = Array.from({ length: HASH_WINDOW }, () => 31)
+  .reduce((power, base) => Math.imul(power, base), 1);
+function fingerprint(hash: number): number {
+  hash = Math.imul(hash ^ (hash >>> 16), 0x85ebca6b);
+  hash = Math.imul(hash ^ (hash >>> 13), 0xc2b2ae35);
+  return (hash ^ (hash >>> 16)) >>> 0;
+}
+const highSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff;
+const lowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff;
 /** Offsets refer to the current editor snapshot, including unsaved changes. */
 export function documentChunks(text: string, end: number): DocumentChunk[] {
+  end = Math.max(0, Math.min(text.length, Math.floor(end)));
+  // An anchor inside a pair excludes that whole code point; never read past it.
+  if (highSurrogate(text.charCodeAt(end - 1))) end--;
   const chunks: DocumentChunk[] = [];
-  for (let from = 0; from < end;) {
-    let to = Math.min(end, from + CHUNK_CHARS);
-    if (to < end) {
-      // Search only this chunk: scanning the whole prefix is quadratic when
-      // a long document has no paragraph breaks. Include both delimiter chars.
-      const boundary = from + text.slice(from, to + 2).lastIndexOf("\n\n");
-      if (boundary > from + CHUNK_CHARS / 2) to = Math.min(end, boundary + 2);
-      // Never split a UTF-16 surrogate pair.
-      if (/[\uD800-\uDBFF]/.test(text[to - 1])) to--;
+  let from = 0;
+  let hash = 0;
+  // Monotonic queue over a bounded neighbourhood: a unique local minimum is
+  // an anchor regardless of earlier cuts. Equal minima are deliberately not
+  // anchors (repeated text falls back to the hard size limit).
+  const minima: { at: number; score: number }[] = [];
+  for (let scanned = 1; scanned <= end + ANCHOR_RADIUS; scanned++) {
+    if (scanned <= end) {
+      hash = (Math.imul(hash, 31) + text.charCodeAt(scanned - 1)) | 0;
+      if (scanned > HASH_WINDOW) hash = (hash - Math.imul(text.charCodeAt(scanned - HASH_WINDOW - 1), HASH_POWER)) | 0;
+      const paragraph = text.charCodeAt(scanned - 1) === 10 && text.charCodeAt(scanned - 2) === 10;
+      const splitPair = highSurrogate(text.charCodeAt(scanned - 1)) && lowSurrogate(text.charCodeAt(scanned));
+      const score = splitPair ? Infinity : fingerprint(hash) / (paragraph ? 4 : 1);
+      while (minima.length && minima[minima.length - 1].score > score) minima.pop();
+      minima.push({ at: scanned, score });
     }
+    const to = scanned - ANCHOR_RADIUS;
+    while (minima.length && minima[0].at < to - ANCHOR_RADIUS) minima.shift();
+    if (to <= 0) continue;
+    const splitPair = highSurrogate(text.charCodeAt(to - 1)) && lowSurrogate(text.charCodeAt(to));
+    if (splitPair) continue;
+    const anchor = to >= HASH_WINDOW + ANCHOR_RADIUS && scanned <= end &&
+      minima[0]?.at === to && minima[0]?.score !== minima[1]?.score;
+    // Cut one unit early if the hard limit would bisect an astral character.
+    const limit = to - from >= CHUNK_CHARS ||
+      (to - from === CHUNK_CHARS - 1 && highSurrogate(text.charCodeAt(to)));
+    if (to !== end && !anchor && !limit) continue;
     const body = text.slice(from, to);
     if (body.trim()) chunks.push({ from, to, text: body });
-    if (chunks.length > MAX_CHUNKS || to >= end) break;
-    from = Math.max(from + 1, to - OVERLAP);
-    if (/[\uDC00-\uDFFF]/.test(text[from])) from++;
+    if (chunks.length > MAX_CHUNKS) break;
+    from = Math.max(0, to - OVERLAP);
+    if (lowSurrogate(text.charCodeAt(from))) from++;
   }
   return chunks;
 }
@@ -82,7 +116,7 @@ export async function retrieveDocument(args: SemanticRequest, file: string, text
     signal.throwIfAborted();
     if (!prefs.embeddingModelId) throw new Error("Document retrieval requires an embedding model");
     const { conn, usage } = await resolveIndexConnection(args, prefs.embeddingModelId, signal, false, "document");
-    const namespace = await digest(JSON.stringify(["document-v1", file, await indexIdentity(conn)]));
+    const namespace = await digest(JSON.stringify([CHUNK_VERSION, file, await indexIdentity(conn)]));
     const rows = await Promise.all(chunks.map(async (chunk) => {
       const input = (conn.retrieval?.documentPrefix ?? "") + chunk.text;
       const hash = await digest(input);

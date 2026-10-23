@@ -48,23 +48,25 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("current document retrieval", () => {
-  it("bounds paragraph searches even when the document has no paragraph breaks", () => {
-    const search = vi.spyOn(String.prototype, "lastIndexOf");
-    try {
-      const text = "x".repeat(12000);
-      const chunks = documentChunks(text, text.length);
-      expect(chunks[chunks.length - 1]?.to).toBe(text.length);
-      expect(search).toHaveBeenCalled();
-      expect(search.mock.contexts.every((window) => String(window).length <= 1202)).toBe(true);
-    } finally {
-      search.mockRestore();
-    }
-  });
-  it.each([600, 601, 1199, 1200])("preserves paragraph boundaries at offset %i", (boundary) => {
-    const text = "x".repeat(boundary) + "\n\n" + "y".repeat(2400);
+  it("bounds chunks for long text without paragraph breaks", () => {
+    const text = "x".repeat(12000);
     const chunks = documentChunks(text, text.length);
-    expect(chunks[0].to).toBe(boundary > 600 ? boundary + 2 : 1200);
-    chunks.forEach((chunk) => expect(chunk.text).toBe(text.slice(chunk.from, chunk.to)));
+    expect(chunks[chunks.length - 1]?.to).toBe(text.length);
+    expect(chunks.every((chunk) => chunk.text.length <= 1200)).toBe(true);
+  });
+  it("keeps UTF-16 pairs intact at cuts, overlap starts and a partial anchor", () => {
+    const text = "😀𠮷".repeat(4000);
+    for (const end of [text.length, 1201, 2403]) {
+      const chunks = documentChunks(text, end);
+      expect(chunks[chunks.length - 1]?.to).toBe(end - end % 2);
+      chunks.forEach((chunk, i) => {
+        expect(chunk.from % 2).toBe(0);
+        expect(chunk.to % 2).toBe(0);
+        expect(chunk.text).toBe(text.slice(chunk.from, chunk.to));
+        expect(chunk.text.length).toBeLessThanOrEqual(1200);
+        if (i) expect([159, 160]).toContain(chunks[i - 1].to - chunk.from);
+      });
+    }
   });
   it("splits bounded overlapping excerpts with accurate source offsets and never crosses the anchor", () => {
     const text = manuscript + "FUTURE_SECRET";
@@ -182,6 +184,7 @@ it("bounds an oversized catalog explicitly instead of silently indexing a prefix
   const text = "x".repeat(4_500_000);
   const result = await retrieveDocument(args, "huge.md", text, text.length, 16000, "query");
   expect(result.report?.status).toBe("tooLarge");
+  expect(result.report?.considered).toBe(4097);
   expect(result.local).toBe(text.slice(-16000));
   expect(embed).not.toHaveBeenCalled();
 });
@@ -238,4 +241,52 @@ it("finishes an in-flight retrieval even if cache pressure evicts every complete
   const encoded = vi.mocked(embed).mock.calls.flatMap((call) => call[1]).filter((text) => text !== "query");
   expect(encoded).toHaveLength(new Set(encoded).size);
   expect(result.excerpts.every((chunk) => chunk.to <= manuscript.length - 6000)).toBe(true);
+});
+
+
+it.each(["insert", "delete"])("reuses most paid chunk inputs after an early %s", async (edit) => {
+  await retrieveDocument(args, "draft.md", manuscript, manuscript.length, 16000, "query");
+  const original = new Set(vi.mocked(embed).mock.calls.flatMap((c) => c[1]).filter((t) => t !== "query"));
+  vi.mocked(embed).mockClear();
+  const changed = edit === "insert"
+    ? manuscript.slice(0, 57) + "An inserted early paragraph.\n\n" + manuscript.slice(57)
+    : manuscript.slice(0, 57) + manuscript.slice(130);
+  const result = await retrieveDocument(args, "draft.md", changed, changed.length, 16000, "query");
+  const encoded = vi.mocked(embed).mock.calls.flatMap((c) => c[1]).filter((t) => t !== "query");
+  expect(result.report?.status).toBe("complete");
+  expect(encoded.length).toBeGreaterThan(0);
+  expect(encoded.length / original.size).toBeLessThan(0.15);
+  expect(encoded.every((t) => !original.has(t))).toBe(true);
+  expect(result.excerpts.every((c) => c.text === changed.slice(c.from, c.to))).toBe(true);
+});
+
+it.each(["\n\n", " "])("resynchronizes content boundaries in varied prose with separator %j", (separator) => {
+  let seed = 12345;
+  const text = Array.from({ length: 1000 }, (_, i) => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return `${i}: The traveller recorded ${seed.toString(36)} beside the river. 中文😀`;
+  }).join(separator);
+  const original = documentChunks(text, text.length);
+  const known = new Set(original.map((c) => c.text));
+  for (const position of [0, 57, 1020, 2500]) {
+    const changed = text.slice(0, position) + "A new observation.\n\n" + text.slice(position);
+    const chunks = documentChunks(changed, changed.length);
+    expect(chunks.filter((c) => known.has(c.text)).length / chunks.length).toBeGreaterThan(0.9);
+    expect(chunks).toEqual(documentChunks(changed + "FUTURE_SECRET", changed.length));
+    chunks.forEach((chunk, i) => {
+      expect(chunk.text).toBe(changed.slice(chunk.from, chunk.to));
+      expect(chunk.text.length).toBeLessThanOrEqual(1200);
+      if (i) expect([159, 160]).toContain(chunks[i - 1].to - chunk.from);
+    });
+  }
+});
+
+it("isolates the new chunk algorithm from legacy namespaces", async () => {
+  const { digest } = await import("../embeddingCache");
+  const legacy = await digest(JSON.stringify(["document-v1", "draft.md", "e"]));
+  state.cache.set(legacy, new Map());
+  await retrieveDocument(args, "draft.md", manuscript, manuscript.length, 16000, "query");
+  const current = await digest(JSON.stringify(["document-cdc-v2", "draft.md", "e"]));
+  expect(state.cache.get(legacy)?.size).toBe(0);
+  expect(state.cache.get(current)?.size).toBeGreaterThan(0);
 });
