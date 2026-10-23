@@ -677,6 +677,7 @@ capability packs: what kinds of writing a project enables (`model.ts` pack types
 
 ### `src/lib/context/`
 
+- `documentCachePolicy` bounds document-vector persistence to eight namespaces / 64 MiB live payload with transactional namespace LRU; active retrieval keeps its working vectors in memory, while KB vectors and user data remain untouched.
 - `documentRetrieval` chunks only the current writing-task snapshot before its anchor, caches vectors separately, and replaces expandable background with bounded local prose plus ranked excerpts; `documentRetrievalPolicy` shares the opt-in cap between execution and forecast. See `docs/feature/lore/semantic-retrieval-beta.md` § Current-document background retrieval.
 - `semanticPrefs` stores per-project opt-in/model selection through prefs and notifies the forecast on saves; writing tasks snapshot it once for planning and retrieval; `semanticLore` ranks a bounded scoped catalog via `ai/retrieval`; `semanticIndex` shares preparation and on-demand indexing, while `embeddingCache` persists validated vectors and description hashes in the project DB. `selectLore` admits semantic additions only after existing layers and reports provenance/fallbacks.
 

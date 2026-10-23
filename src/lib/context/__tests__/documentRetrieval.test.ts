@@ -7,6 +7,7 @@ import { planContextBudget } from "../budget";
 import type { SemanticRequest } from "../semanticLore";
 
 const state = vi.hoisted(() => ({
+  evictAfterWrite: false,
   prefs: { enabled: true, documentEnabled: true, embeddingModelId: "e", rerankerModelId: "r", minScore: 0.5 },
   cache: new Map<string, Map<string, { entry: string; hash: string; vector: number[] }>>(),
 }));
@@ -17,6 +18,7 @@ vi.mock("../embeddingCache", async (original) => ({
     readEmbeddings: async (_p: string, n: string) => new Map(state.cache.get(n)),
     writeEmbeddings: async (_p: string, n: string, rows: { entry: string; hash: string; vector: number[] }[]) => {
       const stored = state.cache.get(n) ?? new Map(); rows.forEach((r) => stored.set(r.entry, r)); state.cache.set(n, stored);
+      if (state.evictAfterWrite) state.cache.clear();
     },
     invalidateEmbeddings: async (_p: string, n: string) => { state.cache.delete(n); },
     pruneNamespace: async (_p: string, n: string, entries: string[]) => {
@@ -38,7 +40,7 @@ vi.mock("../../ai/retrieval", async (original) => ({
 const args: SemanticRequest = { projectPath: "/p", models: [], providers: [] };
 const manuscript = Array.from({ length: 120 }, (_, i) => `\n\nHeading ${i}\n${String(i).padStart(3, "0")} ${"A fictional historical detail. ".repeat(12)}`).join("");
 beforeEach(() => {
-  vi.clearAllMocks(); state.cache.clear();
+  vi.clearAllMocks(); state.cache.clear(); state.evictAfterWrite = false;
   state.prefs = { enabled: true, documentEnabled: true, embeddingModelId: "e", rerankerModelId: "r", minScore: 0.5 };
   vi.mocked(embed).mockImplementation(async (_c, texts) => texts.map(() => [1, 0]));
   vi.mocked(rerank).mockImplementation(async (_c, _q, texts) => texts.map((_, index) => ({ index, score: 0.9 })));
@@ -224,4 +226,16 @@ it("uses the task's preference snapshot even if settings change before assembly"
   });
   expect(bundle.recentContext).toBe(manuscript.slice(-20000).trim());
   expect(embed).not.toHaveBeenCalled();
+});
+
+
+it("finishes an in-flight retrieval even if cache pressure evicts every completed batch", async () => {
+  state.evictAfterWrite = true;
+  const result = await retrieveDocument(args, "draft.md", manuscript, manuscript.length, 16000, "query");
+  expect(result.report?.status).toBe("complete");
+  expect(result.excerpts.length).toBeGreaterThan(0);
+  expect(state.cache.size).toBe(0);
+  const encoded = vi.mocked(embed).mock.calls.flatMap((call) => call[1]).filter((text) => text !== "query");
+  expect(encoded).toHaveLength(new Set(encoded).size);
+  expect(result.excerpts.every((chunk) => chunk.to <= manuscript.length - 6000)).toBe(true);
 });

@@ -1,6 +1,7 @@
 /** Disposable derived data; never contains API keys or source descriptions. */
 import { getDb } from "../project";
-import { sqlTransaction } from "../sqlTx";
+import { sqlTransaction, type SqlStatement } from "../sqlTx";
+import { DOCUMENT_CACHE_ACCESS_TABLE, documentCacheMaintenance } from "./documentCachePolicy";
 
 interface CachedEmbedding { entry: string; hash: string; vector: number[] }
 export async function digest(text: string): Promise<string> {
@@ -17,10 +18,14 @@ function embeddingCache(table: "kb_embeddings" | "document_embeddings") {
     await db.execute(`CREATE TABLE IF NOT EXISTS ${table} (
       namespace TEXT NOT NULL, entry TEXT NOT NULL, hash TEXT NOT NULL, vector TEXT NOT NULL,
       PRIMARY KEY (namespace, entry))`);
+    if (table === "document_embeddings") await db.execute(DOCUMENT_CACHE_ACCESS_TABLE);
     return db;
   }
   async function readEmbeddings(project: string, namespace: string): Promise<Map<string, CachedEmbedding>> {
     const db = await database(project);
+    if (table === "document_embeddings") {
+      await sqlTransaction(`${project}/.ai-writer/project.db`, documentCacheMaintenance(namespace));
+    }
     const rows = await db.select<{ entry: string; hash: string; vector: string }[]>(
       `SELECT entry, hash, vector FROM ${table} WHERE namespace = ?`, [namespace]);
     const result = new Map<string, CachedEmbedding>();
@@ -32,10 +37,12 @@ function embeddingCache(table: "kb_embeddings" | "document_embeddings") {
   }
   async function writeEmbeddings(project: string, namespace: string, rows: CachedEmbedding[]): Promise<void> {
     await database(project);
-    await sqlTransaction(`${project}/.ai-writer/project.db`, rows.map((r) => ({
+    const statements: SqlStatement[] = rows.map((r) => ({
       sql: `INSERT OR REPLACE INTO ${table} (namespace, entry, hash, vector) VALUES (?, ?, ?, ?)`,
       values: [namespace, r.entry, r.hash, JSON.stringify(r.vector)],
-    })));
+    }));
+    if (table === "document_embeddings") statements.push(...documentCacheMaintenance(namespace));
+    await sqlTransaction(`${project}/.ai-writer/project.db`, statements);
   }
   async function invalidateEmbeddings(project: string, namespace: string): Promise<void> {
     await (await database(project)).execute(`DELETE FROM ${table} WHERE namespace = ?`, [namespace]);
