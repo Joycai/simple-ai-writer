@@ -1,3 +1,4 @@
+import { RetrievalProgressText } from "./RetrievalProgressText";
 import { documentWindowLimit } from "../../lib/context/documentRetrievalPolicy";
 import { semanticPrefs, subscribeSemanticPrefs } from "../../lib/context/semanticPrefs";
 import { OutputRecoveryPanel } from "./OutputRecoveryPanel";
@@ -835,7 +836,7 @@ function ErrorBlock({
 export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
-    isRunning, drafts, activeDraftId, error, agentLog, taskWorkspace,
+    isRunning, retrievalProgress, drafts, activeDraftId, error, agentLog, taskWorkspace,
     loreReport, sourceFilePath, outputEditTarget, lastMessages,
     runTask, abort, clearOutput, setActiveDraft, selection, selectionRange, selectionSource,
     clearSelectionFrom, requestedTask, requestedInstruction, setRequestedTask,
@@ -2012,7 +2013,7 @@ export function AiPanel() {
             {isRunning && !output && !agentLog.some((e) => e.kind === "tool-step") && (
               <div className={styles.thinking}>
                 <span className={styles.spinner} />
-                {t("ai.panel.thinking")}
+                {retrievalProgress ? <RetrievalProgressText progress={retrievalProgress} /> : t("ai.panel.thinking")}
               </div>
             )}
 

@@ -6,23 +6,36 @@ export interface SemanticPrefs {
   documentEnabled?: boolean;
   embeddingModelId: string;
   rerankerModelId: string;
+  /** Legacy fallback for preferences saved before split thresholds. */
   minScore: number;
+  cosineMinScore?: number;
+  rerankerMinScore?: number;
 }
 const DEFAULT_SEMANTIC_PREFS: SemanticPrefs = {
   enabled: false, documentEnabled: false, embeddingModelId: "", rerankerModelId: "", minScore: 0.5,
 };
+const finiteScore = (value: unknown, fallback: number) =>
+  typeof value === "number" && Number.isFinite(value) ? value : fallback;
+export function retrievalThreshold(prefs: SemanticPrefs): number {
+  const legacy = Math.max(-1, Math.min(1, finiteScore(prefs.minScore, 0.5)));
+  return prefs.rerankerModelId
+    ? finiteScore(prefs.rerankerMinScore, legacy)
+    : Math.max(-1, Math.min(1, finiteScore(prefs.cosineMinScore, legacy)));
+}
 const key = (project: string) => SEMANTIC_LORE_PREFIX + toPosixPath(project);
 export function semanticPrefs(project: string | null): SemanticPrefs {
   if (!project) return { ...DEFAULT_SEMANTIC_PREFS };
   try {
     const r = JSON.parse(readPref(key(project)) ?? "null");
+    const legacy = Math.max(-1, Math.min(1, finiteScore(r?.minScore, 0.5)));
     return {
+      cosineMinScore: Math.max(-1, Math.min(1, finiteScore(r?.cosineMinScore, legacy))),
+      rerankerMinScore: finiteScore(r?.rerankerMinScore, legacy),
       enabled: r?.enabled === true,
       documentEnabled: r?.documentEnabled === true,
       embeddingModelId: typeof r?.embeddingModelId === "string" ? r.embeddingModelId : "",
       rerankerModelId: typeof r?.rerankerModelId === "string" ? r.rerankerModelId : "",
-      minScore: typeof r?.minScore === "number" && Number.isFinite(r.minScore)
-        ? Math.max(-1, Math.min(1, r.minScore)) : 0.5,
+      minScore: legacy,
     };
   } catch { return { ...DEFAULT_SEMANTIC_PREFS }; }
 }

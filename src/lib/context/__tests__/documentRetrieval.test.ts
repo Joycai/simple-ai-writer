@@ -11,7 +11,7 @@ const state = vi.hoisted(() => ({
   prefs: { enabled: true, documentEnabled: true, embeddingModelId: "e", rerankerModelId: "r", minScore: 0.5 },
   cache: new Map<string, Map<string, { entry: string; hash: string; vector: number[] }>>(),
 }));
-vi.mock("../semanticPrefs", () => ({ semanticPrefs: () => state.prefs }));
+vi.mock("../semanticPrefs", async (original) => ({ ...await original<typeof import("../semanticPrefs")>(), semanticPrefs: () => state.prefs }));
 vi.mock("../embeddingCache", async (original) => ({
   ...await original<typeof import("../embeddingCache")>(),
   documentEmbeddingCache: {
@@ -289,4 +289,18 @@ it("isolates the new chunk algorithm from legacy namespaces", async () => {
   const current = await digest(JSON.stringify(["document-cdc-v2", "draft.md", "e"]));
   expect(state.cache.get(legacy)?.size).toBe(0);
   expect(state.cache.get(current)?.size).toBeGreaterThan(0);
+});
+
+it("reports completed unique chunks and uses only the final reranker threshold", async () => {
+  const onProgress = vi.fn();
+  const request = { ...args, onProgress, prefs: { ...state.prefs, cosineMinScore: 1, rerankerMinScore: 0.8 } };
+  const result = await retrieveDocument(request, "draft.md", manuscript, manuscript.length, 16000, "detail");
+  expect(result.excerpts.length).toBeGreaterThan(0);
+  const indexed = onProgress.mock.calls.map(([p]) => p).filter((p) => p?.phase === "indexing");
+  expect(indexed[0].ready).toBe(0);
+  expect(indexed[indexed.length - 1].ready).toBe(indexed[indexed.length - 1].total);
+  expect(indexed.length).toBeGreaterThan(2);
+  expect(onProgress).toHaveBeenLastCalledWith(null);
+  const rejected = await retrieveDocument({ ...request, prefs: { ...request.prefs, rerankerMinScore: 2 } }, "draft.md", manuscript, manuscript.length, 16000, "detail");
+  expect(rejected.excerpts).toEqual([]);
 });

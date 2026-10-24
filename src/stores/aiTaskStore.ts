@@ -1,3 +1,4 @@
+import type { RetrievalProgress } from "../lib/context/semanticLore";
 import { semanticPrefs } from "../lib/context/semanticPrefs";
 import { documentWindowLimit, DOCUMENT_RECAP_CHARS } from "../lib/context/documentRetrievalPolicy";
 import { trackOutput, recoveryRequest } from "./outputRecoveryStore";
@@ -100,6 +101,7 @@ function patchDraft(set: SetState, id: string, patch: Partial<Draft>): void {
 export interface SelectionRange { from: number; to: number; }
 
 interface AiTaskState {
+  retrievalProgress: RetrievalProgress | null;
   isRunning: boolean;
   /** This run's results, in request order. Empty before the first run. */
   drafts: Draft[];
@@ -204,6 +206,7 @@ function notifyRunFinished(kind: TaskKind, failure: string | null): void {
 }
 
 export const useAiTaskStore = create<AiTaskState>((set, get) => ({
+  retrievalProgress: null,
   isRunning: false,
   drafts: [],
   activeDraftId: null,
@@ -517,9 +520,12 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const recoveryTruncated = new Set<string>();
     const controller = new AbortController();
     extras = { ...extras, documentFile,
-      semantic: { projectPath, models, providers, signal: controller.signal, prefs: retrievalPrefs } };
+      semantic: { projectPath, models, providers, signal: controller.signal, prefs: retrievalPrefs,
+        onProgress: (retrievalProgress) => {
+          if (get().abortController === controller && !controller.signal.aborted) set({ retrievalProgress });
+        } } };
     set({
-      isRunning: true, drafts, activeDraftId: drafts[0].id,
+      retrievalProgress: null, isRunning: true, drafts, activeDraftId: drafts[0].id,
       // Cleared with the log it belongs to: until this run creates its own
       // workspace a few lines down, the previous run's plan is not this run's.
       error: null, agentLog: [], taskWorkspace: null, loreReport: null, lastMessages: null,
@@ -958,7 +964,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       useAgentStore.getState().rejectAll("task ended", controller);
       // Same guard: abort() already cleared state, and a newer task may own it now.
       if (get().abortController === controller) {
-        set({ isRunning: false, abortController: null });
+        set({ isRunning: false, abortController: null, retrievalProgress: null });
         notifyRunFinished(kind, get().error);
       }
     }
@@ -969,7 +975,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     controller?.abort();
     // Unblock a loop waiting on an approval card so the abort takes effect.
     useAgentStore.getState().rejectAll("aborted by user", controller);
-    set({ isRunning: false, abortController: null });
+    set({ isRunning: false, abortController: null, retrievalProgress: null });
   },
 
   clearOutput: () =>

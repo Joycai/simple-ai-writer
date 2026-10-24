@@ -1,3 +1,4 @@
+import type { RetrievalProgress } from "../../lib/context/semanticLore";
 /**
  * One chat turn's run, and the multi-conversation plumbing around it: opening
  * and restoring conversations, the job queue and its pump, and the resume seed
@@ -314,9 +315,12 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
   // The slot is already ours (pump took it); the controller is what 停止 and
   // the card queues know this run by.
   const controller = new AbortController();
-  const semantic = { projectPath, models: useAiStore.getState().models, providers: useAiStore.getState().providers, signal: controller.signal };
+  const semantic = { projectPath, models: useAiStore.getState().models, providers: useAiStore.getState().providers, signal: controller.signal,
+    onProgress: (retrievalProgress: RetrievalProgress | null) => {
+      if (get().chatAborts[key] === controller && !controller.signal.aborted) patchChat(set, key, { retrievalProgress });
+    } };
   set((s) => ({ chatAborts: { ...s.chatAborts, [key]: controller } }));
-  patchChat(set, key, { error: null });
+  patchChat(set, key, { error: null, retrievalProgress: null });
 
   const patchAssistant = (patch: (turn: ChatTurn) => ChatTurn) =>
     patchChat(set, key, (c) => ({
@@ -933,6 +937,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
     // Drain this turn's own approvals — never another run's.
     get().rejectAll("task ended", controller);
     if (get().chatAborts[key] === controller) {
+      patchChat(set, key, { retrievalProgress: null });
       set((s) => {
         const chatAborts = { ...s.chatAborts };
         delete chatAborts[key];
