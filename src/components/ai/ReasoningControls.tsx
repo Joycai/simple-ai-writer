@@ -23,7 +23,7 @@ import { ChevronDown } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { usePopoverDismiss } from "./usePopoverDismiss";
 import {
-  categoryHasControl, isOnOffCategory, onEffort, thinkingIsOn,
+  categoryHasControl, effortForDisplay, effortMenuForDisplay, isOnOffCategory, onEffort, thinkingIsOn,
   type ReasoningEffort, type ThinkingBudgetSpec,
 } from "../../lib/ai/reasoning";
 import styles from "./ReasoningControls.module.css";
@@ -114,7 +114,7 @@ export function ReasoningControls({ variant }: Props) {
   const capabilityModel = capabilityModelOf({ modelId: model.modelId, relayUpstream: model.relayUpstream });
   const stored = model.reasoningEffort ?? "default";
   const current = cat.shape === "levels"
-    ? (stored === "off" && cat.offSpelling === "lowest" ? "low" : effortOnWire(stored, wire, capabilityModel, false, catalogId) ?? "default")
+    ? effortForDisplay(cat, effortOnWire(stored, wire, capabilityModel, false, catalogId) ?? "default")
     : stored;
   const set = (e: ReasoningEffort) => {
     // "default" is stored as absent — one representation for "send nothing".
@@ -134,7 +134,7 @@ export function ReasoningControls({ variant }: Props) {
   const levels = cat.shape === "levels";
   // The levels this model takes on this wire — the category's menu, less the
   // ones it refuses (capabilities.ts `reasoningOff` / `effortMax` / `effortMinimal`).
-  const menu = effortMenuOnWire(cat.menu, wire, capabilityModel, catalogId);
+  const menu = effortMenuForDisplay(cat, effortMenuOnWire(cat.menu, wire, capabilityModel, catalogId));
 
   const onOffChips = (
     <div className={styles.chipGroup}>

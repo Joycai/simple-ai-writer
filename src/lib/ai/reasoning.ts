@@ -504,6 +504,17 @@ export function effortForCategory(next: ThinkingCategory | undefined, effort: Re
   return next?.defaultEffort ?? "default";
 }
 
+/** Display aliases only: retain stored values and the runtime's fallback menu. */
+export function effortForDisplay(category: ThinkingCategory, effort: ReasoningEffort): ReasoningEffort {
+  return category.shape === "levels" && category.offSpelling === "lowest" && effort === "off"
+    ? "low" : effort;
+}
+
+/** Collapse synonymous stops after route restrictions have removed refused levels. */
+export function effortMenuForDisplay(category: ThinkingCategory, menu: readonly ReasoningEffort[]): ReasoningEffort[] {
+  return [...new Set(menu.map((effort) => effortForDisplay(category, effort)))];
+}
+
 /**
  * Whether an on/off toggle should read as "on" for this stored effort — the
  * control's display only. Nothing on the wire is decided here: whether a
