@@ -1,3 +1,4 @@
+import { usageSnapshot } from "./streamUsage";
 /**
  * DashScope's native protocol (百炼 `/api/v1`) — the multimodal generation
  * endpoint, streamed.
@@ -128,6 +129,7 @@ export async function streamDashscope(opts: StreamOptions): Promise<void> {
     } catch {
       return; // ignore malformed SSE lines
     }
+    if (json.usage) opts._onUsage?.(usageSnapshot("dashscope", json.usage));
     // A failure mid-stream (a refused image, a moderation stop, an outage)
     // arrives on a 200 as an `error` frame: `{code, message, request_id}`.
     if (event === "error" || (json.code && !json.output)) {

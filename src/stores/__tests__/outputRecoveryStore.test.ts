@@ -77,7 +77,8 @@ describe("output recovery orchestration", () => {
     });
     await useOutputRecoveryStore.getState().resume("r");
     expect(h.stream).toHaveBeenCalledTimes(2);
-    expect(h.usage).toHaveBeenCalledTimes(2);
+    expect(h.stream.mock.calls.every(([opts]) => opts.accounting?.task === "output-recovery" && opts.accounting.projectPath === "/a")).toBe(true);
+    expect(h.usage).not.toHaveBeenCalled();
     expect(h.save.mock.calls.map(([, r]) => r.nextSection)).toContain(2);
     expect(useOutputRecoveryStore.getState().rows[0]).toMatchObject({ nextSection: 3, status: "kept" });
   });

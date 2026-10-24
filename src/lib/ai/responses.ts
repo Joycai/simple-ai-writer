@@ -1,3 +1,4 @@
+import { usageSnapshot } from "./streamUsage";
 /**
  * OpenAI Responses (and compatible) streaming adapter — `POST {base}/responses`
  * with SSE parsing.
@@ -358,7 +359,9 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
   };
 
   const readTerminalUsage = (response: unknown) => {
+    const raw = (response as { usage?: unknown } | undefined)?.usage;
     const u = readUsage(response, costPlatform);
+    if (raw) opts._onUsage?.(usageSnapshot("responses", raw, u.reportedCost));
     inputTokens = u.inputTokens;
     outputTokens = u.outputTokens;
     cachedTokens = u.cachedTokens;
@@ -470,6 +473,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
         return true;
       }
       case "response.failed": {
+        readTerminalUsage(json.response);
         const msg = json.response?.error?.message ?? json.response?.error?.code ?? "response.failed";
         throw new Error(`OpenAI Responses: ${msg}`);
       }

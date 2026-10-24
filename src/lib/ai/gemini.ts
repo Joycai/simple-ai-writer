@@ -1,3 +1,4 @@
+import { usageSnapshot } from "./streamUsage";
 /**
  * Gemini streaming adapter — streamGenerateContent with SSE parsing, plus the
  * OpenAI-message → Gemini-contents conversion (incl. tool call round-trips).
@@ -340,6 +341,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     } catch {
       return; // skip malformed SSE lines
     }
+    if (json.usageMetadata) opts._onUsage?.(usageSnapshot("gemini", json.usageMetadata, reportedCostOf(platform, "gemini", json.usageMetadata)));
     if (json.error) {
       const msg = (json.error as { message?: string }).message ?? JSON.stringify(json.error);
       throw new Error(`Gemini: ${msg}`);

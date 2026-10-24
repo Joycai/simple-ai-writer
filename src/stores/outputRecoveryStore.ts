@@ -7,7 +7,6 @@ import {
 import { streamCompletion, type StreamMessage } from "../lib/ai";
 import { conversationalModels } from "../lib/ai/configDb";
 import { connOptions, resolveConn } from "../lib/ai/conn";
-import { recordUsage } from "../lib/ai/usageRow";
 import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import { loadApiKey } from "../lib/keyStore";
 import { profileSystemPrompt } from "../lib/context/rag";
@@ -165,6 +164,7 @@ export const useOutputRecoveryStore = create<RecoveryState>((set, get) => ({
         let done = false;
         let truncated = false;
         await streamCompletion({
+          accounting: { projectPath: project, model, task: "output-recovery" },
           ...connOptions({ model, provider, apiKey }), serverTools: [], messages, signal: controller.signal,
           onChunk: (chunk) => {
             if ("text" in chunk) {
@@ -173,11 +173,6 @@ export const useOutputRecoveryStore = create<RecoveryState>((set, get) => ({
             } else if ("done" in chunk) {
               done = true;
               truncated = !!chunk.truncated;
-              void recordUsage(project, {
-                model, task: "output-recovery", promptTokens: chunk.inputTokens,
-                completionTokens: chunk.outputTokens, cachedTokens: chunk.cachedTokens,
-                reportedCost: chunk.reportedCost,
-              });
             }
           },
         });

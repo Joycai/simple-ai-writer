@@ -28,7 +28,6 @@ import { resolveSubAgentConn } from "../../lib/agent/subagentModel";
 import { newChatStateMemory } from "../../lib/agent/stateFlag";
 import { repairToolCallPairing, runAgent } from "../../lib/agent/runtime";
 import { elideExpiredTurnImages } from "../../lib/agent/imageLease";
-import { recordUsage } from "../../lib/ai/usageRow";
 import { measureCharsPerToken, RECENT_WINDOW_MIN_CHARS } from "../../lib/context/budget";
 import { messageCeilingFor } from "../../lib/agent/toolCost";
 import { workflowBriefingSection } from "../../lib/workflow";
@@ -755,6 +754,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
 
     recoveryContext = recoveryRequest(history);
     const { inputTokens, outputTokens, cachedTokens, reportedCost, outcome } = await runAgent({
+      accounting: { projectPath, model, task: "chat" },
       ...connOptions({ provider, model, apiKey }),
       // Never undefined: without a ceiling the tool loop's history trimming
       // is a no-op, and a chat that reads pictures accumulates base64 in a
@@ -920,7 +920,6 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
     // the next turn.
     bumpContext();
     recordRunOutcome(model.id, null);
-    void recordUsage(projectPath, { model, task: "chat", promptTokens: inputTokens, cachedTokens, completionTokens: outputTokens, reportedCost });
   } catch (e) {
     // Whatever streamed before the failure is still the author's to read.
     stream.flush();

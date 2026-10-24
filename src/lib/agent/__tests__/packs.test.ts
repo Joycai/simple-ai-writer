@@ -294,14 +294,10 @@ describe("tool packs", () => {
 
       expect(res.content).toContain("pack-file_write-x.md");
       expect(res.content).toContain("Report:");
-      expect(mockRecordUsage).toHaveBeenCalledWith("/test-project", {
-        model: expect.objectContaining({ id: "m-main" }),
-        task: "pack:file_write",
-        promptTokens: 500,
-        cachedTokens: 0,
-        completionTokens: 200,
-        reportedCost: 0.0042,
+      expect(mockRunAgent.mock.calls[0][0].accounting).toMatchObject({
+        projectPath: "/test-project", model: { id: "m-main" }, task: "pack:file_write",
       });
+      expect(mockRecordUsage).not.toHaveBeenCalled();
     });
 
     it("keeps the pack's spend out of the parent's totals via a nested run-done", async () => {

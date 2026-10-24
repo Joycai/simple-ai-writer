@@ -1,3 +1,4 @@
+import type { StreamAccounting, ReportedUsage } from "./streamUsage";
 import type { ConnOptions } from "./conn";
 /**
  * Shared protocol types for the streaming AI client.
@@ -446,6 +447,11 @@ export interface WireRewrite {
 }
 
 export interface StreamOptions extends Pick<ConnOptions, "retrieval"> {
+  /** Ledger context for each actual network request, including failed attempts. */
+  accounting?: StreamAccounting;
+  /** Internal adapter evidence hooks, installed by streamCompletion. */
+  _onUsage?: (usage: ReportedUsage) => void;
+  _onUsageComplete?: () => void;
   baseUrl: string;
   apiKey: string;
   standard: ApiStandard;

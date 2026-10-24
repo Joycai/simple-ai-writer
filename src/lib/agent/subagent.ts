@@ -20,7 +20,6 @@ import { upstreamDropping } from "../ai/relayUpstream";
 import { imagePart, imagesWithinBudget } from "../ai/imagePart";
 import { canSeeImages, pdfRouteFor, readsPdf, type Model, type Provider } from "../ai/configDb";
 import { connOptions } from "../ai/conn";
-import { recordUsage } from "../ai/usageRow";
 import { withCurrentTime } from "../context/clock";
 import { bytesToBase64, isImagePath } from "../fs/images";
 import { fileExists, readBinaryFile } from "../fs/fileio";
@@ -280,6 +279,7 @@ export async function executeDelegate(
   try {
     result = await ctx.subRun.run({
       ...connOptions(conn),
+      accounting: { projectPath: ctx.projectPath, model: conn.model, task: `subagent:${kind}` },
       preset,
       messages,
       toolContext: {
@@ -312,7 +312,7 @@ export async function executeDelegate(
   }
 
   // What this specialist spent, on the record where the author can see it.
-  // The DB row below is the permanent ledger, but it is invisible until someone
+  // The per-request ledger is permanent, but it is invisible until someone
   // opens Settings → 用量 — and a delegation is exactly the step whose cost the
   // author is deciding about *now*. `parentStep` keeps it out of the parent
   // run's own totals, which count the parent's model only.
@@ -324,14 +324,6 @@ export async function executeDelegate(
     parentStep: call.id,
   });
 
-  await recordUsage(ctx.projectPath, {
-    model: conn.model,
-    task: `subagent:${kind}`,
-    promptTokens: result.inputTokens,
-    cachedTokens: result.cachedTokens,
-    completionTokens: result.outputTokens,
-    reportedCost: result.reportedCost,
-  });
 
   if (!output.trim()) {
     return fail(`the ${kind} subagent returned nothing. Try a narrower task, or do it yourself.`);

@@ -17,7 +17,6 @@ import {
 } from "../lib/context/memory";
 import { readFile } from "../lib/fs/fileio";
 import { type Model, type Provider } from "../lib/ai/configDb";
-import { recordUsage as recordUsageRow } from "../lib/ai/usageRow";
 import { addReportedCost } from "../lib/ai/reportedCost";
 import { connOptions, plannedLimits, resolveConn, type ConnResolution } from "../lib/ai/conn";
 import { loadApiKey } from "../lib/keyStore";
@@ -104,6 +103,7 @@ async function runMemoryGeneration(opts: {
 
     let summary = "";
     await streamCompletion({
+      accounting: { projectPath, model, task: "memory" },
       ...connOptions({ provider, model, apiKey }),
       // A background summary of text already in hand: nothing to look up or
       // compute. The model's standing server tools would only add cost — the
@@ -262,9 +262,6 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
           set({ notice: i18n.t(outcome.skipped === "short" ? "ai.memory.docTooShort" : "ai.memory.upToDate") });
         }
       } else {
-        // Always recorded — billing reflects what was actually generated,
-        // regardless of whether this run is still the live one.
-        recordUsage(projectPath, model, outcome.usage);
         if (get().abortController === controller) {
           set({
             docPath: activeFilePath,
@@ -338,9 +335,6 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
           set({ notice: i18n.t(outcome.skipped === "short" ? "ai.memory.docTooShort" : "ai.memory.upToDate") });
         }
       } else {
-        // Always recorded — billing reflects what was actually generated,
-        // regardless of whether this run is still the live one.
-        recordUsage(projectPath, model, outcome.usage);
         // Keep the active-doc memory view in sync when we just regenerated it.
         if (
           (isSamePath(absFilePath, activeFilePath) || isSamePath(get().docPath, absFilePath)) &&
@@ -369,17 +363,3 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     set({ chapterGen: null, chapterGenController: null });
   },
 }));
-
-/** Persist summarization token usage (best-effort). */
-function recordUsage(projectPath: string, model: Model, usage: MemoryUsage): void {
-  if (usage.in <= 0 && usage.out <= 0) return;
-  void recordUsageRow(projectPath, {
-    model,
-    task: "memory",
-    promptTokens: usage.in,
-    cachedTokens: usage.cached,
-    completionTokens: usage.out,
-    reportedCost: usage.cost,
-  });
-}
-

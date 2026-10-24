@@ -5,6 +5,7 @@
  * in ./openai, ./responses, ./gemini, ./anthropic and ./dashscope. Shared protocol types live in ./types.
  */
 
+import { createStreamUsage } from "./streamUsage";
 import i18n from "../../i18n";
 import { streamAnthropic } from "./anthropic";
 import { streamDashscope } from "./dashscope";
@@ -197,8 +198,15 @@ async function sendOnce(req: StreamOptions, plan: RequestPlan): Promise<boolean>
   // what says so rather than an assumption about the adapters.
   let streamed = false;
   const watch = createStallWatch(req.signal, firstChunkDeadlineMs(estimated), STREAM_IDLE_MS);
+  const usage = createStreamUsage(req.accounting);
+  let outcome: "complete" | "failed" | "cancelled" = "failed";
   const wrapped: StreamOptions = {
     ...req,
+    _onUsage: (snapshot) => {
+      usage.snapshot(snapshot);
+      if (Object.keys(snapshot).length) { streamed = true; watch.alive(); }
+    },
+    _onUsageComplete: () => usage.complete(),
     _plan: plan,
     signal: watch.signal,
     // Wired here, not by callers: it is the log's own plumbing. An adapter that
@@ -206,12 +214,14 @@ async function sendOnce(req: StreamOptions, plan: RequestPlan): Promise<boolean>
     // A caller's own hook still runs: the live probes read the bodies they sent
     // through it, and replacing it left them asserting on nothing.
     _onRequestBody: (body) => {
+      usage.start();
       log.requestBody(body);
       req._onRequestBody?.(body);
     },
     onChunk: (chunk) => {
       streamed = true;
       watch.alive();
+      if ("done" in chunk) usage.complete();
       log.chunk(chunk);
       req.onChunk(chunk);
     },
@@ -236,12 +246,14 @@ async function sendOnce(req: StreamOptions, plan: RequestPlan): Promise<boolean>
       default:
         await streamOpenAI(wrapped);
     }
+    outcome = "complete";
     log.success();
     return false;
   } catch (e) {
     // Whatever the adapter threw on the watchdog's abort (an AbortError, the
     // reason itself, a network error), the truth is that the stream stalled.
     const err = watch.stalled() ?? e;
+    if (req.signal?.aborted) outcome = "cancelled";
     log.error(err);
     // Both callers that force a tool already handle "the model didn't call
     // it", and a JSON tier stepped down still carries the cue — so neither
@@ -257,5 +269,6 @@ async function sendOnce(req: StreamOptions, plan: RequestPlan): Promise<boolean>
     return true;
   } finally {
     watch.done();
+    await usage.finish(outcome);
   }
 }

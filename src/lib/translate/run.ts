@@ -12,10 +12,11 @@
  *    就把这一块判死，交给调用方处理——它**必须**保留原文（不变量 3）。
  * 3. **回带上一块的尾巴，但不参与本块的计量。** tok/行 只除以本块的输出行数。
  *
- * 整文件的编排见本文件下半部的 {@link runDocument}；审批卡片与记账在
- * `lib/translate/tool.ts`——那里才有 `ToolContext`。
+ * 整文件的编排见本文件下半部的 {@link runDocument}；审批卡片与记账上下文在
+ * `lib/translate/tool.ts`，逐次请求的账由 `streamCompletion` 写入。
  */
 
+import type { StreamAccounting } from "../ai/streamUsage";
 import { streamCompletion } from "../ai";
 import type { ConnOptions } from "../ai/conn";
 import {
@@ -58,6 +59,7 @@ interface ChunkOutcome {
 }
 
 interface RunChunkOptions {
+  accounting?: StreamAccounting;
   conn: ConnOptions;
   /** 术语表来源。不给就走无术语表模板。 */
   loreIndex?: LoreIndex;
@@ -86,6 +88,7 @@ async function requestOnce(
   const usage: TranslateUsage = { inputTokens: 0, outputTokens: 0 };
 
   await streamCompletion({
+    accounting: o.accounting,
     ...o.conn,
     // 覆盖模型行上的配置：这三个值属于这个**格式**，不属于作者对某个端点的偏好。
     ...SAKURA_SAMPLING,
