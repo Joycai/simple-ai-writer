@@ -5,9 +5,9 @@ vi.mock('../../fs/fileio', () => ({
   readFile: async (p: string) => h.files.get(p)!,
   writeFile: async (p: string,v: string) => { h.files.set(p,v); },
   makeDir: async () => {}, removeDir: async (p: string) => { h.cleaned.push(p); },
-  copyPath: async (a: string,b: string) => { if(h.copyFails) throw new Error('copy failed'); h.copies.push([a,b]); },
+  copyPath: async (a: string,b: string) => { if(h.copyFails) throw new Error('copy failed'); h.copies.push([a,b]); for (const [p, text] of [...h.files]) { if (p.startsWith(a + "/")) h.files.set(b + p.slice(a.length), text); } },
   renamePath: async (_a: string,b: string) => { h.moves.push(b); },
-  readDir: async (p: string) => !h.entities ? [] : p.endsWith('/people') ? [{name:'hero',path:`${p}/hero`,isDirectory:true},...(h.extraEntry ? [{name:'villain',path:`${p}/villain`,isDirectory:true}] : [])] : [{name:'people',path:`${p}/people`,isDirectory:true}],
+  readDir: async (p: string) => p.includes('/tmp/lore-export-') ? [...new Set([...h.files.keys()].filter(f => f.startsWith(p + '/')).map(f => f.slice(p.length + 1).split('/')[0]))].map(name => ({name, path: `${p}/${name}`, isDirectory: !h.files.has(`${p}/${name}`)})) : !h.entities ? [] : p.endsWith('/people') ? [{name:'hero',path:`${p}/hero`,isDirectory:true},...(h.extraEntry ? [{name:'villain',path:`${p}/villain`,isDirectory:true}] : [])] : [{name:'people',path:`${p}/people`,isDirectory:true}],
 }));
 vi.mock('../../fs/transfer', () => ({
   zipExportDialog: async (_p: string,_prefix: string,manifest: string) => { h.manifest=manifest; h.zipSource=_p; return h.exportResult; },
@@ -86,4 +86,32 @@ it('cleans the selected snapshot on dialog cancellation or copy failure', async 
   await expect(exportLoreBundle('/source',['/source/.ai-writer/lore/people/hero'])).rejects.toThrow('copy failed');
   expect(h.cleaned).toHaveLength(1);
   expect(h.cleaned[0]).toContain('/tmp/lore-export-');
+});
+
+it('warns from the copied content before saving, preserves references, and cleans on refusal', async () => {
+  h.entities = true;
+  const source = '/source/.ai-writer/lore/people/hero/index.md';
+  const raw = '---\nname: Hero\n---\n[[lore:Villain]] ![map](../../maps/map.png)';
+  h.files.set(source, raw);
+  const confirm = vi.fn(() => false);
+  expect(await exportLoreBundle('/source', ['/source/.ai-writer/lore/people/hero'], confirm)).toBeNull();
+  expect(confirm.mock.calls[0]).toEqual([[
+    { source: 'people/hero/index.md', target: 'Villain', kind: 'citation' },
+    { source: 'people/hero/index.md', target: '../../maps/map.png', kind: 'file' },
+  ]]);
+  expect(h.zipSource).toBe('');
+  expect(h.cleaned).toHaveLength(1);
+  expect(h.files.get(source)).toBe(raw);
+  expect(h.files.get(`${h.cleaned[0]}/people/hero/index.md`)).toBe(raw);
+  expect(await exportLoreBundle('/source', ['/source/.ai-writer/lore/people/hero'], () => true)).toBe('/bundle.zip');
+  expect(JSON.parse(h.manifest).entities).toHaveLength(1);
+});
+
+it('requires acknowledgement and cleans up when dependency review fails', async () => {
+  h.entities = true;
+  h.files.set('/source/.ai-writer/lore/people/hero/index.md', '[[lore:missing]]');
+  await expect(exportLoreBundle('/source', ['/source/.ai-writer/lore/people/hero'])).rejects.toThrow('dependencies need review');
+  await expect(exportLoreBundle('/source', ['/source/.ai-writer/lore/people/hero'], () => { throw new Error('review failed'); })).rejects.toThrow('review failed');
+  expect(h.cleaned).toHaveLength(2);
+  expect(h.zipSource).toBe('');
 });

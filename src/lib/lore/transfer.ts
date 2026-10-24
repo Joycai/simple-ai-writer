@@ -23,6 +23,7 @@ import { parseFrontmatter } from "../fs/markdown";
 import { activeWorkspace, loreCategoryIds } from "../profile/active";
 import { CATEGORY_ID_RE } from "../profile/model";
 import { uniqueEntityId } from "./entity";
+import { inspectBundleDependencies, type BundleDependency } from "./bundleDependencies";
 import { baseName } from "../paths";
 
 const LORE_BUNDLE_KIND = "ai-writer-lore-bundle";
@@ -112,7 +113,11 @@ async function walkLoreTree(root: string): Promise<{ category: string; id: strin
  * Optional selectedPaths exports only those entry folders and their category definitions.
  * Returns the saved path, or null when the user cancelled.
  */
-export async function exportLoreBundle(projectPath: string, selectedPaths?: readonly string[]): Promise<string | null> {
+export async function exportLoreBundle(
+  projectPath: string,
+  selectedPaths?: readonly string[],
+  confirmDependencies?: (dependencies: BundleDependency[]) => boolean | Promise<boolean>,
+): Promise<string | null> {
   const root = loreRoot(projectPath);
   const allEntities = await walkLoreTree(root);
   const selected = selectedPaths === undefined ? undefined : new Set(selectedPaths);
@@ -169,6 +174,12 @@ export async function exportLoreBundle(projectPath: string, selectedPaths?: read
     for (const e of entities) {
       await makeDir(`${tempDir}/${e.category}`);
       await copyPath(`${root}/${e.category}/${e.id}`, `${tempDir}/${e.category}/${e.id}`);
+    }
+    const dependencies = await inspectBundleDependencies(tempDir);
+    if (dependencies.length) {
+      // Callers must explicitly acknowledge an incomplete bundle before saving.
+      if (!confirmDependencies) throw new Error("Bundle dependencies need review before export.");
+      if (!await confirmDependencies(dependencies)) return null;
     }
     return await save(tempDir);
   } finally {
