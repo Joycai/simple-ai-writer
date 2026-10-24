@@ -609,6 +609,7 @@ export interface AgentRunResult {
 }
 
 export interface AgentRuntimeOptions extends ConnOptions {
+  accounting?: StreamOptions["accounting"];
   // ── Transport ──────────────────────────────────────────────────────────────
   // The endpoint/model half comes from ConnOptions (lib/ai/conn) — build it with
   // connOptions(conn) rather than listing the fields here.
@@ -1160,6 +1161,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
     try {
       await streamCompletion({
+        accounting: opts.accounting,
         ...pickConnOptions(opts),
         ...(thinkingFallback?.off ? { reasoningEffort: "off" as const } : {}),
         messages: history,

@@ -30,9 +30,8 @@
 
 import i18n from "../../i18n";
 import type { StreamMessage } from "../ai/types";
-import { canSeeImages, type Model } from "../ai/configDb";
+import { canSeeImages } from "../ai/configDb";
 import { connOptions, plannedLimits, type AiConn } from "../ai/conn";
-import { recordUsage } from "../ai/usageRow";
 import { CONTEXT_UTILIZATION_DEFAULT } from "../context/budget";
 import { withCurrentTime } from "../context/clock";
 import { AGENT_ASSIST_PRESET, type TaskPreset } from "./presets";
@@ -342,6 +341,7 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
   try {
     result = await subRun.run({
       ...connOptions(conn),
+      accounting: { projectPath: ctx.projectPath, model: conn.model, task: `pack:${pack}` },
       inputCeilingTokens,
       preset,
       messages,
@@ -395,15 +395,6 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
     outputTokens: result.outputTokens,
     at: Date.now(),
     parentStep: call.id,
-  });
-  const model: Model = conn.model;
-  await recordUsage(ctx.projectPath, {
-    model,
-    task: `pack:${pack}`,
-    promptTokens: result.inputTokens,
-    cachedTokens: result.cachedTokens,
-    completionTokens: result.outputTokens,
-    reportedCost: result.reportedCost,
   });
 
   if (!output.trim()) {

@@ -15,8 +15,6 @@ import {
 } from "../lib/context/memory";
 import { chapterTitle, type Volume } from "../lib/context/outline";
 import { readFile } from "../lib/fs/fileio";
-import { type Model } from "../lib/ai/configDb";
-import { recordUsage as recordUsageRow } from "../lib/ai/usageRow";
 import { connOptions, plannedLimits, resolveConn, type ConnResolution } from "../lib/ai/conn";
 import { loadApiKey } from "../lib/keyStore";
 import { useAiStore } from "./aiStore";
@@ -94,8 +92,8 @@ export const useDigestStore = create<DigestState>((set, get) => ({
       const apiKey = (await loadApiKey(provider.id)) ?? "";
 
       let summary = "";
-      let usage: DigestUsage = { in: 0, out: 0, cached: 0, cost: null };
       await streamCompletion({
+        accounting: { projectPath, model, task: "digest" },
         ...connOptions({ provider, model, apiKey }),
         // Background summary, same as memoryStore: no server tools (search,
         // code interpreter) — they can only add cost to a digest of text in hand.
@@ -106,21 +104,11 @@ export const useDigestStore = create<DigestState>((set, get) => ({
         ],
         signal: controller.signal,
         onChunk: (chunk) => {
-          if ("done" in chunk) {
-            usage = {
-              in: chunk.inputTokens,
-              out: chunk.outputTokens,
-              cached: chunk.cachedTokens ?? 0,
-              cost: chunk.reportedCost ?? null,
-            };
-          } else if ("text" in chunk) {
+          if ("text" in chunk) {
             summary += chunk.text;
           }
         },
       });
-
-      // Billing reflects what was generated even if the run was superseded.
-      recordUsage(projectPath, model, usage);
 
       const digest: CollectionDigest = {
         volume: volume.relPath,
@@ -146,19 +134,3 @@ export const useDigestStore = create<DigestState>((set, get) => ({
     set({ gen: null, genController: null });
   },
 }));
-
-/** `cost`: the platform's reported cost, or null when it reported none. */
-type DigestUsage = { in: number; out: number; cached: number; cost: number | null };
-
-/** Persist digest token usage (best-effort). */
-function recordUsage(projectPath: string, model: Model, usage: DigestUsage): void {
-  if (usage.in <= 0 && usage.out <= 0) return;
-  void recordUsageRow(projectPath, {
-    model,
-    task: "digest",
-    promptTokens: usage.in,
-    cachedTokens: usage.cached,
-    completionTokens: usage.out,
-    reportedCost: usage.cost,
-  });
-}

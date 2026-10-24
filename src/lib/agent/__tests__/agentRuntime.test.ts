@@ -1222,3 +1222,15 @@ describe("tool-argument progress", () => {
     expect(opts.events.some((e) => e.kind === "tool-args")).toBe(false);
   });
 });
+
+it("passes accounting to every round even when a later stream fails", async () => {
+  const accounting = { projectPath: "/p", model: { id: "m" }, task: "chat" };
+  queueRound([
+    { toolCalls: [{ index: 0, id: "call-usage", name: "list_lore_entities", arguments: "{}" }] },
+    { done: true, inputTokens: 10, outputTokens: 5 },
+  ]);
+  mockStream.mockRejectedValueOnce(new Error("connection lost"));
+  await expect(runAgent(makeOptions({ accounting }))).rejects.toThrow("connection lost");
+  expect(mockStream).toHaveBeenCalledTimes(2);
+  expect(mockStream.mock.calls.every(([opts]) => opts.accounting === accounting)).toBe(true);
+});

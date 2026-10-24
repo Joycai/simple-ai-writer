@@ -419,14 +419,10 @@ describe("subagent", () => {
       const res = await executeDelegate(call, ctx);
 
       expect(mockRunAgent).toHaveBeenCalledTimes(1);
-      expect(mockRecordUsage).toHaveBeenCalledWith("/test-project", {
-        model: expect.objectContaining({ id: "m-search" }),
-        task: "subagent:search",
-        promptTokens: 50,
-        cachedTokens: 0,
-        completionTokens: 100,
-        reportedCost: null,
+      expect(mockRunAgent.mock.calls[0][0].accounting).toMatchObject({
+        projectPath: "/test-project", model: { id: "m-search" }, task: "subagent:search",
       });
+      expect(mockRecordUsage).not.toHaveBeenCalled();
       expect(mockWriteTaskNote).toHaveBeenCalledTimes(1);
       expect(res.content).toContain(".ai-writer/tasks/task-123/notes/search-find-facts.md");
       expect(res.content).toContain("Here is the detailed research report on topic X.");

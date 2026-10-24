@@ -1,3 +1,4 @@
+import { usageSnapshot } from "./streamUsage";
 /**
  * Anthropic streaming adapter — the Messages API (`POST /v1/messages`, SSE),
  * plus the OpenAI-message → Anthropic-messages conversion (incl. tool call
@@ -767,6 +768,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
         case "message_start": {
           const message = json.message as Record<string, unknown> | undefined;
           usage = readUsage(message?.usage, usage);
+          if (message?.usage) opts._onUsage?.(usageSnapshot("anthropic", message.usage));
           return;
         }
         case "content_block_start": {
@@ -867,6 +869,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
           // The cost of the whole response rides here only — never the opening
           // snapshot, whose numbers are partial (landscape.md §7 第十八个样本「再补测」).
           legCost = reportedCostOf(platform, "anthropic", json.usage);
+          if (json.usage) opts._onUsage?.(usageSnapshot("anthropic", json.usage, legCost));
           const stop = (json.delta as { stop_reason?: string } | undefined)?.stop_reason;
           if (stop) stopReason = stop;
           if (stop && ANTHROPIC_REFUSAL_STOP_REASONS.has(stop)) {
@@ -917,6 +920,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
       if (tail.startsWith("data:")) parseData(tail.slice(5).trim());
     }
     if (!ended) throw new Error("Anthropic: stream interrupted before message_stop");
+    opts._onUsageComplete?.();
     flushServerCalls();
     total = {
       inputTokens: total.inputTokens + usage.inputTokens,

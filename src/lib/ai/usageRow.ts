@@ -36,6 +36,14 @@ import {
  * 自己算一遍再传进来，就是第二套口径的开始。
  */
 export interface RecordUsageInput {
+  /** Stable for one physical attempt; new retries always get a new id. */
+  requestId?: string;
+  /** Absent fields remain unknown even though legacy aggregate columns use zero. */
+  usageEvidence?: {
+    outcome: "complete" | "failed" | "cancelled";
+    source: "reported" | "unreported";
+    fields: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; reportedCost?: number };
+  };
   model: Pick<Model, "id" | "fee">;
   /** 任务标签：一个 profile 任务 id，或 `chat` / `memory` / `image` 这类种类名。 */
   task: string;
@@ -124,7 +132,7 @@ const INSERT_COLUMNS = [
   // 不盖的话每一行新用量都会在下次开项目 / 下次加载配置时被重扫、重算、原样
   // 重写一遍——写的值一模一样，不是数据损坏，但收敛就没了：那个部分索引再也
   // 空不下来，而这一趟挂在 `openProject` 的 await 链上。
-  "cost_split_checked",
+  "cost_split_checked", "request_id", "usage_evidence",
 ];
 
 function insertValues(r: UsageRowValues): unknown[] {
@@ -144,7 +152,7 @@ function insertValues(r: UsageRowValues): unknown[] {
 
 function insertSql(scope: "project" | "global"): string {
   const cols = scope === "global" ? [...INSERT_COLUMNS, "project"] : INSERT_COLUMNS;
-  return `INSERT INTO token_usage (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`;
+  return `INSERT INTO token_usage (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")}) ON CONFLICT(request_id) WHERE request_id IS NOT NULL DO NOTHING`;
 }
 
 /**
@@ -159,7 +167,7 @@ export async function recordUsage(
   input: RecordedUsage,
 ): Promise<void> {
   const row = buildUsageRow(input);
-  const values = insertValues(row);
+  const values = [...insertValues(row), input.requestId ?? null, input.usageEvidence ? JSON.stringify(input.usageEvidence) : null];
   await Promise.all([
     projectPath
       ? getDb(projectPath)

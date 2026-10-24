@@ -16,7 +16,6 @@
  */
 
 import { connOptions, type AiConn } from "../ai/conn";
-import { recordUsage as recordUsageRow } from "../ai/usageRow";
 import { loadApiKey } from "../keyStore";
 import { fileExists, readFile } from "../fs/fileio";
 import { baseName, resolveWorkspacePath } from "../paths";
@@ -153,23 +152,6 @@ function progressReporter(ctx: ToolContext) {
   };
 }
 
-/** 一次运行花了多少，记在作者能看到的账上。本地模型价格为 0，账依然记得住。 */
-async function recordUsage(
-  ctx: ToolContext,
-  conn: AiConn,
-  usage: { inputTokens: number; outputTokens: number },
-): Promise<void> {
-  if (!ctx.projectPath) return;
-  await recordUsageRow(ctx.projectPath, {
-    model: conn.model,
-    task: "subagent:translate",
-    promptTokens: usage.inputTokens,
-    completionTokens: usage.outputTokens,
-    // Sakura 本地模型，几段带重试的聚合；不经会报价的平台，照计费组算。
-    reportedCost: null,
-  });
-}
-
 export async function translateTool(
   toolCallId: string,
   args: TranslateArgs,
@@ -220,11 +202,11 @@ async function translatePassage(
   const dict = await loadTranslateDict(ctx);
   const outcome = await runChunk(chunks[0], {
     conn: connOptions(conn),
+    accounting: { projectPath: ctx.projectPath, model: conn.model, task: "subagent:translate" },
     loreIndex: isTranslateLoreEnabled() ? ctx.loreIndex : undefined,
     dict: dict.entries,
     signal: ctx.signal,
   });
-  await recordUsage(ctx, conn, outcome.usage);
 
   if (!outcome.ok) {
     const last = outcome.attempts[outcome.attempts.length - 1];
@@ -280,14 +262,13 @@ async function translateFile(
   const dict = await loadTranslateDict(ctx);
   const outcome = await runDocument(original, {
     conn: connOptions(conn),
+    accounting: { projectPath: ctx.projectPath, model: conn.model, task: "subagent:translate" },
     loreIndex: isTranslateLoreEnabled() ? ctx.loreIndex : undefined,
     dict: dict.entries,
     signal: ctx.signal,
     linesPerChunk: translateLinesPerChunk(),
     onProgress: progressReporter(ctx),
   });
-  // 记在账上，无论成败：失败的那些请求也真的发出去了。
-  await recordUsage(ctx, conn, outcome.usage);
 
   if (!outcome.chunkCount) {
     return fail(`no Japanese was found in "${baseName(source)}". This model only translates Japanese into Chinese.`);

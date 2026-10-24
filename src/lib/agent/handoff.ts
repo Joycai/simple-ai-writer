@@ -24,7 +24,6 @@ import i18n from "../../i18n";
 import type { StreamMessage, ToolDefinition } from "../ai/types";
 import { canSeeImages, costFor } from "../ai/configDb";
 import { connOptions } from "../ai/conn";
-import { recordUsage } from "../ai/usageRow";
 import { fileExists, readFile } from "../fs/fileio";
 import { withCurrentTime } from "../context/clock";
 import { normalizeChapterFileName } from "../context/outline";
@@ -397,6 +396,7 @@ export async function runWriterHandoff(args: WriterHandoffArgs): Promise<WriterH
   try {
     result = await args.runAgent({
       ...connOptions(conn),
+      accounting: { projectPath: ctx.projectPath, model: conn.model, task: "subagent:writer" },
       preset: WRITER_PRESET,
       messages,
       toolContext: {
@@ -433,14 +433,6 @@ export async function runWriterHandoff(args: WriterHandoffArgs): Promise<WriterH
     parentStep: stepId,
   });
   const cost = costFor(conn.model, result.inputTokens, result.outputTokens, result.cachedTokens, result.reportedCost);
-  await recordUsage(ctx.projectPath, {
-    model: conn.model,
-    task: "subagent:writer",
-    promptTokens: result.inputTokens,
-    cachedTokens: result.cachedTokens,
-    completionTokens: result.outputTokens,
-    reportedCost: result.reportedCost,
-  });
 
   const usage = {
     inputTokens: result.inputTokens,

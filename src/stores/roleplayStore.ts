@@ -43,7 +43,6 @@ import { useAppStore } from "./appStore";
 import { connOptions, plannedLimits, resolveConn } from "../lib/ai/conn";
 import { canSeeImages, costFor } from "../lib/ai/configDb";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
-import { recordUsage } from "../lib/ai/usageRow";
 import type { MessageContent, StreamMessage } from "../lib/ai/types";
 import { measureCharsPerToken } from "../lib/context/budget";
 import { messageCeilingFor } from "../lib/agent/toolCost";
@@ -714,6 +713,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const routed = routeTools(preset, effectiveSubs, workspace, models, { providers });
 
       const result = await runAgent({
+        accounting: { projectPath, model, task: agent.kind === "narrator" ? "roleplay:narrator" : "roleplay:character" },
         ...connOptions({ provider, model, apiKey }),
         inputCeilingTokens: messageCeiling,
         preset: { ...preset, tools: routed.tools, serverTools: routed.serverTools },
@@ -850,14 +850,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         },
       }));
       recordRunOutcome(model.id, null);
-      void recordUsage(projectPath, {
-        model,
-        task: agent.kind === "narrator" ? "roleplay:narrator" : "roleplay:character",
-        promptTokens: result.inputTokens,
-        cachedTokens: result.cachedTokens,
-        completionTokens: result.outputTokens,
-        reportedCost: result.reportedCost,
-      });
       if (get().activeAgentId !== job.agentId) {
         set((st) => ({ unread: { ...st.unread, [job.agentId]: true } }));
         notify("done", i18n.t("notify.doneTitle"), i18n.t("roleplay.notify.replied", {

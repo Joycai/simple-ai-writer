@@ -32,7 +32,6 @@ import { useAgentStore } from "./agentStore";
 import { useAiStore } from "./aiStore";
 import { draftCountFor, totalUsage, type Draft } from "../lib/ai/drafts";
 import { canSeeImages, costFor } from "../lib/ai/configDb";
-import { recordUsage } from "../lib/ai/usageRow";
 import { connOptions, plannedLimits, resolveConn } from "../lib/ai/conn";
 import { useAppStore } from "./appStore";
 import { useLoreStore } from "./loreStore";
@@ -670,6 +669,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         };
 
         const { inputTokens, outputTokens, cachedTokens, reportedCost, outcome } = await runAgent({
+          accounting: { projectPath, model, task: kind },
           ...conn,
           // The **message** ceiling: the tool schemas' share is already out of
           // it, and what the runtime trims is messages. 0 on a static plan
@@ -819,7 +819,6 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         if (get().abortController === controller) {
           get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
         }
-        void recordUsage(projectPath, { model, task: kind, promptTokens: inputTokens, cachedTokens, completionTokens: outputTokens, reportedCost });
       } else {
         // ── Simple streaming: polish / rewrite / summary / custom / Gemini ─
         const bundle = await assembleContext(
@@ -852,6 +851,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             // request this was".
             const logServerTool = createServerToolLog(1);
             return streamCompletion({
+              accounting: { projectPath, model, task: kind },
               ...conn,
               messages,
               signal: controller.signal,
@@ -886,9 +886,6 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
                     done: true,
                     truncated: truncated ?? false,
                   });
-                  // One row per draft: each is a separate billed call, and a
-                  // single summed row would misreport the run's shape.
-                  void recordUsage(projectPath, { model, task: kind, promptTokens: inputTokens, cachedTokens, completionTokens: outputTokens, reportedCost });
                 } else if ("text" in chunk) {
                   pendingAppends.set(draft.id, (pendingAppends.get(draft.id) ?? "") + chunk.text);
                   stream.schedule();

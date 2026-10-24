@@ -1,3 +1,4 @@
+import { usageSnapshot } from "./streamUsage";
 /**
  * OpenAI (and compatible) streaming adapter — chat/completions with SSE parsing.
  */
@@ -154,6 +155,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     } catch {
       return; // ignore malformed SSE lines
     }
+    if (json.usage) opts._onUsage?.(usageSnapshot("openai", json.usage, reportedCostOf(platform, "openai", json.usage)));
     // A relay can return HTTP 200 and then deliver a failure (moderation
     // block, upstream outage, credit exhaustion) as an SSE data event rather
     // than an error status — OpenRouter does this routinely. Left unhandled,

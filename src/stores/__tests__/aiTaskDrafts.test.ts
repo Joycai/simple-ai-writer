@@ -15,6 +15,7 @@ type Chunk =
   | { done: true; inputTokens: number; outputTokens: number };
 
 interface StreamArgs {
+  accounting?: import("../../lib/ai/streamUsage").StreamAccounting;
   messages: unknown;
   signal: AbortSignal;
   onChunk: (chunk: Chunk) => void;
@@ -24,7 +25,7 @@ const h = vi.hoisted(() => ({
   /** The author's requested draft count, as appStore would report it. */
   draftCount: 1,
   /** Every streamCompletion call, in fire order. */
-  streams: [] as { signal: AbortSignal }[],
+  streams: [] as Pick<StreamArgs, "signal" | "accounting">[],
   /** Per-call-index behaviour; default is "emit some text and finish". */
   behaviour: null as null | ((index: number, args: StreamArgs) => Promise<void>),
   persisted: [] as { inTokens: number; cachedTokens: number; outTokens: number }[],
@@ -35,7 +36,7 @@ const h = vi.hoisted(() => ({
 vi.mock("../../lib/ai", () => ({
   streamCompletion: async (args: StreamArgs) => {
     const index = h.streams.length;
-    h.streams.push({ signal: args.signal });
+    h.streams.push({ signal: args.signal, accounting: args.accounting });
     if (h.behaviour) return h.behaviour(index, args);
     args.onChunk({ text: `draft-${index}` });
     args.onChunk({ done: true, inputTokens: 10, outputTokens: 5 });
@@ -435,11 +436,12 @@ describe("runTask — multiple drafts", () => {
     expect(drafts().every((d) => d.error)).toBe(true);
   });
 
-  it("records one usage row per draft", async () => {
+  it("delegates accounting to each draft stream without writing aggregate duplicates", async () => {
     await useAiTaskStore.getState().runTask("polish");
     // Each draft is a separately billed call; one summed row would misreport it.
-    expect(h.persisted).toHaveLength(3);
-    expect(h.persisted.every((r) => r.inTokens === 10 && r.outTokens === 5)).toBe(true);
+    expect(h.persisted).toHaveLength(0);
+    expect(h.streams).toHaveLength(3);
+    expect(h.streams.every((r) => r.accounting?.task === "polish" && r.accounting.projectPath)).toBe(true);
     expect(totalUsage(drafts())).toMatchObject({ inputTokens: 30, outputTokens: 15 });
   });
 });

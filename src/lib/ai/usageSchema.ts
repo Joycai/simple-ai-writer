@@ -40,6 +40,8 @@ const USAGE_COLUMNS = `
 
 /** 计费快照列。老行上它们是 NULL，读作「没有快照」——按当时的样子读。 */
 const SNAPSHOT_COLUMNS: [string, string][] = [
+  ["request_id", "TEXT"],
+  ["usage_evidence", "TEXT"],
   ["billing_mode", "TEXT"],
   ["input_price", "REAL"],
   ["cache_price", "REAL"],
@@ -116,6 +118,7 @@ export async function ensureUsageSchema(db: Db, scope: "project" | "global"): Pr
   const cols = await db.select<{ name: string }[]>(`PRAGMA table_info(token_usage)`);
   const have = new Set(cols.map((c) => c.name));
   for (const [name, type] of SNAPSHOT_COLUMNS) await addUsageColumn(db, have, name, type);
+  await db.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_request ON token_usage (request_id) WHERE request_id IS NOT NULL`);
   if (scope === "global") {
     await addUsageColumn(db, have, "project", "TEXT");
     // 总体库里一个项目的行动辄上万，范围查询与「清掉这个项目」都靠它。

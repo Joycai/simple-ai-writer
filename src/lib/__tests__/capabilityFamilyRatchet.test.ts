@@ -37,6 +37,7 @@ const WIRE_SHAPE: Readonly<Record<string, string>> = {
   "lib/ai/capabilities.ts": "能力表本身——族是它的一个轴",
   "lib/ai/platforms.ts": "平台的地址与线路：每族一条路径约定",
   "lib/ai/routes.ts": "线路 ↔ ApiStandard 的换算",
+  "lib/ai/streamUsage.ts": "用量响应字段与缓存/思考桶的协议归一化，不判断能力有无",
   "lib/ai/urls.ts": "各族的 URL 拼法",
   "lib/ai/reasoning.ts": "思考参数的拼法（类目按族登记，§5 明确不并入）",
   "lib/ai/jsonMode.ts": "JSON 模式的拼法与强度（response_format / text.format / generationConfig）",
