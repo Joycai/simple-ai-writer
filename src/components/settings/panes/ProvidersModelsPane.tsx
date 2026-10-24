@@ -1,3 +1,5 @@
+import { semanticPrefs } from "../../../lib/context/semanticPrefs";
+import { retrievalDeletionWarning } from "./retrievalModelWarning";
 import { isRerankFormat } from "../../../lib/ai/retrievalConfig";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -76,6 +78,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [drawerClosing, setDrawerClosing] = useState(false);
+  const [modelConfirmation, setModelConfirmation] = useState(false);
   const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<string | null>(null);
   /**
@@ -171,7 +174,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
     // it. Both listeners sit on `window`, so the page's would otherwise fire
     // too and take the whole settings page down with the dialog — claiming the
     // key with a no-op is what keeps one press to one layer.
-    const handler = pending
+    const handler = pending || modelConfirmation
       ? () => {}
       : orderMenu
         ? () => setOrderMenu(null)
@@ -180,7 +183,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
           : null;
     onEscapeInterceptChange(handler);
     return () => onEscapeInterceptChange(null);
-  }, [drawer, pending, orderMenu, onEscapeInterceptChange]);
+  }, [drawer, pending, modelConfirmation, orderMenu, onEscapeInterceptChange]);
 
   const q = query.trim().toLowerCase();
 
@@ -318,6 +321,13 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
     }
     openDrawer({ kind: "provider", providerId, apiKey });
   };
+
+  const deletionWarning = pending && pending.kind !== "merge"
+    ? retrievalDeletionWarning(models.filter((m) => pending.kind === "model"
+      ? m.id === pending.id : m.providerId === pending.id), semanticPrefs(projectPath))
+    : null;
+  const deletionSuffix = deletionWarning
+    ? `\n\n${t(`semantic.modelDelete${deletionWarning === "current" ? "Current" : "Other"}`)}` : "";
 
   const confirmPending = () => {
     if (!pending) return;
@@ -723,6 +733,8 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
               providerId={drawer.providerId}
               modelId={drawer.modelId}
               comfy={drawer.comfy}
+              projectPath={projectPath}
+              onConfirmationChange={setModelConfirmation}
               onClose={closeDrawer}
             />
           )}
@@ -737,9 +749,9 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
               ? t("aiConfig.hub.deleteModel")
               : t("aiConfig.hub.mergeTitle", { keep: pending.candidate.keep.name })}
           message={pending.kind === "provider"
-            ? t("aiConfig.hub.deleteProviderConfirm", { name: pending.name, count: pending.count })
+            ? t("aiConfig.hub.deleteProviderConfirm", { name: pending.name, count: pending.count }) + deletionSuffix
             : pending.kind === "model"
-              ? t("aiConfig.hub.deleteModelConfirm", { name: pending.name })
+              ? t("aiConfig.hub.deleteModelConfirm", { name: pending.name }) + deletionSuffix
               : mergeMessage(pending.candidate)}
           confirmLabel={pending.kind === "merge" ? t("aiConfig.hub.mergeConfirm") : t("common.delete")}
           danger={pending.kind !== "merge"}

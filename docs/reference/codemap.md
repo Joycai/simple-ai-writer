@@ -199,6 +199,7 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 
 - `McpServers` provides the MCP Beta switch, standard JSON import, per-server enable/remove and read-only connection testing. Header values go to the OS keyring and clear from the import field after save; no credentials are reloaded into the form.
 
+- `retrievalModelWarning` shares the active-project/unknown-other-project dependency policy between model saves and model/channel deletion. Confirmation preserves project selections; see semantic-retrieval-beta.md § Shared model changes and deletion.
 - `SemanticRetrieval` in Labs adds a project-scoped semantic retrieval Beta, typed model selectors and themed controls; embedding/rerank registration lives in Channels & Models. Pipeline and bounds: [semantic-retrieval-beta.md](../feature/lore/semantic-retrieval-beta.md).
 
 - Under the AI group, 实验室 (`LabPane`) holds **every** Beta switch — each gates an assistant capability, so its neighbours are the panes an author configures next —
