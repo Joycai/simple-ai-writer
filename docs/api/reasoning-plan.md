@@ -82,6 +82,18 @@ Qwen 3.8 选 qwen-effort，3.7 Plus 选 qwen-budget；DeepSeek 官方 Chat 的 V
 [Qwen3.8-27B 模型卡](https://huggingface.co/Qwen/Qwen3.8-27B)、
 [Qwen3.7 Plus 预算上限](https://www.alibabacloud.com/help/en/model-studio/coding-plan-faq)。
 
+## 0.3 最低档别名的显示去重（1.99.17）
+
+未知模型仍按声明的类目解析；当 levels 类目的 `offSpelling` 为 `lowest` 时，
+「关闭」与「低」是同一个请求语义，控件只展示「低」。聊天的三种力度盘和模型抽屉
+共用 `effortForDisplay` / `effortMenuForDisplay`，在线路过滤之后去重；旧 off 值
+显示为选中的低档，打开或保存其他设置不主动改写该值。默认仍表示不发送参数。
+
+这是显示修复，不是新的端点能力判断：保留类目原菜单和适配器拼写，避免影响
+运行时 thinking-cut 对旧 off 别名的使用；真实 disable 开关和预算控件不去重。
+离线回归覆盖未知原生/兼容 Gemini、Claude 类目、已识别 Opus 档位、旧值拼写和
+真实开关。协议预算上限、线路实际效果仍需各自的端点证据，本次不作推断。
+
 ## 0. 更新（2026-09）：思考参数按类目
 
 **变更**：写侧的作者选择从「一个抽象六值 `reasoningEffort`（默认/关/低/中/高/最高，

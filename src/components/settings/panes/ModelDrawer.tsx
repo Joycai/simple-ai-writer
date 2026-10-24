@@ -43,7 +43,7 @@ import {
 } from "../../../lib/comfy/workflow";
 import { readFile } from "../../../lib/fs/fileio";
 import {
-  categoriesForFamily, effortForCategory, isOnOffCategory, onEffort,
+  categoriesForFamily, effortForCategory, effortForDisplay, effortMenuForDisplay, isOnOffCategory, onEffort,
   thinkingIsOn, THINKING_CATEGORIES,
   type ReasoningEffort, type ThinkingCategoryId,
 } from "../../../lib/ai/reasoning";
@@ -1588,11 +1588,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                         />
                       </>
                     ) : (
-                      effortMenuOnWire(formCategory.menu, curWire, capModel, catalogId).map((e) => (
+                      effortMenuForDisplay(formCategory, effortMenuOnWire(formCategory.menu, curWire, capModel, catalogId)).map((e) => (
                         <DashChip
                           key={e}
                           label={effortLabel(e)}
-                          active={form.reasoningEffort === e}
+                          active={effortForDisplay(formCategory, form.reasoningEffort) === e}
                           onClick={() => setForm({ ...form, reasoningEffort: e })}
                         />
                       ))

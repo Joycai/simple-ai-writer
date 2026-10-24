@@ -15,6 +15,8 @@ import { describe, expect, it } from "vitest";
 import {
   categoriesForFamily,
   effortForCategory,
+  effortForDisplay,
+  effortMenuForDisplay,
   parseThinkingCategory,
   forcesToolChoiceAuto,
   isOnOffCategory,
@@ -27,6 +29,39 @@ import {
 } from "../reasoning";
 import { resolveThinkingCategory } from "../capabilities";
 import type { ApiStandard } from "../types";
+
+describe("distinct reasoning controls", () => {
+  it.each(["gemini", "gemini_compat", "anthropic", "anthropic_compat"] as const)(
+    "%s collapses unknown-model off aliases without changing saved request behavior",
+    (standard) => {
+      const category = resolveThinkingCategory({ modelId: "unknown-model" }, standard);
+      const original = [...category.menu];
+      const menu = effortMenuForDisplay(category, category.menu);
+      expect(menu).toEqual(original.filter((e) => e !== "off"));
+      expect(effortForDisplay(category, "off")).toBe("low");
+      expect(menu).toContain(effortForDisplay(category, "off"));
+      expect(effortForDisplay(category, "default")).toBe("default");
+      expect(reasoningBody(category, "off")).toEqual(reasoningBody(category, "low"));
+      expect(category.menu).toEqual(original);
+      expect(category.menu).toContain("off"); // runtime thinking-cut fallback retains its alias
+    },
+  );
+
+  it("retains real off switches and budget controls", () => {
+    for (const category of Object.values(THINKING_CATEGORIES)) {
+      if (category.shape === "levels" && category.offSpelling === "lowest") continue;
+      expect(effortMenuForDisplay(category, category.menu)).toEqual(category.menu);
+      expect(effortForDisplay(category, "off")).toBe("off");
+    }
+  });
+
+  it("keeps known-model ladders and route-filtered levels intact", () => {
+    const category = resolveThinkingCategory({ modelId: "claude-opus-4-6" }, "anthropic");
+    expect(effortMenuForDisplay(category, category.menu)).toEqual(category.menu);
+    expect(effortMenuForDisplay(category, ["low", "medium", "high"])).toEqual(["low", "medium", "high"]);
+    expect(effortForDisplay(category, "off")).toBe("low");
+  });
+});
 
 describe("resolveThinkingCategory", () => {
   it("ignores an unknown declared category and falls back to the default", () => {
