@@ -76,3 +76,13 @@ it("hides document retrieval controls when the parent project opt-in is off", ()
   renderToStaticMarkup(createElement(SemanticRetrieval));
   expect(fixture.toggles["semantic.documentEnable"]).toBeUndefined();
 });
+
+it("renders independently saved thresholds with only cosine bounded", () => {
+  fixture.prefs = { ...fixture.prefs, cosineMinScore: -0.2, rerankerMinScore: 3 };
+  const html = renderToStaticMarkup(createElement(SemanticRetrieval));
+  const inputs = html.match(/<input[^>]*>/g) ?? [];
+  expect(inputs.find((s) => s.includes('semantic.cosineMinScore'))).toMatch(/min="-1" max="1".*value="-0.2"/);
+  const reranker = inputs.find((s) => s.includes('semantic.rerankerMinScore'));
+  expect(reranker).toContain('value="3"');
+  expect(reranker).not.toMatch(/ (min|max)=/);
+});

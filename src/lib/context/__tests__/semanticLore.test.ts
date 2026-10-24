@@ -160,3 +160,51 @@ describe("semantic catalog retrieval", () => {
     expect(result.report.entities[0]).toMatchObject({ reason: "semantic", semanticScore: 0.9 });
   });
 });
+
+it("reports cold and cached batch progress then clears it", async () => {
+  enable("e", "r");
+  const onProgress = vi.fn();
+  const catalog = { custom: Array.from({ length: 65 }, (_, i) => entity(`entry-${i}`)) };
+  vi.mocked(embed).mockImplementation(async (_c, texts) => texts.map((text) => ["sneak", "again"].includes(text) ? [0, 1] : [1, 0]));
+  vi.mocked(rerank).mockResolvedValue([{ index: 0, score: 0.8 }]);
+  const request = { ...args, onProgress, prefs: { ...semanticPrefs("/p"), cosineMinScore: 1, rerankerMinScore: 0.7 } };
+  expect((await retrieveSemantic("sneak", catalog, null, new Set(), request)).matches).toHaveLength(1);
+  expect(onProgress.mock.calls.map(([p]) => p?.phase === "indexing" ? p.ready : p?.phase ?? null))
+    .toEqual(["preparing", 0, 32, 64, 65, "query", "reranking", null]);
+  onProgress.mockClear();
+  await retrieveSemantic("again", catalog, null, new Set(), request);
+  expect(onProgress.mock.calls.map(([p]) => p?.phase === "indexing" ? p.ready : p?.phase ?? null))
+    .toEqual(["preparing", 65, "query", "reranking", null]);
+});
+it("clears progress on timeout and ignores late upstream completion", async () => {
+  vi.useFakeTimers(); enable("e", "");
+  const onProgress = vi.fn();
+  vi.mocked(embed).mockImplementation(async (_c, texts) => {
+    await new Promise((resolve) => setTimeout(resolve, 25_000));
+    return texts.map(() => [1, 0]);
+  });
+  const pending = retrieveSemantic("sneak", index, null, new Set(), { ...args, onProgress });
+  await vi.advanceTimersByTimeAsync(20_001);
+  expect((await pending).report?.status).toBe("timeout");
+  expect(onProgress).toHaveBeenLastCalledWith(null);
+  const calls = onProgress.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(onProgress).toHaveBeenCalledTimes(calls);
+});
+
+it("uses cosine independently when no reranker is selected", async () => {
+  enable("e", "");
+  vi.mocked(embed).mockImplementation(async (_c, texts) => texts.map((text) => text === "query" ? [0.6, 0.8] : [1, 0]));
+  const request = { ...args, prefs: { ...semanticPrefs("/p"), cosineMinScore: 0.7, rerankerMinScore: -10 } };
+  expect((await retrieveSemantic("query", index, null, new Set(), request)).matches).toEqual([]);
+  request.prefs.cosineMinScore = 0.5;
+  expect((await retrieveSemantic("query", index, null, new Set(), request)).matches).toHaveLength(2);
+});
+it("clears feedback when the author cancels reranking", async () => {
+  enable();
+  const controller = new AbortController();
+  const onProgress = vi.fn();
+  vi.mocked(rerank).mockImplementation(async () => { controller.abort(); return []; });
+  await expect(retrieveSemantic("query", index, null, new Set(), { ...args, signal: controller.signal, onProgress })).rejects.toThrow();
+  expect(onProgress).toHaveBeenLastCalledWith(null);
+});

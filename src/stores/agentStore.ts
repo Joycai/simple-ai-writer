@@ -878,6 +878,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // would fire the moment the slot frees, which undoes it. Its placeholder
     // answer goes with it; the author's words stay as the record of the ask.
     const dropped = get().chatQueue.filter((j) => j.key === k).map((j) => j.assistantTurnId);
+    patchChat(set, k, { retrievalProgress: null });
     set((s) => {
       const chatAborts = { ...s.chatAborts };
       delete chatAborts[k];

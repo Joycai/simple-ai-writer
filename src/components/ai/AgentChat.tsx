@@ -1,3 +1,4 @@
+import { RetrievalProgressText } from "./RetrievalProgressText";
 import { ChatError } from "./ChatError";
 import { canRetryChat } from "../../stores/agent/selectors";
 import { OutputRecoveryPanel } from "./OutputRecoveryPanel";
@@ -136,6 +137,7 @@ export function AgentChat() {
   const hasHistory = useAgentStore((s) => s.chatSessions.length > 0);
   const dequeueChat = useAgentStore((s) => s.dequeueChat);
   const promoteChat = useAgentStore((s) => s.promoteChat);
+  const retrievalProgress = useActiveChat((c) => c.retrievalProgress);
   const chatError = useActiveChat((c) => c.error);
   const retryChat = useAgentStore((s) => s.retryChat);
   const retryAvailable = useAgentStore((s) => canRetryChat(s, s.activeChatKey));
@@ -1207,6 +1209,9 @@ export function AgentChat() {
               onPick={(item) => void handlePickMention(item)}
             />
           )}
+          {chatRunning && retrievalProgress && <div className={`${styles.runningNote} ${styles.retrievalNote}`}>
+            <RetrievalProgressText progress={retrievalProgress} /> · {runClock}
+          </div>}
           <div className={styles.inputFooter}>
             {/* Insert (not send): a snippet is a starting point the author
                 completes before sending. */}
@@ -1215,7 +1220,7 @@ export function AgentChat() {
               onInsert={setDraft}
               onAfterInsert={focusEndOfInput}
             />
-            {chatRunning && (
+            {chatRunning && !retrievalProgress && (
               <span className={styles.runningNote}>
                 <span className={styles.runningDots} aria-hidden>
                   <span /><span /><span />

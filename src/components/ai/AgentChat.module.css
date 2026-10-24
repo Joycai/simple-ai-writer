@@ -731,6 +731,13 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.retrievalNote {
+  display: block;
+  padding: 0 var(--space-3) var(--space-2);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
 .runningDots { display: inline-flex; gap: 4px; }
 .runningDots span { width: 4px; height: 4px; }
 /* The middle dot takes the ramp's mid step rather than the mockup's

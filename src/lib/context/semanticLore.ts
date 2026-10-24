@@ -2,12 +2,19 @@
 import type { Model, Provider } from "../ai/configDb";
 import { embed, rerank, cosine, embeddingLimits, RetrievalError } from "../ai/retrieval";
 import { inScope, type LoreEntity, type LoreIndex, type LoreScope } from "../lore";
-import { semanticPrefs, type SemanticPrefs } from "./semanticPrefs";
+import { semanticPrefs, retrievalThreshold, type SemanticPrefs } from "./semanticPrefs";
 import { catalogText, resolveIndexConnection, indexedVectors, indexIdentity } from "./semanticIndex";
 import { invalidateEmbeddings } from "./embeddingCache";
 export { catalogText } from "./semanticIndex";
 
+export interface RetrievalProgress {
+  source: "kb" | "document";
+  phase: "preparing" | "indexing" | "query" | "reranking";
+  ready?: number;
+  total?: number;
+}
 export interface SemanticRequest {
+  onProgress?: (progress: RetrievalProgress | null) => void;
   projectPath: string;
   /** One task snapshot shared by budget planning and both retrieval paths. */
   prefs?: SemanticPrefs;
@@ -57,6 +64,11 @@ export async function retrieveSemantic(
     const stop = () => reject(new DOMException("Retrieval stopped", "AbortError"));
     if (signal.aborted) stop(); else signal.addEventListener("abort", stop, { once: true });
   });
+  let finished = false;
+  const progress = (phase: RetrievalProgress["phase"], counts?: { ready: number; total: number }) => {
+    if (!finished && !signal.aborted) args.onProgress?.({ source: "kb", phase, ...counts });
+  };
+  progress("preparing");
   const run = async (): Promise<SemanticMatch[]> => {
     if (!prefs.embeddingModelId && !prefs.rerankerModelId) throw new RetrievalError("model");
     let candidates = catalog.map((entity) => ({ entity, score: 0 }));
@@ -68,7 +80,8 @@ export async function retrieveSemantic(
       // one absolute deadline, including credential resolution and reranking.
       clearTimeout(timer);
       timer = setTimeout(timeout, Math.max(0, timeoutMs - (Date.now() - started)));
-      const vectors = await indexedVectors(args, conn, catalog, index, signal, usage);
+      const vectors = await indexedVectors(args, conn, catalog, index, signal, usage, (p) => progress("indexing", p));
+      progress("query");
       const [q] = await embed(conn, [(conn.retrieval?.queryPrefix ?? "") + query], signal, usage);
       if (vectors.some((v) => v.length !== q.length)) {
         await invalidateEmbeddings(args.projectPath, await indexIdentity(conn));
@@ -84,11 +97,12 @@ export async function retrieveSemantic(
     }
     if (prefs.rerankerModelId) {
       const { conn, usage } = await resolveIndexConnection(args, prefs.rerankerModelId, signal, true);
+      progress("reranking");
       const ranked = await rerank(conn, query, candidates.map((c) => catalogText(c.entity).slice(0, 1600)), signal, usage);
       candidates = ranked.map((r) => ({ entity: candidates[r.index].entity, score: r.score }));
     }
     signal.throwIfAborted();
-    const matches = candidates.filter((c) => c.score >= prefs.minScore);
+    const matches = candidates.filter((c) => c.score >= retrievalThreshold(prefs));
     report.matchesLimited = Math.max(0, matches.length - 5);
     return matches.slice(0, 5);
   };
@@ -101,6 +115,8 @@ export async function retrieveSemantic(
       : { code: error instanceof Error && error.name === "KeyringError" ? "keyring" : "response" };
     return { matches: [], report };
   } finally {
+    finished = true;
+    args.onProgress?.(null);
     clearTimeout(timer);
     args.signal?.removeEventListener("abort", abort);
   }

@@ -2,8 +2,8 @@
 import { embed, rerank, cosine, embeddingLimits } from "../ai/retrieval";
 import { digest, documentEmbeddingCache as cache } from "./embeddingCache";
 import { indexIdentity, resolveIndexConnection } from "./semanticIndex";
-import type { SemanticRequest } from "./semanticLore";
-import { semanticPrefs } from "./semanticPrefs";
+import type { SemanticRequest, RetrievalProgress } from "./semanticLore";
+import { semanticPrefs, retrievalThreshold } from "./semanticPrefs";
 import { DOCUMENT_LOCAL_CHARS } from "./documentRetrievalPolicy";
 
 interface DocumentChunk { from: number; to: number; text: string }
@@ -112,6 +112,11 @@ export async function retrieveDocument(args: SemanticRequest, file: string, text
     stop = () => reject(new DOMException("Document retrieval stopped", "AbortError"));
     if (signal.aborted) stop(); else signal.addEventListener("abort", stop, { once: true });
   });
+  let finished = false;
+  const progress = (phase: RetrievalProgress["phase"], counts?: { ready: number; total: number }) => {
+    if (!finished && !signal.aborted) args.onProgress?.({ source: "document", phase, ...counts });
+  };
+  progress("preparing");
   const run = async () => {
     signal.throwIfAborted();
     if (!prefs.embeddingModelId) throw new Error("Document retrieval requires an embedding model");
@@ -126,6 +131,9 @@ export async function retrieveDocument(args: SemanticRequest, file: string, text
       signal.throwIfAborted();
       const stored = await cache.readEmbeddings(args.projectPath, namespace);
       const missing = [...new Map(rows.filter((r) => !stored.has(r.entry)).map((r) => [r.entry, r])).values()];
+      const total = new Set(rows.map((r) => r.entry)).size;
+      let ready = total - missing.length;
+      progress("indexing", { ready, total });
       const { batchSize } = embeddingLimits(conn);
       for (let i = 0; i < missing.length; i += batchSize) {
         signal.throwIfAborted();
@@ -135,12 +143,15 @@ export async function retrieveDocument(args: SemanticRequest, file: string, text
         const saved = batch.map((r, j) => ({ entry: r.entry, hash: r.hash, vector: output[j] }));
         await cache.writeEmbeddings(args.projectPath, namespace, saved);
         saved.forEach((r) => stored.set(r.entry, r));
+        ready += saved.length;
+        progress("indexing", { ready, total });
       }
       signal.throwIfAborted();
       await cache.pruneNamespace(args.projectPath, namespace, rows.map((r) => r.entry));
       return rows.map((r) => stored.get(r.entry)!.vector);
     });
     const qtext = query.slice(0, 4000);
+    progress("query");
     const [q] = await embed(conn, [(conn.retrieval?.queryPrefix ?? "") + qtext], signal, usage);
     if (vectors.some((v) => v.length !== q.length)) {
       await cache.invalidateEmbeddings(args.projectPath, namespace);
@@ -150,6 +161,7 @@ export async function retrieveDocument(args: SemanticRequest, file: string, text
       .sort((a, b) => b.score - a.score || a.chunk.from - b.chunk.from).slice(0, 30);
     if (prefs.rerankerModelId) {
       const ranking = await resolveIndexConnection(args, prefs.rerankerModelId, signal, true, "document");
+      progress("reranking");
       const scores = await rerank(ranking.conn, qtext, ranked.map((r) => r.chunk.text), signal, ranking.usage);
       ranked = scores.map((r) => ({ chunk: ranked[r.index].chunk, score: r.score }));
     }
@@ -158,7 +170,7 @@ export async function retrieveDocument(args: SemanticRequest, file: string, text
     let remaining = Math.max(0, budget - local.length - 600);
     const picked: typeof ranked = [];
     for (const item of ranked) {
-      if (item.score < prefs.minScore || picked.length >= 6) continue;
+      if (item.score < retrievalThreshold(prefs) || picked.length >= 6) continue;
       if (picked.some((p) => item.chunk.from < p.chunk.to && item.chunk.to > p.chunk.from)) continue;
       if (item.chunk.text.length + 100 > remaining) continue;
       picked.push(item); remaining -= item.chunk.text.length + 100;
@@ -172,6 +184,8 @@ export async function retrieveDocument(args: SemanticRequest, file: string, text
     if (args.signal?.aborted) throw error;
     return { local: fallback(), excerpts: [], report: { ...report, status: timedOut ? "timeout" as const : "unavailable" as const } };
   } finally {
+    finished = true;
+    args.onProgress?.(null);
     clearTimeout(timer); signal.removeEventListener("abort", stop);
     args.signal?.removeEventListener("abort", abort);
   }

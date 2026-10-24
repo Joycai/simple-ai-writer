@@ -1410,7 +1410,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
               }} />
           </Field>
           <Field label={t("semantic.path")} hint={t("semantic.pathHint")}>
-            <input aria-label={t("semantic.path")} className={inputCls(false)} value={retrieval.path} onChange={(e) => setRetrieval({ ...retrieval, path: e.target.value })} />
+            <input aria-invalid={!validRetrievalPath(retrieval.path)} aria-describedby={!validRetrievalPath(retrieval.path) ? "retrieval-path-error" : undefined} aria-label={t("semantic.path")} className={inputCls(false)} value={retrieval.path} onChange={(e) => setRetrieval({ ...retrieval, path: e.target.value })} />
+            {!validRetrievalPath(retrieval.path) && <p id="retrieval-path-error" className={styles.errorNote} role="status">{t("semantic.invalidPath")}</p>}
           </Field>
           {form.type === "embedding" && <>
             <Field label={t("semantic.queryPrefix")} hint="">
@@ -2108,7 +2109,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
         <span className={hub.escHint}>{t("aiConfig.hub.escToClose")}</span>
         <span className={hub.footSpacer} />
         <button className={styles.btnSecondary} onClick={onClose}>{t("aiConfig.models.cancel")}</button>
-        <button className={styles.btnPrimary} onClick={() => void handleSave()} disabled={!form.modelId.trim() || saving}>
+        <button className={styles.btnPrimary} onClick={() => void handleSave()} disabled={!form.modelId.trim() || saving || (isRetrievalModel && !validRetrievalPath(retrieval.path))}>
           {saving
             ? (existing ? t("aiConfig.models.editing") : t("aiConfig.models.saving"))
             : (existing ? t("aiConfig.models.edit") : t("aiConfig.models.add"))}

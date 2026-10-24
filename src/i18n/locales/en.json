@@ -5062,7 +5062,19 @@
     "modelChangeCurrent": "The current project selects this model for retrieval, even if retrieval is currently off. Changing it may make retrieval unavailable or require new embeddings and incur usage. Other projects may also select these models; their bindings have not been checked. Selections are kept. Choose a replacement in each affected project’s Settings → AI configuration → Labs → Semantic retrieval.",
     "modelChangeOther": "Changing this retrieval model may affect projects that select it or require new embeddings and incur usage. Other projects may also select these models; their bindings have not been checked. Selections are kept. Choose a replacement in each affected project’s Settings → AI configuration → Labs → Semantic retrieval.",
     "modelDeleteCurrent": "The current project selects an affected model for retrieval, even if retrieval is currently off. Deleting it will leave that selection unavailable. Other projects may also select these models; their bindings have not been checked. Selections are kept. Choose a replacement in each affected project’s Settings → AI configuration → Labs → Semantic retrieval.",
-    "modelDeleteOther": "Deleting these retrieval models will make them unavailable to projects that select them. Other projects may also select these models; their bindings have not been checked. Selections are kept. Choose a replacement in each affected project’s Settings → AI configuration → Labs → Semantic retrieval."
+    "modelDeleteOther": "Deleting these retrieval models will make them unavailable to projects that select them. Other projects may also select these models; their bindings have not been checked. Selections are kept. Choose a replacement in each affected project’s Settings → AI configuration → Labs → Semantic retrieval.",
+    "cosineMinScore": "Minimum cosine similarity",
+    "cosineMinScoreHint": "Used without a reranker. Range −1 to 1; not a probability.",
+    "rerankerMinScore": "Minimum reranker score",
+    "rerankerMinScoreHint": "Used whenever a reranker is selected, including after embedding shortlisting. Scores depend on the model; any finite value is allowed.",
+    "progress": {
+      "kb": "Knowledge Base",
+      "document": "Document",
+      "preparing": "{{source}}: preparing retrieval…",
+      "indexing": "{{source}}: indexing {{ready}} / {{total}}",
+      "query": "{{source}}: matching query…",
+      "reranking": "{{source}}: reranking…"
+    }
   },
   "imageOutput": {
     "customize": "Customize output capabilities",

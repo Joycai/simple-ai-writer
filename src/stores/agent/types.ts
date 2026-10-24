@@ -1,3 +1,4 @@
+import type { RetrievalProgress } from "../../lib/context/semanticLore";
 /**
  * agentStore's types — the state shape, the pending-card kinds, a conversation's
  * turns and live state. Split out of `agentStore.ts` (docs/feature/code-structure-plan.md
@@ -192,6 +193,8 @@ interface ChatUsage {
  * `sessionId` arrives with the first persist.
  */
 export interface LiveChat {
+  /** Transient on-demand retrieval feedback; never saved in chat history. */
+  retrievalProgress?: RetrievalProgress | null;
   key: string;
   /** DB row this conversation saves into; null until the first persist. */
   sessionId: number | null;

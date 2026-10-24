@@ -54,10 +54,17 @@ function ProjectRetrieval({ project }: { project: string | null }) {
       <Row title={t("semantic.documentEnable")} desc={t("semantic.documentHint")}>
         <Toggle on={prefs.documentEnabled === true} onChange={(documentEnabled) => update({ documentEnabled })} label={t("semantic.documentEnable")} />
       </Row>
-      <Row title={t("semantic.threshold")} desc={t("semantic.thresholdHint")}>
-        <input className={`${common.input} ${common.rowNumber}`} aria-label={t("semantic.threshold")} type="number" min={-1} max={1} step={0.05} defaultValue={prefs.minScore}
-          onBlur={(e) => { const n = Number(e.target.value); if (Number.isFinite(n)) { const minScore = Math.max(-1, Math.min(1, n)); update({ minScore }); e.target.value = String(minScore); } }} />
-      </Row>
+      {(["cosineMinScore", "rerankerMinScore"] as const).map((field) => <Row key={field}
+        title={t(`semantic.${field}`)} desc={t(`semantic.${field}Hint`)}>
+        <input className={`${common.input} ${common.rowNumber}`} aria-label={t(`semantic.${field}`)}
+          type="number" min={field === "cosineMinScore" ? -1 : undefined} max={field === "cosineMinScore" ? 1 : undefined}
+          step="any" defaultValue={prefs[field] ?? prefs.minScore}
+          onBlur={(e) => {
+            const n = e.target.value.trim() ? Number(e.target.value) : NaN;
+            const value = Number.isFinite(n) ? (field === "cosineMinScore" ? Math.max(-1, Math.min(1, n)) : n) : (prefs[field] ?? prefs.minScore);
+            update({ [field]: value }); e.target.value = String(value);
+          }} />
+      </Row>)}
       {prefs.embeddingModelId && <SemanticIndexPanel project={project} modelId={prefs.embeddingModelId} />}
       {!prefs.embeddingModelId && !prefs.rerankerModelId && <p className={ui.rowWarn}>{t("semantic.chooseModel")}</p>}
       <p className={ui.rowDesc}>{t("semantic.transferHint", { entry: terms.entry })}</p>
