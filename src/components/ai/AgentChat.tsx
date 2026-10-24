@@ -1161,10 +1161,7 @@ export function AgentChat() {
                 {t("ai.chat.waitingLine", { defaultValue: "这段停在上面那张卡。批准或拒绝之后才能继续说话。" })}
               </span>
             </div>
-            {chatRunning && retrievalProgress && <div className={`${styles.runningNote} ${styles.retrievalNote}`}>
-            <RetrievalProgressText progress={retrievalProgress} /> · {runClock}
-          </div>}
-          <div className={styles.inputFooter}>
+            <div className={styles.inputFooter}>
               {/* Inert, not gone: 片段 inserts into an input nobody can type in,
                   and 思考 would look like it changed *this* turn (屏 1z §6). */}
               <span className={styles.footerInert} aria-hidden>
