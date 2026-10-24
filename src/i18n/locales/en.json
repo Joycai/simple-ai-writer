@@ -3388,7 +3388,9 @@
       "importing": "Importing…",
       "importDone": "Import complete: {{imported}} entries added, {{skipped}} skipped.",
       "hiddenCategories": "Categories {{categories}} are not among the enabled categories — imported to disk but hidden for now; enable the matching pack or create a category with that id to see them.",
-      "strategyOverwriteHint": "The entries being replaced are moved into .ai-writer/backups rather than deleted — move one back if you need it."
+      "strategyOverwriteHint": "The entries being replaced are moved into .ai-writer/backups rather than deleted — move one back if you need it.",
+      "dependencyWarning": "This bundle has {{count}} references that cannot be resolved within the selection. Cited entries or local files may be absent after import; absolute links may still point to this computer.\n\n{{details}}\n{{more}}\nExport anyway? References will be preserved and no extra files will be included.",
+      "dependenciesMore": "…and {{count}} more."
     },
     "detail": {
       "openInEditor": "Open in Editor",

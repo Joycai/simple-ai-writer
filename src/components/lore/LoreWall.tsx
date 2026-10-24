@@ -528,7 +528,14 @@ export function LoreWall() {
     if (!projectPath || transferBusy) return;
     setTransferBusy(true);
     try {
-      const saved = await exportLoreBundle(projectPath, entries?.map((e) => e.dirPath));
+      const saved = await exportLoreBundle(projectPath, entries?.map((e) => e.dirPath), (dependencies) => {
+        const shown = dependencies.slice(0, 12).map((d) =>
+          `${d.source.slice(0, 180)} → ${d.target.slice(0, 180)}`).join("\n");
+        return window.confirm(t("lore.transfer.dependencyWarning", {
+          count: dependencies.length, details: shown,
+          more: dependencies.length > 12 ? t("lore.transfer.dependenciesMore", { count: dependencies.length - 12 }) : "",
+        }));
+      });
       // Show the bundle where it landed instead of an alert — and when that
       // fails, the alert after all, saying the export itself went through.
       if (saved) revealItemInDir(saved).catch((e) => {

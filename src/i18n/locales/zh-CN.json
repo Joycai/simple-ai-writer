@@ -3379,7 +3379,9 @@
       "importing": "导入中…",
       "importDone": "导入完成：新增 {{imported}} 个条目，跳过 {{skipped}} 个。",
       "hiddenCategories": "其中分类 {{categories}} 不属于当前启用的分类，已导入到磁盘但暂不显示；启用对应能力包或新建同名分类即可看到。",
-      "strategyOverwriteHint": "被替换的条目会移入 .ai-writer/backups,不会真的删掉——需要时可以移回来。"
+      "strategyOverwriteHint": "被替换的条目会移入 .ai-writer/backups,不会真的删掉——需要时可以移回来。",
+      "dependencyWarning": "此导出包中有 {{count}} 处引用无法在所选内容内解析。导入后，引用目标或本地文件可能缺失；绝对路径仍可能指向当前电脑。\n\n{{details}}\n{{more}}\n仍要导出吗？引用原文将保留，不会自动加入其他文件。",
+      "dependenciesMore": "…另有 {{count}} 处。"
     },
     "detail": {
       "openInEditor": "在编辑器中打开",
