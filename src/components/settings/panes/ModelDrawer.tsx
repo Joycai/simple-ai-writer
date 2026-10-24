@@ -21,9 +21,12 @@
  * The 「将发送」 line above the buttons is built by `lib/ai/modelSummary` from
  * the adapters' own body functions, so it cannot drift from the request.
  */
+import { ConfirmDialog } from "../../common/ConfirmDialog";
+import { semanticPrefs } from "../../../lib/context/semanticPrefs";
+import { retrievalModelWarning } from "./retrievalModelWarning";
 import { retrievalUrl } from "../../../lib/ai/retrieval";
 import { RETRIEVAL_PATHS, isRerankFormat, validRetrievalPath, type RetrievalConfig } from "../../../lib/ai/retrievalConfig";
-import { Fragment, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { learnedVersion, subscribeLearned } from "../../../lib/ai/capability/learned";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
@@ -227,9 +230,11 @@ interface Props {
    */
   comfy?: boolean;
   onClose: () => void;
+  projectPath: string | null;
+  onConfirmationChange?: (open: boolean) => void;
 }
 
-export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
+export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, onConfirmationChange }: Props) {
   const { t } = useTranslation();
   const { providers, models, feeGroups, addModel, updateModel, fetchAndImportModels } = useAiStore();
   const feeWords = useFeeLabelWords();
@@ -711,7 +716,12 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     return Object.keys(out).length ? out : undefined;
   };
 
-  const handleSave = async () => {
+  const [retrievalWarning, setRetrievalWarning] = useState<string | null>(null);
+  useEffect(() => {
+    onConfirmationChange?.(retrievalWarning !== null);
+    return () => onConfirmationChange?.(false);
+  }, [retrievalWarning, onConfirmationChange]);
+  const handleSave = async (confirmed = false) => {
     if (!form.modelId.trim()) return;
     if (isRetrievalModel && !validRetrievalPath(retrieval.path)) { setError(t("semantic.invalidPath")); return; }
     setSaving(true);
@@ -823,7 +833,13 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         relayUpstream,
       };
       if (existing) {
-        await updateModel({ ...existing, ...shared });
+        const next = { ...existing, ...shared };
+        const warning = retrievalModelWarning(existing, next, semanticPrefs(projectPath));
+        if (warning && !confirmed) {
+          setRetrievalWarning(t(`semantic.modelChange${warning === "current" ? "Current" : "Other"}`));
+          return;
+        }
+        await updateModel(next);
       } else {
         await addModel({ ...shared, enabled: true });
       }
@@ -2092,12 +2108,19 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         <span className={hub.escHint}>{t("aiConfig.hub.escToClose")}</span>
         <span className={hub.footSpacer} />
         <button className={styles.btnSecondary} onClick={onClose}>{t("aiConfig.models.cancel")}</button>
-        <button className={styles.btnPrimary} onClick={handleSave} disabled={!form.modelId.trim() || saving}>
+        <button className={styles.btnPrimary} onClick={() => void handleSave()} disabled={!form.modelId.trim() || saving}>
           {saving
             ? (existing ? t("aiConfig.models.editing") : t("aiConfig.models.saving"))
             : (existing ? t("aiConfig.models.edit") : t("aiConfig.models.add"))}
         </button>
       </div>
+      {retrievalWarning && <ConfirmDialog
+        title={t("semantic.modelChangeTitle")}
+        message={retrievalWarning}
+        confirmLabel={t("aiConfig.models.edit")}
+        onConfirm={() => void handleSave(true)}
+        onClose={() => setRetrievalWarning(null)}
+      />}
     </div>
   );
 }
