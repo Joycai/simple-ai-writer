@@ -289,6 +289,21 @@ const DOUBAO: readonly (readonly [id: string, maxOutput: number])[] = [
   ["doubao-seed-2.1-turbo", 262_144],
 ];
 
+// Plan alias, measured on Chat and Responses only (2026-10-26).
+// Limits are Ark's documented 1024k / 128k, not a context stress test.
+const KIMI_K31_PLAN: PlatformModelRow = {
+  match: eq("kimi-k3.1-pro"),
+  set: {
+    contextSize: 1_048_576, maxOutput: 131_072,
+    // none/minimal/disabled are accepted but corrupt the thinking boundary:
+    // reasoning leaks into final text (and one CRT answer was wrong).
+    // "no" means no usable off mode, not an HTTP rejection.
+    temperature: false, reasoningOff: false, effortMinimal: false,
+    jsonSchema: true, pdfInput: true,
+  },
+  prefill: MULTIMODAL_PDF,
+};
+
 /**
  * `newapi` and `custom` alike: a New API relay lands on `custom` unless the
  * author picks New API. What differs is the upstream behind each model, which
@@ -377,8 +392,13 @@ export const PLATFORM_CELLS: Record<PlatformId, PlatformCells> = {
       // A `video_url` clip read right on doubao-seed-2.0-mini; `fps` left no
       // mark on a 4-second clip's bill in either spelling, which a clip that
       // short cannot tell from a frame floor — so no `videoFps` cell (第十九个样本).
-      openai: { jsonSchema: true, videoInput: true, models: SEED_THINKING },
-      responses: { web_search: true, jsonSchema: true },
+      openai: { jsonSchema: true, videoInput: true, models: [...SEED_THINKING,
+        { ...KIMI_K31_PLAN, set: { ...KIMI_K31_PLAN.set, forcedToolChoice: true } },
+      ] },
+      responses: { web_search: true, jsonSchema: true, models: [
+        // Accepts required but can answer without a call (sample 25 review).
+        { ...KIMI_K31_PLAN, set: { ...KIMI_K31_PLAN.set, forcedToolChoice: false } },
+      ] },
       anthropic: {
         web_search: true,
         pdfInput: true,

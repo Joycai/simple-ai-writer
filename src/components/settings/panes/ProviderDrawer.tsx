@@ -149,8 +149,8 @@ const DASHSCOPE_MODELS: StarterModel[] = [
  * lib/ai/capability/cells/platform.ts, where the measurements are cited), so a
  * starter row and a hand-added one never disagree.
  *
- * The plan's other models (DeepSeek, GLM, Kimi, MiniMax) are not listed: the
- * sample measured Doubao only, and a starter list is a recommendation.
+ * Kimi K3.1 Pro has its own measured Chat/Responses calibration below.
+ * Other unmeasured plan models stay out of this recommendation list.
  */
 const doubao = (modelId: string, name: string): StarterModel => ({
   modelId, name, ...platformModelCalibration("volcengine-plan", modelId),
@@ -175,6 +175,10 @@ const seedream = (modelId: string, name: string, dialect: "seedream-5-lite" | "s
   caps: { route: "ark", dialect, edit: true, maxRefs: dialect === "seedream-5-pro" ? 10 : 14 },
 });
 const VOLCENGINE_PLAN_MODELS: StarterModel[] = [
+  {
+    modelId: "kimi-k3.1-pro", name: "Kimi K3.1 Pro", activeRoute: "responses",
+    ...platformModelCalibration("volcengine-plan", "kimi-k3.1-pro", "responses"),
+  },
   doubao("doubao-seed-2.0-lite", "Doubao Seed 2.0 Lite"),
   doubao("doubao-seed-2.0-mini", "Doubao Seed 2.0 Mini"),
   doubao("doubao-seed-2.1-turbo", "Doubao Seed 2.1 Turbo"),
