@@ -278,6 +278,7 @@ CommandPalette, onboarding flow, library view (文库: only what the author pick
 ### `src/lib/ai/`
 
 #### 流式协议层
+- `carryScope.ts`：统一入口为跨轮载体标注端点、协议、模型及凭据来源摘要；来源不匹配或旧历史无来源时，仅投影发送副本，保留可见文本与裸工具配对。普通 Responses 回答轮也保存 output items；损坏工具调用恢复时丢弃原始载体、重建配对。依据与边界见 `docs/api/provider-layering.md` → 跨轮载体的来源与恢复。
 - streaming client (`index.ts` dispatch on `familyOf(standard)`, `openai.ts`/`responses.ts`/`gemini.ts`/`anthropic.ts`/`dashscope.ts` adapters — five protocol families (the fifth is DashScope's native `/api/v1`, which shares `chatParams` and the `chatDelta` choice reader with Chat Completions — docs/api/dashscope-native-plan.md), Responses being OpenAI's second one on the same base and Bearer, with `instructions` + `input` items instead of `messages`, typed stream events, and `store:false` on every request
   - `Model.textVerbosity` goes out as `text.verbosity`, merged beside a structured task's `text.format` rather than replacing it, and the terminal event's echoed `reasoning.effort` / `temperature` is compared with what was sent — a mismatch becomes `wireRewrites` on the done chunk, in the API log and as a `round-done` row in the execution log, reported and never retried (`docs/api/gpt56-plan.md` P2 / P3)
   - slice-by-slice status in `docs/api/qianwen-compat-plan.md` §6 — `types.ts`)

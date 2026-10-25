@@ -37,7 +37,7 @@ function stubFetch(feed: (push: (raw: string) => void, close: () => void) => voi
 
 const delta = (text: string) => `data: {"choices":[{"delta":{"content":"${text}"}}]}\n\n`;
 
-function start(signal?: AbortSignal) {
+async function start(signal?: AbortSignal) {
   const received: StreamChunk[] = [];
   let settled = false;
   const done = streamCompletion({
@@ -53,6 +53,8 @@ function start(signal?: AbortSignal) {
   });
   // Attached now so a rejection that lands during a timer advance is not "unhandled".
   done.catch(() => {});
+  // Origin hashing uses real WebCrypto; start the network request before advancing fake time.
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
   return { done, received, isSettled: () => settled };
 }
 
@@ -74,7 +76,7 @@ describe("stream watchdog", () => {
 
   it("gives up on a stream that never sends anything, and not before its deadline", async () => {
     stubFetch(() => {});
-    const run = start();
+    const run = await start();
 
     await vi.advanceTimersByTimeAsync(FIRST_CHUNK_BASE_MS - 1_000);
     expect(run.isSettled()).toBe(false);
@@ -85,7 +87,7 @@ describe("stream watchdog", () => {
 
   it("gives up when output started and then stopped", async () => {
     stubFetch((push) => push(delta("开头")));
-    const run = start();
+    const run = await start();
 
     await vi.advanceTimersByTimeAsync(STREAM_IDLE_MS - 1_000);
     expect(run.isSettled()).toBe(false);
@@ -112,7 +114,7 @@ describe("stream watchdog", () => {
       };
       setTimeout(next, 90_000);
     });
-    const run = start();
+    const run = await start();
 
     await vi.advanceTimersByTimeAsync(90_000 + 3 * 300_000 + 1_000);
 
@@ -124,7 +126,7 @@ describe("stream watchdog", () => {
   it("leaves an author's stop an AbortError, not a stall", async () => {
     stubFetch(() => {});
     const controller = new AbortController();
-    const run = start(controller.signal);
+    const run = await start(controller.signal);
 
     await vi.advanceTimersByTimeAsync(5_000);
     controller.abort();

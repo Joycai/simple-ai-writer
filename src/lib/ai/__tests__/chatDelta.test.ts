@@ -133,3 +133,13 @@ describe("deltaText", () => {
     expect(deltaText(undefined)).toBe("");
   });
 });
+
+
+it("does not treat a dedicated refusal with finish_reason stop as success", () => {
+  const chunks: StreamChunk[] = [];
+  const reader = createChatDeltaReader(opts(chunks));
+  reader.read({ delta: { refusal: "Cannot " } });
+  reader.read({ delta: { refusal: "answer" }, finish_reason: "stop" });
+  expect(() => reader.finish()).toThrow("refusal: Cannot answer");
+  expect(chunks).toEqual([]);
+});

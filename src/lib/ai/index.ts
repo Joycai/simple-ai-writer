@@ -5,6 +5,7 @@
  * in ./openai, ./responses, ./gemini, ./anthropic and ./dashscope. Shared protocol types live in ./types.
  */
 
+import { carryScope, projectCarry } from "./carryScope";
 import { createStreamUsage } from "./streamUsage";
 import i18n from "../../i18n";
 import { streamAnthropic } from "./anthropic";
@@ -132,7 +133,14 @@ interface StreamResult {
  */
 export async function streamCompletion(opts: StreamOptions): Promise<StreamResult> {
   if (opts.retrieval) throw new Error(i18n.t("semantic.notConversational"));
-  const merged: StreamOptions = { ...opts, messages: applyPrefix(opts.messages, opts.prefix) };
+  const scope = await carryScope(opts);
+  const merged: StreamOptions = {
+    ...opts, messages: applyPrefix(projectCarry(opts.messages, scope), opts.prefix),
+    onChunk: (chunk) => opts.onChunk(
+      "toolCalls" in chunk || ("done" in chunk && chunk._responseItems)
+        ? { ...chunk, _carryScope: scope } : chunk,
+    ),
+  };
   for (;;) {
     // What the request carries, decided once per attempt for whichever adapter
     // spells it — the forced choice and the JSON tier read the learned store.

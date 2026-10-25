@@ -242,3 +242,36 @@ task takes"，`SummarizeRequestConfig` 写着 "same fields sendChat holds"。看
 - **能力判定散在各提问者手里** —— 同一个「能不能 X」在抽屉、适配器、摘要、会话面各算一遍，
   私有字段按族放行的缺陷（智谱 G12）由此而来。收成一张登记表加一个裁决函数的方案在
   [`capability-gating-plan.md`](capability-gating-plan.md)（`proposal`）。
+
+
+## 跨轮载体的来源与恢复（2026-10-25）
+
+`streamCompletion` 在协议适配前用 `carryScope` 投影历史，并为工具轮及普通 Responses
+回答轮标注来源。来源是协议、端点（去首尾空白及尾斜线）、原始模型 ID、平台、鉴权方式、
+上游声明与凭据的 SHA-256 摘要；不持久化明文 key。相同模型名不代表相同账号或密钥域。
+摘要不是服务端签名验证器，也无法检测网关在相同地址和 key 背后静默更换渠道。
+
+本应用保守地只回传同来源载体。来源缺失的旧历史按未知处理：请求副本保留可见文字、
+裸工具调用与结果，去掉私有 reasoning 字段、签名及密文；原历史不变，因此切回原线路
+仍能使用已记录来源的载体。即使某些官方平台允许跨平台，也不能据此放行任意中继。
+Gemini GenerateContent 的裸工具历史用其文档规定的 `skip_thought_signature_validator`
+重建；有可信原始 parts 时保持原样，不插入占位签名。
+
+核实依据（官方文档，未进行付费跨账号实测）：
+- [Claude thinking](https://platform.claude.com/docs/en/build-with-claude/thinking)：通常支持
+  官方平台间签名兼容，但 Sonnet 5.5 / Haiku 5.5 的块受生成账号或关联账号限制。
+- [Gemini GenerateContent thought signatures](https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures)：
+  从其他模型导入缺签名的函数历史时允许上述占位值；不要把 Interactions 的跨模型规则
+  套到 GenerateContent。
+- [OpenAI reasoning](https://developers.openai.com/api/docs/guides/reasoning)：无状态多轮
+  `all_turns` 需要回传完整历史中的 output items。普通回答轮也保存这些条目，下一次
+  用它们替换普通 assistant 文本，避免重复发送答案。
+
+工具恢复若剔除了损坏调用，就必须弃掉这一轮整组原始载体，按仍保留的完整调用重建配对
+历史；不能只改 `tool_calls` 却继续回传旧 `function_call`。原生 Chat 的明文 reasoning
+可以保留，但密文移除。拒绝响应按失败结束，等待读取终态 usage 后再抛错，防止拒绝原因
+消失或已报告用量漏记。
+
+回归覆盖：`carryScope.test.ts`（同源、换端点/凭据/模型/协议、旧历史、序列化、原历史不变），
+`responses.test.ts` / `chatDelta.test.ts`（拒绝、普通轮条目），`streamUsage.test.ts`（拒绝记账），
+`agentRuntimeTruncation.test.ts`（混合损坏调用恢复），`agentRuntime.test.ts`（跨轮保存）。

@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { streamCompletion, type StreamChunk, type StreamMessage } from "../index";
 import type { ReasoningEffort, ThinkingCategoryId } from "../reasoning";
+import { carryScope } from "../carryScope";
 import { toResponsesInput } from "../responses";
 import { parseServerTools, type ServerToolEvent, type ServerToolId } from "../serverTools";
 
@@ -829,9 +830,10 @@ describe("Responses adapter — echoing a tool round", () => {
 
   it("puts the turn's own items into input, in place of the bare mapping, for the same model", async () => {
     const calls = mockFetch([COMPLETED]);
+    const scope = await carryScope({ baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "gpt-5.5" });
     await streamCompletion({
       baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "gpt-5.5",
-      messages: history, tools: [TOOL], onChunk: () => {},
+      messages: history.map(m => m.role === "assistant" ? { ...m, _carryScope: scope } : m), tools: [TOOL], onChunk: () => {},
     });
     expect(calls[0].body.input).toEqual([
       { role: "user", content: "read a.md" },
@@ -908,5 +910,28 @@ describe("Responses adapter — reasoning effort", () => {
     }
     expect(await orca("openai/gpt-6-astra")).toEqual({ effort: "low", summary: "auto" });
     expect(await orca("openai/gpt-6-sol")).toEqual({ effort: "none" });
+  });
+});
+
+
+describe("Responses refusal and plain-turn carry", () => {
+  it.each(["delta", "done", "item"])("rejects refusal from %s after preserving terminal usage", async (kind) => {
+    const refused = kind === "item"
+      ? ev("response.output_item.done", { item: { type: "message", content: [{ type: "refusal", refusal: "Cannot answer" }] } })
+      : ev(`response.refusal.${kind}`, { delta: "Cannot answer", refusal: "Cannot answer" });
+    await expect(collect({ chunks: [refused, COMPLETED] })).rejects.toThrow(/refusal: Cannot answer/);
+  });
+
+  it("returns and replays plain-turn reasoning and message exactly once", async () => {
+    const message = { type: "message", id: "msg_1", role: "assistant", content: [{ type: "output_text", text: "answer" }] };
+    const { received } = await collect({ chunks: [ev("response.output_item.done", { item: REASONING_ITEM }),
+      ev("response.output_text.delta", { delta: "answer" }), ev("response.output_item.done", { item: message }), COMPLETED] });
+    const done = doneOf(received);
+    expect(done._responseItems?.items).toEqual([REASONING_ITEM, message]);
+    const { input } = toResponsesInput([{ role: "assistant", content: "answer", _responseItems: done._responseItems },
+      { role: "user", content: "continue" }], "gpt-5.5");
+    expect(input).toEqual([REASONING_ITEM, message, { role: "user", content: "continue" }]);
+    expect(toResponsesInput([{ role: "assistant", content: "answer", _responseItems: done._responseItems }], "other").input)
+      .toEqual([{ role: "assistant", content: "answer" }]);
   });
 });

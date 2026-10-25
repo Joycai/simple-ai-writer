@@ -64,6 +64,7 @@ interface ChatDeltaReader {
  */
 export function createChatDeltaReader(opts: StreamOptions, label = "OpenAI"): ChatDeltaReader {
   let truncated = false;
+  let refusal = "";
   // The endpoint's own finish_reason, last non-empty one seen — reported on the
   // done chunk so the log can say why a turn ended (stop / length / tool_calls
   // / a vendor's own word), not just that it did.
@@ -117,6 +118,7 @@ export function createChatDeltaReader(opts: StreamOptions, label = "OpenAI"): Ch
 
   const read = (choice: ChatChoice | undefined) => {
     const delta = choice?.delta;
+    if (typeof delta?.refusal === "string") refusal += delta.refusal;
     const content = deltaText(delta?.content);
     if (content) emit(inlineThink.push(content));
     // Thinking endpoints stream reasoning beside the answer, under a field name
@@ -180,6 +182,7 @@ export function createChatDeltaReader(opts: StreamOptions, label = "OpenAI"): Ch
     read,
     hasFinishReason: () => !!stopReason,
     finish() {
+      if (refusal) throw new Error(`${label}: refusal: ${refusal}`);
       emit(inlineThink.flush());
       emitToolCalls();
       return { stopReason, truncated };

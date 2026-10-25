@@ -53,7 +53,8 @@ import { usageSnapshot } from "./streamUsage";
  *     yields a complete call.
  *   - The echo is the turn's `output[]` verbatim, collected from
  *     `output_item.done` — reasoning item (encrypted) included — and handed
- *     back on the `toolCalls` chunk as `_responseItems`. The next request puts
+ *     back on the `toolCalls` and terminal chunks as `_responseItems`, including
+ *     plain answer turns. The next request puts
  *     those items into `input` *in place of* the bare `function_call` mapping,
  *     never beside it. No forced-choice downgrade here: forcing while thinking
  *     is legal on this family (§2.3); an endpoint that nonetheless refuses is
@@ -128,7 +129,7 @@ function toInputPart(part: ContentPart): Record<string, unknown> {
  * with `systemAs: "developer"`, one `developer` message at the head of the
  * input carrying the same text, and no `instructions` at all.
  *
- * An assistant turn that called tools is echoed as the endpoint's own output
+ * An assistant turn is echoed as the endpoint's own output
  * items when it has them and they came from the model being asked now
  * (`_responseItems`, see `ResponseItemCarry`); otherwise — a history that
  * began on another provider or another model, since the app allows switching
@@ -154,12 +155,14 @@ export function toResponsesInput(
       input.push({ type: "function_call_output", call_id: m.tool_call_id, output: m.content });
       continue;
     }
-    if (m.role === "assistant" && m.content === null && "tool_calls" in m) {
+    if (m.role === "assistant") {
       const carried = m._responseItems;
       if (carried && carried.items.length > 0 && (!modelId || carried.modelId === modelId)) {
         for (const item of carried.items) input.push(item as Record<string, unknown>);
         continue;
       }
+    }
+    if (m.role === "assistant" && m.content === null && "tool_calls" in m) {
       for (const call of m.tool_calls) {
         input.push({
           type: "function_call",
@@ -311,6 +314,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
   /** Only on the terminal `response.usage`, and only from a trusted platform (`reportedCost.ts`). */
   let reportedCost: number | undefined;
   let truncated = false;
+  let refusal = "";
   let stopReason: string | undefined;
   let buffer = "";
   // Function calls keyed by `output_index` — the one key every event about a
@@ -347,9 +351,11 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
   const wireRewrites: { field: "reasoning.effort" | "temperature"; sent: string; echoed: string }[] = [];
 
   const finish = () => {
+    if (refusal) throw new Error(`OpenAI Responses: refusal: ${refusal}`);
     emitToolCalls();
     opts.onChunk({
       done: true, inputTokens, outputTokens,
+      ...(items.length ? { _responseItems: { modelId: opts.modelId, items } } : {}),
       ...(truncated ? { truncated } : {}),
       ...(stopReason ? { stopReason } : {}),
       ...(cachedTokens ? { cachedTokens } : {}),
@@ -406,6 +412,12 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
       throw new Error(`OpenAI Responses: ${msg}`);
     }
     switch (json.type) {
+      case "response.refusal.delta":
+        if (typeof json.delta === "string") refusal += json.delta;
+        return false;
+      case "response.refusal.done":
+        if (typeof json.refusal === "string") refusal = json.refusal || refusal;
+        return false;
       case "response.output_text.delta":
         // Every delta also carries an `obfuscation` field (random padding
         // against length side-channels); it is not text and is ignored by
@@ -450,6 +462,11 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
           if (typeof item.call_id === "string") entry.id = item.call_id;
           if (typeof item.name === "string") entry.name = item.name;
           if (typeof item.arguments === "string") entry.args = item.arguments;
+        }
+        if (item?.type === "message" && Array.isArray(item.content)) {
+          for (const part of item.content) {
+            if (part.type === "refusal" && typeof part.refusal === "string") refusal = part.refusal || refusal;
+          }
         }
         if (isEchoItem(item)) items.push(item);
         const finished = responsesServerToolEvent(item, "result", `output_${json.output_index}`);

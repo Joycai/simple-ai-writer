@@ -132,3 +132,13 @@ data: {"error": {"message": "insufficient credits", "type": "…", "code": "…"
 四族的增量机制差异是**工程量**问题，照着写就行；失败通道的差异是**正确性**
 问题——因为它决定了"这次调用成功了吗"这个判断本身，而默认答案（HTTP 200 =
 成功）在兼容层上是错的。
+
+
+### 专用拒绝字段（2026-10-25 文档复核）
+
+Chat Completions 的 `delta.refusal` 与 Responses 的 `response.refusal.delta` /
+`response.refusal.done`、message 中的 `type:"refusal"` content 也携带拒绝信息。
+它们可以伴随正常的 `stop` / `completed` 终态；仅检查 `content_filter` 会漏掉拒绝。
+拒绝与用量并不互斥，应保留终态报告的 usage。
+来源：[OpenAI Chat SDK](https://github.com/openai/openai-python/blob/main/helpers.md)、
+[Responses streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events)。

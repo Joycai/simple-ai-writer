@@ -79,6 +79,9 @@ export function convertToGeminiContents(messages: StreamMessage[]): GeminiConten
           role: "model",
           parts: msg.tool_calls.map((tc) => ({
             functionCall: { name: tc.function.name, args: parseJsonArgs(tc.function.arguments) },
+            // Imported/rebuilt calls have no authentic signature. This is the
+            // GenerateContent API's documented escape hatch for that case.
+            thoughtSignature: "skip_thought_signature_validator",
           })),
         });
       }
