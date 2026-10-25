@@ -218,6 +218,12 @@ export function initialFeeGroupId(existing: Pick<Model, "feeGroupId"> | undefine
   return channelDefault ?? "";
 }
 
+/** Family-specific measured media defaults override platform-wide defaults. */
+export function modelMediaCalibration(...[platform, modelId, family]: Parameters<typeof platformModelCalibration>) {
+  const cal = { ...platformModelCalibration(platform, modelId), ...platformModelCalibration(platform, modelId, family) };
+  return { type: cal.type, pdfInput: cal.pdfInput };
+}
+
 interface Props {
   /** The group this drawer was opened from — a model cannot change hands. */
   providerId: string;
@@ -446,37 +452,44 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
   // state; the value facts follow the chain instead (valueNotes.ts). A field is ours to write only while it is
   // unset or still holds what the previous prefill put there — so correcting
   // a typo re-prefills, and anything the author chose by hand stays.
-  // Keyed by the id it ran for: blurring the id field again without changing it
+  // Keyed by id and route: blurring the id field without changing either
   // must not take back a field the author has since set to its unset value.
   // An edited row starts at its own id, so blurring the field unchanged does nothing.
-  const lastCalibration = useRef<{ id?: string; type?: ModelType; pdf?: boolean }>({ id: existing?.modelId.trim().toLowerCase() });
-  const applyCalibration = (modelId: string) => {
-    if (!provider || !channel) return;
+  const lastCalibration = useRef<{ id?: string; family?: ProtocolFamily; type?: ModelType; pdf?: boolean }>({ id: existing?.modelId.trim().toLowerCase() });
+  const mediaEdited = useRef({ type: false, pdf: false });
+  const applyCalibration = (modelId: string, targetProvider = provider) => {
+    if (!targetProvider || !channel) return;
     const id = modelId.trim().toLowerCase();
-    if (id === lastCalibration.current.id) return;
+    const family = familyOf(targetProvider.apiStandard);
+    if (id === lastCalibration.current.id && (existing || family === lastCalibration.current.family)) return;
+    const idChanged = id !== lastCalibration.current.id;
     // A category left on 自动 resolves anew for the new id, on every route —
     // an edited row as much as a new one (valueNotes.ts `effortForNewId`).
-    const resolvedOn = (p: typeof provider) =>
+    const resolvedOn = (p: typeof targetProvider) =>
       thinkingCategoryOf({ modelId: modelId.trim() }, { standard: p.apiStandard, platform: providerWire(p).platform }).value;
-    setForm((f) => ({ ...f, reasoningEffort: effortForNewId(f.thinkingCategory, f.reasoningEffort, resolvedOn(provider)) }));
-    setParked((all) => {
-      const next = { ...all };
-      for (const [f, prof] of Object.entries(all) as [ProtocolFamily, RouteProfile][]) {
-        const p = routeProvider(channel, f);
-        if (!p || !prof.reasoningEffort) continue;
-        next[f] = { ...prof, reasoningEffort: effortForNewId(prof.thinkingCategory, prof.reasoningEffort, resolvedOn(p)) };
-      }
-      return next;
-    });
+    if (idChanged) {
+      setForm((f) => ({ ...f, reasoningEffort: effortForNewId(f.thinkingCategory, f.reasoningEffort, resolvedOn(targetProvider)) }));
+      setParked((all) => {
+        const next = { ...all };
+        for (const [f, prof] of Object.entries(all) as [ProtocolFamily, RouteProfile][]) {
+          const p = routeProvider(channel, f);
+          if (!p || !prof.reasoningEffort) continue;
+          next[f] = { ...prof, reasoningEffort: effortForNewId(prof.thinkingCategory, prof.reasoningEffort, resolvedOn(p)) };
+        }
+        return next;
+      });
+    }
     if (existing) { lastCalibration.current = { id }; return; }
     // A new row takes only what has no unset state (D1): the category, window
     // and cap stay empty and follow the platform's rows (the notes say so).
-    const cal = platformModelCalibration(providerWire(provider).platform, modelId) ?? {};
-    const next = { id, type: cal.type as ModelType | undefined, pdf: cal.pdfInput };
+    const platform = providerWire(targetProvider).platform;
+    const cal = modelMediaCalibration(platform, modelId, family);
+    const next = { id, family, type: cal.type as ModelType | undefined, pdf: cal.pdfInput };
     const prev = lastCalibration.current;
     const ours = <T,>(cur: T, unset: T, prevVal: T | undefined) => cur === unset || (prevVal !== undefined && cur === prevVal);
-    setForm((f) => ({ ...f, type: ours<ModelType>(f.type, "text", prev.type) ? (next.type ?? "text") : f.type }));
-    setPdfInput((cur) => (ours(cur, false, prev.pdf) ? !!next.pdf : cur));
+    const edit = { ...mediaEdited.current };
+    setForm((f) => ({ ...f, type: !edit.type && ours<ModelType>(f.type, "text", prev.type) ? (next.type ?? "text") : f.type }));
+    setPdfInput((cur) => (!edit.pdf && ours(cur, false, prev.pdf) ? !!next.pdf : cur));
     lastCalibration.current = next;
   };
 
@@ -673,6 +686,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
     if (!channel || !route || next === route) return;
     const nextProvider = routeProvider(channel, next);
     if (!nextProvider) return;
+    if (!existing) applyCalibration(form.modelId, nextProvider);
     const now = routeFieldsNow();
     const prof = parked[next] ?? {};
     setParked((p) => {
@@ -1238,6 +1252,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
               active={form.type === type}
               swatch={`var(--color-type-${type === "embedding" ? "vision" : type === "rerank" ? "multimodal" : type}-fg)`}
               onClick={() => {
+                mediaEdited.current.type = true;
                 // Seed from the provider's protocol the first time this
                 // becomes an image model, so the common case needs no
                 // thought and the odd one is still overridable. The Gemini
@@ -1723,7 +1738,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                   ? t("aiConfig.models.briefPdf")
                   : notSentHint("pdfInput", capModel)}
                 on={pdfInput}
-                onChange={setPdfInput}
+                onChange={(value) => { mediaEdited.current.pdf = true; setPdfInput(value); }}
                 {...whyProps("pdf", t("aiConfig.models.pdfInputHint"))}
               />
             </Fold>

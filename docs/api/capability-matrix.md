@@ -216,7 +216,7 @@
 | xai | ✓ protocol | ✓ protocol |  |  |  |
 | minimax | ✓ protocol |  |  | · |  |
 | volcengine | ✓ protocol | ✓ protocol |  |  |  |
-| volcengine-plan | ✓ protocol | ✓ protocol |  | · |  |
+| volcengine-plan | ✓ 按模型 protocol | ✓ 按模型 protocol |  | · |  |
 | zhipu | ✓ protocol |  |  |  |  |
 | orcarouter | ✓ 按模型 protocol | ✓ protocol | · | · |  |
 | newapi | ✓ protocol | ✓ protocol | · | · |  |

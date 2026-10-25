@@ -298,8 +298,8 @@ const KIMI_K31_PLAN: PlatformModelRow = {
     // none/minimal/disabled are accepted but corrupt the thinking boundary:
     // reasoning leaks into final text (and one CRT answer was wrong).
     // "no" means no usable off mode, not an HTTP rejection.
-    temperature: false, reasoningOff: false,
-    jsonSchema: true, pdfInput: true, forcedToolChoice: true,
+    temperature: false, reasoningOff: false, effortMinimal: false,
+    jsonSchema: true, pdfInput: true,
   },
   prefill: MULTIMODAL_PDF,
 };
@@ -392,8 +392,13 @@ export const PLATFORM_CELLS: Record<PlatformId, PlatformCells> = {
       // A `video_url` clip read right on doubao-seed-2.0-mini; `fps` left no
       // mark on a 4-second clip's bill in either spelling, which a clip that
       // short cannot tell from a frame floor — so no `videoFps` cell (第十九个样本).
-      openai: { jsonSchema: true, videoInput: true, models: [...SEED_THINKING, KIMI_K31_PLAN] },
-      responses: { web_search: true, jsonSchema: true, models: [KIMI_K31_PLAN] },
+      openai: { jsonSchema: true, videoInput: true, models: [...SEED_THINKING,
+        { ...KIMI_K31_PLAN, set: { ...KIMI_K31_PLAN.set, forcedToolChoice: true } },
+      ] },
+      responses: { web_search: true, jsonSchema: true, models: [
+        // Accepts required but can answer without a call (sample 25 review).
+        { ...KIMI_K31_PLAN, set: { ...KIMI_K31_PLAN.set, forcedToolChoice: false } },
+      ] },
       anthropic: {
         web_search: true,
         pdfInput: true,

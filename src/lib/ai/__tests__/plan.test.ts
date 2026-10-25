@@ -64,9 +64,12 @@ describe("planRequest", () => {
     };
     const body = JSON.parse(await bodyOf(family, opts));
     expect(body).not.toHaveProperty("temperature");
-    expect(body.tool_choice).toBe("required");
+    expect(body.tool_choice).toBe(family === "openai" ? "required" : "auto");
+    expect(planRequest(opts).toolChoice?.downgradedBy).toBe(family === "openai" ? undefined : "cell");
     expect(family === "openai" ? body.reasoning_effort : body.reasoning.effort).toBe("low");
     expect(planRequest(opts).media).toMatchObject({ image: true, pdf: true });
+    const minimal = JSON.parse(await bodyOf(family, { ...opts, reasoningEffort: "minimal" }));
+    expect(family === "openai" ? minimal.reasoning_effort : minimal.reasoning.effort).toBe("low");
   });
   it("is a function of its input alone", () => {
     const input: PlanInput = { standard: "openai_compat", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", modelId: "qwen3.5-plus", ...DECLARED };

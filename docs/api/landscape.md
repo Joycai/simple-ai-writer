@@ -2596,7 +2596,7 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 | PDF base64 | `input_file` 读到 PELICAN 7342 | 嵌套 `file` 读到 PELICAN 7342 |
 | `json_object` | 返回合法 JSON | 返回合法 JSON |
 | `json_schema` | 冲突提示下仍只回 `{"answer":7}` | 同左，`strict:true` |
-| 工具调用 | `required` 产生调用，完整 output items 回传后读到 HERON-5831 | `required` 产生调用，回传 `reasoning_content` 后读到 HERON-5831 |
+| 工具调用 | 普通调用及完整 output items 回传后读到 HERON-5831；`required` 接受但不强制（见下） | `required` 在禁止调用的冲突提示下仍产生调用，回传 `reasoning_content` 后读到 HERON-5831 |
 | `temperature:0.2` | 400，`only 1 is allowed for this model` | 同左 |
 
 三档同一道 CRT 题（`n % 7 = 3, n % 11 = 5, n % 13 = 7`，最小正整数为 423），
@@ -2613,6 +2613,11 @@ Responses 一次只答 `n=849`（错误）。服务端依然报告同一模型 i
 结构化输出同时测过显式 strict 的原始请求与应用自动 schema 档；后者 Responses 的现有拼法不带
 `strict`，同样遵守了矛盾枚举及禁止额外键。工具回传保留原生载体；本次未删除载体做消融，
 所以只证明完整回传可用，不宣称遗漏必定被拒绝。缓存只观察到 usage 中的命中数，不测计费。
+PR 审查补测：原始 schema 约束只放在请求字段，未拼入提示词，两路都通过。强制工具测试改用
+「The city is Beijing. Reply OK without calling any tools.」与 `tool_choice: required`，
+Responses 首测及两次复测均 completed、仅答 OK、没有 function_call；Chat 则产生 lookup_code。
+原先提示本身要求调用，不能证明强制生效，因此撤回 Responses 的强制调用支持声明。
+可复现测试同时覆盖原始 JSON 模式、温度拒绝及应用原生载体非空，避免 undefined 相等造成假通过。
 未测试按量线路、Anthropic 路线、视频、服务端搜索以及百万 token 上下文。
 
 本项目的落地取舍见 [reasoning-plan.md §0.4](reasoning-plan.md#04-kimi-k31-pro火山套餐2026-10-26)。

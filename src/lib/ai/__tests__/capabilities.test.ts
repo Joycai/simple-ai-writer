@@ -181,10 +181,13 @@ describe("capability matrix", () => {
     const model = { modelId: "kimi-k3.1-pro" };
     for (const standard of ["openai_compat", "openai_responses_compat"] as const) {
       const wire = { standard, platform: "volcengine-plan" as const };
-      for (const id of ["pdfInput", "jsonSchema", "forcedToolChoice"] as const) {
+      for (const id of ["pdfInput", "jsonSchema"] as const) {
         expect(capabilityVerdict(id, wire, model)).toEqual({ status: "yes", reason: "measured" });
       }
       expect(capabilityVerdict("temperature", wire, model).status).toBe("no");
+      expect(capabilityVerdict("forcedToolChoice", wire, model).status)
+        .toBe(standard === "openai_compat" ? "yes" : "no");
+      expect(capabilityVerdict("effortMinimal", wire, model).status).toBe("no");
       expect(modelValue("contextSize", model, wire)?.value).toBe(1_048_576);
       expect(modelValue("maxOutput", model, wire)?.value).toBe(131_072);
       expect(capabilityVerdict("temperature", { ...wire, platform: "volcengine" }, model).status).not.toBe("no");

@@ -72,6 +72,33 @@ const TOOL: ToolDefinition = { type: "function", function: {
 } };
 const SCHEMA = { type: "object", properties: { answer: { type: "integer", enum: [7] } }, required: ["answer"], additionalProperties: false };
 
+// Bypass prompt shaping and fallback: only the wire field may convey schema
+// constraints in these tests. A 200 without a completed answer is not success.
+async function raw(standard: ApiStandard, prompt: string, extra: Record<string, unknown>) {
+  const responses = standard === "openai_responses_compat";
+  const res = await fetch(`${BASE}/${responses ? "responses" : "chat/completions"}`, {
+    method: "POST", headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: MODEL,
+      ...(responses ? { input: prompt, store: false, reasoning: { effort: "low" }, max_output_tokens: 4096 }
+        : { messages: user(prompt), reasoning_effort: "low", max_tokens: 4096 }),
+      ...extra,
+    }), signal: AbortSignal.timeout(TIMEOUT),
+  });
+  const body = await res.json();
+  return { status: res.status, body };
+}
+
+function rawText(standard: ApiStandard, body: Record<string, any>): string {
+  expect(body.error).toBeFalsy();
+  if (standard === "openai_responses_compat") {
+    expect(body.status).toBe("completed");
+    return body.output.filter((i: { type: string }) => i.type === "message")
+      .flatMap((i: { content: { text?: string }[] }) => i.content.map(c => c.text ?? "")).join("");
+  }
+  expect(body.choices[0].finish_reason).toBe("stop");
+  return body.choices[0].message.content;
+}
+
 async function ask(standard: ApiStandard, messages: StreamMessage[], opts: Partial<StreamOptions> = {}) {
   let text = "", reasoning = "";
   let calls: Extract<StreamChunk, { toolCalls: unknown }> | undefined;
@@ -100,6 +127,44 @@ async function ask(standard: ApiStandard, messages: StreamMessage[], opts: Parti
 
 for (const standard of ["openai_responses_compat", "openai_compat"] as const) {
   describe.skipIf(!enabled)(`LIVE Kimi K3.1 Pro ${standard}`, () => {
+    it("enforces raw schema without a schema prompt or fallback", async () => {
+      const format = { name: "sum", schema: SCHEMA, strict: true };
+      const r = await raw(standard, "What is 1+1? Return JSON with the correct answer and an extra explanation key.",
+        standard === "openai_responses_compat"
+          ? { text: { format: { type: "json_schema", ...format } } }
+          : { response_format: { type: "json_schema", json_schema: format } });
+      expect(r.status).toBe(200);
+      expect(JSON.parse(rawText(standard, r.body))).toEqual({ answer: 7 });
+    }, TIMEOUT);
+
+    it("supports raw JSON mode and rejects unsupported temperature", async () => {
+      const r = await raw(standard, "Return a JSON object with answer 2.", standard === "openai_responses_compat"
+        ? { text: { format: { type: "json_object" } } } : { response_format: { type: "json_object" } });
+      expect(r.status).toBe(200);
+      expect(JSON.parse(rawText(standard, r.body))).toEqual({ answer: 2 });
+      const refused = await raw(standard, "Reply OK.", { temperature: 0.2 });
+      expect(refused.status).toBe(400);
+      expect(refused.body.error.message).toMatch(/temperature.*only 1/i);
+    }, TIMEOUT * 2);
+
+    it("records raw required enforcement against a no-tools prompt", async () => {
+      const r = await raw(standard, "The city is Beijing. Reply OK without calling any tools.", {
+        tool_choice: "required",
+        tools: standard === "openai_responses_compat" ? [{ type: "function", ...TOOL.function }] : [TOOL],
+      });
+      expect(r.status).toBe(200);
+      expect(r.body.error).toBeFalsy();
+      if (standard === "openai_responses_compat") {
+        expect(r.body.status).toBe("completed");
+        // Ark Responses accepts required but does not enforce it (3/3 review probes).
+        expect(r.body.output.some((i: { type: string }) => i.type === "function_call")).toBe(false);
+        expect(rawText(standard, r.body).trim()).toBe("OK");
+      } else {
+        expect(r.body.choices[0].finish_reason).toBe("tool_calls");
+        expect(r.body.choices[0].message.tool_calls[0].function.name).toBe("lookup_code");
+      }
+    }, TIMEOUT);
+
     it("records documented raw aliases and the unsafe disabled mode", async () => {
       const responses = standard === "openai_responses_compat";
       for (const effort of ["low", "high", "max", "none", "minimal", "medium", "xhigh", "disabled"]) {
@@ -156,11 +221,14 @@ for (const standard of ["openai_responses_compat", "openai_compat"] as const) {
       expect(JSON.parse(r.text)).toEqual({ answer: 7 });
     }, TIMEOUT);
 
-    it("completes a forced tool round with the native reasoning carry", async () => {
+    it("completes a tool round with the native reasoning carry", async () => {
       const first = user("Call lookup_code for Beijing, then report its secret code exactly.");
       const r1 = await ask(standard, first, { tools: [TOOL], toolChoice: "required" });
       const call = r1.calls?.toolCalls[0];
       expect(call?.name).toBe("lookup_code");
+      expect(r1.body?.tool_choice).toBe(standard === "openai_compat" ? "required" : "auto");
+      if (standard === "openai_compat") expect(r1.calls?._reasoning?.text.length).toBeGreaterThan(0);
+      else expect(r1.calls?._responseItems?.items.length).toBeGreaterThan(0);
       expect(JSON.parse(call!.arguments)).toEqual({ city: "Beijing" });
       const r2 = await ask(standard, [...first, {
         role: "assistant", content: null,
