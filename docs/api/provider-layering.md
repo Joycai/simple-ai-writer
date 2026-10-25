@@ -252,7 +252,10 @@ task takes"，`SummarizeRequestConfig` 写着 "same fields sendChat holds"。看
 摘要不是服务端签名验证器，也无法检测网关在相同地址和 key 背后静默更换渠道。
 
 本应用保守地只回传同来源载体。来源缺失的旧历史按未知处理：请求副本保留可见文字、
-裸工具调用与结果，去掉私有 reasoning 字段、签名及密文；原历史不变，因此切回原线路
+裸工具调用与结果，去掉签名及密文。无来源的旧 Chat 历史保留已有明文 reasoning 的字段名和内容，
+以保持 DeepSeek 等工具轮的回传契约；已知来源不匹配时则去掉整个私有 reasoning。
+载体移除后没有可见文字、媒体或工具调用的 assistant 消息从请求副本中省略，避免将
+Responses 的纯推理轮变成 Anthropic 的空文本块。原历史不变，因此切回原线路
 仍能使用已记录来源的载体。即使某些官方平台允许跨平台，也不能据此放行任意中继。
 Gemini GenerateContent 的裸工具历史用其文档规定的 `skip_thought_signature_validator`
 重建；有可信原始 parts 时保持原样，不插入占位签名。

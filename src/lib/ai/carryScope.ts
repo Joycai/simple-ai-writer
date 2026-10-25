@@ -14,8 +14,8 @@ export async function carryScope(opts: ConnOptions): Promise<string> {
 
 /** Request-local projection; switching back must not erase the saved original. */
 export function projectCarry(messages: StreamMessage[], scope: string): StreamMessage[] {
-  return messages.map((message) => {
-    if (message.role !== "assistant" || message._carryScope === scope) return message;
+  return messages.flatMap((message): StreamMessage[] => {
+    if (message.role !== "assistant" || message._carryScope === scope) return [message];
     // Legacy histories have no verifiable origin either. Keep visible content
     // and bare tool calls/results; the target adapter rebuilds its own spelling.
     const copy = { ...message };
@@ -24,8 +24,22 @@ export function projectCarry(messages: StreamMessage[], scope: string): StreamMe
     if ("tool_calls" in copy) {
       delete copy._geminiModelParts;
       delete copy._thinkingBlocks;
-      delete copy._reasoning;
+      // Legacy plain reasoning was already replayed before origin metadata
+      // existed. Preserve that contract (e.g. DeepSeek tool turns), but never
+      // grandfather ciphertext or a known foreign route's private fields.
+      if (!message._carryScope && copy._reasoning) {
+        copy._reasoning = { field: copy._reasoning.field, text: copy._reasoning.text };
+      } else {
+        delete copy._reasoning;
+      }
     }
-    return copy;
+    // A reasoning-only Responses turn has no portable visible message after
+    // its carrier is removed. Omit only the request copy, preserving the stored
+    // original for switching back. Tool calls and media are real content.
+    const hasCalls = "tool_calls" in copy && copy.tool_calls.length > 0;
+    const hasContent = typeof copy.content === "string"
+      ? copy.content.trim().length > 0
+      : Array.isArray(copy.content) && copy.content.some(p => p.type !== "text" || p.text.trim().length > 0);
+    return hasCalls || hasContent ? [copy] : [];
   });
 }

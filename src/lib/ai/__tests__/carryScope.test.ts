@@ -57,3 +57,51 @@ describe("opaque history origin", () => {
     }
   }
 });
+
+it("legacy DeepSeek tool history keeps plain reasoning but never legacy ciphertext", async () => {
+  const messages: StreamMessage[] = [{ role: "user", content: "task" }, {
+    role: "assistant", content: null,
+    tool_calls: [{ id: "c", type: "function", function: { name: "f", arguments: "{}" } }],
+    _reasoning: { field: "reasoning_content", text: "original reasoning", encrypted: { modelId: "deepseek-v4-flash", value: "opaque" } },
+  }, { role: "tool", tool_call_id: "c", content: "result" }];
+  const saved = JSON.stringify(messages);
+  let body: Record<string, unknown> = {};
+  vi.stubGlobal("fetch", vi.fn(async () => new Response("data: [DONE]\n\n")));
+  await streamCompletion({ baseUrl: "https://api.deepseek.com", apiKey: "test", standard: "openai_compat", modelId: "deepseek-v4-flash",
+    messages, tools: [{ type: "function", function: { name: "f", description: "f", parameters: { type: "object", properties: {} } } }],
+    _onRequestBody: b => { body = b as Record<string, unknown>; }, onChunk: () => {},
+  });
+  const wire = body.messages as Record<string, unknown>[];
+  expect(wire[1].reasoning_content).toBe("original reasoning");
+  expect(wire[1]).not.toHaveProperty("encrypted_content");
+  expect(wire[2]).toMatchObject({ role: "tool", tool_call_id: "c" });
+  expect(JSON.stringify(messages)).toBe(saved);
+});
+
+it("removes only empty projected turns, preserving same-origin carriers, media, calls and stored history", () => {
+  const empty: StreamMessage = { role: "assistant", content: "", _carryScope: "source",
+    _responseItems: { modelId: "m", items: [{ type: "reasoning", encrypted_content: "opaque" }] } };
+  const media: StreamMessage = { role: "assistant", content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AA==" } }] };
+  const tool: StreamMessage = { role: "assistant", content: null, tool_calls: [{ id: "c", type: "function", function: { name: "f", arguments: "{}" } }] };
+  const result: StreamMessage = { role: "tool", tool_call_id: "c", content: "" };
+  const history = [empty, media, tool, result];
+  const saved = JSON.stringify(history);
+  expect(projectCarry(history, "foreign")).toEqual([media, tool, result]);
+  expect(projectCarry(history, "source")[0]).toBe(empty);
+  expect(JSON.stringify(history)).toBe(saved);
+});
+
+it.each([undefined, "responses-origin"])("switching a reasoning-only Responses turn to Anthropic omits empty text (scope %s)", async (_carryScope) => {
+  let body: Record<string, unknown> = {};
+  vi.stubGlobal("fetch", vi.fn(async () => new Response('data: {"type":"message_stop"}\n\n')));
+  const messages: StreamMessage[] = [{ role: "user", content: "task" }, { role: "assistant", content: "", _carryScope,
+    _responseItems: { modelId: "gpt-5.5", items: [{ type: "reasoning", encrypted_content: "opaque" }] } },
+    { role: "user", content: "continue" }];
+  const saved = JSON.stringify(messages);
+  await streamCompletion({ baseUrl: "https://api.anthropic.com", apiKey: "test", standard: "anthropic", modelId: "claude-sonnet-4-5",
+    messages, _onRequestBody: b => { body = b as Record<string, unknown>; }, onChunk: () => {},
+  });
+  const wire = body.messages as { role: string; content: { type: string; text: string }[] }[];
+  expect(wire).toEqual([{ role: "user", content: [{ type: "text", text: "task" }, { type: "text", text: "continue" }] }]);
+  expect(JSON.stringify(messages)).toBe(saved);
+});
