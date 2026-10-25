@@ -2568,6 +2568,55 @@ claude-adaptive 上发「关闭」，而这两个类目的「关闭」在线上�
 
 同日补测 `qwen3.7-text-rerank`：先核对 [原生接口](https://platform.qianwenai.com/docs/api-reference/rerank/dashscope-rerank) 与 [兼容接口](https://platform.qianwenai.com/docs/api-reference/rerank/openai-rerank) 的模型支持范围，确认需使用原生 `input` / `parameters` 结构。`live.qwen-rerank.test.ts` 通过应用适配器对三条虚构描述重排成功，相关描述第一、289 个输入 token；具体数值与边界见 [retrieval.md](retrieval.md#qwen37-native-text-rerank--2026-10-16)。
 
+### 第二十五个样本：火山套餐 Kimi K3.1 Pro（① ②，2026-10-26）
+
+**先查官方文档**（2026-10-26）：
+- [火山模型列表](https://docs.volcengine.com/docs/ark/model-list?lang=zh)：正式 id
+  `kimi-k3-1-pro-261024`，1024k 上下文、128k 最大回答、128k 最大思考，支持视觉、工具与结构化输出。
+- [火山 Responses 思考规则](https://docs.volcengine.com/docs/ark/responses-api-deep-thinking)：
+  该模型默认 `max`；七档兼容输入映射到三个原生档：`none/minimal/low → low`、
+  `medium/high → high`、`xhigh/max → max`。
+- [创建 Response](https://docs.volcengine.com/docs/ark/create-model-responses-api?lang=zh)：
+  `reasoning.effort`、`input_image` / `input_file`、扁平 function、`function_call_output`、
+  `text.format` 的 `json_object` / `json_schema` 与 `strict`。
+- [Kimi 原厂模型说明](https://www.kimi.com/code/docs/en/kimi-code/models)：K3.1 Pro 原生档
+  `low/high/max`，只支持思考模式。该页的 Kimi Code 默认 `high` **不用于推断火山默认值**。
+
+**实测范围**：`https://ark.cn-beijing.volces.com/api/plan/v3`，套餐 key，直接使用
+`kimi-k3.1-pro`，不调用 `/models`；两路响应均回报 `kimi-k3-1-pro-261024`。
+非流式原始请求与应用流式适配器分别验证。可复现用例 `live.kimi-k31.test.ts`，需同时设置
+`KIMI_K31_LIVE=1` 与 `SEEDDACE_KEY`。请求外层时限 900 秒；流式仍保留应用的
+120 秒首片段、600 秒片段间静默保护。只上传程序生成的纯色 PNG 与单页 PDF，不上传作者资料。
+
+| 能力 | Responses | Chat Completions |
+| --- | --- | --- |
+| `low / high / max` | 均 200，有 reasoning summary；回显同名 effort | 均 200，有 `reasoning_content` |
+| `medium / xhigh` | 均 200、有推理；回显原始别名，不能靠回显证明映射 | 均 200、有推理；不是新增原生档 |
+| PNG data URL | 正确识别 teal | 正确识别 teal |
+| PDF base64 | `input_file` 读到 PELICAN 7342 | 嵌套 `file` 读到 PELICAN 7342 |
+| `json_object` | 返回合法 JSON | 返回合法 JSON |
+| `json_schema` | 冲突提示下仍只回 `{"answer":7}` | 同左，`strict:true` |
+| 工具调用 | `required` 产生调用，完整 output items 回传后读到 HERON-5831 | `required` 产生调用，回传 `reasoning_content` 后读到 HERON-5831 |
+| `temperature:0.2` | 400，`only 1 is allowed for this model` | 同左 |
+
+三档同一道 CRT 题（`n % 7 = 3, n % 11 = 5, n % 13 = 7`，最小正整数为 423），
+首次 Responses 非流式 low/high/max 分别用 220/243/293 reasoning tokens、6.0/6.5/8.3 秒，
+均回答正确。应用流式两路三档也通过。单次样本只说明档位被接受且可观察到推理差异，
+不证明强度与时延、token 消耗严格单调，更不构成质量基准。上下文和输出数值来自文档，未做极限压力测试。
+
+**文档冲突：关闭模式不能当成可靠支持。** 两路 `none/minimal` 都接受，返回零 reasoning tokens、
+没有独立推理块，与文档的「映射 low」不符。简单 OK 题掩盖了问题：同一 CRT 题上，
+`thinking:{type:"disabled"}` 两路都把推理过程直接写进最终正文；`none` 的 Chat 也出现正文泄漏，
+Responses 一次只答 `n=849`（错误）。服务端依然报告同一模型 id，不能据此断言背后是否换了模型。
+因此记录「接受参数但思考边界失效」，不将它认定为正常关闭能力；也不能把 200 等同于正确实现了官方映射。
+
+结构化输出同时测过显式 strict 的原始请求与应用自动 schema 档；后者 Responses 的现有拼法不带
+`strict`，同样遵守了矛盾枚举及禁止额外键。工具回传保留原生载体；本次未删除载体做消融，
+所以只证明完整回传可用，不宣称遗漏必定被拒绝。缓存只观察到 usage 中的命中数，不测计费。
+未测试按量线路、Anthropic 路线、视频、服务端搜索以及百万 token 上下文。
+
+本项目的落地取舍见 [reasoning-plan.md §0.4](reasoning-plan.md#04-kimi-k31-pro火山套餐2026-10-26)。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**

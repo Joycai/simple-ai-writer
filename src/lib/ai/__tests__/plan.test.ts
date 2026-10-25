@@ -54,6 +54,20 @@ afterEach(() => {
 });
 
 describe("planRequest", () => {
+  it.each(["openai", "responses"] as const)("shapes the measured Kimi Plan %s route", async (family) => {
+    const opts: StreamOptions = {
+      standard: family === "openai" ? "openai_compat" : "openai_responses_compat",
+      platform: "volcengine-plan", baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3",
+      apiKey: "test", modelId: "kimi-k3.1-pro", modelType: "multimodal", pdfInput: true,
+      temperature: 0.2, reasoningEffort: "off", tools: [TOOL], toolChoice: "required",
+      messages: [{ role: "user", content: "Test" }], onChunk: () => {},
+    };
+    const body = JSON.parse(await bodyOf(family, opts));
+    expect(body).not.toHaveProperty("temperature");
+    expect(body.tool_choice).toBe("required");
+    expect(family === "openai" ? body.reasoning_effort : body.reasoning.effort).toBe("low");
+    expect(planRequest(opts).media).toMatchObject({ image: true, pdf: true });
+  });
   it("is a function of its input alone", () => {
     const input: PlanInput = { standard: "openai_compat", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", modelId: "qwen3.5-plus", ...DECLARED };
     const frozen = JSON.stringify(input);

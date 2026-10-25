@@ -9,6 +9,17 @@ const thinking = ["low", "medium", "high", "xhigh", "max"];
 const optional = ["off", ...thinking];
 
 describe("model-specific effort ladders", () => {
+  it.each(["kimi-k3.1-pro", "moonshotai/kimi-k3.1-pro", "kimi-k3-1-pro-261024"])("%s keeps only native Kimi levels", (modelId) => {
+    for (const standard of ["openai_compat", "openai_responses_compat"] as ApiStandard[]) {
+      const wire = { standard, platform: "volcengine-plan" as const };
+      const category = resolveThinkingCategory({ modelId }, standard, wire.platform);
+      expect(category.menu).toEqual(["low", "high", "max"]);
+      expect(effortOnWire("off", wire, { modelId }, false)).toBe("low");
+      expect(reasoningBody(category, undefined)).toBeUndefined();
+      expect(reasoningBody(category, "max")).toEqual(standard === "openai_compat"
+        ? { reasoning_effort: "max" } : { reasoning: { effort: "max", summary: "auto" } });
+    }
+  });
   it.each([
     ["gpt-5.6-sol", optional], ["gpt-5.6-terra", optional], ["gpt-5.6-luna", optional],
     ["gpt-6-sol", optional], ["gpt-6-luna", optional],

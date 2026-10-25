@@ -177,6 +177,21 @@ function renderMatrix(): string {
 }
 
 describe("capability matrix", () => {
+  it("scopes Kimi K3.1 Plan measurements to its tested alias and OpenAI routes", () => {
+    const model = { modelId: "kimi-k3.1-pro" };
+    for (const standard of ["openai_compat", "openai_responses_compat"] as const) {
+      const wire = { standard, platform: "volcengine-plan" as const };
+      for (const id of ["pdfInput", "jsonSchema", "forcedToolChoice"] as const) {
+        expect(capabilityVerdict(id, wire, model)).toEqual({ status: "yes", reason: "measured" });
+      }
+      expect(capabilityVerdict("temperature", wire, model).status).toBe("no");
+      expect(modelValue("contextSize", model, wire)?.value).toBe(1_048_576);
+      expect(modelValue("maxOutput", model, wire)?.value).toBe(131_072);
+      expect(capabilityVerdict("temperature", { ...wire, platform: "volcengine" }, model).status).not.toBe("no");
+      expect(capabilityVerdict("temperature", wire, { modelId: "doubao-seed-2.1-turbo" }).status).not.toBe("no");
+    }
+    expect(capabilityVerdict("temperature", { standard: "anthropic_compat", platform: "volcengine-plan" }, model).reason).not.toBe("model");
+  });
   it("docs/api/capability-matrix.md is the table as it stands", () => {
     const rendered = renderMatrix();
     if (process.env.UPDATE_CAPABILITY_MATRIX) fs.writeFileSync(MATRIX, rendered);

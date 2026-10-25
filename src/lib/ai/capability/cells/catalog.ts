@@ -123,6 +123,14 @@ const MODEL_CATALOG: readonly CatalogRow[] = bySpecificity<CatalogRow>([
   row("deepseek-v4-pro", { maxOutput: 393_216 }),
   row("glm-5.2", { maxOutput: 131_072 }),
   row("kimi-k3", { maxOutput: 1_000_000 }),
+  // Native K3.1 Pro levels. Ark's documented aliases are not native levels;
+  // its Plan off-mode discrepancy is recorded in landscape.md sample 25.
+  // Route-specific limits and measured support live in platform.ts.
+  ...["kimi-k3.1-pro", "kimi-k3-1-pro"].map((p) => row(p, {
+    reasoningOff: false,
+    effortProfile: { family: "openai", levels: ["low", "high", "max"] },
+    ...STRICT,
+  })),
   // ── 智谱 BigModel — the vendor's 核心参数 table, 2026-09 (landscape.md §7
   // 第十四个样本; 4.5-air's 98,304 measured: one over is a 400 naming the range).
   // `glm-5` covers every 5.x id (5-turbo, 5.1–5.3, 5.3-flash(x), 5v-turbo); the

@@ -24,7 +24,7 @@
 | xai | ✓ protocol | ✓ protocol |  |  |  |
 | minimax | ✓ protocol |  |  | · |  |
 | volcengine | ✓ protocol | ✓ protocol |  |  |  |
-| volcengine-plan | ✓ protocol | ✓ protocol |  | ✓ measured |  |
+| volcengine-plan | ✓ 按模型 protocol | ✓ 按模型 protocol |  | ✓ measured |  |
 | zhipu | ✓ protocol |  |  |  |  |
 | orcarouter | ✓ protocol | ✓ protocol | ✓ measured | ✓ measured |  |
 | newapi | ✓ 按上游 protocol | ✓ 按上游 protocol | · | · 按上游 |  |
@@ -120,7 +120,7 @@
 | xai | ✓ protocol | ✓ protocol |  |  |  |
 | minimax | ✓ protocol |  |  | ✓ protocol |  |
 | volcengine | ✓ protocol | ✓ protocol |  |  |  |
-| volcengine-plan | ✓ protocol | ✓ protocol |  | ✓ protocol |  |
+| volcengine-plan | ✓ 按模型 protocol | ✓ 按模型 protocol |  | ✓ protocol |  |
 | zhipu | · |  |  |  |  |
 | orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | ✓ protocol |  |
 | newapi | ✓ 按上游 protocol | ✓ 按上游 protocol | ✓ protocol | ✓ 按上游 protocol |  |
@@ -168,7 +168,7 @@
 | xai | ✓ protocol | ✓ protocol |  |  |  |
 | minimax | ✓ protocol |  |  | · |  |
 | volcengine | ✓ protocol | ✓ protocol |  |  |  |
-| volcengine-plan | ✓ protocol | ✓ protocol |  | · |  |
+| volcengine-plan | ✓ 按模型 protocol | ✓ 按模型 protocol |  | · |  |
 | zhipu | ✓ protocol |  |  |  |  |
 | orcarouter | ✓ 按模型 protocol | ✓ 按模型 protocol | · | · |  |
 | newapi | ✓ protocol | ✓ protocol | · | · |  |
@@ -240,7 +240,7 @@
 | xai | ✓ protocol | ✓ protocol |  |  |  |
 | minimax | ✓ protocol |  |  | · |  |
 | volcengine | ✓ protocol | ✓ protocol |  |  |  |
-| volcengine-plan | ✓ protocol | ✓ protocol |  | · |  |
+| volcengine-plan | ✓ 按模型 protocol | ✓ 按模型 protocol |  | · |  |
 | zhipu | ✓ protocol |  |  |  |  |
 | orcarouter | ✓ protocol | ✓ 按模型 protocol | ✓ protocol | · |  |
 | newapi | ✓ protocol | ✓ 按上游 protocol | ✓ protocol | · |  |
@@ -360,7 +360,7 @@
 | xai | ? unmeasured | ✓ measured |  |  |  |
 | minimax | ? unmeasured |  |  | ? unmeasured |  |
 | volcengine | ? unmeasured | ? unmeasured |  |  |  |
-| volcengine-plan | ✓ measured | ✓ measured |  | ? unmeasured |  |
+| volcengine-plan | ✓ 按模型 measured | ✓ 按模型 measured |  | ? unmeasured |  |
 | zhipu | · |  |  |  |  |
 | orcarouter | ✓ measured | ✓ measured | ✓ measured | ✓ measured |  |
 | newapi | ? 按上游 unmeasured | ? 按上游 unmeasured | ? unmeasured | ? unmeasured |  |
@@ -587,9 +587,11 @@
 | volcengine-plan | Chat | `doubao-seed-2.0-lite` | 262,144 | 131,072 |
 | volcengine-plan | Chat | `doubao-seed-2.0-mini` | 262,144 | 131,072 |
 | volcengine-plan | Chat | `doubao-seed-2.1-turbo` | 262,144 | 262,144 |
+| volcengine-plan | Chat | `kimi-k3.1-pro` | 1,048,576 | 131,072 |
 | volcengine-plan | Resp | `doubao-seed-2.0-lite` | 262,144 | 131,072 |
 | volcengine-plan | Resp | `doubao-seed-2.0-mini` | 262,144 | 131,072 |
 | volcengine-plan | Resp | `doubao-seed-2.1-turbo` | 262,144 | 262,144 |
+| volcengine-plan | Resp | `kimi-k3.1-pro` | 1,048,576 | 131,072 |
 | volcengine-plan | Anth | `doubao-seed-2.0-lite` | 262,144 | 131,072 |
 | volcengine-plan | Anth | `doubao-seed-2.0-mini` | 262,144 | 131,072 |
 | volcengine-plan | Anth | `doubao-seed-2.1-turbo` | 262,144 | 262,144 |
