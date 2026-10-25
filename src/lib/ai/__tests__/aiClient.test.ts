@@ -1461,9 +1461,9 @@ describe("streamCompletion — reasoning content", () => {
     };
     const same = await turn("seed");
     expect(same[0]).toMatchObject({ reasoning_content: "summary", encrypted_content: "sealed" });
-    // Another model has no compatible origin, including the private summary field.
+    // Plain reasoning remains portable; another source cannot decrypt the payload.
     const other = await turn("deepseek-v4");
-    expect(other[0]).not.toHaveProperty("reasoning_content");
+    expect(other[0].reasoning_content).toBe("summary");
     expect(other[0]).not.toHaveProperty("encrypted_content");
   });
 

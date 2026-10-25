@@ -105,3 +105,29 @@ it.each([undefined, "responses-origin"])("switching a reasoning-only Responses t
   expect(wire).toEqual([{ role: "user", content: [{ type: "text", text: "task" }, { type: "text", text: "continue" }] }]);
   expect(JSON.stringify(messages)).toBe(saved);
 });
+
+it.each(["unchanged", "key", "endpoint", "both"] as const)("restored scoped tool history preserves plain reasoning after changing %s", async (change) => {
+  const conn = { baseUrl: "https://api.deepseek.com", apiKey: "old-key", standard: "openai_compat" as const, modelId: "deepseek-v4-flash" };
+  const scope = await carryScope(conn);
+  const original: StreamMessage[] = [{ role: "user", content: "task" }, {
+    role: "assistant", content: null, _carryScope: scope,
+    tool_calls: [{ id: "c", type: "function", function: { name: "f", arguments: "{}" } }],
+    _reasoning: { field: "reasoning_content", text: "original reasoning", encrypted: { modelId: conn.modelId, value: "opaque" } },
+  }, { role: "tool", tool_call_id: "c", content: "result" }, { role: "user", content: "continue" }];
+  const saved = JSON.stringify(original);
+  const messages: StreamMessage[] = JSON.parse(saved);
+  let body: Record<string, unknown> = {};
+  vi.stubGlobal("fetch", vi.fn(async () => new Response("data: [DONE]\n\n")));
+  await streamCompletion({ ...conn,
+    ...(change === "key" || change === "both" ? { apiKey: "new-key" } : {}),
+    ...(change === "endpoint" || change === "both" ? { baseUrl: "https://relay.example/v1" } : {}),
+    messages, tools: [{ type: "function", function: { name: "f", description: "f", parameters: { type: "object", properties: {} } } }],
+    _onRequestBody: b => { body = b as Record<string, unknown>; }, onChunk: () => {},
+  });
+  const wire = body.messages as Record<string, unknown>[];
+  expect(wire[1]).toMatchObject({ reasoning_content: "original reasoning", tool_calls: [{ id: "c" }] });
+  expect(wire[1].encrypted_content).toBe(change === "unchanged" ? "opaque" : undefined);
+  expect(wire[2]).toEqual({ role: "tool", tool_call_id: "c", content: "result" });
+  expect(JSON.stringify(messages)).toBe(saved);
+  expect(projectCarry(messages, scope)).toEqual(original);
+});

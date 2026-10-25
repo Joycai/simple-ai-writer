@@ -24,13 +24,12 @@ export function projectCarry(messages: StreamMessage[], scope: string): StreamMe
     if ("tool_calls" in copy) {
       delete copy._geminiModelParts;
       delete copy._thinkingBlocks;
-      // Legacy plain reasoning was already replayed before origin metadata
-      // existed. Preserve that contract (e.g. DeepSeek tool turns), but never
-      // grandfather ciphertext or a known foreign route's private fields.
-      if (!message._carryScope && copy._reasoning) {
+      // Plain reasoning is part of the portable tool transcript, not an
+      // account-bound credential. Chat adapters replay its original field;
+      // other protocol adapters ignore it. Strip only its opaque payload,
+      // including when a known session changes key or endpoint.
+      if (copy._reasoning) {
         copy._reasoning = { field: copy._reasoning.field, text: copy._reasoning.text };
-      } else {
-        delete copy._reasoning;
       }
     }
     // A reasoning-only Responses turn has no portable visible message after
