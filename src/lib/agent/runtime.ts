@@ -1020,6 +1020,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     let roundReasoning: NativeReasoning | undefined;
     let roundThinkingBlocks: ThinkingBlockCarry | undefined;
     let roundResponseItems: ResponseItemCarry | undefined;
+    let roundCarryScope: string | undefined;
     // Streamed reasoning for this round, reported to the log as it grows. The
     // start time is captured on the first fragment rather than at round start:
     // a model that thinks only after reading a tool result would otherwise be
@@ -1256,7 +1257,10 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
             roundReasoning = chunk._reasoning;
             roundThinkingBlocks = chunk._thinkingBlocks;
             roundResponseItems = chunk._responseItems;
+            roundCarryScope = chunk._carryScope;
           } else if ("done" in chunk) {
+            roundResponseItems = chunk._responseItems ?? roundResponseItems;
+            roundCarryScope = chunk._carryScope ?? roundCarryScope;
             totalInputTokens += chunk.inputTokens;
             totalOutputTokens += chunk.outputTokens;
             totalCachedTokens += chunk.cachedTokens ?? 0;
@@ -1511,8 +1515,10 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // IS the chat session's transcript, and without this the next turn's
       // model has never seen its own answer. Empty text stays out — Anthropic
       // rejects empty content blocks.
-      if (roundText.trim()) {
-        history.push({ role: "assistant", content: roundText });
+      if (roundText.trim() || roundResponseItems?.items.length) {
+        history.push({ role: "assistant", content: roundText,
+          ...(roundResponseItems ? { _responseItems: roundResponseItems, _carryScope: roundCarryScope } : {}),
+        });
       }
 
       // Cut off mid-sentence: ask for the rest instead of handing the author
@@ -1595,6 +1601,14 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // on which the sensible-looking move is to send the same thing again.
     const brokenCalls = roundToolCalls.filter((tc) => !argumentsUsable(tc.arguments));
     if (brokenCalls.length > 0) {
+      // Rebuild a bare, paired turn. Never splice signed/encrypted raw items:
+      // they still describe the rejected call, and signatures bind the original.
+      roundGeminiModelParts = undefined;
+      roundResponseItems = undefined;
+      roundThinkingBlocks = undefined;
+      // Plain reasoning can still be required by Chat-compatible models.
+      // Only its opaque payload is bound to the discarded call set.
+      if (roundReasoning) roundReasoning = { field: roundReasoning.field, text: roundReasoning.text };
       roundToolCalls = roundToolCalls.filter((tc) => argumentsUsable(tc.arguments));
       for (const tc of brokenCalls) {
         // Reported as a failed step rather than a silent omission: the author
@@ -1643,6 +1657,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         _reasoning: roundReasoning,
         _thinkingBlocks: roundThinkingBlocks,
         _responseItems: roundResponseItems,
+        _carryScope: roundCarryScope,
       });
     }
 

@@ -17,7 +17,7 @@ export interface ThinkingBlockCarry {
 }
 
 /**
- * The OpenAI Responses family's output items for one tool round, tagged with
+ * The OpenAI Responses family's output items for one assistant turn, tagged with
  * the model that produced them (see `lib/ai/responses.ts`).
  *
  * `reasoning` (with its `encrypted_content`), `function_call` and any
@@ -315,6 +315,10 @@ export type StreamChunk =
   | { toolArgs: { name: string; chars: number } }
   | {
       done: true;
+      /** Full output items, including on a plain (non-tool) turn. */
+      _responseItems?: ResponseItemCarry;
+      /** Digest of the originating route and credential; never sent on the wire. */
+      _carryScope?: string;
       inputTokens: number;
       outputTokens: number;
       /** True when the provider cut the response short on max-tokens (OpenAI
@@ -356,6 +360,7 @@ export type StreamChunk =
     }
   | {
       toolCalls: AccumulatedToolCall[];
+      _carryScope?: string;
       _geminiModelParts?: unknown[];
       /**
        * The round's reasoning, whole, for echoing back on the assistant message
@@ -372,10 +377,16 @@ export type StreamChunk =
 
 /** All message variants accepted by the streaming API. */
 export type StreamMessage =
-  | { role: "system" | "user" | "assistant"; content: MessageContent }
+  | {
+      role: "system" | "user" | "assistant";
+      content: MessageContent;
+      _responseItems?: ResponseItemCarry;
+      _carryScope?: string;
+    }
   | {
       role: "assistant";
       content: null;
+      _carryScope?: string;
       tool_calls: AssistantToolCall[];
       _geminiModelParts?: unknown[];
       /**

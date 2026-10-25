@@ -298,3 +298,26 @@ describe("truncated tool call", () => {
     expect(opts.messages.filter((m) => m.role === "tool")).toHaveLength(1);
   });
 });
+
+describe("mixed valid and broken calls with opaque carriers", () => {
+  it("rebuilds the surviving call without replaying the rejected raw call", async () => {
+    const good = { index: 0, id: "good", name: "list_lore_entities", arguments: "{}" };
+    const bad = { index: 1, id: "bad", name: "read_file", arguments: '{"path":' };
+    queueRound([{ toolCalls: [good, bad],
+      _responseItems: { modelId: "m", items: [good, bad].map(c => ({ type: "function_call", call_id: c.id, name: c.name, arguments: c.arguments })) },
+      _geminiModelParts: [{ functionCall: { name: good.name, args: {} }, thoughtSignature: "opaque" }],
+      _thinkingBlocks: { modelId: "m", blocks: [{ type: "thinking", signature: "opaque" }] },
+      _reasoning: { field: "reasoning_content", text: "thinking", encrypted: { modelId: "m", value: "opaque" } },
+    }, { done: true, inputTokens: 5, outputTokens: 5, truncated: true }]);
+    queueRound([{ text: "recovered" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+    const opts = makeOptions();
+    await runAgent(opts);
+    const assistant = sent[1].find(m => m.role === "assistant" && "tool_calls" in m);
+    expect(assistant).toMatchObject({ tool_calls: [{ id: "good" }], _responseItems: undefined,
+      _geminiModelParts: undefined, _thinkingBlocks: undefined, _reasoning: { field: "reasoning_content", text: "thinking" } });
+    expect(JSON.stringify(assistant)).not.toContain("opaque");
+    expect(JSON.stringify(sent[1])).not.toContain('"call_id":"bad"');
+    expect(sent[1].filter(m => m.role === "tool").map(m => m.role === "tool" && m.tool_call_id)).toEqual(["good"]);
+    expect(opts.events.some(e => e.kind === "tool-step" && e.step.toolCallId === "bad" && e.step.status === "running")).toBe(false);
+  });
+});

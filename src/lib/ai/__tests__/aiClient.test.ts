@@ -3,6 +3,7 @@ import {
   streamCompletion, ContextSizeError, ImagePayloadError,
   type ApiStandard, type AuthMode, type StreamChunk, type StreamMessage, type ToolDefinition,
 } from "../index";
+import { carryScope } from "../carryScope";
 import type { ReasoningEffort, ThinkingCategoryId } from "../reasoning";
 import { __resetLearned } from "../capability/learned";
 import type { ServerToolId } from "../serverTools";
@@ -1374,6 +1375,7 @@ describe("streamCompletion — reasoning content", () => {
           role: "assistant",
           content: null,
           tool_calls: [{ id: "c1", type: "function", function: { name: "get_date", arguments: "{}" } }],
+          _carryScope: await carryScope({ baseUrl: "https://api.example.com/v1", apiKey: "k", standard: "openai_compat", modelId: "m" }),
           _reasoning: { field: "reasoning_content", text: "I need the date" },
         },
         { role: "tool", tool_call_id: "c1", content: "2026-08-13" },
@@ -1398,6 +1400,7 @@ describe("streamCompletion — reasoning content", () => {
           role: "assistant",
           content: null,
           tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
+          _carryScope: await carryScope({ baseUrl: "https://api.example.com/v1", apiKey: "k", standard: "openai_compat", modelId: "m" }),
           _reasoning: { field: "reasoning", text: "thought" },
         },
       ],
@@ -1434,7 +1437,7 @@ describe("streamCompletion — reasoning content", () => {
   });
 
   it("echoes encrypted_content to the same model only", async () => {
-    const turn = (modelId: string) => {
+    const turn = async (modelId: string) => {
       const calls = mockFetch([finish]);
       return streamCompletion({
         baseUrl: "https://api.example.com/v1",
@@ -1446,6 +1449,7 @@ describe("streamCompletion — reasoning content", () => {
             role: "assistant",
             content: null,
             tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
+            _carryScope: await carryScope({ baseUrl: "https://api.example.com/v1", apiKey: "k", standard: "openai_compat", modelId: "seed" }),
             _reasoning: {
               field: "reasoning_content", text: "summary",
               encrypted: { modelId: "seed", value: "sealed" },
@@ -1457,7 +1461,7 @@ describe("streamCompletion — reasoning content", () => {
     };
     const same = await turn("seed");
     expect(same[0]).toMatchObject({ reasoning_content: "summary", encrypted_content: "sealed" });
-    // Another model cannot decrypt it; the summary still goes, as before.
+    // Plain reasoning remains portable; another source cannot decrypt the payload.
     const other = await turn("deepseek-v4");
     expect(other[0].reasoning_content).toBe("summary");
     expect(other[0]).not.toHaveProperty("encrypted_content");
@@ -1465,21 +1469,22 @@ describe("streamCompletion — reasoning content", () => {
 
   it("echoes a sealed payload that arrived with no summary text", async () => {
     const { received } = await collect({
-      modelId: "seed",
+      modelId: "seed", standard: "openai_compat",
       chunks: [
         'data: {"choices":[{"delta":{"encrypted_content":"sealed"}}]}\n',
         'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"f","arguments":"{}"}}]}}]}\n',
         finish,
       ],
     });
-    const tools = received.find((c) => "toolCalls" in c) as { _reasoning?: { text: string } };
+    const tools = received.find((c) => "toolCalls" in c) as { _reasoning?: { text: string }; _carryScope?: string };
     const calls = mockFetch([finish]);
     await streamCompletion({
-      baseUrl: "https://api.example.com/v1", apiKey: "k", standard: "openai_compat", modelId: "seed",
+      baseUrl: "https://api.example.com/v1", apiKey: "test-key", standard: "openai_compat", modelId: "seed",
       messages: [{
         role: "assistant", content: null,
         tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
         _reasoning: tools._reasoning as never,
+        _carryScope: tools._carryScope,
       }],
       onChunk: () => {},
     });
@@ -1491,11 +1496,12 @@ describe("streamCompletion — reasoning content", () => {
     // After a model switch nothing of that round's reasoning is left to send.
     const other = mockFetch([finish]);
     await streamCompletion({
-      baseUrl: "https://api.example.com/v1", apiKey: "k", standard: "openai_compat", modelId: "other",
+      baseUrl: "https://api.example.com/v1", apiKey: "test-key", standard: "openai_compat", modelId: "other",
       messages: [{
         role: "assistant", content: null,
         tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
         _reasoning: tools._reasoning as never,
+        _carryScope: tools._carryScope,
       }],
       onChunk: () => {},
     });
@@ -2758,6 +2764,7 @@ describe("streamCompletion — Anthropic SSE", () => {
           role: "assistant",
           content: null,
           tool_calls: [{ id: "toolu_1", type: "function", function: { name: "get_weather", arguments: "{}" } }],
+          _carryScope: await carryScope({ baseUrl: "https://api.anthropic.com", apiKey: "k", standard: "anthropic", modelId: "claude-x" }),
           _thinkingBlocks: { modelId: "claude-x", blocks },
         },
         { role: "tool", tool_call_id: "toolu_1", content: "20C" },

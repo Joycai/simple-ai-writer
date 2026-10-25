@@ -1234,3 +1234,16 @@ it("passes accounting to every round even when a later stream fails", async () =
   expect(mockStream).toHaveBeenCalledTimes(2);
   expect(mockStream.mock.calls.every(([opts]) => opts.accounting === accounting)).toBe(true);
 });
+
+it("preserves a plain Responses turn's opaque items and origin in persisted history", async () => {
+  const carry = { modelId: "m", items: [{ type: "reasoning", encrypted_content: "opaque" },
+    { type: "message", role: "assistant", content: [{ type: "output_text", text: "answer" }] }] };
+  queueRound([{ text: "answer" }, { done: true, inputTokens: 10, outputTokens: 5, _responseItems: carry, _carryScope: "scope" }]);
+  const opts = makeOptions();
+  await runAgent(opts);
+  expect(opts.messages[opts.messages.length - 1]).toEqual({ role: "assistant", content: "answer", _responseItems: carry, _carryScope: "scope" });
+  const saved = JSON.parse(JSON.stringify(opts.messages));
+  queueRound([{ text: "next" }, { done: true, inputTokens: 10, outputTokens: 5 }]);
+  await runAgent(makeOptions({ messages: [...saved, { role: "user", content: "continue" }] }));
+  expect(sent[1]).toContainEqual({ role: "assistant", content: "answer", _responseItems: carry, _carryScope: "scope" });
+});

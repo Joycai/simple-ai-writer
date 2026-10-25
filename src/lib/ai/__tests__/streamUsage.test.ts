@@ -92,8 +92,24 @@ it("flushes the latest reported counts on watchdog abort", async () => {
   } }))));
   const pending = streamCompletion(opts());
   const failed = expect(pending).rejects.toThrow();
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
   await vi.advanceTimersByTimeAsync(600_001);
   await failed;
   expect(recordUsage).toHaveBeenCalledTimes(1);
   expect(vi.mocked(recordUsage).mock.calls[0][1]).toMatchObject({ promptTokens: 10, completionTokens: 3, usageEvidence: { outcome: "failed" } });
+});
+
+
+it.each(["openai_compat", "openai_responses_compat"] as const)("%s keeps reported usage when refusing", async (standard) => {
+  const frames = standard === "openai_compat"
+    ? line({ choices: [{ delta: { refusal: "Cannot answer" }, finish_reason: "stop" }] }) +
+      line({ usage: { prompt_tokens: 10, completion_tokens: 3 } }) + "data: [DONE]\n\n"
+    : line({ type: "response.refusal.delta", delta: "Cannot answer" }) +
+      line({ type: "response.completed", response: { usage: { input_tokens: 10, output_tokens: 3 } } });
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(frames)));
+  const request = opts(standard);
+  await expect(streamCompletion(request)).rejects.toThrow("refusal: Cannot answer");
+  expect(recordUsage).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(recordUsage).mock.calls[0][1]).toMatchObject({ promptTokens: 10, completionTokens: 3, usageEvidence: { outcome: "failed" } });
+  expect(vi.mocked(request.onChunk).mock.calls.some(([chunk]) => "done" in chunk)).toBe(false);
 });
