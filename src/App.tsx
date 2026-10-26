@@ -36,6 +36,7 @@ import { usePrefsFocusSync } from "./usePrefsFocusSync";
 import { useWindowTitle } from "./useWindowTitle";
 import { launchProjectPath } from "./lib/instance";
 import { installCitationNavigation } from "./lib/lore/citations";
+import { installExternalLinkNavigation } from "./lib/externalLinks";
 import { installNavigationHistory } from "./stores/navStore";
 import { fillLayer } from "./lib/motion";
 
@@ -46,6 +47,7 @@ const SettingsPage = lazy(() =>
 );
 
 export default function App() {
+  useEffect(installExternalLinkNavigation, []);
   const {
     sidebarWidth, setSidebarWidth,
     sidebarCollapsed,
