@@ -262,7 +262,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     // plan-covered) with no `sources` field. Chat Completions has no field.
     // A base64 `document` block was read (the secret word came back) — the
     // one Anthropic-shaped wire measured to do so.
-    source: "landscape.md §7 第十二个样本 (2026-09-18), 第二十五个样本 Kimi K3.1 Pro (2026-10-26)",
+    source: "landscape.md §7 第十二个样本 (2026-09-18), 第二十五个样本 Kimi K3.1 Pro、第二十六个样本 Doubao Seed 2.1 Pro (2026-10-26)",
   },
   // 智谱 BigModel. One key reaches four prefixes on this host; the path, not
   // the key, decides whether a call bills the balance or a GLM Coding Plan —

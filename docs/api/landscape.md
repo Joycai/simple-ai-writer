@@ -2622,6 +2622,48 @@ Responses 首测及两次复测均 completed、仅答 OK、没有 function_call�
 
 本项目的落地取舍见 [reasoning-plan.md §0.4](reasoning-plan.md#04-kimi-k31-pro火山套餐2026-10-26)。
 
+### 第二十六个样本：火山套餐 Doubao Seed 2.1 Pro（① ②，2026-10-26）
+
+**先查官方文档**（2026-10-26）：
+- [模型列表](https://docs.volcengine.com/docs/ark/model-list?lang=zh)：`doubao-seed-2-1-pro-260915`
+  是 1024k 上下文、256k 最大回答/思考；旧版 `260628` 只有 256k 上下文，不能混用。
+- [深度思考](https://docs.volcengine.com/docs/ark/deep-thinking?lang=zh)：默认开启、默认 `high`；
+  Chat 用 `reasoning_effort`，Responses 用 `reasoning.effort`。原生档为 `low/medium/high`，
+  `minimal` 关闭，`none → minimal`，`xhigh/max → high`；`thinking.type:disabled` 也可关闭。
+  文档要求保留思考摘要和加密原文；Chat 回传 `encrypted_content`，无状态 Responses 回传完整 output items。
+- [创建 Response](https://docs.volcengine.com/docs/ark/create-model-responses-api?lang=zh)：
+  文件、图片、function tools、`text.format` 的协议定义。
+- [套餐模型上线记录](https://docs.volcengine.com/docs/ark/agent-plan-personal-model-release?lang=zh)：
+  套餐别名 `doubao-seed-2.1-pro` 于 09.23 上线。
+
+**实测范围**：`https://ark.cn-beijing.volces.com/api/plan/v3`，直接请求别名
+`doubao-seed-2.1-pro`，不枚举模型。两路响应均报 `doubao-seed-2-1-pro-260915`。
+只发送合成文字、纯色 PNG 与单页 PDF。可重复测试 `live.doubao-21.test.ts` 需同时设置
+`DOUBAO_21_LIVE=1` 与 `SEEDDACE_KEY`；单请求外层 1800 秒，应用流式的首片段 120 秒、
+片段间静默 600 秒保护不变。文档限额没有做压力测试，别名未来更新时应重新校准。
+
+**推理档位**：原始非流式两路七档及 disabled 共 16 次请求均 200。
+同一 CRT 题的正确答案为 423，Responses low/medium/high 推理用量为 225/321/315，
+Chat 为 236/230/251，三档均得出 423。xhigh/max 也正确，但请求回显只保留原始档名，
+其映射关系以官方文档为依据，单题的用量差异不证明强度单调。
+none/minimal/disabled 均零 reasoning tokens，无独立推理载体；该 CRT 题关闭思考时全部答错，
+部分回答含解题说明。这证明关闭会降低该样本的推理准确率，不代表关闭参数无效，也不保证正文永不解释。
+
+**原始协议约束**：两路 `json_schema` 严格枚举仅放在 wire，提示要求 1+1 并额外加说明键，
+实际只回 `{"answer":7}`；`json_object` 返回合法 JSON。`temperature:0.2` 被接受，
+没有验证其对采样分布的统计影响。
+`tool_choice:required` 与「Reply OK without calling any tools」对照，两路均可正常结束而没有工具调用；
+接受参数不能当作强制能力。
+
+**应用流式回归**：两路 off/low/medium/high 均成功，off 的简单算术题无独立推理输出；
+PNG 正确识别青色，PDF 读到 PELICAN 7342；自动 schema 档遵守 answer=7 的约束。
+工具调用后返回 HERON-5831，Chat 的非空 `reasoning_content` 与 `encrypted_content` 原样回传，
+Responses 的非空加密推理字段及完整 output items 也逐项原样回传。共 22 项可重复用例通过，其中 required 反向提示在
+首测及整套复测两次均未强制调用。没有做载体删除消融，因此不宣称缺载体必定报错。
+未测试按量线路、Anthropic、视频、服务端搜索、百万 token 上下文或输出极限。
+
+本项目取舍见 [reasoning-plan.md §0.5](reasoning-plan.md#05-doubao-seed-21-pro火山套餐2026-10-26)。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**

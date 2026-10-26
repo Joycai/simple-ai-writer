@@ -54,6 +54,25 @@ afterEach(() => {
 });
 
 describe("planRequest", () => {
+  it.each(["openai", "responses"] as const)("shapes Seed 2.1 Pro on %s without Kimi restrictions", async (family) => {
+    const opts: StreamOptions = {
+      standard: family === "openai" ? "openai_compat" : "openai_responses_compat",
+      platform: "volcengine-plan", baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3",
+      apiKey: "test", modelId: "doubao-seed-2.1-pro", modelType: "multimodal", pdfInput: true,
+      temperature: 0.2, reasoningEffort: "off", tools: [TOOL], toolChoice: "required",
+      messages: [{ role: "user", content: "Test" }], onChunk: () => {},
+    };
+    const body = JSON.parse(await bodyOf(family, opts));
+    expect(body.temperature).toBe(0.2);
+    expect(body.tool_choice).toBe("auto");
+    if (family === "openai") {
+      expect(body.thinking).toEqual({ type: "disabled" });
+      expect(body).not.toHaveProperty("reasoning_effort");
+    } else expect(body.reasoning.effort).toBe("none");
+    expect(planRequest(opts).media).toMatchObject({ image: true, pdf: true });
+    const medium = JSON.parse(await bodyOf(family, { ...opts, reasoningEffort: "medium" }));
+    expect(family === "openai" ? medium.reasoning_effort : medium.reasoning.effort).toBe("medium");
+  });
   it.each(["openai", "responses"] as const)("shapes the measured Kimi Plan %s route", async (family) => {
     const opts: StreamOptions = {
       standard: family === "openai" ? "openai_compat" : "openai_responses_compat",

@@ -91,12 +91,13 @@ interface PlatformCells {
   families?: Partial<Record<ProtocolFamily | "all", FamilyCells>>;
 }
 
-/** Documented control spellings (2026-10-19), not measured capability flags. */
+/** Documented control spellings (2026-10-19, Seed Pro 2026-10-26), not measured capability flags. */
 const QWEN_THINKING: readonly PlatformModelRow[] = [
   { match: /^qwen3\.8-(?:max|flash|27b)(?:$|-)/, set: { thinkingCategory: "qwen-effort" } },
   { match: /^qwen3\.7-plus(?:$|-)/, set: { thinkingCategory: "qwen-budget" } },
 ];
 const SEED_THINKING: readonly PlatformModelRow[] = [
+  { match: /^doubao-seed-2(?:-1|\.1)-pro(?:$|-)/, set: { thinkingCategory: "doubao" } },
   { match: /^doubao-seed-2(?:-0|\.0)-(?:pro|lite)(?:$|-)/, set: { thinkingCategory: "doubao" } },
 ];
 
@@ -304,6 +305,15 @@ const KIMI_K31_PLAN: PlatformModelRow = {
   prefill: MULTIMODAL_PDF,
 };
 
+// Exact Plan alias resolves to 260915. Documented limits, not stress-tested.
+const DOUBAO_21_PRO_PLAN: PlatformModelRow = {
+  match: eq("doubao-seed-2.1-pro"),
+  set: { contextSize: 1_048_576, maxOutput: 262_144,
+    reasoningOff: true, effortMinimal: true, temperature: true,
+    forcedToolChoice: false, jsonSchema: true, pdfInput: true },
+  prefill: MULTIMODAL_PDF,
+};
+
 /**
  * `newapi` and `custom` alike: a New API relay lands on `custom` unless the
  * author picks New API. What differs is the upstream behind each model, which
@@ -393,9 +403,11 @@ export const PLATFORM_CELLS: Record<PlatformId, PlatformCells> = {
       // mark on a 4-second clip's bill in either spelling, which a clip that
       // short cannot tell from a frame floor — so no `videoFps` cell (第十九个样本).
       openai: { jsonSchema: true, videoInput: true, models: [...SEED_THINKING,
+        DOUBAO_21_PRO_PLAN,
         { ...KIMI_K31_PLAN, set: { ...KIMI_K31_PLAN.set, forcedToolChoice: true } },
       ] },
       responses: { web_search: true, jsonSchema: true, models: [
+        DOUBAO_21_PRO_PLAN,
         // Accepts required but can answer without a call (sample 25 review).
         { ...KIMI_K31_PLAN, set: { ...KIMI_K31_PLAN.set, forcedToolChoice: false } },
       ] },

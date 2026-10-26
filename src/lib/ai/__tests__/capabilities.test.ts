@@ -177,6 +177,21 @@ function renderMatrix(): string {
 }
 
 describe("capability matrix", () => {
+  it("scopes Seed 2.1 Pro Plan measurements to Chat and Responses", () => {
+    const model = { modelId: "doubao-seed-2.1-pro" };
+    for (const standard of ["openai_compat", "openai_responses_compat"] as const) {
+      const wire = { standard, platform: "volcengine-plan" as const };
+      for (const id of ["pdfInput", "jsonSchema", "reasoningOff", "effortMinimal", "temperature"] as const) {
+        expect(capabilityVerdict(id, wire, model)).toEqual({ status: "yes", reason: "measured" });
+      }
+      expect(capabilityVerdict("forcedToolChoice", wire, model).status).toBe("no");
+      expect(modelValue("contextSize", model, wire)?.value).toBe(1_048_576);
+      expect(modelValue("maxOutput", model, wire)?.value).toBe(262_144);
+      expect(capabilityVerdict("forcedToolChoice", { ...wire, platform: "volcengine" }, model).status).not.toBe("no");
+      expect(capabilityVerdict("forcedToolChoice", wire, { modelId: "doubao-seed-2.1-turbo" }).status).not.toBe("no");
+      expect(modelValue("contextSize", { modelId: "doubao-seed-2.1-pro-other" }, wire)?.value).not.toBe(1_048_576);
+    }
+  });
   it("scopes Kimi K3.1 Plan measurements to its tested alias and OpenAI routes", () => {
     const model = { modelId: "kimi-k3.1-pro" };
     for (const standard of ["openai_compat", "openai_responses_compat"] as const) {
