@@ -48,6 +48,8 @@ describe("model-specific effort ladders", () => {
     ["Qwen/Qwen3.8-27B", ["off", "low", "medium", "xhigh"]],
     ["doubao-seed-2-0-pro-260215", ["off", "low", "medium", "high"]],
     ["doubao-seed-2.0-lite", ["off", "low", "medium", "high"]],
+    ["doubao-seed-2.1-pro", ["off", "low", "medium", "high"]],
+    ["doubao-seed-2-1-pro-260915", ["off", "low", "medium", "high"]],
   ])("%s trims compatibility aliases on Chat and Responses", (modelId, expected) => {
     for (const standard of ["openai_compat", "openai_responses_compat"] as ApiStandard[]) {
       expect(resolveThinkingCategory({ modelId: modelId as string }, standard).menu).toEqual(expected);
@@ -73,6 +75,7 @@ describe("model-specific effort ladders", () => {
     ["volcengine", "doubao-seed-2-0-pro-260215", "doubao"],
     ["volcengine-plan", "doubao-seed-2.0-lite", "doubao"],
     ["volcengine-plan", "doubao-seed-2-0-lite-260428", "doubao"],
+    ["volcengine-plan", "doubao-seed-2.1-pro", "doubao"],
   ] as const)("%s selects the native switch for %s", (platform, modelId, id) => {
     const category = resolveThinkingCategory({ modelId }, "openai_compat", platform);
     expect(category.id).toBe(id);

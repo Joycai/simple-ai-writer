@@ -78,6 +78,10 @@ const MODEL_CATALOG: readonly CatalogRow[] = bySpecificity<CatalogRow>([
   ...["doubao-seed-2-0-pro", "doubao-seed-2-0-lite", "doubao-seed-2.0-pro", "doubao-seed-2.0-lite"]
     .map((p) => row(p, { effortProfile: { family: "openai", category: "doubao", levels: ["off", "low", "medium", "high"] } })),
   row("qwen3.7-plus", { maxThinkingBudget: 262_144 }),
+  // Ark's native ladder; none/minimal disable, xhigh/max alias high (2026-10-26).
+  ...["doubao-seed-2.1-pro", "doubao-seed-2-1-pro"].map((p) => row(p, {
+    effortProfile: { family: "openai", category: "doubao", levels: ["off", "low", "medium", "high"] },
+  })),
   // ── OpenAI ──
   // GPT-6: 128K, the same as GPT-5 (OrcaRouter's catalog for all three, 2026-09-26).
   // gpt-6 held an enum the prompt contradicted, on ① and ② (landscape.md §7 第十八个样本).

@@ -179,6 +179,10 @@ const VOLCENGINE_PLAN_MODELS: StarterModel[] = [
     modelId: "kimi-k3.1-pro", name: "Kimi K3.1 Pro", activeRoute: "responses",
     ...platformModelCalibration("volcengine-plan", "kimi-k3.1-pro", "responses"),
   },
+  {
+    modelId: "doubao-seed-2.1-pro", name: "Doubao Seed 2.1 Pro", activeRoute: "responses",
+    ...platformModelCalibration("volcengine-plan", "doubao-seed-2.1-pro", "responses"),
+  },
   doubao("doubao-seed-2.0-lite", "Doubao Seed 2.0 Lite"),
   doubao("doubao-seed-2.0-mini", "Doubao Seed 2.0 Mini"),
   doubao("doubao-seed-2.1-turbo", "Doubao Seed 2.1 Turbo"),

@@ -548,6 +548,7 @@
 | volcengine-plan | Chat | `doubao-seed-2.0-lite` | `doubao` |
 | volcengine-plan | Chat | `doubao-seed-2.0-mini` | `doubao` |
 | volcengine-plan | Chat | `doubao-seed-2.1-turbo` | `doubao` |
+| volcengine-plan | Chat | `doubao-seed-2.1-pro` | `doubao` |
 | volcengine-plan | Anth | `doubao-seed-2.0-lite` | `doubao-switch` |
 | volcengine-plan | Anth | `doubao-seed-2.0-mini` | `doubao-switch` |
 | volcengine-plan | Anth | `doubao-seed-2.1-turbo` | `doubao-switch` |
@@ -587,10 +588,12 @@
 | volcengine-plan | Chat | `doubao-seed-2.0-lite` | 262,144 | 131,072 |
 | volcengine-plan | Chat | `doubao-seed-2.0-mini` | 262,144 | 131,072 |
 | volcengine-plan | Chat | `doubao-seed-2.1-turbo` | 262,144 | 262,144 |
+| volcengine-plan | Chat | `doubao-seed-2.1-pro` | 1,048,576 | 262,144 |
 | volcengine-plan | Chat | `kimi-k3.1-pro` | 1,048,576 | 131,072 |
 | volcengine-plan | Resp | `doubao-seed-2.0-lite` | 262,144 | 131,072 |
 | volcengine-plan | Resp | `doubao-seed-2.0-mini` | 262,144 | 131,072 |
 | volcengine-plan | Resp | `doubao-seed-2.1-turbo` | 262,144 | 262,144 |
+| volcengine-plan | Resp | `doubao-seed-2.1-pro` | 1,048,576 | 262,144 |
 | volcengine-plan | Resp | `kimi-k3.1-pro` | 1,048,576 | 131,072 |
 | volcengine-plan | Anth | `doubao-seed-2.0-lite` | 262,144 | 131,072 |
 | volcengine-plan | Anth | `doubao-seed-2.0-mini` | 262,144 | 131,072 |
