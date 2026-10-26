@@ -844,6 +844,7 @@ document import into the workspace:
 ### `src/lib/` 根模块
 
 #### 多开与基础模块
+- `externalLinks.ts` 在 App 挂载时注册 document 级点击代理：HTTP(S) 链接交给系统默认浏览器，mailto 交给默认邮件应用；先同步取消 WebView 导航，打开失败也不能替换应用页面。覆盖动态 Markdown、嵌套链接内容、修饰键和中键点击；已处理事件、文内锚点、相对路径及知识库引用保留原行为。协议相对 URL 按 HTTPS 打开。HTML 沙箱 iframe 有独立文档，不在此代理范围内。
 - `project.ts`
 - `keyStore.ts`
 - `recentProjects.ts` (the recent-projects list and its pin set, pure: parsing, the cap that counts only unpinned entries, and the cross-instance merge `prefs.writePrefMerged` applies at persist time; the pinned section renders from the pin row, not the recents; both rows are machine-local)

@@ -49,6 +49,7 @@ const FLAT = `${LIB}/__tests__`;
 const ROOT_MODULE_TESTS: Readonly<Record<string, string>> = {
   "appReset.test.ts": "appReset",
   "closeDocShortcut.test.ts": "shortcuts",
+  "externalLinks.test.ts": "externalLinks",
   "httpLocalUrl.test.ts": "http",
   "ime.test.ts": "ime",
   "keyStore.test.ts": "keyStore",
