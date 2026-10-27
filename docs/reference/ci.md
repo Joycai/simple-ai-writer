@@ -134,6 +134,13 @@ that area, since the job is skipped rather than run.)
 
 ## Keeping CI green locally
 
+For pnpm dependency refreshes, keep the Tauri JS API and plugins on the same
+major/minor releases as `src-tauri/Cargo.lock`; `pnpm exec tauri info` checks this
+alignment. Their manifest ranges use `~` so `pnpm update` cannot independently
+advance a minor release. The HTTP plugin is pinned to `2.6.0` to match the local
+patched Rust crate. Upgrade these pairs together when updating the backend;
+frontend type-checks and mocks alone cannot verify their IPC compatibility.
+
 Run the same checks before pushing (the Rust blocks only matter if you touched `src-tauri/` or
 `server/` respectively — CI skips them otherwise):
 

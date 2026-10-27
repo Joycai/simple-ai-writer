@@ -556,6 +556,7 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 #### 分层模块（write.ts / format.ts / blocks.ts）
 
 - 分层照 `pptx/` 的分法——能不碰库就决定的全住在纯模块里，`write.ts` 是**唯一**知道 `docx` 库存在的文件（1.1MB，懒加载，不进启动包），换库或改走 Rust 时要重写的只有它。
+- `renderBlock` 显式返回 `(Paragraph | Table)[]`：docx 9.14 的类型下，推断出的 `Paragraph[] | Table[]` 会让 `flatMap` 只接受段落；联合元素类型保留正文中段落与表格的原有顺序，不需要类型断言。
 - `format.ts` 是主体：一份 Word 文稿的全部版面参数，单位是磅 / 毫米 / twip。**刻意不复用 `lib/theme/markdownThemes.ts`** —— 那五套是 CSS，`2em` 和 `var(--font-serif)` 无法无损翻成磅，而 CSS **根本不表达页面**（纸张、页边距、文档网格在那边不存在）；内置预设的名字和 markdown 主题对齐（作者看到的和导出的对得上），值是一张手写映射表而不是从 CSS 推导的。
 - `blocks.ts` 走 markdown-it 的 **token 流**而不是 `renderMarkdown` 的 HTML：vitest 跑在 node 下没有 DOM，走 DOM 就等于这一层不可测，而逻辑全在这一层；用的是 `lib/fs/markdown` 里**同一个** `md` 实例，所以方言不分叉、自定义的 `lore_cite` 也看得见。
 

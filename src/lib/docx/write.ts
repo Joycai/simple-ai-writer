@@ -235,7 +235,7 @@ function renderBlock(
   format: DocFormat,
   images: Map<string, ResolvedImage>,
   bodyWidthPx: number,
-) {
+): (import("docx").Paragraph | import("docx").Table)[] {
   switch (block.kind) {
     case "heading": {
       // 五、六级沿用四级：Word 的内置样式再往下也不再有排版意义。
