@@ -14,7 +14,7 @@
 
 A local-first desktop writing workspace that combines a Markdown editor, a project knowledge base, and an approval-gated AI agent. It is designed for long-form writing and document work where source files, context, and generated results should remain under the author's control.
 
-**Runs on macOS, Windows, and Linux.** The editor and project data are local. Network access is used only when you call a configured AI provider or opt into the companion sync server.
+**Runs on macOS, Windows, and Linux.** The editor and project data are local. Network features use your configured AI and retrieval endpoints, optional MCP servers, the companion sync server, and on-demand font downloads.
 
 ---
 
@@ -36,9 +36,9 @@ A local-first desktop writing workspace that combines a Markdown editor, a proje
   - Google Gemini
   - Anthropic Messages
 - Use hosted providers, gateways, or local servers such as Ollama and LM Studio.
-- Configure models by capability, including text, vision, PDF input, video input, image generation, translation, and speech recognition.
+- Configure models by capability, including text, vision, PDF input, video input, image generation, translation, speech recognition, embeddings, and reranking. Available controls and reasoning levels follow the model and endpoint capabilities.
 - Keep API keys in the operating system credential manager rather than in project files or SQLite.
-- Track token usage and configured costs per model call.
+- Configure shared fee groups and track usage in both project and installation-wide ledgers. Each recorded call keeps its price snapshot, so later pricing changes preserve historical costs.
 
 ### Use task workflows or the full agent
 
@@ -54,7 +54,16 @@ The unified agent runtime can:
 - ask the author questions and pause at round limits instead of silently guessing;
 - show approval cards before protected edits, conversions, exports, transcription, or command execution.
 
-The task panel and conversational assistant share the same runtime and execution log. Multiple chat sessions can remain available at once.
+The task panel and conversational assistant share the same runtime and execution log. Multiple chat sessions can remain available at once. Failed chat runs offer expandable error details and a continuation retry that preserves completed tool results. Saved long outputs can be continued or generated in sections.
+
+### Use chat shortcuts and external MCP tools
+
+- Type `/help` for available shortcuts or `/mcp` to browse configured servers and load their tool catalogues without sending a conversational model request.
+- Use `/imageGen` for the built-in image route or `/<server>:<tool>` for a discovered MCP tool, followed by your request. The assistant prepares the arguments through the existing approval flow.
+- Enable **MCP servers (Beta)** in Settings → AI Configuration → Lab and import a standard `mcpServers` JSON configuration. This version supports Streamable HTTP; stdio and OAuth are not supported.
+- Review remote calls individually or explicitly allow a server's discovered tools for the current session/task. Header credentials stay in the OS keyring. External service charges are not included in the app's usage ledger.
+
+See [MCP setup and boundaries](docs/feature/agent/mcp-support.md).
 
 ### Build a structured knowledge base
 
@@ -66,7 +75,13 @@ Knowledge-base entries live as Markdown under `.ai-writer/lore/<category>/<entry
 - image galleries and per-category image slots;
 - citations that navigate back to the source entry.
 
-Context assembly combines the current task, document focus, relevant entries, recent material, rolling memory, and optional book-spine summaries. Retrieval is local and does not require an embedding service.
+Context assembly combines the current task, document focus, relevant entries, recent material, rolling memory, and optional book-spine summaries. Name/alias matching works locally without an embedding service.
+
+Optional **Semantic retrieval (Beta)** adds relevant entries using separately configured embedding and/or rerank models. Enable it per project in Lab; its model selections are local to this device. Index preparation and reuse reduce repeated embedding requests. Retrieval sends scoped entry descriptions to the selected endpoint and reports failures while preserving ordinary matching.
+
+A separate opt-in retrieves background passages from the current document for writing tasks, using the current editor snapshot and cached chunks. It bounds background context; the full selected text still goes to the writing model. First-time indexing can incur retrieval charges. See [retrieval setup, limits, and remaining validation](docs/feature/lore/semantic-retrieval-beta.md).
+
+Export the whole knowledge base or selected entries as ZIP bundles, including their facets and local assets. Import into another project with a conflict preview. Selected exports warn about references outside the bundle and preserve those references for review.
 
 ### Adapt the workspace with capability packs
 
@@ -108,8 +123,10 @@ Each pack contributes task definitions and knowledge-base categories without cha
 
 ## Experimental features
 
-Settings → AI Configuration → Lab contains features that are **off by default**. When disabled, their entry points and agent tools are absent rather than shown as permanently unavailable.
+Settings → AI Configuration → Lab contains features that are **off by default**. Most switches hide the related entry points and agent tools when disabled. The ComfyUI switch controls its setup entry; already configured ComfyUI models continue to work.
 
+- MCP servers over Streamable HTTP
+- Project-scoped semantic retrieval, with optional current-document background retrieval
 - PPTX export from HTML slides
 - Word (`.docx`) export with reusable typography presets
 - Excel (`.xlsx`) export from Markdown tables
@@ -156,7 +173,7 @@ Download the installer for your platform from [GitHub Releases](https://github.c
 | Windows | `.msi` or NSIS `.exe` |
 | Linux | `.AppImage` or `.deb` |
 
-Release builds are currently not code-signed. Your operating system may require an explicit first-run confirmation.
+macOS bundles are ad-hoc signed, without a Developer ID certificate or notarization; Windows builds are unsigned. Your operating system may require an explicit first-run confirmation. See [macOS signing details](docs/reference/macos-signing.md).
 
 ### Build from source
 
@@ -194,7 +211,7 @@ pnpm tauri build
 
 1. **Open a folder.** Simple AI Writer initializes `.ai-writer/` without moving or wrapping your existing documents.
 2. **Choose capability packs.** Select any combination during onboarding or later in Settings → Workspace.
-3. **Connect a provider.** Add a provider and model in Settings → Providers & Models, or configure a local endpoint.
+3. **Connect a provider.** Add a provider and model in Settings → Channels & Models, or configure a local endpoint.
 4. **Write or import material.** Create Markdown files, import Office/PDF documents, or add images and recordings.
 5. **Add knowledge.** Create entries in the Knowledge Base and organize details into facets or collections when useful.
 6. **Call AI.** Select text for an edit task, run a continuation, open the assistant, or use the command palette.
@@ -212,7 +229,7 @@ my-project/
 ├── research/
 ├── assets/
 └── .ai-writer/
-    ├── project.db             # project-scoped usage and runtime data
+    ├── project.db             # usage, chats, output recovery, retrieval caches
     ├── profile.json           # enabled capability packs and custom categories
     ├── lore/                  # knowledge-base entries and galleries
     ├── memory/                # rolling context summaries
@@ -224,7 +241,7 @@ my-project/
     └── tmp/                   # conversion and transcription caches
 ```
 
-Installation-scoped provider, model, prompt, and preference data lives in `config.db` under the app data directory. API keys live separately in the OS credential manager.
+Installation-scoped provider, model, fee-group, prompt, format-preset, preference, and global usage data lives in `config.db` under the app data directory. MCP connections and project retrieval selections are device-local preferences excluded from configuration backups. API keys live separately in the OS credential manager.
 
 ---
 
@@ -237,7 +254,8 @@ src/
 ├── lib/
 │   ├── ai/            # provider protocols, streaming, model capabilities, usage
 │   ├── agent/         # tool loop, approvals, routing, compaction, subagents
-│   ├── context/       # RAG assembly, memory, document focus, clock
+│   ├── context/       # RAG, semantic/document retrieval, memory, focus, clock
+│   ├── mcp/           # external tool discovery, approvals, results and assets
 │   ├── lore/          # entry model, facets, collections, citations, galleries
 │   ├── profile/       # capability packs and workspace profile resolution
 │   ├── import/        # docx/xlsx/pdf/pptx → Markdown
@@ -247,6 +265,7 @@ src/
 └── styles/            # design tokens and global cascade
 
 src-tauri/             # Tauri/Rust desktop backend
+prototypes/            # isolated React design studio and fictional UI fixtures
 server/                # optional standalone sync/config-backup server
 docs/                  # living architecture, API, feature, and issue documentation
 themes/                # downloadable themes: Journal, the Phycat suite, and the Morandi Garden pair
@@ -266,7 +285,7 @@ pnpm tauri dev          # normal desktop development loop
 pnpm dev                # browser UI only; native features are unavailable
 pnpm exec tsc --noEmit  # strict TypeScript check; this is the lint gate
 pnpm test               # Vitest
-pnpm build              # type-check and build the frontend
+pnpm build              # type-check and build the app frontend + design studio
 pnpm tauri build        # release bundle for the current platform
 ```
 
@@ -278,10 +297,10 @@ Run these from `src-tauri/`, and again from `server/` when changing the companio
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
-cargo build
+cargo build --locked
 ```
 
-The pull-request gate runs the same checks. See [`docs/reference/ci.md`](docs/reference/ci.md) for the exact workflow and platform packages.
+The app Rust job also runs `cargo test -p tauri-plugin-http` for the patched HTTP transport. The pull-request gate runs these checks, with Rust and server jobs conditional on the changed paths. See [`docs/reference/ci.md`](docs/reference/ci.md) for the exact workflow and platform packages.
 
 ### Documentation for contributors
 
@@ -290,7 +309,6 @@ For UX/UI design reviews, run `pnpm prototypes:dev` and open
 interactive controls, and a fictional writing/approval flow. The
 [prototype guide](prototypes/README.md) explains how to add and review screens;
 [the design system](docs/reference/design-system.md) remains authoritative.
-
 
 - [`AGENTS.md`](AGENTS.md) — authoritative project guide; edit it directly for repository rules, architecture overview, and required reading before changing a subsystem. `CLAUDE.md` imports it for compatibility; no regeneration is needed
 - [`docs/reference/architecture.md`](docs/reference/architecture.md) — storage, RAG, providers, streaming, exports, IPC, and security details
@@ -308,8 +326,9 @@ When contributing, branch from `main` with a `feat/`, `fix/`, `chore/`, `docs/`,
 - Project documents and knowledge-base files remain in the selected local folder.
 - Filesystem commands are fenced to explicitly scoped paths by the Tauri backend.
 - API credentials are stored in the OS credential manager.
-- Provider requests go directly to the endpoint configured by the author.
-- Protected writes and paid or high-risk actions use proposal/approval cards.
+- AI, retrieval, and MCP requests go to the endpoints configured by the author.
+- Optional semantic indexing sends eligible entry descriptions or document chunks to the selected retrieval service; default name/alias matching stays local.
+- Protected edits, exports, transcription, command execution, and external MCP calls use approval cards or their explicit approval policies. AI and retrieval requests incur usage when run through their configured workflows.
 - Imported and converted source files are never modified in place.
 - Optional sync is self-hosted and uses explicit push/pull plans; it is not live collaborative editing.
 
