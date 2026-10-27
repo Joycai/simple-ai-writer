@@ -19,6 +19,7 @@
  */
 
 import { getDb, getGlobalDb } from "../project";
+import { withUsageClear } from "./usageOutbox";
 
 export type UsageWindow = "today" | "7d" | "30d" | "all";
 
@@ -36,6 +37,13 @@ export interface UsageBucket {
   outputUnits: number;
   /** 按规格计费却没命中任何档位、上游也没报价的请求数——按 0 计的那些。 */
   uncovered: number;
+  incompleteUsage: number;
+  incompleteInput: number;
+  incompleteCache: number;
+  incompleteOutput: number;
+  incompleteFresh: number;
+  freshTokens: number;
+  incompleteCost: number;
   costUsd: number;
   /**
    * `costUsd` 按「钱花在哪一种量上」拆开的六份，用量页的计量条按它上色。
@@ -122,6 +130,13 @@ export function rowToBucket(r: Record<string, unknown>): UsageBucket {
     completionTokens: num(r.completion_tokens),
     outputUnits: num(r.output_units),
     uncovered: num(r.uncovered),
+    incompleteUsage: num(r.incomplete_usage),
+    incompleteInput: num(r.incomplete_input),
+    incompleteCache: num(r.incomplete_cache),
+    incompleteOutput: num(r.incomplete_output),
+    incompleteFresh: num(r.incomplete_fresh),
+    freshTokens: num(r.fresh_tokens),
+    incompleteCost: num(r.incomplete_cost),
     costUsd: num(r.cost_usd),
     costInput: num(r.cost_input),
     costCache: num(r.cost_cache),
@@ -143,6 +158,13 @@ export function sumBuckets(key: string, buckets: UsageBucket[]): UsageBucket {
       completionTokens: acc.completionTokens + b.completionTokens,
       outputUnits: acc.outputUnits + b.outputUnits,
       uncovered: acc.uncovered + b.uncovered,
+      incompleteUsage: acc.incompleteUsage + b.incompleteUsage,
+      incompleteInput: acc.incompleteInput + b.incompleteInput,
+      incompleteCache: acc.incompleteCache + b.incompleteCache,
+      incompleteOutput: acc.incompleteOutput + b.incompleteOutput,
+      incompleteFresh: acc.incompleteFresh + b.incompleteFresh,
+      freshTokens: acc.freshTokens + b.freshTokens,
+      incompleteCost: acc.incompleteCost + b.incompleteCost,
       costUsd: acc.costUsd + b.costUsd,
       costInput: acc.costInput + b.costInput,
       costCache: acc.costCache + b.costCache,
@@ -154,7 +176,8 @@ export function sumBuckets(key: string, buckets: UsageBucket[]): UsageBucket {
     }),
     {
       key, calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, outputUnits: 0,
-      uncovered: 0, costUsd: 0,
+      incompleteInput: 0, incompleteCache: 0, incompleteOutput: 0, incompleteFresh: 0, freshTokens: 0,
+      uncovered: 0, costUsd: 0, incompleteUsage: 0, incompleteCost: 0,
       costInput: 0, costCache: 0, costOutput: 0, costCount: 0, costDuration: 0, costOther: 0,
       costUnsplit: 0,
     },
@@ -194,13 +217,13 @@ type UsageSortDir = "asc" | "desc";
 /** Uncached ("fresh") input — `cachedTokens` is a subset of `promptTokens`,
  *  so the input column is the difference, not the raw prompt figure. */
 function freshInput(b: UsageBucket): number {
-  return Math.max(0, b.promptTokens - b.cachedTokens);
+  return b.freshTokens;
 }
 
 /** A group with no prompt tokens has no meaningful hit rate; -1 sorts those
  *  rows below every real ratio in descending order (where they read as "—"). */
 function cacheHitRatio(b: UsageBucket): number {
-  return b.promptTokens > 0 ? b.cachedTokens / b.promptTokens : -1;
+  return !b.incompleteInput && !b.incompleteCache && b.promptTokens > 0 ? b.cachedTokens / b.promptTokens : -1;
 }
 
 /**
@@ -275,7 +298,16 @@ export type UsageScope = "project" | "global";
  * `cost_input IS NULL` 就是「这一行没有分项快照」的判据：新行六列必写（哪怕
  * 是 0），老行六列全空。所以拿第一列判一次就够，不必六列都查。
  */
+// Old complete rows have all fields; ambiguous historical rows stay unknown.
+const knownMask = "COALESCE(usage_known, CASE WHEN usage_incomplete = 0 THEN 7 ELSE 0 END)";
 export const ROLLUP_SELECT = `COUNT(*) AS calls,
+         SUM(CASE WHEN (${knownMask} & 1) = 0 THEN 1 ELSE 0 END) AS incomplete_input,
+         SUM(CASE WHEN (${knownMask} & 2) = 0 THEN 1 ELSE 0 END) AS incomplete_cache,
+         SUM(CASE WHEN (${knownMask} & 4) = 0 THEN 1 ELSE 0 END) AS incomplete_output,
+         SUM(CASE WHEN (${knownMask} & 3) != 3 THEN 1 ELSE 0 END) AS incomplete_fresh,
+         SUM(CASE WHEN (${knownMask} & 3) = 3 THEN MAX(0, prompt_tokens - cached_tokens) ELSE 0 END) AS fresh_tokens,
+         SUM(CASE WHEN usage_incomplete IS NULL OR usage_incomplete = 1 THEN 1 ELSE 0 END) AS incomplete_usage,
+         SUM(CASE WHEN cost_incomplete = 1 OR (cost_incomplete IS NULL AND reported_cost IS NULL) THEN 1 ELSE 0 END) AS incomplete_cost,
          SUM(prompt_tokens) AS prompt_tokens,
          SUM(cached_tokens) AS cached_tokens,
          SUM(completion_tokens) AS completion_tokens,
@@ -356,12 +388,14 @@ export function groupBuckets(
  * 在总体范围里带上 `projectPath` 则只清这个项目在总账里的那些行。
  */
 export async function clearUsage(scope: UsageScope, projectPath: string | null): Promise<void> {
-  const db = await dbFor(scope, projectPath);
-  if (scope === "global" && projectPath) {
-    await db.execute("DELETE FROM token_usage WHERE project = ?", [projectPath]);
-    return;
-  }
-  await db.execute("DELETE FROM token_usage");
+  await withUsageClear(scope, projectPath, async () => {
+    const db = await dbFor(scope, projectPath);
+    if (scope === "global" && projectPath) {
+      await db.execute("DELETE FROM token_usage WHERE project = ?", [projectPath]);
+    } else {
+      await db.execute("DELETE FROM token_usage");
+    }
+  });
 }
 
 /**

@@ -194,6 +194,7 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
   一个完整的 `FeeGroup`（三种方式的字段全在），分段控件只改 `billingMode`：**切方式
   只换下面的字段区，不清空别的方式的值**。列表行首 7px 方块沿用模型抽屉节目录的记号
   （实心 = 配了价，虚线 = 全是 0）。
+- 用量清空使用主题化 `ConfirmDialog`；数量完整性按输入 / 缓存 / 输出分别呈现，缺缓存不掩盖已知输出零。
 - 用量页有两排 chip：范围（本项目 / 全部）在上，时间窗在下——先问「哪一份账」，再问
   「哪一段时间」。分组条只有一个强调色、长度表示占比（份额用长度，种类用词：这个
   仓库只有一个强调色，把成本拆成五段上色要么互相认不出，要么逼出一套新色板）。
@@ -343,7 +344,7 @@ CommandPalette, onboarding flow, library view (文库: only what the author pick
 - the snippet library's pure layer (`snippets.ts` — grouping/search/hit-slicing shared by the picker and Settings → Prompt, so both surfaces section a library the same way; see `docs/feature/prompt-snippets-ui-brief.md`)
 #### 计费与用量
 
-- `streamUsage` collects per-network-attempt reported snapshots for metered streams, replacing cumulative fields rather than summing frames. `streamCompletion` finalizes them through `recordUsage` on success/failure/cancellation; callers pass accounting context and never write a duplicate run aggregate. Nullable request IDs deduplicate each ledger; `usage_evidence` preserves unknown fields and outcome. See billing § Failed streaming attempts for scope and best-effort delivery limits.
+- `streamUsage` collects per-network-attempt reported snapshots for metered streams, replacing cumulative fields rather than summing frames. `streamCompletion` finalizes them through `recordUsage` on success/failure/cancellation; callers pass accounting context and never write a duplicate run aggregate. Request IDs deduplicate each ledger; `usage_evidence` preserves unknown fields and outcome. `usageOutbox` persists immutable per-ledger receipts before delivery and replays at startup / every 30 seconds; `usage_incomplete` / `cost_incomplete` drive unknown/partial labels in Settings. Image and ASR results carry stable IDs into the same writer. See billing § Failed streaming attempts for scope and best-effort delivery limits.
 价格在**计费组**上（`feeGroup*`），模型只持有 `feeGroupId`；用量行由 `usageRow.ts` 的 `recordUsage` 唯一入口写两处（项目库 + `config.db`），行上自带当时的价，`costOf()` 是唯一的算式；读那一侧（`usage.ts`）、给老行补分项（`usageBackfill.ts`，唯一改写历史行的地方）、用量条分段（`usageMeter.ts`）、上游报价换算（`reportedCost.ts`）各一个文件。**逐文件的分工、不变量和理由都在 [`docs/feature/billing/01-fee-groups.md`](../feature/billing/01-fee-groups.md) 的「模块」一节**，改这些文件之前读那里；硬规则在 `AGENTS.md`「计费与用量」。
 
 #### 图片与日志

@@ -1,3 +1,4 @@
+import { startUsageDelivery } from "./lib/ai/usageOutbox";
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { AnimatePresence, MotionConfig } from "motion/react";
 import "./styles/global.css";
@@ -112,12 +113,15 @@ export default function App() {
   }, [storedView, view, setMainView]);
 
   useEffect(() => {
-    loadConfig();
+    let stop: (() => void) | undefined;
+    let disposed = false;
+    void loadConfig().then(() => { if (IS_TAURI && !disposed) stop = startUsageDelivery(); });
     // The command tool's description names the machine's shell, and tool
     // definitions are built synchronously — so the probe runs once at boot,
     // and only when the Beta is on: an author who never opened it never pays
     // it (lib/cli/shell, docs/feature/agent/shell-command-plan.md §3.3).
     if (IS_TAURI && isCliEnabled()) void shellInfo();
+    return () => { disposed = true; stop?.(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

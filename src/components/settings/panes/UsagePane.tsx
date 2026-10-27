@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+import { ConfirmDialog } from "../../common/ConfirmDialog";
+import { retryUsageDelivery, subscribeUsageDelivery, usageDeliverySnapshot } from "../../../lib/ai/usageOutbox";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { useAiStore } from "../../../stores/aiStore";
 import { useProjectStore } from "../../../stores/projectStore";
@@ -35,7 +37,7 @@ type Dimension = "group" | "model" | "task" | "project";
 /** `cachedTokens` is a subset of `promptTokens` (see configDb.costFor), so the
  *  "fresh input" column is the difference, not the raw prompt figure. */
 function uncached(b: UsageBucket): number {
-  return Math.max(0, b.promptTokens - b.cachedTokens);
+  return b.freshTokens;
 }
 
 /**
@@ -60,7 +62,7 @@ function pctText(share: number): string {
 }
 
 function hitRate(b: UsageBucket): string {
-  if (b.promptTokens <= 0) return "—";
+  if (b.incompleteInput || b.incompleteCache || b.promptTokens <= 0) return "—";
   return `${Math.round((b.cachedTokens / b.promptTokens) * 100)}%`;
 }
 
@@ -76,6 +78,12 @@ function hitRate(b: UsageBucket): string {
  */
 export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
   const { t, i18n: i18nInst } = useTranslation();
+  const delivery = useSyncExternalStore(subscribeUsageDelivery, usageDeliverySnapshot);
+  const quantity = (n: number, incomplete: number) => incomplete
+    ? n > 0 ? t("systemSettings.usage.knownValue", { value: formatTokenCount(n) }) : t("systemSettings.usage.unknownUsage")
+    : formatTokenCount(n);
+  const amount = (b: UsageBucket) => b.incompleteCost
+    ? t("systemSettings.usage.incompleteAmount", { amount: formatUsd(b.costUsd) }) : formatUsd(b.costUsd);
   const isZh = i18nInst.language.startsWith("zh");
   const projectPath = useProjectStore((s) => s.projectPath);
   const models = useAiStore((s) => s.models);
@@ -93,6 +101,7 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
   });
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // 总体那份不需要开着项目：它正是「项目删了、移走了，这一年花了多少还在」
@@ -110,7 +119,7 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
       .catch((e) => { if (!cancelled) setError(String(e)); })
       .finally(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; };
-  }, [scope, projectPath, window]);
+  }, [scope, projectPath, window, delivery.revision]);
 
   // 「按项目」在本项目范围下永远只有一行——切回去时把维度带回来，免得
   // 作者看到一个只有一行、还是自己的表。
@@ -126,8 +135,7 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
    */
   const handleClear = async () => {
     if (busy) return;
-    const key = scope === "global" ? "clearConfirmGlobal" : "clearConfirm";
-    if (!globalThis.confirm(t(`systemSettings.usage.${key}`))) return;
+    setConfirmClear(false);
     setBusy(true);
     try {
       await clearUsage(scope, scope === "global" ? null : projectPath);
@@ -188,6 +196,14 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
   if (scope === "project" && !projectPath) {
     return (
       <Pane width="wide">
+      {(delivery.pending > 0 || delivery.failed) && (
+        <div className={ui.usageGap} role="status">
+          <span>{t(delivery.volatile > 0 ? "systemSettings.usage.deliveryVolatile" : delivery.pending > 0 ? "systemSettings.usage.deliveryPending" : "systemSettings.usage.deliveryFailed", { n: delivery.pending })}</span>
+          <button type="button" className={ui.usageGapLink} onClick={() => { void retryUsageDelivery(); }}>
+            {t("systemSettings.usage.retryDelivery")}
+          </button>
+        </div>
+      )}
         <PaneHeader title={t("systemSettings.tabs.usage")} sub={t("systemSettings.usage.paneSub")} />
         <div className={ui.emptyNote}>{t("systemSettings.usage.noProjectScoped")}</div>
         <Section label={t("systemSettings.usage.scope")}>
@@ -325,13 +341,13 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
         {
           key: "input",
           label: t("systemSettings.usage.cards.input"),
-          value: formatTokenCount(total.promptTokens),
-          sub: t("systemSettings.usage.cards.inputSub", { cached: formatTokenCount(total.cachedTokens) }),
+          value: quantity(total.promptTokens, total.incompleteInput),
+          sub: t("systemSettings.usage.cards.inputSub", { cached: quantity(total.cachedTokens, total.incompleteCache) }),
         },
         {
           key: "output",
           label: t("systemSettings.usage.cards.output"),
-          value: formatTokenCount(total.completionTokens),
+          value: quantity(total.completionTokens, total.incompleteOutput),
           sub: t("systemSettings.usage.cards.outputSub"),
         },
         {
@@ -343,7 +359,7 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
         {
           key: "cost",
           label: t("systemSettings.usage.cards.cost"),
-          value: formatUsd(total.costUsd),
+          value: amount(total),
           sub: t("systemSettings.usage.cards.costSub"),
         },
       ]
@@ -351,6 +367,14 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
 
   return (
     <Pane width="wide">
+      {(delivery.pending > 0 || delivery.failed) && (
+        <div className={ui.usageGap} role="status">
+          <span>{t(delivery.volatile > 0 ? "systemSettings.usage.deliveryVolatile" : delivery.pending > 0 ? "systemSettings.usage.deliveryPending" : "systemSettings.usage.deliveryFailed", { n: delivery.pending })}</span>
+          <button type="button" className={ui.usageGapLink} onClick={() => { void retryUsageDelivery(); }}>
+            {t("systemSettings.usage.retryDelivery")}
+          </button>
+        </div>
+      )}
       <PaneHeader
         title={t("systemSettings.tabs.usage")}
         /* 副标题直接说这一份账存在哪：两本账的差别是「存在哪、活多久」，
@@ -435,17 +459,21 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
                     {meterBar(b)}
                   </div>
                   <span className={ui.usageNum}>{b.calls.toLocaleString("en-US")}</span>
-                  <span className={ui.usageNum}>{formatTokenCount(uncached(b))}</span>
-                  <span className={`${ui.usageNum} ${ui.usageNumMuted} ${ui.hideNarrow}`}>{formatTokenCount(b.cachedTokens)}</span>
-                  <span className={ui.usageNum}>{formatTokenCount(b.completionTokens)}</span>
+                  <span className={ui.usageNum}>{quantity(uncached(b), b.incompleteFresh)}</span>
+                  <span className={`${ui.usageNum} ${ui.usageNumMuted} ${ui.hideNarrow}`}>{quantity(b.cachedTokens, b.incompleteCache)}</span>
+                  <span className={ui.usageNum}>{quantity(b.completionTokens, b.incompleteOutput)}</span>
                   <span className={`${ui.usageNum} ${ui.usageNumMuted} ${ui.hideNarrow}`}>{hitRate(b)}</span>
-                  {/* A priced model always bills something, so a zero here means
-                      "no price configured" rather than "this run was free". */}
                   <span className={`${ui.usageNum} ${ui.usageNumCost}`}>
-                    {b.costUsd > 0 ? formatUsd(b.costUsd) : "—"}
+                    {b.incompleteCost ? b.costUsd > 0 ? `≈ ${formatUsd(b.costUsd)}` : t("systemSettings.usage.unknownUsage") : formatUsd(b.costUsd)}
                   </span>
                   {/* 没命中任何档位的请求按 0 计——不是错误，是还没配完，所以
                       写成一行提示而不是警示色，并且给一条直达补表的路。 */}
+                  {b.incompleteCost > 0 && (
+                    <div className={ui.usageGap}>{t("systemSettings.usage.incompleteCost", { n: b.incompleteCost })}</div>
+                  )}
+                  {b.incompleteUsage > 0 && (
+                    <div className={ui.usageGap}>{t("systemSettings.usage.incompleteUsage", { n: b.incompleteUsage })}</div>
+                  )}
                   {b.uncovered > 0 && (
                     <div className={ui.usageGap}>
                       <span>{t("systemSettings.usage.uncovered", { n: b.uncovered })}</span>
@@ -474,13 +502,21 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
         >
           <button
             className={ui.rowBtn}
-            onClick={handleClear}
+            onClick={() => setConfirmClear(true)}
             disabled={busy || !summary || summary.total.calls === 0}
           >
             {t(`systemSettings.usage.clearLabel.${scope}`)}
           </button>
         </Row>
       </Section>
+      {confirmClear && <ConfirmDialog
+        title={t(`systemSettings.usage.clearLabel.${scope}`)}
+        message={t(`systemSettings.usage.${scope === "global" ? "clearConfirmGlobal" : "clearConfirm"}`)}
+        confirmLabel={t(`systemSettings.usage.clearLabel.${scope}`)}
+        danger
+        onConfirm={() => { void handleClear(); }}
+        onClose={() => setConfirmClear(false)}
+      />}
     </Pane>
   );
 }

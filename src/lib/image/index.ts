@@ -173,9 +173,10 @@ export async function recordImageUsage(
   model: Model,
   task: string,
   images: number,
-  usage?: { inputTokens: number; outputTokens: number },
+  usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number },
   spec: { size?: unknown; quality?: unknown; seconds?: unknown } = {},
   inputImages = 0,
+  requestId?: string,
 ): Promise<void> {
   // `model.id`，不是 `model.modelId`：别的写入方记的都是配置里的内部 id，
   // 这里曾经记供应商的模型串，于是同一列里混了两套标识空间，用量卷不出
@@ -183,8 +184,10 @@ export async function recordImageUsage(
   await recordUsage(projectPath, {
     model,
     task,
-    promptTokens: usage?.inputTokens ?? 0,
-    completionTokens: usage?.outputTokens ?? 0,
+    requestId,
+    promptTokens: usage?.inputTokens,
+    completionTokens: usage?.outputTokens,
+    cachedTokens: usage?.cachedTokens,
     outputUnits: images,
     spec,
     inputImages,

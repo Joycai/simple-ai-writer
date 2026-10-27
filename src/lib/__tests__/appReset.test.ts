@@ -1,3 +1,4 @@
+vi.mock("../ai/usageOutbox", () => ({ withUsageClear: vi.fn(async (_scope: string, _project: string | null, clear: () => Promise<void>) => clear()) }));
 /**
  * resetApp — 清除的顺序，以及被拒绝时的停手。
  *
@@ -177,4 +178,14 @@ it("includes MCP credentials in reset before their preference rows are cleared",
     expect(h.clearAllSecrets.mock.calls[0][0]).toContain("mcp:images");
     expect(h.timeline.findIndex((x) => x.startsWith("secrets:"))).toBeLessThan(h.timeline.indexOf("prefs:cleared"));
   } finally { h.mcp = []; }
+});
+
+
+it("refuses unresolved recovery before deleting secrets or configuration", async () => {
+  const { withUsageClear } = await import("../ai/usageOutbox");
+  vi.mocked(withUsageClear).mockRejectedValueOnce(new Error("pending recovery"));
+  await expect(resetApp()).rejects.toThrow("pending recovery");
+  expect(h.clearAllSecrets).not.toHaveBeenCalled();
+  expect(h.invoke.mock.calls.filter(([cmd]) => cmd === "sqlite_transaction")).toHaveLength(0);
+  expect(h.clearAllPrefs).not.toHaveBeenCalled();
 });

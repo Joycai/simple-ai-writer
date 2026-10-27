@@ -44,7 +44,7 @@
    估算照样快照在同一行上。
 6. **一次请求记两处。** 项目库（`.ai-writer/project.db`，跟着项目文件夹走）和
    总账（`appDataDir/config.db` 的 `token_usage`，多一列 `project`，比任何一个
-   项目活得久）。两处各自 try，永不抛错。
+   项目活得久）。两处独立投递；先持久保存收据，失败可重试，永不遮蔽生成结果。
 7. **记账只有一个写入口。** `lib/ai/usageRow.recordUsage`；纯函数 `buildUsageRow`
    把「这次请求的事实 + 模型绑的价」变成要写下去的那一行。
 8. **「按计费组」统计按当前归属，不按快照。** 行上快照的是**价**，不是归属；
@@ -83,7 +83,7 @@
 - `feeGroupList.ts` 是列表怎么分段、怎么过滤，以及两个下拉的选项表。纯的，不碰库也不碰 store。
 - **一次请求记两处**（`usageRow.ts` 的唯一写入口 `recordUsage`）：项目
   `.ai-writer/project.db`（跟着项目文件夹走）与 appDataDir 的 `config.db`（多一列
-  `project`，比任何一个项目活得久）。两处各自 try、永不抛错——记账不能把一次
+  `project`，比任何一个项目活得久）。两处独立投递、失败由 `usageOutbox` 持久重试——记账不能把一次
   已经交付并且上游已经收了钱的请求变成失败。两张表的结构共用 `usageSchema.ts`
   一处定义（长歪了，用量页在「本项目 / 全部」之间一切就会少掉几列，而那种少法不报错）。
 - **行自带价格**：`buildUsageRow` 把当时的模式 / 单价 / 数量 / 规格抄在行上，
@@ -425,13 +425,145 @@ The migrated paths are the existing metered streaming consumers: writing drafts 
 
 - All five adapters report usage as soon as the wire provides it, including usage on refusal/failure frames where present. The callback runs before delivering content from the same frame, so a UI cancellation cannot erase already received evidence. Only finite, nonnegative numeric values qualify. No token count is inferred from text length, `total_tokens`, elapsed time or the prompt estimate.
 - Reports are cumulative snapshots within a physical request. Later present fields replace earlier ones; absent fields do not erase them. Anthropic input/cache buckets and Gemini thought/tool-input buckets are normalized with their existing protocol meanings. Explicit zero remains reported zero. Trusted upstream cost still comes exclusively through `reportedCostOf` and overrides the fee calculation for that individual attempt.
-- A successful request keeps existing per-request pricing even when the endpoint omits usage. A failed/cancelled request is recorded only if at least one valid usage/cost field was received. Its token cost uses only reported counts and the request-time fee snapshot through `costOf`; its flat `request_count` is zero because failure alone does not prove a request fee was charged. Missing quantities cannot be priced. Failed requests without usage produce no charge row; this is **unknown billing**, never a claim that the provider charged nothing.
-- New nullable `usage_evidence` JSON stores `outcome` (`complete`, `failed`, `cancelled`), `source` (`reported`, `unreported`) and the actual normalized fields. Missing fields remain absent here, even though legacy aggregate numeric columns use zero. An unsuccessful snapshot may be only a lower bound on the provider's final usage. Aggregate Settings totals sum known recorded cost; there is no new per-attempt evidence inspector in this patch.
+- A successful request keeps existing per-request pricing even when the endpoint omits usage. A failed/cancelled request is recorded only if at least one valid usage/cost field was received. Its token cost uses only reported counts and the request-time fee snapshot through `costOf`; its flat `request_count` is zero because failure alone does not prove a request fee was charged. Missing quantities cannot be priced. Since 1.99.25 failed requests without usage retain a zero-known-cost row marked incomplete, with `request_count = 0`; this is **unknown billing**, never a claim that the provider charged nothing.
+- New nullable `usage_evidence` JSON stores `outcome` (`complete`, `failed`, `cancelled`), `source` (`reported`, `unreported`) and the actual normalized fields. Missing fields remain absent here, even though legacy aggregate numeric columns use zero. An unsuccessful snapshot may be only a lower bound on the provider's final usage. Aggregate Settings totals sum known recorded cost; since 1.99.25 the Settings page also exposes incomplete counts and costs. There is no per-attempt evidence inspector.
 
 ### Attempt identity, retries and limits
 
 Each actual adapter request starts a UUID `request_id`. Anthropic continuation legs are separate requests; a completed leg is recorded even if the next leg fails. Each agent round, manual retry, output-recovery section and translation retry also gets a new ID. These really are new upstream requests and are not deduplicated against the earlier failed attempt. Capability fallback 400s without usage create no charge row. Receiving usage counts as stream activity and prevents automatic capability replay after that evidence.
 
-The collector finalizes each attempt once and ignores late reports after settlement. Each ledger has a partial unique index on non-null `request_id`; `recordUsage` uses conflict-do-nothing for that key. Repeating a write of the same attempt cannot duplicate a committed row, and retrying the same write can fill the other ledger if only one sink previously succeeded. Rows without IDs, including historical records and non-streaming callers, retain their old insert behavior. Migration adds nullable columns/indexes only; it does not invent evidence for or reprice historical rows.
+The collector finalizes each attempt once and ignores late reports after settlement. Each ledger has a partial unique index on non-null `request_id`; `recordUsage` uses conflict-do-nothing for that key. Repeating a write of the same attempt cannot duplicate a committed row, and retrying the same write can fill the other ledger if only one sink previously succeeded. Historical rows without IDs retain their old insert behavior. Since 1.99.25 every new receipt has an ID; image and transcription results carry stable identities. Migration adds nullable columns/indexes only; it does not invent evidence for or reprice historical rows.
 
-This is idempotent, best-effort accounting, not a distributed exactly-once delivery guarantee: the two databases still commit independently, there is no durable outbox or automatic database retry, and a process crash before finalization can lose the current in-memory snapshot. Errors and cancellations remain errors/cancellations; recording never resumes generation. No paid endpoint tests are required or run for this change. Offline protocol fixtures, lifecycle tests and real SQLite migrations/deduplication checks cover the contract.
+The initial 1.99.16 implementation was idempotent, best-effort accounting with no durable outbox. Version 1.99.25 adds the recovery mechanism below. The two databases still commit independently, and a process crash before finalization can lose the current in-memory stream snapshot. Errors and cancellations remain errors/cancellations; recording never resumes generation. No paid endpoint tests are required or run for this change. Offline protocol fixtures, lifecycle tests and real SQLite migrations/deduplication checks cover the contract.
+
+
+## Unknown usage and durable recovery (1.99.25)
+
+### Evidence and presentation
+
+`usage_incomplete` and `cost_incomplete` are nullable integer snapshots shared by both
+ledgers. New rows explicitly store 0/1; historical rows stay NULL because absence of
+old evidence cannot be repaired by guessing. The read side aggregates these flags in
+SQL, and group/total folding carries both counts without recalculating money.
+
+- Token details are incomplete when input, output, or cache quantity is absent or invalid.
+  Explicit numeric zero is known. Image adapters no longer replace absent usage fields
+  with zero. Legacy numeric columns retain their existing non-null/zero representation;
+  the completeness flags and streaming `usage_evidence` carry the missingness.
+- Costs are incomplete when there is no configured fee, an attempt was interrupted,
+  required quantities are missing, or a specification rate was not matched. A missing
+  cache quantity only makes token cost incomplete when cache and input prices differ.
+  Known image counts or ASR seconds can fully price a spec/request fee without token
+  details. Trusted complete quotes, including zero, cover the monetary estimate while
+  leaving token completeness independent.
+- The page labels partial token counts as known quantities, zero unknown quantities as
+  unknown, suppresses an unreliable cache ratio, and labels partial money as incomplete.
+  The known subtotal is **not a lower-bound promise**: missing cache details can make
+  an input-price estimate higher than the eventual bill. Explicitly known free cost is
+  shown as $0, not hidden. Historical rows without a quote are conservatively incomplete;
+  their stored amounts remain untouched.
+- Failed/cancelled metered stream attempts without usage are now retained as unknown,
+  including capability refusals. They increment attempt counts but get no invented flat
+  request charge. This changes call-count totals intentionally; it does not assert billing.
+
+### Immutable receipts and replay
+
+`usageOutbox.ts` writes one immutable JSON receipt **per ledger** under
+`appDataDir/usage-outbox/`. The receipt contains the versioned INSERT values (including
+original price, quantities, amount, timestamp, request ID and completeness); it contains
+no prompt, output content, API key or executable SQL. Version 1's value layout is the
+`USAGE_INSERT_COLUMNS` contract; a future layout change must migrate pending receipts
+rather than merely changing the expected array length.
+
+Both receipts are written using unique temporary names and rename **before either
+ledger is written**. After a successful idempotent INSERT, only that ledger's receipt is
+removed. A crash between INSERT and receipt removal leads to harmless replay through
+the partial unique `request_id` index. A different window may acknowledge the same
+receipt; missing receipt files are treated as already acknowledged. Repricing and
+resubmitting generation are never part of recovery.
+
+Replay runs after configuration startup, every 30 seconds, on new usage writes, and
+from the page's retry button. Local operations serialize; separate windows rely on
+ledger uniqueness and deletion tombstones. Bad receipts stay on disk and report failure without blocking other
+valid receipts. A missing/inaccessible project remains pending; recovery never creates
+its database. Reopening the project restores its filesystem scope for the next retry.
+Global delivery proceeds independently.
+
+If the receipt store itself fails, the receipt remains in memory and both ledger writes
+are still attempted. The page distinguishes pending durable receipts from those not yet
+saved, asks the author to keep the app open for the latter, and exposes recovery failure.
+There is no claim of durability before a receipt rename succeeds, nor of power-loss
+fsync guarantees. Process termination before receipt persistence / stream finalization
+can still lose evidence. Neither a database nor receipt-store failure turns an already
+obtained generation result into an API failure.
+
+Clearing usage and app reset first drain recovery and refuse while recovery is unresolved;
+otherwise old pending receipts could restore cleared statistics. Pending project-only
+receipts do not block clearing a successfully delivered global ledger. The guard serializes
+within a window. In each ledger, an AFTER DELETE trigger retains only deleted request IDs
+in `usage_deleted_requests`; a BEFORE INSERT trigger ignores their replay. The marker is
+committed or rolled back with the DELETE, preventing another window’s already-in-flight
+INSERT from restoring cleared rows. Markers are deliberately retained across app reset:
+there is no safe time limit for a delayed receipt. They contain no quantities, prices or
+project paths. Requests not yet delivered at clear time remain new traffic, not deleted
+history. Recovery preflight runs before keyring deletion; secrets still precede config rows.
+Receipt deletion
+and two-ledger commit are intentionally separate; this is idempotent recovery, not an
+exactly-once distributed database protocol.
+
+### Image and transcription identities
+
+- `generateImage` allocates a UUID for each generation invocation and returns it on the
+  result. Normal materialization, stale-result billing and illustration billing pass that
+  same ID to `recordImageUsage`; re-delivering the same result cannot add another row.
+  A new generation/retry gets a different ID. Internal transport attempts that return no
+  usable result do not acquire inferred image quantities.
+- Synchronous ASR creates a new UUID for recognition. Asynchronous ASR derives identity
+  from a hash of endpoint + model + upstream task ID, so resuming a saved task keeps its identity;
+  replacing an expired task changes it. Cache hits remain unbilled. A successful ASR
+  response without billed seconds now writes an incomplete row rather than disappearing.
+- Billing is before writing image candidates, illustration assets or a transcription's
+  final document, so a later output-file write failure cannot erase the received usage.
+  API/download/parsing failures before a usable media result remain outside these media
+  receipt paths; this change does not invent vendor billing evidence for them.
+
+### Verification
+
+Offline regression covers unknown vs zero, trusted zero quotes, partial streams, missing
+cache details, specification quantities, legacy NULL flags, image/ASR identity forwarding,
+ASR cache hits and resumed tasks, SQLite migrations and per-sink deduplication. Real
+SQLite plus temporary filesystem tests exercise durable restart replay, original pricing
+and timestamps, volatile fallback, two receipts before first INSERT, missing projects,
+malformed receipts and clear guards. No video implementation or paid-provider reconciliation
+is included.
+
+
+### Review corrections: completeness and themed controls
+
+`usage_known` stores independent input/cache/output presence bits (1/2/4). Missing cache
+no longer hides a reported output zero. Uncached input is summed only from rows with both
+input and cache known: subtracting incomplete aggregate cache from total input would
+incorrectly label an upper bound as known usage. Cache hit rate requires input and cache,
+not output. Old fully complete rows imply all bits; ambiguous old rows remain unknown.
+Pending receipts from the earlier layout acquire a NULL mask during parsing, preserving
+snapshots without inventing per-field evidence.
+
+The usage clear action uses the shared `ConfirmDialog`/`ModalShell` and its theme tokens;
+no native browser confirm is used. The redundant native amount tooltip was removed;
+incompleteness stays visible in the amount and row notes. Recovery buttons continue to
+use `usageGapLink` and the shared focus styles.
+
+Regression tests cover reset refusal before secrets, a paused cross-window INSERT resumed
+after clear, deletion-marker rollback and ledger isolation, and mixed known/unknown
+field aggregation with an explicit output zero.
+
+
+### Partial cache evidence
+
+When only cache tokens are reported, the row retains that known quantity instead of
+clamping it against an unknown input total represented by zero. The total-input presence
+bit stays unset; only the reported cache bucket is priced through `costOf`, with zero
+known fresh input and an incomplete cost. Evidence fields are the source for both values
+and presence bits, so fallback counters cannot contradict the evidence snapshot.
+Image adapters reuse the existing protocol usage normalizer, preserving reported cache
+counts (including zero) and Gemini thought tokens without inventing missing fields.
