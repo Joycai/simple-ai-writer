@@ -179,10 +179,14 @@ create ambiguous selections. Tool descriptions render as plain text.
 Selecting a command replaces only its editable prefix and preserves the request,
 including whitespace and multiline text. Unrecognized slash-prefixed prose and
 file paths remain ordinary chat messages. Arrow keys select, Enter
-inserts, Escape dismisses, and forward Tab explicitly enters the catalogue
+completes a partial command or submits an already complete command, Escape dismisses, and forward Tab explicitly enters the catalogue
 buttons. The panel follows the textarea in DOM order, while CSS places it
 visually above; subsequent Tabs reach the footer without cycling back through the
-input. Shift+Tab retains native backward traversal. Add a natural
+input. The menu floats above the composer and scrolls within the available viewport
+height, so opening it cannot push the input or send controls below the window.
+Submitting `/help` or `/mcp` focuses the local browser panel; these commands do not
+send a model request. Exact commands pass through to submission instead of repeatedly
+inserting the same prefix. Shift+Tab retains native backward traversal. Add a natural
 language request after an execution command, then send. The first version expands
 that command into an explicit request to the existing assistant (the transcript
 keeps the author’s original command): MCP requests identify the exact server/tool and request current

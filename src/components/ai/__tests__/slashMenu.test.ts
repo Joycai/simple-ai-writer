@@ -46,11 +46,37 @@ function composer(draft: string) {
 }
 
 describe("slash composer interactions", () => {
-  it("preserves multiline requests when Enter inserts a menu command", () => {
-    const { result, setDraft, key } = composer("/mcp  paint a tree\n  with birds\n");
+  it.each(["/help", "/mcp", "/imageGen"])("lets a complete command reach submission: %s", draft => {
+    const { result, setDraft, key } = composer(draft);
+    const event = key("Enter");
+    expect(result.keyDown(event as never, false)).toBe(false);
+    expect(setDraft).not.toHaveBeenCalled();
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it.each(["/help", "/mcp"])("opens local browsing without sending a model request: %s", draft => {
+    const { result } = composer(draft);
+    const focus = vi.fn();
+    result.panel.props.children[0].props.ref.current = { focus };
+    expect(result.prepare()).toBeNull();
+    expect(focus).toHaveBeenCalledOnce();
+  });
+
+  it("submits an image request and leaves Shift+Enter and IME untouched", () => {
+    const { result, key } = composer("/imageGen draw a tree");
+    expect(result.keyDown(key("Enter") as never, false)).toBe(false);
+    expect(result.prepare()).toContain("draw a tree");
+    const menu = composer("/im");
+    expect(menu.result.keyDown(key("Enter", true) as never, false)).toBe(false);
+    expect(menu.result.keyDown(key("Enter") as never, true)).toBe(false);
+  });
+
+
+  it("completes a partial command on Enter", () => {
+    const { result, setDraft, key } = composer("/mc");
     const event = key("Enter");
     expect(result.keyDown(event as never, false)).toBe(true);
-    expect(setDraft).toHaveBeenCalledWith("/mcp  paint a tree\n  with birds\n");
+    expect(setDraft).toHaveBeenCalledWith("/mcp ");
     expect(event.preventDefault).toHaveBeenCalled();
   });
 
