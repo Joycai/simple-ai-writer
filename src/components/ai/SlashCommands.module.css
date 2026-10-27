@@ -1,4 +1,6 @@
 .panel {
+  /* Visually above the input; after it in DOM for forward keyboard traversal. */
+  order: -1;
   max-height: 320px;
   overflow: auto;
   padding: var(--space-3);

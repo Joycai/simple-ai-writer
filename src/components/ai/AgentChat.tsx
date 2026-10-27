@@ -1192,7 +1192,6 @@ export function AgentChat() {
           </div>
         ) : (
         <div className={`${styles.inputRow} ${chatRunning ? styles.inputRowRunning : ""}`}>
-          {slash.panel}
           <textarea
             ref={inputRef}
             className={styles.input}
@@ -1206,6 +1205,7 @@ export function AgentChat() {
             {...slash.inputProps}
             placeholder={`${activeModelId ? t("ai.chat.placeholder", { kb: terms.kb }) : t("ai.errors.noModel")} · ${t("slash.placeholder")}`}
           />
+          {slash.panel}
           {search.open && (
             // Anchored to the textarea itself rather than a wrapper: the
             // composer is a flex column, and an extra box in it would change

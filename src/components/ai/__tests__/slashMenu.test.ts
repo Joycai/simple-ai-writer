@@ -31,3 +31,61 @@ describe("slash command menu", () => {
     expect(renderToStaticMarkup(createElement(Menu, { draft: "/imageGen draw a tree", image: true }))).toBe("");
   });
 });
+
+/** Capture the hook's event boundary without installing a browser-only DOM shim. */
+function composer(draft: string) {
+  let result!: ReturnType<typeof useSlashCommands>;
+  const setDraft = vi.fn();
+  function Harness() {
+    result = useSlashCommands("chat", draft, setDraft, true);
+    return result.panel;
+  }
+  renderToStaticMarkup(createElement(Harness));
+  const key = (name: string, shiftKey = false) => ({ key: name, shiftKey, preventDefault: vi.fn() });
+  return { result, setDraft, key };
+}
+
+describe("slash composer interactions", () => {
+  it("preserves multiline requests when Enter inserts a menu command", () => {
+    const { result, setDraft, key } = composer("/mcp  paint a tree\n  with birds\n");
+    const event = key("Enter");
+    expect(result.keyDown(event as never, false)).toBe(true);
+    expect(setDraft).toHaveBeenCalledWith("/mcp  paint a tree\n  with birds\n");
+    expect(event.preventDefault).toHaveBeenCalled();
+  });
+
+  it.each(["/Users/me/story.md please summarize", "/tmp/story.md", "/ordinary prose"])("sends literal text unchanged: %s", draft => {
+    const { result, key } = composer(draft);
+    expect(result.prepare()).toBe(draft);
+    expect(result.keyDown(key("Enter") as never, false)).toBe(false);
+  });
+
+  it("moves forward Tab to the catalogue control but preserves Shift+Tab and IME", () => {
+    const { result, key } = composer("/mcp");
+    // The real ref points at the rendered panel. Supply the focus boundary here
+    // to verify the handler instead of relying on static markup's tab order.
+    const panel = result.panel.props.children[0];
+    const focus = vi.fn();
+    const querySelector = vi.fn(() => ({ focus }));
+    panel.props.ref.current = { querySelector };
+    const forward = key("Tab");
+    expect(result.keyDown(forward as never, false)).toBe(true);
+    expect(forward.preventDefault).toHaveBeenCalled();
+    expect(querySelector).toHaveBeenCalledWith("[data-slash-control]:not(:disabled)");
+    expect(focus).toHaveBeenCalledOnce();
+    expect(result.keyDown(key("Tab", true) as never, false)).toBe(false);
+    expect(result.keyDown(key("Tab") as never, true)).toBe(false);
+    expect(focus).toHaveBeenCalledOnce();
+  });
+
+  it("keeps unavailable image commands blocked while allowing ordinary text", () => {
+    let prepare!: () => string | null;
+    function Harness() {
+      const commands = useSlashCommands("chat", "/imageGen a tree", () => {}, false);
+      prepare = commands.prepare;
+      return commands.panel;
+    }
+    renderToStaticMarkup(createElement(Harness));
+    expect(prepare()).toBeNull();
+  });
+});

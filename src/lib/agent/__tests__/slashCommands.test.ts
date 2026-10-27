@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commandRequest, mcpCommand, mcpTarget, parseSlash } from "../slashCommands";
+import { commandRequest, insertSlashCommand, mcpCommand, mcpTarget, parseSlash } from "../slashCommands";
 
 describe("chat slash commands", () => {
   it("only recognizes commands at the start and preserves multiline requests", () => {
@@ -26,5 +26,12 @@ describe("chat slash commands", () => {
   it("uses the built-in image route and asks for missing destinations", () => {
     expect(commandRequest("imageGen", "a tree")).toContain("built-in generate_image");
     expect(commandRequest("imageGen", "a tree")).toContain("missing destination");
+  });
+});
+
+describe("command prefix replacement", () => {
+  it("retains spacing and multiline content while changing the selected tool", () => {
+    expect(insertSlashCommand("/mcp  paint a tree\n  with birds\n", "images:draw")).toBe("/images:draw  paint a tree\n  with birds\n");
+    expect(insertSlashCommand("/ima", "imageGen")).toBe("/imageGen ");
   });
 });

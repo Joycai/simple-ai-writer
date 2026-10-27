@@ -176,8 +176,13 @@ keyed by server revision; they are discarded when the chat changes or composer u
 Server/tool names are URL-encoded within shortcuts so spaces and colons cannot
 create ambiguous selections. Tool descriptions render as plain text.
 
-Selecting a command inserts its editable prefix. Arrow keys select, Enter
-inserts, Escape dismisses, and Tab reaches the catalogue buttons. Add a natural
+Selecting a command replaces only its editable prefix and preserves the request,
+including whitespace and multiline text. Unrecognized slash-prefixed prose and
+file paths remain ordinary chat messages. Arrow keys select, Enter
+inserts, Escape dismisses, and forward Tab explicitly enters the catalogue
+buttons. The panel follows the textarea in DOM order, while CSS places it
+visually above; subsequent Tabs reach the footer without cycling back through the
+input. Shift+Tab retains native backward traversal. Add a natural
 language request after an execution command, then send. The first version expands
 that command into an explicit request to the existing assistant (the transcript
 keeps the author’s original command): MCP requests identify the exact server/tool and request current
