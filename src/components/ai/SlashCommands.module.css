@@ -1,0 +1,36 @@
+.panel {
+  /* Visually above the input; after it in DOM for forward keyboard traversal. */
+  order: -1;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--space-3);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--font-size-xs);
+}
+.heading { font-weight: 600; margin-bottom: var(--space-2); }
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-2);
+  text-align: left;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+  overflow-wrap: anywhere;
+}
+.row:hover { background: var(--color-bg-hover); }
+.row.selected { background: var(--color-accent-tint); }
+.row:disabled { color: var(--color-text-muted); }
+.command { font-family: var(--font-mono); color: var(--color-text-primary); }
+.servers { border-top: 1px solid var(--color-border); margin-top: var(--space-2); }
+.server { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) 0; overflow-wrap: anywhere; }
+.server button { color: var(--color-accent); background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); }
+.hint { color: var(--color-text-muted); }
+.error { color: var(--color-error); font-size: var(--font-size-xs); }
+.settings { color: var(--color-accent); background: transparent; border: 0; padding: var(--space-2) 0; }

@@ -5105,5 +5105,26 @@
     },
     "gpt25": "GPT Image 2.5",
     "grok": "Grok Imagine 2.0"
+  },
+  "slash": {
+    "title": "快捷命令",
+    "help": "浏览快捷命令",
+    "mcp": "浏览 MCP 服务与工具",
+    "image": "使用图片子代理生成图片",
+    "imageUnavailable": "请在 AI 配置中启用并配置图片子代理",
+    "noMatches": "没有匹配的命令",
+    "count": "{{count}} 个已启用服务",
+    "mcpUnavailable": "请在设置 → AI 配置 → 实验室启用 MCP（仅桌面端）。",
+    "disabled": "已禁用",
+    "loading": "加载中…",
+    "failed": "发现失败，可重试",
+    "tools": "{{count}} 个工具",
+    "notLoaded": "未加载",
+    "refresh": "刷新",
+    "load": "加载工具",
+    "hint": "↑ ↓ 选择 · Enter 插入 · Esc 关闭。在命令后填写要求，调用沿用现有审批流程。",
+    "invalid": "请选择可用命令，并在命令后填写要求。",
+    "settings": "配置能力",
+    "placeholder": "输入 / 查看快捷命令"
   }
 }

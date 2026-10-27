@@ -448,3 +448,10 @@ Presets live in `src/lib/motion.ts` (`springScreen`/`springPanel`/`springDrawer`
 并说明仅移除归类定义、内容不受影响。footer 固定，错误保留在表单中，保存期间禁用控件与关闭。
 新建分类的槽位可留空；无槽位的特征表单仍有新建槽位按钮。槽位单独保存的行为在标题说明中
 明确表达，避免取消特征后误以为槽位也被撤销。
+
+### Chat command menu
+
+The chat composer's slash-command panel uses existing elevated-surface, border,
+text, accent-selection and shadow tokens. It sits in the composer flow with a
+bounded scroll area; command names use the monospace token. Server statuses and
+refresh controls share the same theme palette, including installed themes.
