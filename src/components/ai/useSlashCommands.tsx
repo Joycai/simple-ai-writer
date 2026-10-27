@@ -26,6 +26,20 @@ export function useSlashCommands(scope: string, draft: string, setDraft: (text: 
   const servers = readMcpServers();
   const enabled = IS_TAURI && isMcpEnabled();
   const open = !!parsed && dismissed !== draft && (!parsed.request || parsed.command === "mcp" || parsed.command === "help");
+  useEffect(() => {
+    const panel = panelRef.current;
+    const anchor = panel?.parentElement;
+    if (!open || !panel || !anchor) return;
+    const fit = () => {
+      panel.style.maxHeight = `${Math.max(0, Math.min(320, anchor.getBoundingClientRect().top - 8))}px`;
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    // Ancestor resizing can move the composer without resizing the input.
+    for (let node: Element | null = anchor; node; node = node.parentElement) observer.observe(node);
+    window.addEventListener("resize", fit);
+    return () => { observer.disconnect(); window.removeEventListener("resize", fit); };
+  }, [open]);
   const catalogueOf = (id: string, revision: string) => catalogues[id]?.revision === revision ? catalogues[id] : undefined;
   const load = async (id: string) => {
     const server = readMcpServers().find(s => s.id === id);
@@ -71,8 +85,10 @@ export function useSlashCommands(scope: string, draft: string, setDraft: (text: 
     if (e.key === "Enter" && !e.shiftKey) {
       const entry = matches[index];
       if (!entry) return false;
+      // A complete command must reach prepare(), not be reinserted forever.
+      if (!entry.unavailable && parsed?.command === entry.command) return false;
       e.preventDefault();
-      if (entry && !entry.unavailable) pick(entry.command);
+      if (!entry.unavailable) pick(entry.command);
       return true;
     }
     return false;
@@ -81,7 +97,11 @@ export function useSlashCommands(scope: string, draft: string, setDraft: (text: 
   const prepare = (): string | null => {
     const p = parseSlash(draft);
     if (!p) return draft;
-    if (p.command === "help" || p.command === "mcp" || !p.command) { setDismissed(null); return null; }
+    if (p.command === "help" || p.command === "mcp" || !p.command) {
+      setDismissed(null);
+      panelRef.current?.focus();
+      return null;
+    }
     const target = mcpTarget(p.command);
     // Only known command syntax claims a message. A slash alone does not
     // reserve arbitrary prose or paths, even after the picker is dismissed.
@@ -91,7 +111,7 @@ export function useSlashCommands(scope: string, draft: string, setDraft: (text: 
     return commandRequest(p.command, p.request);
   };
   const panel = <>
-    {open && <div ref={panelRef} className={styles.panel} aria-label={t("slash.title")}
+    {open && <div ref={panelRef} className={styles.panel} tabIndex={-1} aria-label={t("slash.title")}
       onKeyDown={e => {
         if (e.key === "Escape" && !e.nativeEvent.isComposing && e.keyCode !== 229) {
           e.preventDefault(); e.stopPropagation(); setDismissed(draft); setDraft(draft);

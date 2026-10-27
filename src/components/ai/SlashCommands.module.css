@@ -1,7 +1,12 @@
 .panel {
   /* Visually above the input; after it in DOM for forward keyboard traversal. */
-  order: -1;
-  max-height: 320px;
+  position: absolute;
+  inset-inline: 0;
+  bottom: 100%;
+  z-index: 10;
+  box-sizing: border-box;
+  max-height: min(320px, 40vh);
+  overscroll-behavior: contain;
   overflow: auto;
   padding: var(--space-3);
   background: var(--color-bg-elevated);
