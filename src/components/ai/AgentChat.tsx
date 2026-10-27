@@ -1,3 +1,5 @@
+import { routePlannedTools } from "../../lib/agent/routing";
+import { useSlashCommands } from "./useSlashCommands";
 import { RetrievalProgressText } from "./RetrievalProgressText";
 import { ChatError } from "./ChatError";
 import { canRetryChat } from "../../stores/agent/selectors";
@@ -543,9 +545,16 @@ export function AgentChat() {
   // hasMessage: words, or a picture on its own (chat-image-paste-plan §10).
   const canSend = hasMessage(draft, refs) && !chatRunning && !chatQueued && !chatCompacting && !pasting && !reading && !!activeModelId;
 
+  const slash = useSlashCommands(
+    activeKey, draft,
+    (text) => { setDraft(text); inputRef.current?.focus(); },
+    routePlannedTools(chatAgentPreset(), effectiveSubs, models, {
+      handoff: true, packs: true, mcp: true, providers,
+    }).tools.includes("generate_image"),
+  );
   const handleSend = () => {
-    if (!canSend) return;
-    const text = draft;
+    const text = slash.prepare();
+    if (text === null || !canSend) return;
     const sending = refs;
     setRefError(null);
     // References are per-message, like the typed text: the next question is
@@ -559,7 +568,7 @@ export function AgentChat() {
     // Asking a question is an intent to watch the answer: re-arm the follow even
     // if the author had scrolled back into history to write it.
     stick.toBottom();
-    void sendChat(text, attachedQuote, sending);
+    void sendChat(text, attachedQuote, sending, { displayText: draft });
   };
 
   // 2d: the composer stays typeable during a run, and Enter queues the draft
@@ -697,6 +706,7 @@ export function AgentChat() {
     // the chip row stays, so the author can Tab out of it or Esc the whole
     // thing). Esc there closes the picker rather than stopping the run; Enter
     // with nothing matching anywhere falls through to send. See mentionKeyDown.
+    if (slash.keyDown(e, ime.isComposing(e))) return;
     if (mentionKeyDown(e, mention, search, ime.isComposing(e), (item) => void handlePickMention(item))) return;
     // 2d: Esc 同效 — while a run is live, Esc anywhere in the composer stops
     // it (the picker, when open, has already claimed Esc above).
@@ -1182,6 +1192,7 @@ export function AgentChat() {
           </div>
         ) : (
         <div className={`${styles.inputRow} ${chatRunning ? styles.inputRowRunning : ""}`}>
+          {slash.panel}
           <textarea
             ref={inputRef}
             className={styles.input}
@@ -1192,8 +1203,8 @@ export function AgentChat() {
             onPaste={handlePaste}
             onContextMenu={snippetSave.onTextareaContextMenu}
             {...ime.imeProps}
-            placeholder={activeModelId ? t("ai.chat.placeholder", { kb: terms.kb }) : t("ai.errors.noModel")}
-            disabled={!activeModelId}
+            {...slash.inputProps}
+            placeholder={`${activeModelId ? t("ai.chat.placeholder", { kb: terms.kb }) : t("ai.errors.noModel")} · ${t("slash.placeholder")}`}
           />
           {search.open && (
             // Anchored to the textarea itself rather than a wrapper: the

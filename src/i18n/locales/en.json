@@ -5114,5 +5114,26 @@
     },
     "gpt25": "GPT Image 2.5",
     "grok": "Grok Imagine 2.0"
+  },
+  "slash": {
+    "title": "Commands",
+    "help": "Browse commands",
+    "mcp": "Browse MCP servers and tools",
+    "image": "Generate a picture with the image subagent",
+    "imageUnavailable": "Enable and configure the image subagent in AI settings",
+    "noMatches": "No matching commands",
+    "count": "{{count}} enabled servers",
+    "mcpUnavailable": "Enable MCP in Settings → AI configuration → Labs (desktop only).",
+    "disabled": "Disabled",
+    "loading": "Loading…",
+    "failed": "Discovery failed — retry",
+    "tools": "{{count}} tools",
+    "notLoaded": "Not loaded",
+    "refresh": "Refresh",
+    "load": "Load tools",
+    "hint": "↑ ↓ to select · Enter to insert · Esc to close. Add your request after the command; calls use the normal approval flow.",
+    "invalid": "Choose an available command and add a request after it.",
+    "settings": "Configure capabilities",
+    "placeholder": "Type / for commands"
   }
 }

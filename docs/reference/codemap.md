@@ -976,3 +976,12 @@ Rust 侧。
 - A second binary, `aiw-kb-tray` (`src/bin/tray.rs`), is a Windows-only tray launcher running the same server in-process (start/stop from the menu, run at login, first-run credentials in a dialog); on other platforms it compiles to a stub that exits, so CI's `clippy --all-targets` still covers it. Design: `docs/feature/knowledge-base/kb-server-tray.md`.
 - Its own crate, its own CI job, its own `server/README.md` (what it is + API + the console) and `server/DEPLOY.md` (编译 / 密钥 / systemd / Docker / TLS / 轮换 / 排错); design in `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §13–§20 and `docs/feature/knowledge-base/kb-admin-console.md` (the console's own trade-offs and where it departs from 设计稿 03e).
 - The client side lives in `src/lib/sync/` + `src/components/sync/` + Settings → 同步与备份
+
+### Chat command entry points
+
+`components/ai/useSlashCommands.tsx` owns the local command menu and revision-bound
+MCP catalogue discovery; `lib/agent/slashCommands.ts` owns prefix parsing,
+namespace encoding and explicit request expansion. `AgentChat` handles picker keys
+before mentions and passes expanded execution requests through normal `sendChat`.
+See `feature/agent/mcp-support.md` → Chat slash commands for the first-version
+model-mediated execution boundary and rationale.

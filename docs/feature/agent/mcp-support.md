@@ -163,3 +163,28 @@ Protocol: [Streamable HTTP 2025-11-25](https://modelcontextprotocol.io/specifica
 [tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools).
 This implementation deliberately targets the server's negotiated session-based
 protocol family; it does not claim support for the newer stateless transport.
+
+## Chat slash commands
+
+The chat composer offers `/help`, `/mcp`, `/imageGen` and
+`/<server>:<tool>` shortcuts. `/help` and `/mcp` are local browsing actions,
+requiring no conversational model request. `/mcp` lists configured servers;
+**Load tools** performs bounded discovery only, with per-server loading, error,
+disabled and not-loaded states. **Refresh** replaces the catalogue. Counts refer
+to discovered tools, never an assumed zero. Catalogues are component-local and
+keyed by server revision; they are discarded when the chat changes or composer unmounts.
+Server/tool names are URL-encoded within shortcuts so spaces and colons cannot
+create ambiguous selections. Tool descriptions render as plain text.
+
+Selecting a command inserts its editable prefix. Arrow keys select, Enter
+inserts, Escape dismisses, and Tab reaches the catalogue buttons. Add a natural
+language request after an execution command, then send. The first version expands
+that command into an explicit request to the existing assistant (the transcript
+keeps the author’s original command): MCP requests identify the exact server/tool and request current
+schema discovery; image requests select the built-in `generate_image` route.
+This remains model-mediated argument preparation, not a deterministic direct
+RPC. Missing required details are requested by the assistant. This choice reuses
+the existing tool approvals, destination selection, image receipts and session
+grants rather than creating a second execution path. No slash command grants
+approval. Image availability comes from the same planned routing as the chat.
+All command surfaces use theme tokens, and descriptions/status/help are localized.
