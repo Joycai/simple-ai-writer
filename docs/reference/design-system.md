@@ -455,3 +455,11 @@ The chat composer's slash-command panel uses existing elevated-surface, border,
 text, accent-selection and shadow tokens. It sits in the composer flow with a
 bounded scroll area; command names use the monospace token. Server statuses and
 refresh controls share the same theme palette, including installed themes.
+
+Sent chat messages render executable `/imageGen` and `/server:tool` prefixes as
+inline monospace command labels, using accent tint, accent text and a neutral
+border. This separates the invocation from its request without suggesting a
+clickable control. Long names wrap within narrow chat rails; the original token,
+whitespace and request remain intact for copying and history. File paths and
+unrecognized slash prose retain ordinary text styling. Existing `@` references
+keep their accent text. This is presentation only and never changes execution.

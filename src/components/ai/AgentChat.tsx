@@ -79,7 +79,7 @@ import type { TurnExport } from "../../lib/agent/chatSession";
 import { baseName, middleEllipsis, projectRelative as projectRel, toPosixPath } from "../../lib/paths";
 import { foldBoundary } from "../../lib/agent/transcriptFold";
 import { rewindableTurnIds } from "../../lib/agent/rewind";
-import { splitMentions } from "../../lib/agent/mentionText";
+import { ChatUserText } from "./ChatUserText";
 import {
   computeContextBreakdown,
 } from "../../lib/agent/contextBreakdown";
@@ -1406,23 +1406,6 @@ function TurnExports({ items }: { items?: TurnExport[] }) {
 }
 
 /**
- * A sent message's text with its `@[名称]` references in the accent color —
- * the same amber the ref chips wore before sending, so the bubble reads as the
- * record of that composition. Plain spans keep `.userTurn`'s pre-wrap intact.
- */
-function MentionText({ text }: { text: string }) {
-  return (
-    <>
-      {splitMentions(text).map((seg, i) =>
-        seg.kind === "mention"
-          ? <span key={i} className={styles.mentionRef}>{seg.text}</span>
-          : <span key={i}>{seg.text}</span>,
-      )}
-    </>
-  );
-}
-
-/**
  * memo: the transcript re-renders on every streamed flush (the turns array is
  * rebuilt per store write), but only the *patched* turn gets a new object —
  * every earlier turn keeps its identity, so memoized turns skip entirely and
@@ -1457,7 +1440,7 @@ const UserTurn = memo(function UserTurn({ turn, onCtx, onRewind, confirm, doomed
         </div>
       )}
       {/* A picture sent on its own has no words: no empty bubble above it. */}
-      {turn.text && <div className={styles.userTurn}><MentionText text={turn.text} /></div>}
+      {turn.text && <div className={styles.userTurn}><ChatUserText text={turn.text} /></div>}
       {/* Below the words, unlike an assistant turn's pictures: there the
           prose is a caption for the image, here it is the instruction
           the image came with. */}
