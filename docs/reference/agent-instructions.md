@@ -55,3 +55,17 @@ scratch material used to transfer knowledge-base updates; both are ignored.
 Before cleaning temporary notes or redundant skill copies, archive them outside
 the repository and verify the retained skills. Do not ignore all skill directories
 or a generic `agent/` directory: that could conceal future project-owned files.
+
+## Shared project skill discovery — 2026-10-27
+
+Project skills under `.claude/skills/` are also exposed through relative links
+in `.agents/skills/`, so agents using either discovery directory load the same
+instructions and scripts. Keep one tracked source per skill; do not copy and
+rewrite commands for each agent. The existing `tauri-development` skill keeps
+its source in `.agents/skills/` and its reverse link in `.claude/skills/`.
+
+The duplicate local copies had already drifted: two instructions referenced
+the nonexistent `.Codex/skills/` directory. Relative links preserve the working
+commands and prevent future edits from diverging. They contain no machine-local
+absolute paths; checkouts need Git symbolic-link support, as the existing
+`tauri-development` link already does.
