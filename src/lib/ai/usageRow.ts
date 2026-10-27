@@ -98,23 +98,28 @@ export interface UsageRowValues {
  */
 export function buildUsageRow(input: RecordUsageInput, nowMs: number = Date.now()): UsageRowValues {
   const fee = feeOf(input.model);
+  const known = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0;
+  const fields = input.usageEvidence?.fields;
+  const inputCount = fields ? fields.inputTokens : input.promptTokens;
+  const cacheCount = fields ? fields.cachedTokens : input.cachedTokens;
+  const outputCount = fields ? fields.outputTokens : input.completionTokens;
   const count = (n: number | undefined) => typeof n === "number" && Number.isFinite(n) && n >= 0 ? Math.round(n) : 0;
-  const prompt = count(input.promptTokens);
-  const cached = Math.min(count(input.cachedTokens), prompt);
-  const completion = count(input.completionTokens);
+  const prompt = count(inputCount);
+  const cached = known(inputCount) ? Math.min(count(cacheCount), prompt) : count(cacheCount);
+  const completion = count(outputCount);
   const { billed, priced } = billedForSpec(
     fee,
     { outputUnits: input.outputUnits ?? 0, inputImages: input.inputImages ?? 0 },
     input.spec ?? {},
-    { inputTokens: prompt, outputTokens: completion, cachedTokens: cached },
+    // With no total input report, only the cache bucket is priceable. Keep the
+    // ledger total unknown; this subtotal supplies no invented fresh tokens.
+    { inputTokens: Math.max(prompt, cached), outputTokens: completion, cachedTokens: cached },
     input.reportedCost ?? null,
   );
   const withRequests: Billed = { ...billed, requests: Math.max(0, input.requests ?? 1) };
   // `costOf()` 只调一次，总额与分项都从这一次的结果来——调两次就有了两个
   // 可能不一致的数，而它们不一致的时候没有任何东西会报错。
   const parts = costOf(withRequests);
-  const known = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0;
-  const fields = input.usageEvidence?.fields;
   const usageKnown = (known(fields ? fields.inputTokens : input.promptTokens) ? 1 : 0)
     | (known(fields ? fields.cachedTokens : input.cachedTokens) ? 2 : 0)
     | (known(fields ? fields.outputTokens : input.completionTokens) ? 4 : 0);

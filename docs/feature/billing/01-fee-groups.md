@@ -556,3 +556,14 @@ use `usageGapLink` and the shared focus styles.
 Regression tests cover reset refusal before secrets, a paused cross-window INSERT resumed
 after clear, deletion-marker rollback and ledger isolation, and mixed known/unknown
 field aggregation with an explicit output zero.
+
+
+### Partial cache evidence
+
+When only cache tokens are reported, the row retains that known quantity instead of
+clamping it against an unknown input total represented by zero. The total-input presence
+bit stays unset; only the reported cache bucket is priced through `costOf`, with zero
+known fresh input and an incomplete cost. Evidence fields are the source for both values
+and presence bits, so fallback counters cannot contradict the evidence snapshot.
+Image adapters reuse the existing protocol usage normalizer, preserving reported cache
+counts (including zero) and Gemini thought tokens without inventing missing fields.

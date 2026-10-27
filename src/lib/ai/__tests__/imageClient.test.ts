@@ -55,12 +55,12 @@ describe("generateImage · OpenAI shape", () => {
   it("turns b64_json into a data URL and reports token usage", async () => {
     mockJson({
       data: [{ b64_json: "aGk=" }],
-      usage: { input_tokens: 12, output_tokens: 34 },
+      usage: { input_tokens: 12, output_tokens: 34, input_tokens_details: { cached_tokens: 4 } },
     });
     const res = await generateImage(OPENAI, { prompt: "a cat" });
     expect(res.images).toHaveLength(1);
     expect(res.images[0].dataUrl).toBe("data:image/png;base64,aGk=");
-    expect(res.usage).toEqual({ inputTokens: 12, outputTokens: 34 });
+    expect(res.usage).toEqual({ inputTokens: 12, outputTokens: 34, cachedTokens: 4 });
     expect(res.requestId).toEqual(expect.any(String));
     const next = await generateImage(OPENAI, { prompt: "a cat" });
     expect(next.requestId).not.toBe(res.requestId);
@@ -233,7 +233,7 @@ describe("generateImage · Gemini shape", () => {
         content: { parts: [{ text: "here you go" }, { inlineData: { mimeType: "image/webp", data: "aGk=" } }] },
         finishReason: "STOP",
       }],
-      usageMetadata: { promptTokenCount: 7, candidatesTokenCount: 1290 },
+      usageMetadata: { promptTokenCount: 7, candidatesTokenCount: 1290, cachedContentTokenCount: 0, thoughtsTokenCount: 10 },
     });
     const res = await generateImage(GEMINI, { prompt: "a cat" });
     expect(calls[0].url).toContain(":generateContent");
@@ -241,7 +241,7 @@ describe("generateImage · Gemini shape", () => {
       .toEqual(["TEXT", "IMAGE"]);
     expect(res.images[0]).toEqual({ dataUrl: "data:image/webp;base64,aGk=", mime: "image/webp" });
     expect(res.text).toBe("here you go");
-    expect(res.usage).toEqual({ inputTokens: 7, outputTokens: 1290 });
+    expect(res.usage).toEqual({ inputTokens: 7, outputTokens: 1300, cachedTokens: 0 });
   });
 
   it("types inlineData by its bytes when the declared mime lies", async () => {
@@ -327,14 +327,14 @@ describe("generateImage · chat route", () => {
     // `image_b64_json` are the same bare base64 string.
     mockJson({
       choices: [{ message: { role: "assistant", content: PNG_B64, images: [{ b64_json: PNG_B64 }], image_b64_json: PNG_B64 } }],
-      usage: { prompt_tokens: 14, completion_tokens: 1756 },
+      usage: { prompt_tokens: 14, completion_tokens: 1756, prompt_tokens_details: { cached_tokens: 3 } },
     });
     const res = await generateImage(RELAY, { prompt: "a cat" });
     expect(res.images).toHaveLength(1);
     expect(res.images[0].mime).toBe("image/png");
     // The base64 must not survive as "commentary".
     expect(res.text).toBeUndefined();
-    expect(res.usage).toEqual({ inputTokens: 14, outputTokens: 1756 });
+    expect(res.usage).toEqual({ inputTokens: 14, outputTokens: 1756, cachedTokens: 3 });
   });
 
   it("treats a bare link as the picture and downloads it", async () => {

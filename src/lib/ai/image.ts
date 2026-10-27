@@ -25,6 +25,7 @@ import type { GeminiSafetySettings } from "./safety";
 import { geminiAuthHeaders } from "./gemini";
 import type { Model, Provider } from "./configDb";
 import { effectiveAsyncTask, effectiveImageRoute } from "./imageRoute";
+import { usageSnapshot } from "./streamUsage";
 import type { ApiStandard, AuthMode, ImageRoute } from "./types";
 import { geminiUrl, openaiUrl, trimBase } from "./urls";
 
@@ -676,7 +677,7 @@ async function parseOpenAiImagePayload(raw: unknown, signal?: AbortSignal): Prom
 
   // Present on the token-billed image models, absent on the per-image ones.
   const usage = json.usage
-    ? { inputTokens: json.usage.input_tokens, outputTokens: json.usage.output_tokens }
+    ? usageSnapshot("responses", json.usage)
     : undefined;
   // revised_prompt is what the provider actually rendered after its own
   // rewriting — worth surfacing, since it explains output the author's prompt
@@ -944,7 +945,7 @@ async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResul
   }
 
   const usage = json.usage
-    ? { inputTokens: json.usage.prompt_tokens, outputTokens: json.usage.completion_tokens }
+    ? usageSnapshot("openai", json.usage)
     : undefined;
   return { images, usage, ...(texts.length ? { text: texts.join("\n\n") } : {}) };
 }
@@ -1051,10 +1052,7 @@ async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
   }
 
   const usage = json.usageMetadata
-    ? {
-        inputTokens: json.usageMetadata.promptTokenCount,
-        outputTokens: json.usageMetadata.candidatesTokenCount,
-      }
+    ? usageSnapshot("gemini", json.usageMetadata)
     : undefined;
   return { images, usage, ...(texts.length ? { text: texts.join("\n\n") } : {}) };
 }

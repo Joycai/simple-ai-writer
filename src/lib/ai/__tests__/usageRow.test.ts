@@ -341,6 +341,16 @@ describe("recordUsage", () => {
 });
 
 describe("usage completeness", () => {
+  it("retains reported cache when total input is unknown, without inventing fresh input", () => {
+    const row = buildUsageRow({
+      model: model(fee({ inputPrice: 2, cachePrice: 0.2 })), task: "chat",
+      usageEvidence: { outcome: "failed", source: "reported", fields: { cachedTokens: 100 } },
+    });
+    expect(row).toMatchObject({ promptTokens: 0, cachedTokens: 100, usageKnown: 2,
+      usageIncomplete: true, costIncomplete: true });
+    expect(row.billed).toMatchObject({ inputTokens: 0, cacheTokens: 100 });
+    expect(row.costUsd).toBeCloseTo(100 * 0.2 / 1e6, 12);
+  });
   it("distinguishes no report from explicit zero and keeps a trusted zero quote", () => {
     const base = { model: model(fee({ inputPrice: 2, cachePrice: 2, outputPrice: 4 })), task: "chat" };
     expect(buildUsageRow(base)).toMatchObject({ usageIncomplete: true, costIncomplete: true });
