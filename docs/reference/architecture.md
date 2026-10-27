@@ -16,14 +16,13 @@ Each table is created (and later columns added with `PRAGMA table_info` →
 
 ```
 project.db   token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens,
-                          cost_usd, created_at, + 计费快照与分项 22 列 — lib/ai/usageSchema.ts)
+                          cost_usd, created_at, + 计费快照、分项与请求证据 — lib/ai/usageSchema.ts)
 project.db   chat_sessions (id, preview, data, pinned, title, stash_id, created_at, updated_at)
                           -- 对话助手会话，每条一个 JSON blob（lib/agent/sessionDb）
 project.db   kb_embeddings (namespace, entry, hash, vector) -- disposable persistent retrieval cache (lib/context/embeddingCache)
 project.db   document_embeddings (namespace, entry, hash, vector) -- bounded document-vector cache, separate from KB pruning
 project.db   document_embedding_access (namespace, accessed) -- namespace LRU sequence, no filenames; 8 namespaces / 64 MiB live payload
 project.db   output_recovery (id, data, updated_at) -- 长输出正文检查点（lib/agent/outputRecovery）
-project.db   document_embeddings (namespace, entry, hash, vector) -- 当前文档正文检索的派生向量缓存，不存原文，与知识库缓存分表
 config.db    token_usage 同上 + project          -- 总账：比任何一个项目活得久
 config.db    fee_groups  (id, name, vendor, billing_mode, input_price, cache_input_price,
                           output_price, request_price, output_unit, output_rates,
@@ -38,7 +37,7 @@ config.db    models      (id, provider_id, model_id, name, type, enabled, prefix
                           --       thinking_budget, text_verbosity, structured_output,
                           --       server_tools, pdf_input, vl_high_resolution,
                           --       video_input, video_fps
-                          -- 专用格式：translate_format, asr_format
+                          -- 专用格式：translate_format, asr_format, retrieval
                           -- 线路：active_route, routes, relay_upstream
                           -- 计费：fee_group_id, fee_migrated
                           -- 旧列，只剩迁移在读：price_in / price_cached_in / price_out /
@@ -453,9 +452,9 @@ The vocabulary — `toPosixPath` / `baseName` / `dirName` / `joinPath` / `projec
 - **Context Assembly** (4 layers in `assembleContext()`):
   1. System prompt (from active template or default)
   2. Lore (facet-aware layered selection, see below)
-  3. Recent document context (last 2400 chars before selection)
-  4. Task instruction (continue/polish/rewrite/summary/custom)
-- **Output** → `ContextBundle` → formatted to messages via `bundleToMessages()`; carries a `loreReport` (what was injected/dropped and why) rendered in `AiPanel`
+  3. Document context before the task anchor, sized by the budget planner and any explicit reference-window setting; optional current-document retrieval replaces expandable background with bounded local prose and ranked excerpts
+  4. Task input (the complete selection when applicable, plus the resolved task instruction)
+- **Output** → `ContextBundle` → formatted to messages via `bundleToMessages()`; carries a `loreReport` (what was injected/dropped and why) rendered in `AiPanel`; optional current-document excerpts are carried in `documentExcerpts`, with retrieval status reported through the task context report
 - **The chat is the exception to layer 3.** A writing task is invoked *on* the open document, so it gets the window. The conversational assistant is not: it defaults to a **brief** of the open file (path, title, length, heading outline, plus a line saying the text was withheld and which path to `read_file`), and injects the window only when the turn points at the document — a pinned selection, or wording like 这一段 / 本章 / 全文 / 继续写 / `this chapter`. Decision layer in `src/lib/context/docFocus.ts`, wiring in the chat run (`stores/agent/chatJob.ts`), rationale in `docs/feature/agent/chat-memory-plan.md` §5a. The body can arrive on any later turn (`ChatSessionMeta.bodyDocPath` remembers whether it already did)
 
 #### Facet-aware lore selection (`loreSelect.ts`)

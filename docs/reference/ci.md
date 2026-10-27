@@ -29,8 +29,8 @@ involved: this is the server's independent distribution. See `server/DEPLOY.md` 
 | --- | --- | --- |
 | **Detect changed areas** | `dorny/paths-filter` | Decides whether the Rust and sync-server jobs have anything to do |
 | **Frontend** | `pnpm install --frozen-lockfile` → `tsc --noEmit` → `pnpm test` → `pnpm build` | Lockfile integrity, TypeScript type-check (the project's lint gate — strict mode, no unused locals/params), Vitest suite, production bundle builds |
-| **Backend (Rust)** | `cargo fmt --all -- --check` → `cargo clippy --all-targets --all-features -- -D warnings` → `cargo test --all-features` → `cargo build --locked` | Formatting, lints (warnings fail the build), tests, backend compiles |
-| **Sync server** | the same four cargo steps, in `server/` | The knowledge-base backup server (`server/`) — a plain axum binary, so it needs none of the webview apt packages the Tauri job installs |
+| **Backend (Rust)** | `cargo fmt --all -- --check` → `cargo clippy --all-targets --all-features -- -D warnings` → `cargo test --all-features` → `cargo test -p tauri-plugin-http` → `cargo build --locked` | Formatting, lints (warnings fail the build), tests, backend compiles |
+| **Sync server** | fmt, clippy, test and locked build, in `server/` (no HTTP-plugin test) | The knowledge-base backup server (`server/`) — a plain axum binary, so it needs none of the webview apt packages the Tauri job installs |
 | **CI Success** | aggregates the four jobs | Single status check to require in branch protection |
 
 Notes:
@@ -154,6 +154,7 @@ cd src-tauri
 cargo fmt --all -- --check     # or `cargo fmt --all` to auto-fix
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
+cargo test -p tauri-plugin-http
 cargo build --locked
 cd ..
 
