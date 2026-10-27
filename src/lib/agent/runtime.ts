@@ -1273,10 +1273,10 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
             opts.onEvent({
               kind: "round-done",
               round,
-              actualInputTokens: chunk.inputTokens,
+              actualInputTokens: chunk.initialInputTokens ?? chunk.inputTokens,
               ...(chunk.wireRewrites?.length ? { wireRewrites: chunk.wireRewrites } : {}),
               incomparable:
-                chunk.inputTokens <= 0
+                (chunk.initialInputTokens ?? chunk.inputTokens) <= 0
                   ? "no-usage"
                   : roundUsedServerTools
                     ? "server-tools"
@@ -1292,7 +1292,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
               roundTruncated = true;
               roundStopReason = chunk.stopReason;
               roundTruncationCause = truncationCause(
-                chunk.inputTokens, chunk.outputTokens, opts.contextSize,
+                chunk.initialInputTokens ?? chunk.inputTokens, chunk.outputTokens, opts.contextSize,
               );
             }
           }

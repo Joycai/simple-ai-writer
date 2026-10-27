@@ -21,4 +21,13 @@ describe("API network failure logging", () => {
     }
     expect(JSON.stringify(entries)).not.toContain("must-not-log");
   });
+  it("persists first-hop context input separately from summed billable input", async () => {
+    const log = beginApiLog({ standard: "gemini", baseUrl: "https://example.com/v1beta", modelId: "gemini-4-argon", apiKey: "", messages: [], onChunk() {} });
+    log.chunk({ done: true, inputTokens: 90000, initialInputTokens: 100, outputTokens: 80000 });
+    log.success();
+    await vi.waitFor(() => expect(appendFile).toHaveBeenCalledTimes(2));
+    const entries = appendFile.mock.calls.map((call) => JSON.parse(call[1] as string));
+    expect(entries.find((entry) => entry.type === "response").usage).toEqual({ inputTokens: 90000, initialInputTokens: 100, outputTokens: 80000 });
+  });
+
 });

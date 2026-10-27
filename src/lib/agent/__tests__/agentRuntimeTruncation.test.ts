@@ -196,6 +196,19 @@ describe("what ran out", () => {
     });
   });
 
+  it("does not mistake repeated continuation inputs for a full context window", async () => {
+    queueRound([
+      { text: "第一段。" },
+      { done: true, inputTokens: 2000, initialInputTokens: 100, outputTokens: 100, truncated: true, stopReason: "MAX_TOKENS" },
+    ]);
+    queueRound([{ text: "第二段。" }, { done: true, inputTokens: 300, outputTokens: 50 }]);
+    const opts = makeOptions({ contextSize: WINDOW });
+    const result = await runAgent(opts);
+    expect(result.inputTokens).toBe(2300);
+    expect(result.outcome).toBe("completed");
+    expect(truncations(opts.events)[0]).toMatchObject({ cause: "output-cap", recovery: { kind: "text", attempt: 1 } });
+  });
+
   it("reports a round of pure thinking as unanswered rather than completed", async () => {
     queueRound([
       { reasoning: "或者更戏剧……可以写现实悬疑……" },

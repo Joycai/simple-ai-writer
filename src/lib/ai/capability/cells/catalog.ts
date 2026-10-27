@@ -28,7 +28,7 @@ import type { ReasoningEffort } from "../../reasoning";
 
 interface IntrinsicFacts {
   maxOutput?: number;
-  /** No rows yet: every window the app knows is a platform's (`platform.ts`). */
+  /** Unified model window; route-specific measurements may override it. */
   contextSize?: number;
   strictSchemaModel?: true;
   reasons?: false;
@@ -96,6 +96,9 @@ const MODEL_CATALOG: readonly CatalogRow[] = bySpecificity<CatalogRow>([
   row("o3", { maxOutput: 100_000 }),
   row("o1", { maxOutput: 100_000 }),
   // ── Google — `responseJsonSchema` is documented from Gemini 2.5 on ──
+  // Argon: unified input + thinking + output window; 64K streaming hop.
+  // Long decode is route-specific (cells/gemini.ts), not a universal 1M output cap.
+  row("gemini-4-argon", { contextSize: 1_048_576, maxOutput: 65_536, ...STRICT }),
   row("gemini-3", { maxOutput: 65_536, ...STRICT }),
   row("gemini-2.5", { maxOutput: 65_536, ...STRICT }),
   row("gemini-2.0", { maxOutput: 8_192 }),

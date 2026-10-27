@@ -320,6 +320,8 @@ export type StreamChunk =
       /** Digest of the originating route and credential; never sent on the wire. */
       _carryScope?: string;
       inputTokens: number;
+      /** First-hop prompt size, excluding repeated continuation inputs; not billable totals. */
+      initialInputTokens?: number;
       outputTokens: number;
       /** True when the provider cut the response short on max-tokens (OpenAI
        *  finish_reason "length" / Gemini finishReason "MAX_TOKENS") rather than

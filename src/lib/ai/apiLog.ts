@@ -236,7 +236,7 @@ export function beginApiLog(opts: StreamOptions): ApiCallLogger {
 
   let output = "";
   let toolCalls: { name: string; arguments: string }[] | undefined;
-  let usage: { inputTokens: number; outputTokens: number } | undefined;
+  let usage: { inputTokens: number; initialInputTokens?: number; outputTokens: number } | undefined;
   /**
    * Why the response ended, and whether it was cut off. Recorded because
    * "the answer just stops" is the failure this log exists to explain, and the
@@ -282,7 +282,8 @@ export function beginApiLog(opts: StreamOptions): ApiCallLogger {
             : { name: e.name, results: e.results.length, output: e.output, error: e.error },
         );
       } else if ("done" in chunk) {
-        usage = { inputTokens: chunk.inputTokens, outputTokens: chunk.outputTokens };
+        usage = { inputTokens: chunk.inputTokens, outputTokens: chunk.outputTokens,
+          ...(chunk.initialInputTokens !== undefined ? { initialInputTokens: chunk.initialInputTokens } : {}) };
         stopReason = chunk.stopReason;
         truncated = chunk.truncated ?? false;
         wireRewrites = chunk.wireRewrites;

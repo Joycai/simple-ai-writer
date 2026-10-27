@@ -365,7 +365,12 @@ export const PLATFORM_CELLS: Record<PlatformId, PlatformCells> = {
   // vendor documents the block.
   anthropic: { families: { anthropic: { web_search: true, jsonSchema: true, pdfInput: true } } },
   // `responseJsonSchema`, Gemini 2.5 on (structured-output-plan.md).
-  google: { families: { gemini: { jsonSchema: true } } },
+  google: { families: { gemini: {
+    jsonSchema: true,
+    // Official model page, 2026-10-27 (not a paid route measurement).
+    // Prefill only: declarations still belong to the author; limits are catalog facts.
+    models: [cal("gemini-4-argon", {}, MULTIMODAL_PDF)],
+  } } },
   // Chat Completions: none. Its Anthropic-shaped path stays at the protocol's
   // `unknown` — unmeasured, not known absent. A `video_url` part: 422, the
   // error naming it as no accepted variant (第十九个样本).

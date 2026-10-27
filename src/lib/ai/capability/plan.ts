@@ -23,8 +23,9 @@ import { wireOf, type Wire } from "../platforms";
 import { forcesToolChoiceAuto, type ReasoningEffort, type ThinkingCategory } from "../reasoning";
 import { capabilityModelOf } from "../relayUpstream";
 import { effectiveServerTools, type ServerToolId } from "../serverTools";
-import type { StreamMessage, StreamOptions, TextVerbosity } from "../types";
+import { familyOf, type StreamMessage, type StreamOptions, type TextVerbosity } from "../types";
 import { admitMedia } from "../mediaParts";
+import { geminiProfile } from "./cells/gemini";
 import { catalogFact } from "./cells/catalog";
 import { wireThinks, type ThinkingState } from "./conditions";
 import { carried, trusted } from "./intent";
@@ -50,6 +51,8 @@ export type PlanInput = Pick<
 
 export interface RequestPlan {
   wire: Wire;
+  /** Argon GenerateContent only: total budget and per-hop silence allowance. */
+  gemini?: { maxOutputTokens: number; readTimeoutMs: number };
   /**
    * The model as every capability question about it is asked — its id, relay
    * upstream and, when declared, its type (so the tables' `modelTypes` rules
@@ -69,7 +72,7 @@ export interface RequestPlan {
   temperature?: number;
   /**
    * The `max_tokens` a wire that requires one sends (the Messages API); the
-   * others send no cap. Only the author's cap (`TRUST.anthropicMaxTokens`, D2),
+   * others do not use this field (Argon uses `gemini.maxOutputTokens`). Only the author's cap (`TRUST.anthropicMaxTokens`, D2),
    * else the adapter's own default.
    */
   maxTokensOnWire: number;
@@ -225,9 +228,16 @@ export function planRequest(opts: PlanInput): RequestPlan {
     canonicalModelId: opts.canonicalModelId,
     structuredOutput: opts.structuredOutput, relayUpstream: opts.relayUpstream,
   };
+  const gemini = geminiProfile(familyOf(opts.standard), opts.canonicalModelId ?? opts.modelId);
+  const declaredOutput = carried(opts.maxOutput, opts.provenance?.maxOutput);
   return {
     wire,
     model,
+    ...(gemini ? { gemini: {
+      // Catalog caps stay planning-only; only an explicit budget changes spend.
+      maxOutputTokens: Math.max(1, Math.floor(declaredOutput?.source === "author" ? declaredOutput.value : gemini.defaultMaxOutput)),
+      readTimeoutMs: gemini.readTimeoutMs,
+    } } : {}),
     thinking: { category, effort, budget: opts.thinkingBudget, state },
     ...(opts.temperature !== undefined && temperatureReaches(wire, model, category, effort) ? { temperature: opts.temperature } : {}),
     maxTokensOnWire: requiredMaxTokens(trusted(carried(opts.maxOutput, opts.provenance?.maxOutput), "anthropicMaxTokens")),

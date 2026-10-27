@@ -10,7 +10,7 @@ import { refusalText } from "./refusal";
 import { reasoningBody } from "./reasoning";
 import { planRequest } from "./capability/plan";
 import { toSafetySettingsArray } from "./safety";
-import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
+import { addReportedCost, costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
 import { createGeminiServerToolReader, geminiServerTools } from "./serverTools";
 import { geminiUrl } from "./urls";
 import type {
@@ -296,31 +296,24 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     };
   }
 
+  if (plan.gemini) {
+    const config = { ...(body.generationConfig as Record<string, unknown> | undefined) };
+    // These legacy knobs are ignored by Argon, including when supplied in extraBody.
+    for (const key of ["temperature", "topP", "topK", "candidateCount"]) delete config[key];
+    body.generationConfig = { ...config, maxOutputTokens: plan.gemini.maxOutputTokens };
+  }
+
   // The wire body is a different shape from the caller's messages (contents,
   // not messages; thinking inside generationConfig), so the log's request entry
   // alone cannot show what was sent.
-  opts._onRequestBody?.(body);
-
   const platform = costReportingPlatform(opts);
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...geminiAuthHeaders(opts.apiKey, opts.authMode), ...costReportHeaders(platform) },
-    body: JSON.stringify(body),
-    signal: opts.signal,
-  });
-
-  if (!res.ok) {
-    const err = refusalText(await res.text());
-    throw new Error(`Gemini API error ${res.status} (${url}): ${err}`);
-  }
-
-  const reader = res.body!.getReader();
-  const decoder = new TextDecoder();
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let cachedTokens = 0;
-  /** Only on the last block's `usageMetadata`, and only from a trusted platform (`reportedCost.ts`). */
-  let reportedCost: number | undefined;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let totalCachedTokens = 0;
+  let initialInputTokens: number | undefined;
+  let totalReportedCost: number | null | undefined;
+  let continuationToken: string | undefined;
+  const seenTokens = new Set<string>();
   let truncated = false;
   // The candidate's finishReason, for the log — see the Chat Completions adapter.
   let stopReason: string | undefined;
@@ -331,125 +324,180 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   // Searches, pages read and code run by the endpoint itself, for the log.
   const readServerTools = createGeminiServerToolReader();
 
-  // Carry an incomplete trailing line across reads: a single SSE line can be split
-  // across network chunks, and parsing the halves would silently drop content.
-  let buffer = "";
+  // Each hop is a separate billed attempt. Keep its last cumulative snapshot,
+  // then add across hops; never send partial output back as new contents.
+  for (let hop = 0; ; hop++) {
+    if (opts.signal?.aborted) throw opts.signal.reason ?? new DOMException("Aborted", "AbortError");
+    const requestBody = continuationToken ? { ...body, continuationToken } : body;
+    opts._onRequestBody?.(requestBody);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...geminiAuthHeaders(opts.apiKey, opts.authMode), ...costReportHeaders(platform) },
+      body: JSON.stringify(requestBody),
+      signal: opts.signal,
+    });
+    if (!res.ok) {
+      const err = refusalText(await res.text());
+      throw new Error(`Gemini API error ${res.status} (${url}): ${err}`);
+    }
+    if (!res.body) throw new Error("Gemini: response has no stream body");
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cachedTokens = 0;
+    let reportedCost: number | undefined;
+    let nextToken: string | undefined;
+    stopReason = undefined;
 
-  const processLine = (line: string) => {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("data:")) return;
-    let json: Record<string, unknown>;
-    try {
-      json = JSON.parse(trimmed.slice(5).trim()) as Record<string, unknown>;
-    } catch {
-      return; // skip malformed SSE lines
-    }
-    if (json.usageMetadata) opts._onUsage?.(usageSnapshot("gemini", json.usageMetadata, reportedCostOf(platform, "gemini", json.usageMetadata)));
-    if (json.error) {
-      const msg = (json.error as { message?: string }).message ?? JSON.stringify(json.error);
-      throw new Error(`Gemini: ${msg}`);
-    }
-    const blockReason = (json.promptFeedback as { blockReason?: string } | undefined)?.blockReason;
-    if (blockReason) {
-      throw new Error(`Gemini blocked this request (${blockReason}). The content may have triggered a safety filter — try a different model or provider.`);
-    }
-    const candidate = (json.candidates as Array<{ content?: { parts?: unknown[] }; finishReason?: string }> | undefined)?.[0];
-    const rawParts: unknown[] = candidate?.content?.parts ?? [];
-    const parts = rawParts as Array<{
-      text?: string;
-      thought?: boolean;
-      thoughtSignature?: string;
-      functionCall?: { name: string; args?: Record<string, unknown> };
-    }>;
-    for (const part of parts) {
-      // Every part, thinking included, before any branching: the raw array is
-      // what gets echoed back next turn, and a dropped thoughtSignature ends
-      // the run with finishReason MISSING_THOUGHT_SIGNATURE. The one part left
-      // out is a bare `{text: ""}` — the stream's closing chunk — which came
-      // back refused through OrcaRouter's Vertex route ("required oneof field
-      // 'data' must have one initialized field"; possibly the gateway dropping
-      // the empty string on re-serialization, leaving `{}`). It carries
-      // nothing, so leaving it out costs nothing anywhere; an empty text that
-      // carries a signature is kept and was accepted (landscape.md §7 第十八个样本).
-      if (!isBareEmptyText(part)) geminiAllModelParts.push(part);
-      if (part.thought && part.text) {
-        // Reasoning, kept away from `text`: that variant is what reaches the
-        // manuscript. Arrives only when the request asked for it —
-        // `includeThoughts` defaults to off (see reasoningBody).
-        opts.onChunk({ reasoning: part.text });
-      } else if (part.text) {
-        opts.onChunk({ text: part.text });
-      } else if (part.functionCall) {
-        // Gemini sends complete functionCall objects (not streamed fragments)
-        geminiToolCalls.push({
-          index: geminiToolCalls.length,
-          id: `gtc_${Date.now()}_${geminiToolCalls.length}`,
-          name: part.functionCall.name,
-          arguments: JSON.stringify(part.functionCall.args ?? {}),
-        });
+    // Carry an incomplete trailing line across reads: a single SSE line can be split
+    // across network chunks, and parsing the halves would silently drop content.
+    let buffer = "";
+
+    const processLine = (line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) return;
+      let json: Record<string, unknown>;
+      try {
+        json = JSON.parse(trimmed.slice(5).trim()) as Record<string, unknown>;
+      } catch {
+        return; // skip malformed SSE lines
       }
-    }
-    // After the parts: a code run's call and result are parts of this same
-    // block, and the answer's text that follows them streamed above.
-    for (const serverTool of readServerTools(candidate)) opts.onChunk({ serverTool });
-    const usage = json.usageMetadata as {
-      promptTokenCount?: number;
-      candidatesTokenCount?: number;
-      thoughtsTokenCount?: number;
-      toolUsePromptTokenCount?: number;
-      cachedContentTokenCount?: number;
-    } | undefined;
-    if (usage) {
-      // What the built-in tools fed back in (a page read, a code run's output)
-      // is input billed beside the prompt, not inside `promptTokenCount` —
-      // measured: prompt + candidates + thoughts + toolUse = total (第十八个样本「再补测」).
-      inputTokens = (usage.promptTokenCount ?? 0) + (usage.toolUsePromptTokenCount ?? 0);
-      // Thinking models bill reasoning tokens as output, but candidatesTokenCount
-      // excludes them — without this, a run that thinks for 5k tokens and
-      // answers in 500 would record only 500 output tokens.
-      outputTokens = (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0);
-      // A subset of promptTokenCount, not additional to it.
-      cachedTokens = usage.cachedContentTokenCount ?? 0;
-      reportedCost = reportedCostOf(platform, "gemini", usage) ?? reportedCost;
-    }
-    // Response-level block/filter — distinct from promptFeedback.blockReason
-    // above, which only covers the request being refused before generation
-    // starts. Left unhandled, a mid-generation filter trip ends the stream
-    // with whatever text streamed so far, reported as a normal completion.
-    if (candidate?.finishReason && GEMINI_BLOCKED_FINISH_REASONS.has(candidate.finishReason)) {
-      throw new Error(`Gemini blocked this response (${candidate.finishReason}). The content may have triggered a safety filter — try a different model or provider.`);
-    }
-    const fault = candidate?.finishReason && GEMINI_REQUEST_FAULTS[candidate.finishReason];
-    if (fault) {
-      throw new Error(`Gemini rejected this request (${candidate.finishReason}): ${fault}.`);
-    }
-    if (candidate?.finishReason) stopReason = candidate.finishReason;
-    if (candidate?.finishReason === "MAX_TOKENS") truncated = true;
-    if (candidate?.finishReason && !GEMINI_NORMAL_FINISH_REASONS.has(candidate.finishReason)) {
-      throw new Error(`Gemini ended this response abnormally (finishReason: ${candidate.finishReason}).`);
-    }
-  };
+      if (json.usageMetadata) opts._onUsage?.(usageSnapshot("gemini", json.usageMetadata, reportedCostOf(platform, "gemini", json.usageMetadata)));
+      if (json.error) {
+        const msg = (json.error as { message?: string }).message ?? JSON.stringify(json.error);
+        throw new Error(`Gemini: ${msg}`);
+      }
+      const blockReason = (json.promptFeedback as { blockReason?: string } | undefined)?.blockReason;
+      if (blockReason) {
+        throw new Error(`Gemini blocked this request (${blockReason}). The content may have triggered a safety filter — try a different model or provider.`);
+      }
+      const candidate = (json.candidates as Array<{ content?: { parts?: unknown[] }; finishReason?: string; continuationToken?: string }> | undefined)?.[0];
+      if (candidate?.continuationToken) nextToken = candidate.continuationToken;
+      const rawParts: unknown[] = candidate?.content?.parts ?? [];
+      const parts = rawParts as Array<{
+        text?: string;
+        thought?: boolean;
+        thoughtSignature?: string;
+        functionCall?: { name: string; args?: Record<string, unknown> };
+      }>;
+      for (const part of parts) {
+        // Every part, thinking included, before any branching: the raw array is
+        // what gets echoed back next turn, and a dropped thoughtSignature ends
+        // the run with finishReason MISSING_THOUGHT_SIGNATURE. The one part left
+        // out is a bare `{text: ""}` — the stream's closing chunk — which came
+        // back refused through OrcaRouter's Vertex route ("required oneof field
+        // 'data' must have one initialized field"; possibly the gateway dropping
+        // the empty string on re-serialization, leaving `{}`). It carries
+        // nothing, so leaving it out costs nothing anywhere; an empty text that
+        // carries a signature is kept and was accepted (landscape.md §7 第十八个样本).
+        if (!isBareEmptyText(part)) geminiAllModelParts.push(part);
+        if (part.thought && part.text) {
+          // Reasoning, kept away from `text`: that variant is what reaches the
+          // manuscript. Arrives only when the request asked for it —
+          // `includeThoughts` defaults to off (see reasoningBody).
+          opts.onChunk({ reasoning: part.text });
+        } else if (part.text) {
+          opts.onChunk({ text: part.text });
+        } else if (part.functionCall) {
+          // Gemini sends complete functionCall objects (not streamed fragments)
+          geminiToolCalls.push({
+            index: geminiToolCalls.length,
+            id: `gtc_${Date.now()}_${geminiToolCalls.length}`,
+            name: part.functionCall.name,
+            arguments: JSON.stringify(part.functionCall.args ?? {}),
+          });
+        }
+      }
+      // After the parts: a code run's call and result are parts of this same
+      // block, and the answer's text that follows them streamed above.
+      for (const serverTool of readServerTools(candidate)) opts.onChunk({ serverTool });
+      const usage = json.usageMetadata as {
+        promptTokenCount?: number;
+        candidatesTokenCount?: number;
+        thoughtsTokenCount?: number;
+        toolUsePromptTokenCount?: number;
+        cachedContentTokenCount?: number;
+      } | undefined;
+      if (usage) {
+        // What the built-in tools fed back in (a page read, a code run's output)
+        // is input billed beside the prompt, not inside `promptTokenCount` —
+        // measured: prompt + candidates + thoughts + toolUse = total (第十八个样本「再补测」).
+        inputTokens = (usage.promptTokenCount ?? 0) + (usage.toolUsePromptTokenCount ?? 0);
+        // Thinking models bill reasoning tokens as output, but candidatesTokenCount
+        // excludes them — without this, a run that thinks for 5k tokens and
+        // answers in 500 would record only 500 output tokens.
+        outputTokens = (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0);
+        // A subset of promptTokenCount, not additional to it.
+        cachedTokens = usage.cachedContentTokenCount ?? 0;
+        reportedCost = reportedCostOf(platform, "gemini", usage) ?? reportedCost;
+      }
+      // Response-level block/filter — distinct from promptFeedback.blockReason
+      // above, which only covers the request being refused before generation
+      // starts. Left unhandled, a mid-generation filter trip ends the stream
+      // with whatever text streamed so far, reported as a normal completion.
+      if (candidate?.finishReason && GEMINI_BLOCKED_FINISH_REASONS.has(candidate.finishReason)) {
+        throw new Error(`Gemini blocked this response (${candidate.finishReason}). The content may have triggered a safety filter — try a different model or provider.`);
+      }
+      const fault = candidate?.finishReason && GEMINI_REQUEST_FAULTS[candidate.finishReason];
+      if (fault) {
+        throw new Error(`Gemini rejected this request (${candidate.finishReason}): ${fault}.`);
+      }
+      if (candidate?.finishReason) stopReason = candidate.finishReason;
+      if (candidate?.finishReason === "MAX_TOKENS") truncated = true;
+      if (candidate?.finishReason && !GEMINI_NORMAL_FINISH_REASONS.has(candidate.finishReason) &&
+        !(plan.gemini && candidate.finishReason === "CONTINUATION")) {
+        throw new Error(`Gemini ended this response abnormally (finishReason: ${candidate.finishReason}).`);
+      }
+    };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? ""; // keep the last (possibly incomplete) line for next read
-    for (const line of lines) processLine(line);
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) processLine(line);
+      }
+      buffer += decoder.decode();
+      if (buffer.trim()) processLine(buffer);
+      if (!stopReason) throw new Error("Gemini: stream interrupted before finishReason");
+    } finally {
+      // Abort/fault paths must release the network stream too; never replay paid
+      // partial output automatically (checkpoint recovery needs output rollback).
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
+    }
+
+    totalInputTokens += inputTokens;
+    totalOutputTokens += outputTokens;
+    totalCachedTokens += cachedTokens;
+    if (hop === 0) initialInputTokens = inputTokens;
+    totalReportedCost = addReportedCost(totalReportedCost, reportedCost);
+    if (stopReason !== "CONTINUATION") break;
+    if (plan.gemini && totalOutputTokens >= plan.gemini.maxOutputTokens) {
+      throw new Error("Gemini: continuation exceeded the configured total output budget");
+    }
+    if (!nextToken || seenTokens.has(nextToken) || hop >= 127) {
+      throw new Error("Gemini: continuation checkpoint missing, repeated, or hop limit exceeded");
+    }
+    seenTokens.add(nextToken);
+    continuationToken = nextToken;
+    // Settle this completed network attempt before the next request's body hook
+    // starts a new usage record. The final done chunk carries totals for display.
+    opts._onUsageComplete?.();
   }
-  // Flush any buffered final line that arrived without a trailing newline.
-  if (buffer.trim()) processLine(buffer);
 
-  if (!stopReason) throw new Error("Gemini: stream interrupted before finishReason");
   if (geminiToolCalls.length > 0) {
     opts.onChunk({ toolCalls: geminiToolCalls, _geminiModelParts: geminiAllModelParts });
   }
   opts.onChunk({
-    done: true, inputTokens, outputTokens,
+    done: true, inputTokens: totalInputTokens, outputTokens: totalOutputTokens,
+    ...(seenTokens.size ? { initialInputTokens } : {}),
     ...(truncated ? { truncated } : {}),
     ...(stopReason ? { stopReason } : {}),
-    ...(cachedTokens ? { cachedTokens } : {}),
-    ...(reportedCost !== undefined ? { reportedCost } : {}),
+    ...(totalCachedTokens ? { cachedTokens: totalCachedTokens } : {}),
+    ...(typeof totalReportedCost === "number" ? { reportedCost: totalReportedCost } : {}),
   });
 }

@@ -294,7 +294,8 @@ CommandPalette, onboarding flow, library view (文库: only what the author pick
 
 - **内部消息形状是 OpenAI 的**（`StreamMessage`，工具调用的 `arguments` 是 JSON 字符串）。Gemini 和 Anthropic 适配器各自带一个转换器（`convertToGeminiContents` / `convertToAnthropicMessages`），包括工具调用的往返和 data URL → base64 图片。Anthropic 那边还要守两条结构规矩：丢掉开头的 assistant 轮、合并相邻的同角色轮；合并进 tool_result 的作者文字会加上【作者消息】标签（`labelAuthorText`）。流式读取是 fetch + `ReadableStream` 按行解析。
 - **Anthropic 的用量在进门时归一化**：应用里的 `cachedTokens` 是 `inputTokens` 的**子集**（OpenAI / Gemini 就这么报，`costOf()` 也按这个算），Anthropic 报的是三个互不重叠的桶，所以适配器求和：`inputTokens = input_tokens + cache_read_input_tokens + cache_creation_input_tokens`，`cachedTokens = cache_read_input_tokens`。缓存写入比基础输入价贵，而计费组没有缓存写入价（只有输入价和缓存输入价），所以它落进全价桶——宁可多报，不少报。DashScope 原生每帧都带累计 usage，所以不发 `stream_options`。
-- **`max_tokens`**：Anthropic 必填，`Model.maxOutput` 经能力规划（`capability/plan.ts` 的 `maxTokensOnWire`）进请求，没配时发一个常数；其他族它只用于规划。线上另一种输出上限只有任务自己的 `StreamOptions.maxTokens`，只在 Chat Completions 路径上发（今天只有 Sakura 翻译引擎设它）。
+- **Argon GenerateContent**：`capability/cells/gemini.ts` 为原生协议画像，计划携带明确总输出预算与 20 分钟等待；`gemini.ts` 仅对 `CONTINUATION` 用原始请求和最新 token 续接，逐跳记账、最终合计；首跳输入另供上下文诊断，断流不自动重放。理由与验证边界见 `docs/api/gemini-plan.md` §9。
+- **`max_tokens`**：Anthropic 必填，`Model.maxOutput` 经能力规划（`capability/plan.ts` 的 `maxTokensOnWire`）进请求，没配时发一个常数；其他族它只用于规划，Argon 原生协议是例外：作者显式声明的值作为总生成预算。线上另一种输出上限只有任务自己的 `StreamOptions.maxTokens`，只在 Chat Completions 路径上发（今天只有 Sakura 翻译引擎设它）。
 - **结构化输出与思考**：`agent/structured.ts` 要的是 `toolChoice: "required"`（Anthropic `{type:"any"}`），不点名工具。Anthropic 适配器以前在强制工具时发 `thinking: {type: "disabled"}`，这个绕法已经删了——adaptive 思考（默认方言）支持强制工具，而这一段里有几个模型直接拒绝 `disabled`；改之前看 `anthropic.ts` 的 `thinkingFor`。JSON 模式按协议族在 `jsonMode.ts` 决定：OpenAI 系 `response_format`、Gemini `responseMimeType`、Anthropic 没有 JSON-object 档，只有 `off` 与严格的 `json_schema`（`output_config.format`）。要 schema 保证而不只是「合法 JSON」的调用方走 `agent/structured.ts`。
 
 #### 请求整形与工具选择

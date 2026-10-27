@@ -135,6 +135,7 @@ function spellSummary(plan: RequestPlan, budgetDeclared: boolean): WireItem[] {
   const out: WireItem[] = [...(spelling.thinking?.(plan, budgetDeclared) ?? [])];
   const reasoning = reasoningBody(plan.thinking.category, plan.thinking.effort, plan.thinking.budget);
   if (reasoning) out.push(...flatten(reasoning).filter((i) => !NOISE.has(i.key)));
+  if (plan.gemini) out.push({ key: "generationConfig.maxOutputTokens", value: String(plan.gemini.maxOutputTokens) });
   if (spelling.maxTokens) out.push({ key: "max_tokens", value: String(plan.maxTokensOnWire) });
   if (plan.temperature !== undefined) out.push({ key: "temperature", value: String(plan.temperature) });
   out.push(...spelling.serverTools(plan.serverTools));

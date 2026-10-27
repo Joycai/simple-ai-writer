@@ -121,3 +121,15 @@ JSON 解析失败，看起来像"模型不听话"。
 - **③ 的多模态**在 `prompt_tokens_details` 下还有 `image_tokens` / `audio_tokens`
   等明细（部分兼容层也提供），且图片 token 用量随分辨率档位变化很大——同一张图
   在 low / default / high 三档下可能相差一个数量级。
+
+
+## Gemini 4 Argon 的续接用量（官方文档，2026-10-27 核对；未实测）
+
+[long decode 指南](https://ai.google.dev/gemini-api/docs/generate-content/long-decode) 规定：
+REST 每跳 usage 只覆盖该跳，流内累计，取最后一份；跨跳分别相加。后续跳的输入包含此前
+生成内容，所以总 `promptTokenCount` 是计费用量，不能用作当前上下文大小。SDK 自动续接时
+已完成累加，不能再加一次；SDK 的 initialPromptTokenCount 是客户端计算，REST 不提供该字段。
+
+`CONTINUATION` 携带 candidate.continuationToken，可用原请求及该 token 在同一总输出预算内续接；
+`MAX_TOKENS` 是总预算耗尽，提高 maxOutputTokens 才能从 checkpoint 继续，原值重发会 400。
+单次流式 65,536、非流式 32,768；思考与正文共同使用输出预算，整个模型的统一窗口为 1,048,576。

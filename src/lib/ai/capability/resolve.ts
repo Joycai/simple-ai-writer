@@ -11,6 +11,7 @@ import type { ModelType } from "../configDb";
 import type { PlatformId, Wire } from "../platforms";
 import type { RelayUpstreamId } from "../relayUpstream";
 import type { CapabilityId, CapabilityReason, CapabilityStatus, CapabilityVerdict } from "./facts";
+import { geminiProfile } from "./cells/gemini";
 import { catalogFact } from "./cells/catalog";
 import { CAPABILITY_RULES } from "./rules";
 import { PLATFORM_CELLS, platformCell } from "./cells/platform";
@@ -101,6 +102,9 @@ export function familyVerdict(
   // No cell, or rows that single other ids out: the rule below decides.
 
   if (!rule.families.includes(family)) return verdict("no", "family");
+  // Native GenerateContent ignores Argon sampling. Do not infer compat-Chat behavior.
+  if (id === "temperature" &&
+    geminiProfile(family, model.catalogId ?? model.modelId)?.temperature === false) return verdict("no", "model");
   // A route measurement wins above; otherwise honor the documented native ladder.
   if (id === "reasoningOff" && model.modelId &&
     catalogFact("reasoningOff", model.catalogId ?? model.modelId) === false) {
