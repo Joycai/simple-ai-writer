@@ -33,6 +33,8 @@ async function directory() {
 }
 function parseReceipt(text: string): Receipt {
   const r = JSON.parse(text) as Receipt;
+  // Receipts written before per-field completeness remain replayable.
+  if (Array.isArray(r.values) && r.values.length === USAGE_INSERT_COLUMNS.length - 1) r.values.push(null);
   if (r.version !== 1 || !["project", "global"].includes(r.scope)
     || !(r.projectPath === null || typeof r.projectPath === "string")
     || (r.scope === "project" && !r.projectPath)
@@ -68,7 +70,7 @@ async function deliver(path: string, entry: Pending) {
   pending.delete(path);
 }
 // Serialize local enqueue/replay/clear. Other windows may replay the same receipt;
-// the ledger's unique request_id makes that harmless.
+// the ledger's unique request_id and deletion tombstones make that harmless.
 let tail: Promise<unknown> = Promise.resolve();
 function serial<T>(job: () => Promise<T>): Promise<T> {
   const next = tail.then(job, job);

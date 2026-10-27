@@ -73,6 +73,8 @@ export type RecordedUsage = RecordUsageInput & { reportedCost: number | null | u
 
 /** 写进库之前的一整行。导出是为了测试能不碰库就钉住它。 */
 export interface UsageRowValues {
+  /** Bit mask: input = 1, cache = 2, output = 4. */
+  usageKnown: number;
   usageIncomplete: boolean;
   costIncomplete: boolean;
   modelId: string;
@@ -113,9 +115,10 @@ export function buildUsageRow(input: RecordUsageInput, nowMs: number = Date.now(
   const parts = costOf(withRequests);
   const known = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0;
   const fields = input.usageEvidence?.fields;
-  const usageIncomplete = !known(fields ? fields.inputTokens : input.promptTokens)
-    || !known(fields ? fields.outputTokens : input.completionTokens)
-    || !known(fields ? fields.cachedTokens : input.cachedTokens);
+  const usageKnown = (known(fields ? fields.inputTokens : input.promptTokens) ? 1 : 0)
+    | (known(fields ? fields.cachedTokens : input.cachedTokens) ? 2 : 0)
+    | (known(fields ? fields.outputTokens : input.completionTokens) ? 4 : 0);
+  const usageIncomplete = usageKnown !== 7;
   const interrupted = input.usageEvidence && input.usageEvidence.outcome !== "complete";
   const costIncomplete = !hasReportedCost(input.reportedCost) && (
     !input.model.fee || !!interrupted || (fee.billingMode === "token"
@@ -126,7 +129,7 @@ export function buildUsageRow(input: RecordUsageInput, nowMs: number = Date.now(
     || (fee.billingMode !== "token" && fee.inputUnitPrice > 0 && !known(input.inputImages))
   );
   return {
-    usageIncomplete, costIncomplete,
+    usageKnown, usageIncomplete, costIncomplete,
     modelId: input.model.id,
     task: input.task,
     promptTokens: prompt,
@@ -168,6 +171,6 @@ export async function recordUsage(
 ): Promise<void> {
   const row = buildUsageRow(input);
   const values = [...insertValues(row), input.requestId ?? crypto.randomUUID(), input.usageEvidence ? JSON.stringify(input.usageEvidence) : null,
-    row.usageIncomplete ? 1 : 0, row.costIncomplete ? 1 : 0];
+    row.usageIncomplete ? 1 : 0, row.costIncomplete ? 1 : 0, row.usageKnown];
   await enqueueUsage(projectPath, values);
 }

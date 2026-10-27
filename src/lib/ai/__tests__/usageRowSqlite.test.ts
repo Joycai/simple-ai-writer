@@ -158,3 +158,69 @@ it("saves both receipts before the first ledger write and preserves malformed re
   expect(await readFile(`${state.dir}/usage-outbox/bad.json`, "utf8")).toBe("not json");
   expect(global.raw.prepare("SELECT COUNT(*) AS n FROM token_usage").get()?.n).toBe(1);
 });
+
+
+it("does not resurrect cleared usage when another window's INSERT was already in flight", async () => {
+  const { global } = await ledgers();
+  state.global = { execute: async () => { throw new Error("locked"); } };
+  await recordUsage(null, { model: { id: "m" }, task: "chat", requestId: "in-flight", reportedCost: 0 });
+  let release!: () => void;
+  let arrived!: () => void;
+  const paused = new Promise<void>((resolve) => { release = resolve; });
+  const atWrite = new Promise<void>((resolve) => { arrived = resolve; });
+  state.global = { execute: async (sql: string, values: unknown[]) => {
+    arrived(); await paused; return global.db.execute(sql, values);
+  } };
+  const firstWindow = retryUsageDelivery();
+  await atWrite;
+  state.global = global.db;
+  vi.resetModules();
+  const secondWindow = await import("../usageOutbox");
+  await secondWindow.withUsageClear("global", null, async () => { global.raw.exec("DELETE FROM token_usage"); });
+  release(); await firstWindow;
+  expect(global.raw.prepare("SELECT COUNT(*) AS n FROM token_usage").get()?.n).toBe(0);
+  await recordUsage(null, { model: { id: "m" }, task: "chat", requestId: "new-request", reportedCost: 0 });
+  expect(global.raw.prepare("SELECT request_id FROM token_usage").all()).toEqual([{ request_id: "new-request" }]);
+});
+
+it("keeps per-field zeros and sums fresh input only when input and cache are both known", async () => {
+  const { global } = await ledgers();
+  await recordUsage(null, { model: { id: "m" }, task: "partial", promptTokens: 100, completionTokens: 0, reportedCost: null });
+  const row = () => global.raw.prepare(`SELECT ${ROLLUP_SELECT} FROM token_usage`).get();
+  expect(row()).toMatchObject({ incomplete_input: 0, incomplete_cache: 1, incomplete_output: 0,
+    incomplete_fresh: 1, fresh_tokens: 0, completion_tokens: 0 });
+  await recordUsage(null, { model: { id: "m" }, task: "known", promptTokens: 50, cachedTokens: 20, completionTokens: 0, reportedCost: null });
+  expect(row()).toMatchObject({ incomplete_input: 0, incomplete_cache: 1, incomplete_output: 0,
+    incomplete_fresh: 1, fresh_tokens: 30, completion_tokens: 0 });
+});
+
+it("retains deletion markers per ledger and rolls them back with a failed clear", async () => {
+  const { project, global } = await ledgers();
+  const input = { model: { id: "m" }, task: "chat", requestId: "deleted", reportedCost: 0 };
+  await recordUsage("/p", input);
+  project.raw.exec("BEGIN; DELETE FROM token_usage; ROLLBACK;");
+  expect(project.raw.prepare("SELECT COUNT(*) AS n FROM usage_deleted_requests").get()?.n).toBe(0);
+  project.raw.exec("DELETE FROM token_usage");
+  await recordUsage("/p", input);
+  expect(project.raw.prepare("SELECT COUNT(*) AS n FROM token_usage").get()?.n).toBe(0);
+  expect(global.raw.prepare("SELECT COUNT(*) AS n FROM token_usage").get()?.n).toBe(1);
+});
+
+
+it("replays receipts written before the per-field mask was added", async () => {
+  const { global } = await ledgers();
+  state.global = { execute: async () => { throw new Error("locked"); } };
+  await recordUsage(null, { model: { id: "m" }, task: "legacy-receipt", requestId: "old-layout", reportedCost: 0 });
+  const dir = `${state.dir}/usage-outbox`;
+  const [file] = await readdir(dir);
+  const receipt = JSON.parse(await readFile(`${dir}/${file}`, "utf8"));
+  receipt.values.pop();
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(`${dir}/${file}`, JSON.stringify(receipt));
+  state.global = global.db;
+  vi.resetModules();
+  await (await import("../usageOutbox")).retryUsageDelivery();
+  expect(global.raw.prepare("SELECT request_id, usage_known, reported_cost FROM token_usage").get())
+    .toMatchObject({ request_id: "old-layout", usage_known: null, reported_cost: 0 });
+  expect(await readdir(dir)).toEqual([]);
+});

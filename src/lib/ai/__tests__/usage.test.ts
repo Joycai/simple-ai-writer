@@ -26,6 +26,7 @@ import {
 } from "../usage";
 
 const bucket = (over: Partial<UsageBucket>): UsageBucket => ({
+  incompleteInput: 0, incompleteCache: 0, incompleteOutput: 0, incompleteFresh: 0, freshTokens: 0,
   key: "k",
   calls: 0,
   promptTokens: 0,
@@ -199,6 +200,11 @@ describe("ROLLUP_SELECT 的别名与 rowToBucket 读的 key 一一对上", () =>
     output_units: "outputUnits",
     uncovered: "uncovered",
     incomplete_usage: "incompleteUsage",
+    incomplete_input: "incompleteInput",
+    incomplete_cache: "incompleteCache",
+    incomplete_output: "incompleteOutput",
+    incomplete_fresh: "incompleteFresh",
+    fresh_tokens: "freshTokens",
     incomplete_cost: "incompleteCost",
     cost_usd: "costUsd",
     cost_input: "costInput",
@@ -296,9 +302,9 @@ describe("sortBuckets", () => {
 describe("sortUsageBuckets", () => {
   const id = (k: string) => k;
   const rows = [
-    bucket({ key: "a", calls: 5, promptTokens: 100, cachedTokens: 80, completionTokens: 10, costUsd: 0.1 }),
-    bucket({ key: "b", calls: 2, promptTokens: 200, cachedTokens: 20, completionTokens: 90, costUsd: 0.9 }),
-    bucket({ key: "c", calls: 9, promptTokens: 50, cachedTokens: 0, completionTokens: 40, costUsd: 0 }),
+    bucket({ key: "a", calls: 5, promptTokens: 100, cachedTokens: 80, freshTokens: 20, completionTokens: 10, costUsd: 0.1 }),
+    bucket({ key: "b", calls: 2, promptTokens: 200, cachedTokens: 20, freshTokens: 180, completionTokens: 90, costUsd: 0.9 }),
+    bucket({ key: "c", calls: 9, promptTokens: 50, cachedTokens: 0, freshTokens: 50, completionTokens: 40, costUsd: 0 }),
   ];
 
   it("sorts descending by a numeric column", () => {

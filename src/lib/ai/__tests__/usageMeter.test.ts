@@ -13,6 +13,7 @@ import { meterSegments, USAGE_SEGMENT_ORDER, type UsageSegKey } from "../usageMe
 import type { UsageBucket } from "../usage";
 
 const bucket = (over: Partial<UsageBucket> = {}): UsageBucket => ({
+  incompleteInput: 0, incompleteCache: 0, incompleteOutput: 0, incompleteFresh: 0, freshTokens: 0,
   key: "k", calls: 1,
   promptTokens: 0, cachedTokens: 0, completionTokens: 0,
   outputUnits: 0, uncovered: 0, costUsd: 0, incompleteUsage: 0, incompleteCost: 0,

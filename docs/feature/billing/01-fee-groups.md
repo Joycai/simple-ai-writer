@@ -484,7 +484,7 @@ resubmitting generation are never part of recovery.
 
 Replay runs after configuration startup, every 30 seconds, on new usage writes, and
 from the page's retry button. Local operations serialize; separate windows rely on
-ledger uniqueness. Bad receipts stay on disk and report failure without blocking other
+ledger uniqueness and deletion tombstones. Bad receipts stay on disk and report failure without blocking other
 valid receipts. A missing/inaccessible project remains pending; recovery never creates
 its database. Reopening the project restores its filesystem scope for the next retry.
 Global delivery proceeds independently.
@@ -500,7 +500,14 @@ obtained generation result into an API failure.
 Clearing usage and app reset first drain recovery and refuse while recovery is unresolved;
 otherwise old pending receipts could restore cleared statistics. Pending project-only
 receipts do not block clearing a successfully delivered global ledger. The guard serializes
-within a window, not a distributed transaction with concurrent windows. Receipt deletion
+within a window. In each ledger, an AFTER DELETE trigger retains only deleted request IDs
+in `usage_deleted_requests`; a BEFORE INSERT trigger ignores their replay. The marker is
+committed or rolled back with the DELETE, preventing another window’s already-in-flight
+INSERT from restoring cleared rows. Markers are deliberately retained across app reset:
+there is no safe time limit for a delayed receipt. They contain no quantities, prices or
+project paths. Requests not yet delivered at clear time remain new traffic, not deleted
+history. Recovery preflight runs before keyring deletion; secrets still precede config rows.
+Receipt deletion
 and two-ledger commit are intentionally separate; this is idempotent recovery, not an
 exactly-once distributed database protocol.
 
@@ -529,3 +536,23 @@ SQLite plus temporary filesystem tests exercise durable restart replay, original
 and timestamps, volatile fallback, two receipts before first INSERT, missing projects,
 malformed receipts and clear guards. No video implementation or paid-provider reconciliation
 is included.
+
+
+### Review corrections: completeness and themed controls
+
+`usage_known` stores independent input/cache/output presence bits (1/2/4). Missing cache
+no longer hides a reported output zero. Uncached input is summed only from rows with both
+input and cache known: subtracting incomplete aggregate cache from total input would
+incorrectly label an upper bound as known usage. Cache hit rate requires input and cache,
+not output. Old fully complete rows imply all bits; ambiguous old rows remain unknown.
+Pending receipts from the earlier layout acquire a NULL mask during parsing, preserving
+snapshots without inventing per-field evidence.
+
+The usage clear action uses the shared `ConfirmDialog`/`ModalShell` and its theme tokens;
+no native browser confirm is used. The redundant native amount tooltip was removed;
+incompleteness stays visible in the amount and row notes. Recovery buttons continue to
+use `usageGapLink` and the shared focus styles.
+
+Regression tests cover reset refusal before secrets, a paused cross-window INSERT resumed
+after clear, deletion-marker rollback and ledger isolation, and mixed known/unknown
+field aggregation with an explicit output zero.

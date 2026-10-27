@@ -1,3 +1,4 @@
+import { ConfirmDialog } from "../../common/ConfirmDialog";
 import { retryUsageDelivery, subscribeUsageDelivery, usageDeliverySnapshot } from "../../../lib/ai/usageOutbox";
 import { useState, useEffect, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
@@ -36,7 +37,7 @@ type Dimension = "group" | "model" | "task" | "project";
 /** `cachedTokens` is a subset of `promptTokens` (see configDb.costFor), so the
  *  "fresh input" column is the difference, not the raw prompt figure. */
 function uncached(b: UsageBucket): number {
-  return Math.max(0, b.promptTokens - b.cachedTokens);
+  return b.freshTokens;
 }
 
 /**
@@ -61,7 +62,7 @@ function pctText(share: number): string {
 }
 
 function hitRate(b: UsageBucket): string {
-  if (b.incompleteUsage || b.promptTokens <= 0) return "—";
+  if (b.incompleteInput || b.incompleteCache || b.promptTokens <= 0) return "—";
   return `${Math.round((b.cachedTokens / b.promptTokens) * 100)}%`;
 }
 
@@ -78,7 +79,7 @@ function hitRate(b: UsageBucket): string {
 export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
   const { t, i18n: i18nInst } = useTranslation();
   const delivery = useSyncExternalStore(subscribeUsageDelivery, usageDeliverySnapshot);
-  const quantity = (n: number, b: UsageBucket) => b.incompleteUsage
+  const quantity = (n: number, incomplete: number) => incomplete
     ? n > 0 ? t("systemSettings.usage.knownValue", { value: formatTokenCount(n) }) : t("systemSettings.usage.unknownUsage")
     : formatTokenCount(n);
   const amount = (b: UsageBucket) => b.incompleteCost
@@ -100,6 +101,7 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
   });
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // 总体那份不需要开着项目：它正是「项目删了、移走了，这一年花了多少还在」
@@ -133,8 +135,7 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
    */
   const handleClear = async () => {
     if (busy) return;
-    const key = scope === "global" ? "clearConfirmGlobal" : "clearConfirm";
-    if (!globalThis.confirm(t(`systemSettings.usage.${key}`))) return;
+    setConfirmClear(false);
     setBusy(true);
     try {
       await clearUsage(scope, scope === "global" ? null : projectPath);
@@ -340,13 +341,13 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
         {
           key: "input",
           label: t("systemSettings.usage.cards.input"),
-          value: quantity(total.promptTokens, total),
-          sub: t("systemSettings.usage.cards.inputSub", { cached: quantity(total.cachedTokens, total) }),
+          value: quantity(total.promptTokens, total.incompleteInput),
+          sub: t("systemSettings.usage.cards.inputSub", { cached: quantity(total.cachedTokens, total.incompleteCache) }),
         },
         {
           key: "output",
           label: t("systemSettings.usage.cards.output"),
-          value: quantity(total.completionTokens, total),
+          value: quantity(total.completionTokens, total.incompleteOutput),
           sub: t("systemSettings.usage.cards.outputSub"),
         },
         {
@@ -458,11 +459,11 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
                     {meterBar(b)}
                   </div>
                   <span className={ui.usageNum}>{b.calls.toLocaleString("en-US")}</span>
-                  <span className={ui.usageNum}>{quantity(uncached(b), b)}</span>
-                  <span className={`${ui.usageNum} ${ui.usageNumMuted} ${ui.hideNarrow}`}>{quantity(b.cachedTokens, b)}</span>
-                  <span className={ui.usageNum}>{quantity(b.completionTokens, b)}</span>
+                  <span className={ui.usageNum}>{quantity(uncached(b), b.incompleteFresh)}</span>
+                  <span className={`${ui.usageNum} ${ui.usageNumMuted} ${ui.hideNarrow}`}>{quantity(b.cachedTokens, b.incompleteCache)}</span>
+                  <span className={ui.usageNum}>{quantity(b.completionTokens, b.incompleteOutput)}</span>
                   <span className={`${ui.usageNum} ${ui.usageNumMuted} ${ui.hideNarrow}`}>{hitRate(b)}</span>
-                  <span className={`${ui.usageNum} ${ui.usageNumCost}`} title={amount(b)}>
+                  <span className={`${ui.usageNum} ${ui.usageNumCost}`}>
                     {b.incompleteCost ? b.costUsd > 0 ? `≈ ${formatUsd(b.costUsd)}` : t("systemSettings.usage.unknownUsage") : formatUsd(b.costUsd)}
                   </span>
                   {/* 没命中任何档位的请求按 0 计——不是错误，是还没配完，所以
@@ -501,13 +502,21 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
         >
           <button
             className={ui.rowBtn}
-            onClick={handleClear}
+            onClick={() => setConfirmClear(true)}
             disabled={busy || !summary || summary.total.calls === 0}
           >
             {t(`systemSettings.usage.clearLabel.${scope}`)}
           </button>
         </Row>
       </Section>
+      {confirmClear && <ConfirmDialog
+        title={t(`systemSettings.usage.clearLabel.${scope}`)}
+        message={t(`systemSettings.usage.${scope === "global" ? "clearConfirmGlobal" : "clearConfirm"}`)}
+        confirmLabel={t(`systemSettings.usage.clearLabel.${scope}`)}
+        danger
+        onConfirm={() => { void handleClear(); }}
+        onClose={() => setConfirmClear(false)}
+      />}
     </Pane>
   );
 }

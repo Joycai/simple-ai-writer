@@ -130,24 +130,29 @@ export async function resetApp(): Promise<ResetSummary> {
   const db = await configDb();
   const providers = await listProviders(db);
 
-  // 1. 钥匙串先走。被拒就整件事作废——见模块头「顺序」。
-  const wipe = await clearAllSecrets(secretAccounts(providers.map((p) => p.id)));
-  if (wipe.failed > 0) throw new SecretWipeError(wipe.failed);
-
-  // 2. 配置表一次事务。models 先于 providers：外键虽然是 CASCADE，但让删除
-  //    顺序自己成立比依赖它清楚。
   const dbPath = await getGlobalDbPath();
-  await withUsageClear("global", null, () => sqlTransaction(dbPath, [
-    { sql: "DELETE FROM models", values: [] },
-    { sql: "DELETE FROM providers", values: [] },
-    { sql: "DELETE FROM prompts", values: [] },
-    // 组在引用它的两张表之后：删空的顺序自己成立，比依赖「反正没外键」清楚。
-    { sql: "DELETE FROM fee_groups", values: [] },
-    // 总体用量。项目文件夹里的那一份不动——那是作者的稿子那一边的东西。
-    { sql: "DELETE FROM token_usage", values: [] },
-    // 端点学到的降级（learnedDb.ts）。内存里那一份紧跟着清。
-    { sql: "DELETE FROM learned_ceilings", values: [] },
-  ]));
+  let secretsRemoved = 0;
+  await withUsageClear("global", null, async () => {
+    // Recovery preflight runs before any destructive action.
+    // 1. 钥匙串先走。被拒就整件事作废——见模块头「顺序」。
+    const wipe = await clearAllSecrets(secretAccounts(providers.map((p) => p.id)));
+    if (wipe.failed > 0) throw new SecretWipeError(wipe.failed);
+
+    // 2. 配置表一次事务。models 先于 providers：外键虽然是 CASCADE，但让删除
+    //    顺序自己成立比依赖它清楚。
+    secretsRemoved = wipe.removed;
+    await sqlTransaction(dbPath, [
+      { sql: "DELETE FROM models", values: [] },
+      { sql: "DELETE FROM providers", values: [] },
+      { sql: "DELETE FROM prompts", values: [] },
+      // 组在引用它的两张表之后：删空的顺序自己成立，比依赖「反正没外键」清楚。
+      { sql: "DELETE FROM fee_groups", values: [] },
+      // 总体用量。项目文件夹里的那一份不动——那是作者的稿子那一边的东西。
+      { sql: "DELETE FROM token_usage", values: [] },
+      // 端点学到的降级（learnedDb.ts）。内存里那一份紧跟着清。
+      { sql: "DELETE FROM learned_ceilings", values: [] },
+    ]);
+  });
   clearLearned();
 
   // 3. 排版格式和历史遗留的明文密钥表都不在上面那个事务里，理由和
@@ -177,5 +182,5 @@ export async function resetApp(): Promise<ResetSummary> {
   // 5. 偏好最后，并且是 await 的——调用方紧接着就要重载窗口。
   await clearAllPrefs();
 
-  return { inventory, secretsRemoved: wipe.removed };
+  return { inventory, secretsRemoved };
 }
