@@ -810,6 +810,8 @@
       "uncovered": "{{n}} request(s) matched no tier and billed 0",
       "knownValue": "Known: {{value}}",
       "unknownUsage": "Unknown",
+      "deliveryFailed": "Usage recovery could not read or save its records. Totals may be incomplete; retry recovery.",
+      "incompleteCost": "{{n}} requests have incomplete costs; the amount contains only known charges or estimates.",
       "incompleteAmount": "{{amount}} (incomplete)",
       "incompleteUsage": "{{n}} requests have missing usage details; counts show only known quantities.",
       "deliveryPending": "Usage recovery is pending ({{n}} ledger records). Recorded totals may be incomplete; retry runs automatically.",

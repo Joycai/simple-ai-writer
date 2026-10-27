@@ -197,7 +197,7 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
       <Pane width="wide">
       {(delivery.pending > 0 || delivery.failed) && (
         <div className={ui.usageGap} role="status">
-          <span>{t(delivery.volatile > 0 ? "systemSettings.usage.deliveryVolatile" : "systemSettings.usage.deliveryPending", { n: delivery.pending })}</span>
+          <span>{t(delivery.volatile > 0 ? "systemSettings.usage.deliveryVolatile" : delivery.pending > 0 ? "systemSettings.usage.deliveryPending" : "systemSettings.usage.deliveryFailed", { n: delivery.pending })}</span>
           <button type="button" className={ui.usageGapLink} onClick={() => { void retryUsageDelivery(); }}>
             {t("systemSettings.usage.retryDelivery")}
           </button>
@@ -368,7 +368,7 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
     <Pane width="wide">
       {(delivery.pending > 0 || delivery.failed) && (
         <div className={ui.usageGap} role="status">
-          <span>{t(delivery.volatile > 0 ? "systemSettings.usage.deliveryVolatile" : "systemSettings.usage.deliveryPending", { n: delivery.pending })}</span>
+          <span>{t(delivery.volatile > 0 ? "systemSettings.usage.deliveryVolatile" : delivery.pending > 0 ? "systemSettings.usage.deliveryPending" : "systemSettings.usage.deliveryFailed", { n: delivery.pending })}</span>
           <button type="button" className={ui.usageGapLink} onClick={() => { void retryUsageDelivery(); }}>
             {t("systemSettings.usage.retryDelivery")}
           </button>
@@ -462,11 +462,14 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
                   <span className={`${ui.usageNum} ${ui.usageNumMuted} ${ui.hideNarrow}`}>{quantity(b.cachedTokens, b)}</span>
                   <span className={ui.usageNum}>{quantity(b.completionTokens, b)}</span>
                   <span className={`${ui.usageNum} ${ui.usageNumMuted} ${ui.hideNarrow}`}>{hitRate(b)}</span>
-                  <span className={`${ui.usageNum} ${ui.usageNumCost}`}>
-                    {amount(b)}
+                  <span className={`${ui.usageNum} ${ui.usageNumCost}`} title={amount(b)}>
+                    {b.incompleteCost ? b.costUsd > 0 ? `≈ ${formatUsd(b.costUsd)}` : t("systemSettings.usage.unknownUsage") : formatUsd(b.costUsd)}
                   </span>
                   {/* 没命中任何档位的请求按 0 计——不是错误，是还没配完，所以
                       写成一行提示而不是警示色，并且给一条直达补表的路。 */}
+                  {b.incompleteCost > 0 && (
+                    <div className={ui.usageGap}>{t("systemSettings.usage.incompleteCost", { n: b.incompleteCost })}</div>
+                  )}
                   {b.incompleteUsage > 0 && (
                     <div className={ui.usageGap}>{t("systemSettings.usage.incompleteUsage", { n: b.incompleteUsage })}</div>
                   )}

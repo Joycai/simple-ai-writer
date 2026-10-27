@@ -807,6 +807,8 @@
       "uncovered": "{{n}} 次请求没匹配到档位，按 0 计",
       "knownValue": "已知 {{value}}",
       "unknownUsage": "未知",
+      "deliveryFailed": "无法读取或保存补账记录，汇总可能不完整。请重试补账。",
+      "incompleteCost": "{{n}} 次请求费用不完整；金额仅包含已知费用或估算。",
       "incompleteAmount": "{{amount}}（不完整）",
       "incompleteUsage": "{{n}} 次请求缺少用量明细；数量仅包含已知部分。",
       "deliveryPending": "用量待补账（{{n}} 条账目）。汇总可能不完整，系统会自动重试。",
