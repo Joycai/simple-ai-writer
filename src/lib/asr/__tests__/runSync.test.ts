@@ -101,7 +101,7 @@ describe("transcribeFile × dashscope-sync", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions");
     expect(JSON.parse(calls[0].body).asr_options).toEqual({ language: "zh" });
-    expect(first).toMatchObject({ cached: false, billedSeconds: 6 });
+    expect(first).toMatchObject({ cached: false, billedSeconds: 6, requestId: expect.any(String) });
     expect(first.transcript.timed).toBe(false);
     expect(first.cacheDir).toMatch(/-qwen3-asr-flash-sync-p-zh$/);
     const meta = JSON.parse(fsState.files.get(`${first.cacheDir}/meta.json`) as string);

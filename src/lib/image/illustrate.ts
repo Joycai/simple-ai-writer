@@ -173,6 +173,9 @@ export async function runIllustration(
     degraded = inputPaths.length > 0;
   }
 
+  const billedSpec = imageSelectedSpec(model.caps, sel);
+  await recordImageUsage(projectPath, model, proposal.sourcePath ? "image-edit" : "image-gen",
+    result.images.length, result.usage, billedSpec, degraded ? 0 : inputPaths.length, result.requestId);
   const image = result.images[0];
   if (!image) throw new Error("The model returned no image.");
   const { bytes, ext } = dataUrlToBytes(image.dataUrl);
@@ -200,8 +203,6 @@ export async function runIllustration(
     path = await saveImageInFolder(proposal.dest.dir, bytes, ext);
   }
 
-  const billedSpec = imageSelectedSpec(model.caps, sel);
-  await recordImageUsage(projectPath, model, proposal.sourcePath ? "image-edit" : "image-gen", 1, result.usage, billedSpec);
   // Awaited: the record file is a read-modify-write, and an agent approving two
   // illustrations in a row would otherwise lose one of the two entries.
   await recordGeneration(projectPath, {

@@ -24,10 +24,10 @@ it("overwrites cumulative snapshots, preserves missing fields and seals once", a
   expect(vi.mocked(recordUsage).mock.calls[0][1]).toMatchObject({ promptTokens: 100, completionTokens: 8, reportedCost: 0, requests: 0,
     usageEvidence: { outcome: "failed", source: "reported", fields: { inputTokens: 100, outputTokens: 8, reportedCost: 0 } } });
 });
-it("does not price unknown failed requests or infer counts from output", async () => {
+it("records unknown failed attempts without inventing a request fee or token counts", async () => {
   const usage = createStreamUsage(accounting);
   usage.start(); await usage.finish("failed");
-  expect(recordUsage).not.toHaveBeenCalled();
+  expect(recordUsage).toHaveBeenCalledWith("/p", expect.objectContaining({ requests: 0, usageEvidence: { outcome: "failed", source: "unreported", fields: {} } }));
   expect(usageSnapshot("openai", { prompt_tokens: NaN, completion_tokens: -1, total_tokens: 300 })).toEqual({});
   expect(usageSnapshot("gemini", { promptTokenCount: 10, toolUsePromptTokenCount: 5, candidatesTokenCount: 3, thoughtsTokenCount: 7 })).toEqual({ inputTokens: 15, outputTokens: 10 });
 });
@@ -75,14 +75,16 @@ it("records reported input when the author aborts before the terminal frame", as
   await expect(streamCompletion({ ...opts(), signal: controller.signal, onChunk: () => controller.abort() })).rejects.toThrow();
   expect(vi.mocked(recordUsage).mock.calls[0][1]).toMatchObject({ promptTokens: 15, usageEvidence: { outcome: "cancelled", fields: { inputTokens: 15 } } });
 });
-it("does not bill an automatic capability refusal, but bills its successful replacement once", async () => {
+it("retains unknown capability refusals separately from their successful replacement", async () => {
   const fetcher = vi.fn().mockResolvedValueOnce(new Response("Thinking mode does not support this tool_choice", { status: 400 }))
     .mockResolvedValueOnce(new Response(line({ usage: { prompt_tokens: 10, completion_tokens: 3 } }) + "data: [DONE]\n\n"));
   vi.stubGlobal("fetch", fetcher);
   await streamCompletion({ ...opts(), baseUrl: "https://api.deepseek.com", modelId: "deepseek-v4-flash",
     tools: [{ type: "function", function: { name: "emit", description: "Return a result", parameters: { type: "object", properties: {} } } }], toolChoice: "required" });
   expect(fetcher).toHaveBeenCalledTimes(2);
-  expect(recordUsage).toHaveBeenCalledTimes(1);
+  expect(recordUsage).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(recordUsage).mock.calls[0][1].requests).toBe(0);
+  expect(vi.mocked(recordUsage).mock.calls[1][1].requests).toBe(1);
 });
 it("flushes the latest reported counts on watchdog abort", async () => {
   vi.useFakeTimers();

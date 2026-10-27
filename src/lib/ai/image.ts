@@ -167,11 +167,13 @@ export interface GeneratedImage {
 }
 
 export interface ImageResult {
+  /** Stable for this generation; reused by every accounting path. */
+  requestId?: string;
   images: GeneratedImage[];
   /** Commentary some models return alongside the picture (Gemini does). */
   text?: string;
   /** Reported only by providers that meter image generation as tokens. */
-  usage?: { inputTokens: number; outputTokens: number };
+  usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number };
 }
 
 /** Thrown when the endpoint answered, but with no image in it. */
@@ -295,6 +297,7 @@ function withDeadline(signal: AbortSignal | undefined, ms: number): { signal: Ab
  * `streamCompletion` makes.
  */
 export async function generateImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
+  const requestId = crypto.randomUUID();
   const route = effectiveImageRoute(conn.standard, conn);
   // Logged like `streamCompletion` is. These calls bill per attempt and their
   // failures are the least reproducible in the app, so leaving them out of the
@@ -318,7 +321,7 @@ export async function generateImage(conn: ImageConn, req: ImageRequest): Promise
   try {
     const result = await dispatchImage(route, effectiveAsyncTask(conn.standard, conn), conn, req, log);
     log.success({ images: result.images.length, usage: result.usage, text: result.text });
-    return result;
+    return { ...result, requestId };
   } catch (e) {
     log.error(e);
     throw e;
@@ -673,7 +676,7 @@ async function parseOpenAiImagePayload(raw: unknown, signal?: AbortSignal): Prom
 
   // Present on the token-billed image models, absent on the per-image ones.
   const usage = json.usage
-    ? { inputTokens: json.usage.input_tokens ?? 0, outputTokens: json.usage.output_tokens ?? 0 }
+    ? { inputTokens: json.usage.input_tokens, outputTokens: json.usage.output_tokens }
     : undefined;
   // revised_prompt is what the provider actually rendered after its own
   // rewriting — worth surfacing, since it explains output the author's prompt
@@ -941,7 +944,7 @@ async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResul
   }
 
   const usage = json.usage
-    ? { inputTokens: json.usage.prompt_tokens ?? 0, outputTokens: json.usage.completion_tokens ?? 0 }
+    ? { inputTokens: json.usage.prompt_tokens, outputTokens: json.usage.completion_tokens }
     : undefined;
   return { images, usage, ...(texts.length ? { text: texts.join("\n\n") } : {}) };
 }
@@ -1049,8 +1052,8 @@ async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
 
   const usage = json.usageMetadata
     ? {
-        inputTokens: json.usageMetadata.promptTokenCount ?? 0,
-        outputTokens: json.usageMetadata.candidatesTokenCount ?? 0,
+        inputTokens: json.usageMetadata.promptTokenCount,
+        outputTokens: json.usageMetadata.candidatesTokenCount,
       }
     : undefined;
   return { images, usage, ...(texts.length ? { text: texts.join("\n\n") } : {}) };

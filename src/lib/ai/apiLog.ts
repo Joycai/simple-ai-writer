@@ -107,7 +107,7 @@ function redactRequestBody(value: unknown, depth = 0): unknown {
 
 /** Logging for one image call — the same file, so a debug session sees both. */
 export interface ImageCallLogger {
-  success(result: { images: number; usage?: { inputTokens: number; outputTokens: number }; text?: string }): void;
+  success(result: { images: number; usage?: { inputTokens?: number; outputTokens?: number }; text?: string }): void;
   error(e: unknown): void;
   /**
    * A mid-call progress fact worth having when the call never completes —

@@ -7,12 +7,22 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const projectExecute = vi.fn(async () => {});
-const globalExecute = vi.fn(async () => {});
+const projectExecute = vi.fn(async (_sql: string, _values: unknown[]) => {});
+const globalExecute = vi.fn(async (_sql: string, _values: unknown[]) => {});
 vi.mock("../../project", () => ({
   getDb: vi.fn(async () => ({ execute: projectExecute })),
   getGlobalDb: vi.fn(async () => ({ execute: globalExecute })),
 }));
+
+vi.mock("../usageOutbox", async () => {
+  const { usageInsertSql } = await import("../usageSchema");
+  return { enqueueUsage: async (project: string | null, values: unknown[]) => {
+    await Promise.all([
+      project ? projectExecute(usageInsertSql("project"), values).catch(() => {}) : Promise.resolve(),
+      globalExecute(usageInsertSql("global"), [...values, project]).catch(() => {}),
+    ]);
+  } };
+});
 
 import { buildUsageRow, recordUsage } from "../usageRow";
 import type { RecordUsageInput, UsageRowValues } from "../usageRow";
@@ -327,5 +337,25 @@ describe("recordUsage", () => {
       reported_cost: null,
     });
     expect(JSON.parse(String(row.output_spec))).toEqual({ size: "1K", matched: true });
+  });
+});
+
+describe("usage completeness", () => {
+  it("distinguishes no report from explicit zero and keeps a trusted zero quote", () => {
+    const base = { model: model(fee({ inputPrice: 2, cachePrice: 2, outputPrice: 4 })), task: "chat" };
+    expect(buildUsageRow(base)).toMatchObject({ usageIncomplete: true, costIncomplete: true });
+    expect(buildUsageRow({ ...base, promptTokens: 0, completionTokens: 0, cachedTokens: 0 })).toMatchObject({ usageIncomplete: false, costIncomplete: false });
+    expect(buildUsageRow({ ...base, reportedCost: 0 })).toMatchObject({ usageIncomplete: true, costIncomplete: false, costUsd: 0 });
+  });
+  it("prices known image counts without inventing tokens; missing duration remains incomplete", () => {
+    const base = { model: model(fee({ billingMode: "spec", outputUnit: "second", outputRates: [{ price: 2 }] })), task: "asr", inputImages: 0 };
+    expect(buildUsageRow({ ...base, outputUnits: 2.5 })).toMatchObject({ usageIncomplete: true, costIncomplete: false, costUsd: 5 });
+    expect(buildUsageRow(base)).toMatchObject({ costIncomplete: true });
+  });
+  it("marks partial attempts and missing cache quantities at a different cache price as incomplete", () => {
+    const base = { model: model(fee({ inputPrice: 2, cachePrice: 0.2 })), task: "chat", promptTokens: 100, completionTokens: 0 };
+    expect(buildUsageRow(base).costIncomplete).toBe(true);
+    expect(buildUsageRow({ ...base, cachedTokens: 0 }).costIncomplete).toBe(false);
+    expect(buildUsageRow({ ...base, usageEvidence: { outcome: "cancelled", source: "reported", fields: { inputTokens: 100, outputTokens: 0, cachedTokens: 0 } } }).costIncomplete).toBe(true);
   });
 });

@@ -61,6 +61,9 @@ describe("generateImage · OpenAI shape", () => {
     expect(res.images).toHaveLength(1);
     expect(res.images[0].dataUrl).toBe("data:image/png;base64,aGk=");
     expect(res.usage).toEqual({ inputTokens: 12, outputTokens: 34 });
+    expect(res.requestId).toEqual(expect.any(String));
+    const next = await generateImage(OPENAI, { prompt: "a cat" });
+    expect(next.requestId).not.toBe(res.requestId);
   });
 
   it("omits `size` unless the caller asked for one", async () => {

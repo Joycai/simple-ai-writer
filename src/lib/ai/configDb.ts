@@ -718,7 +718,7 @@ export function billedForSpec(
   fee: FeeConfig,
   counted: { outputUnits: number; inputImages?: number },
   raw: { size?: unknown; quality?: unknown; seconds?: unknown } = {},
-  usage?: { inputTokens: number; outputTokens: number; cachedTokens?: number },
+  usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number },
   reportedCost: number | null = null,
 ): { billed: Billed; priced: PricedSpec } {
   const priced = priceSpec(fee, raw, {
@@ -749,7 +749,7 @@ export function billedForSpec(
 export function imageCostFor(
   model: Pick<Model, "fee">,
   images: number,
-  usage?: { inputTokens: number; outputTokens: number },
+  usage?: { inputTokens?: number; outputTokens?: number },
   raw: { size?: unknown; quality?: unknown; seconds?: unknown } = {},
   inputImages = 0,
 ): number {

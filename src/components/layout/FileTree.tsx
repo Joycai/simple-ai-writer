@@ -1270,12 +1270,12 @@ export function FileTree() {
           setBusy({ path: ask.path, text });
         },
       });
+      const cost = await asr.recordTranscriptionUsage(projectPath, conn.model, outcome);
       const target = await asr.writeTranscript(ask.path, outcome.transcript, {
         modelId: conn.modelId,
         timestamps: isAsrTimestampsEnabled(),
         speakers: diarization && !ask.sync,
       });
-      const cost = await asr.recordTranscriptionUsage(projectPath, conn.model, outcome);
       await refreshFileTree();
       setActiveFilePath(target);
       const seconds = outcome.billedSeconds ?? Math.round(outcome.transcript.durationMs / 1000);

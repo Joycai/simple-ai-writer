@@ -1,3 +1,4 @@
+import { withUsageClear } from "./ai/usageOutbox";
 /**
  * 重置应用配置 —— 把这台机器上的应用配置清回刚装好的样子。
  *
@@ -135,7 +136,8 @@ export async function resetApp(): Promise<ResetSummary> {
 
   // 2. 配置表一次事务。models 先于 providers：外键虽然是 CASCADE，但让删除
   //    顺序自己成立比依赖它清楚。
-  await sqlTransaction(await getGlobalDbPath(), [
+  const dbPath = await getGlobalDbPath();
+  await withUsageClear("global", null, () => sqlTransaction(dbPath, [
     { sql: "DELETE FROM models", values: [] },
     { sql: "DELETE FROM providers", values: [] },
     { sql: "DELETE FROM prompts", values: [] },
@@ -145,7 +147,7 @@ export async function resetApp(): Promise<ResetSummary> {
     { sql: "DELETE FROM token_usage", values: [] },
     // 端点学到的降级（learnedDb.ts）。内存里那一份紧跟着清。
     { sql: "DELETE FROM learned_ceilings", values: [] },
-  ]);
+  ]));
   clearLearned();
 
   // 3. 排版格式和历史遗留的明文密钥表都不在上面那个事务里，理由和

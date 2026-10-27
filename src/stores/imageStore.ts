@@ -305,7 +305,7 @@ function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<I
  * the author actually paid.
  */
 function bill(ctx: RunContext, task: "image-gen" | "image-edit", result: ImageResult): void {
-  void recordImageUsage(ctx.projectPath, ctx.model, task, result.images.length, result.usage, specOf(ctx), inputsOf(task));
+  void recordImageUsage(ctx.projectPath, ctx.model, task, result.images.length, result.usage, specOf(ctx), inputsOf(task), result.requestId);
 }
 
 /**
@@ -335,7 +335,6 @@ async function materialize(
   result: ImageResult,
 ): Promise<ImageTurn> {
   const id = nanoid(6);
-  const candidates = await writeCandidates(ctx.projectPath, sessionId, id, result.images);
   await recordImageUsage(
     ctx.projectPath,
     ctx.model,
@@ -344,6 +343,8 @@ async function materialize(
     result.usage,
     specOf(ctx),
     inputsOf(turn.parentId ? "image-edit" : "image-gen"),
+    result.requestId,
   );
+  const candidates = await writeCandidates(ctx.projectPath, sessionId, id, result.images);
   return { id, ...turn, candidates, chosen: 0, text: result.text };
 }

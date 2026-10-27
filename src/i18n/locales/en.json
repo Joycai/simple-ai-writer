@@ -808,6 +808,13 @@
       "unboundSub": "no group, or the group was deleted",
       "unknownProject": "(no project recorded)",
       "uncovered": "{{n}} request(s) matched no tier and billed 0",
+      "knownValue": "Known: {{value}}",
+      "unknownUsage": "Unknown",
+      "incompleteAmount": "{{amount}} (incomplete)",
+      "incompleteUsage": "{{n}} requests have missing usage details; counts show only known quantities.",
+      "deliveryPending": "Usage recovery is pending ({{n}} ledger records). Recorded totals may be incomplete; retry runs automatically.",
+      "deliveryVolatile": "{{n}} ledger records are awaiting recovery, including records not yet saved to disk. Keep the app open and retry.",
+      "retryDelivery": "Retry recovery",
       "goFixRates": "Fill in the tiers →",
       "clearLabel": {
         "project": "Clear this project's records",

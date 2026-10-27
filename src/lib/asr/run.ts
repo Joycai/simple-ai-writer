@@ -85,6 +85,7 @@ export interface TranscribeRequest {
 }
 
 export interface TranscribeOutcome {
+  requestId?: string;
   transcript: Transcript;
   /** 缓存目录（结果 JSON 在里面），给需要词级时间戳的调用方。 */
   cacheDir: string;
@@ -290,6 +291,7 @@ export async function transcribeFile(req: TranscribeRequest): Promise<Transcribe
 
   let resultJson: string;
   let billedSeconds: number | null;
+  let requestId: string = crypto.randomUUID();
   if (sync) {
     const deadline = withDeadline(req.signal, SYNC_DEADLINE_MS);
     try {
@@ -314,7 +316,8 @@ export async function transcribeFile(req: TranscribeRequest): Promise<Transcribe
         await writeFile(pendingPathFor(dir), JSON.stringify(pending)).catch(() => {});
         return id;
       };
-      const poll = (id: string) => {
+      const poll = async (id: string) => {
+        requestId = `asr:${await sha256Hex(new TextEncoder().encode(JSON.stringify([conn.baseUrl, conn.modelId, id])))}`;
         onProgress?.({ phase: "queued", polls: 0, elapsedMs: 0 });
         return pollTask(
           conn,
@@ -372,7 +375,7 @@ export async function transcribeFile(req: TranscribeRequest): Promise<Transcribe
     }
   }
   if (!sync) await dropPending(dir);
-  return { transcript, cacheDir: dir, cached: false, billedSeconds, bytes: bytes.byteLength };
+  return { transcript, cacheDir: dir, cached: false, billedSeconds, bytes: bytes.byteLength, requestId };
 }
 
 /**
@@ -436,13 +439,15 @@ export async function recordTranscriptionUsage(
   model: Pick<Model, "id" | "fee">,
   outcome: TranscribeOutcome,
 ): Promise<number | null> {
-  if (outcome.cached || outcome.billedSeconds === null) return null;
+  if (outcome.cached) return null;
   const { recordUsage } = await import("../ai/usageRow");
   const { buildUsageRow } = await import("../ai/usageRow");
   const input = {
     model,
     task: "asr",
-    outputUnits: outcome.billedSeconds,
+    requestId: outcome.requestId,
+    inputImages: 0,
+    outputUnits: outcome.billedSeconds ?? undefined,
     spec: { seconds: outcome.billedSeconds },
     // 转写不走四个对话适配器，没有上游报价。
     reportedCost: null,

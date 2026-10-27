@@ -324,6 +324,10 @@ export async function applyProposal(
         onProgress: (p) => onProgress?.({ label: label(p) }),
         signal,
       });
+      {
+        const projectPath = deps.projectPath();
+        if (projectPath) await asr.recordTranscriptionUsage(projectPath, conn.model, outcome);
+      }
       const { isAsrTimestampsEnabled } = asr;
       const landed = await asr.writeTranscript(proposal.sourcePath, outcome.transcript, {
         modelId: conn.modelId,
@@ -331,10 +335,6 @@ export async function applyProposal(
         speakers: proposal.diarization,
       });
       await deps.refreshFileTree();
-      {
-        const projectPath = deps.projectPath();
-        if (projectPath) await asr.recordTranscriptionUsage(projectPath, conn.model, outcome);
-      }
       const seconds = outcome.billedSeconds ?? Math.round(outcome.transcript.durationMs / 1000);
       return {
         resultPath: landed,

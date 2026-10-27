@@ -805,6 +805,13 @@
       "unboundSub": "没绑组 / 组已删",
       "unknownProject": "（未记项目）",
       "uncovered": "{{n}} 次请求没匹配到档位，按 0 计",
+      "knownValue": "已知 {{value}}",
+      "unknownUsage": "未知",
+      "incompleteAmount": "{{amount}}（不完整）",
+      "incompleteUsage": "{{n}} 次请求缺少用量明细；数量仅包含已知部分。",
+      "deliveryPending": "用量待补账（{{n}} 条账目）。汇总可能不完整，系统会自动重试。",
+      "deliveryVolatile": "{{n}} 条账目待补账，其中部分尚未保存到磁盘。请保持应用打开并重试。",
+      "retryDelivery": "重试补账",
       "goFixRates": "去补档位 →",
       "clearLabel": {
         "project": "清除本项目记录",

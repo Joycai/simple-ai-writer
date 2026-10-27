@@ -19,6 +19,7 @@
  */
 
 import { getDb, getGlobalDb } from "../project";
+import { withUsageClear } from "./usageOutbox";
 
 export type UsageWindow = "today" | "7d" | "30d" | "all";
 
@@ -36,6 +37,8 @@ export interface UsageBucket {
   outputUnits: number;
   /** 按规格计费却没命中任何档位、上游也没报价的请求数——按 0 计的那些。 */
   uncovered: number;
+  incompleteUsage: number;
+  incompleteCost: number;
   costUsd: number;
   /**
    * `costUsd` 按「钱花在哪一种量上」拆开的六份，用量页的计量条按它上色。
@@ -122,6 +125,8 @@ export function rowToBucket(r: Record<string, unknown>): UsageBucket {
     completionTokens: num(r.completion_tokens),
     outputUnits: num(r.output_units),
     uncovered: num(r.uncovered),
+    incompleteUsage: num(r.incomplete_usage),
+    incompleteCost: num(r.incomplete_cost),
     costUsd: num(r.cost_usd),
     costInput: num(r.cost_input),
     costCache: num(r.cost_cache),
@@ -143,6 +148,8 @@ export function sumBuckets(key: string, buckets: UsageBucket[]): UsageBucket {
       completionTokens: acc.completionTokens + b.completionTokens,
       outputUnits: acc.outputUnits + b.outputUnits,
       uncovered: acc.uncovered + b.uncovered,
+      incompleteUsage: acc.incompleteUsage + b.incompleteUsage,
+      incompleteCost: acc.incompleteCost + b.incompleteCost,
       costUsd: acc.costUsd + b.costUsd,
       costInput: acc.costInput + b.costInput,
       costCache: acc.costCache + b.costCache,
@@ -154,7 +161,7 @@ export function sumBuckets(key: string, buckets: UsageBucket[]): UsageBucket {
     }),
     {
       key, calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, outputUnits: 0,
-      uncovered: 0, costUsd: 0,
+      uncovered: 0, costUsd: 0, incompleteUsage: 0, incompleteCost: 0,
       costInput: 0, costCache: 0, costOutput: 0, costCount: 0, costDuration: 0, costOther: 0,
       costUnsplit: 0,
     },
@@ -276,6 +283,8 @@ export type UsageScope = "project" | "global";
  * 是 0），老行六列全空。所以拿第一列判一次就够，不必六列都查。
  */
 export const ROLLUP_SELECT = `COUNT(*) AS calls,
+         SUM(CASE WHEN usage_incomplete IS NULL OR usage_incomplete = 1 THEN 1 ELSE 0 END) AS incomplete_usage,
+         SUM(CASE WHEN cost_incomplete = 1 OR (cost_incomplete IS NULL AND reported_cost IS NULL) THEN 1 ELSE 0 END) AS incomplete_cost,
          SUM(prompt_tokens) AS prompt_tokens,
          SUM(cached_tokens) AS cached_tokens,
          SUM(completion_tokens) AS completion_tokens,
@@ -356,12 +365,14 @@ export function groupBuckets(
  * 在总体范围里带上 `projectPath` 则只清这个项目在总账里的那些行。
  */
 export async function clearUsage(scope: UsageScope, projectPath: string | null): Promise<void> {
-  const db = await dbFor(scope, projectPath);
-  if (scope === "global" && projectPath) {
-    await db.execute("DELETE FROM token_usage WHERE project = ?", [projectPath]);
-    return;
-  }
-  await db.execute("DELETE FROM token_usage");
+  await withUsageClear(scope, projectPath, async () => {
+    const db = await dbFor(scope, projectPath);
+    if (scope === "global" && projectPath) {
+      await db.execute("DELETE FROM token_usage WHERE project = ?", [projectPath]);
+    } else {
+      await db.execute("DELETE FROM token_usage");
+    }
+  });
 }
 
 /**

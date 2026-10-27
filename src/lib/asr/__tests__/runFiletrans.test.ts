@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 // `transcribeFile` 的 filetrans 那条腿，只看检查点（坑 121）：提交是付费的一步，
@@ -99,6 +100,7 @@ describe("transcribeFile × filetrans checkpoint", () => {
     expect(net.submits).toBe(1);
     expect(net.polls).toEqual(["task-1", "task-1"]);
     expect(out.cached).toBe(false);
+    expect(out.requestId).toBe(`asr:${createHash("sha256").update(JSON.stringify([req.conn.baseUrl, req.conn.modelId, "task-1"])).digest("hex")}`);
     // Settled: the checkpoint is gone, the cache holds the result.
     expect(pendingFiles()).toHaveLength(0);
   });

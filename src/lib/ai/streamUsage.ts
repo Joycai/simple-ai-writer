@@ -45,9 +45,7 @@ export function createStreamUsage(accounting: StreamAccounting | undefined) {
     current = undefined;
     if (!context) return;
     const evidence = Object.keys(attempt.usage).length > 0;
-    // A failed request with no usage provides no evidence of a bill. Do not
-    // invent tokens or a request charge from text length or merely sending it.
-    if (!evidence && outcome !== "complete") return;
+    // Even without usage, retain an unknown attempt rather than imply it was free.
     writes.push(recordUsage(context.projectPath, {
       model: context.model, task: context.task,
       promptTokens: attempt.usage.inputTokens, completionTokens: attempt.usage.outputTokens,
