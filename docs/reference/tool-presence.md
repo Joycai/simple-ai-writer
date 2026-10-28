@@ -88,7 +88,7 @@
 | `routing.ts` `transcribe_audio` · `tools.ts` 音频改口 | 追加规则同 `translate`（Beta 开 **且** `asr` 档位绑了 `isAsrOnly` 的模型）；`read_file` 遇到音视频文件时按 `allowedTools` 判：有就点名 `transcribe_audio`，没有就说要作者去实验室开开关并绑模型——不点一个本次运行没有的工具 |
 | 内置图片工具 · `registry.ts` | 当前绑定能力只在本轮确有图片工具时出现，且每轮重新读取；配置未声明不等于不支持，配置关闭不等于型号永久不支持，单次降级也不向后续轮泛化。摘要只附加一次，运行与预算使用同一份定义。 |
 | `routing.ts` MCP | `mcp` surface opt-in + Tauri + MCP Beta + enabled server: only then append `discover_mcp_tools` and `call_mcp_tool`. Small services return bounded complete schemas on discovery; larger ones load schemas on demand. Calls require individual approval or an explicit revocable server/session grant; prose grants never cover MCP. See [mcp-support](../feature/agent/mcp-support.md). |
-| `routing.ts` `run_command` · `toolTable/exports.ts` `describe` | 三个条件缺一即缺席：surface 能渲染审批卡（`RouteOptions.commands`，chat 与非批量任务面板）、命令行 Beta 开、在 Tauri 里（浏览器没有 shell）。description 在交出定义时才生成（`RegisteredTool.describe`）——它点名这台机器**真正**会用的 shell，模型据此写 PowerShell 还是 POSIX 语法；失败的结果文本再点一次名，教模型改写而不是重试。作者列了免审批命令时，description 多一句点名这些程序（清单空时不出现），让模型知道哪些串联不会打断作者。见 [shell-command-plan §1 不变量 4、5、11、12](../feature/agent/shell-command-plan.md) |
+| `routing.ts` `run_command` · `toolTable/exports.ts` `describe` | 三个条件缺一即缺席：surface 能渲染审批卡（`RouteOptions.commands`，chat 与非批量任务面板）、命令行 Beta 开、在 Tauri 里（浏览器没有 shell）。description 在交出定义时才生成（`RegisteredTool.describe`）——它点名这台机器**真正**会用的 shell，模型据此写 PowerShell 还是 POSIX 语法；失败的结果文本再点一次名，教模型改写而不是重试。作者列了免审批命令时，description 多一句点名这些程序（清单空时不出现），让模型知道哪些串联不会打断作者。内置读取的描述给出当前平台的有界读取例子并说明仍要过执行前路径检查；路径检查失败回原始审批卡。见 [shell-command-plan §1 不变量 4、5、11、12](../feature/agent/shell-command-plan.md) |
 
 ## 一个例外：跨工具改口
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   allowRefusal,
+  prepareAutomaticRead,
   allowlistCandidates,
   allowlistCovers,
   commandAccess,
@@ -123,7 +124,6 @@ describe("commandAccess — cross-platform approval boundary", () => {
     "wc -w README.md",
     "stat README.md",
     "git status --short",
-    "git -C sub log --oneline -5",
     "git diff -- README.md",
     "git diff --output-indicator-new=+ -- README.md",
     "git grep -o TODO",
@@ -216,6 +216,7 @@ describe("commandAccess — cross-platform approval boundary", () => {
     ["cat .*/.ssh/id_rsa", "posix"],
     ["cat {,/}etc/passwd", "posix"],
     ["git -C ../other log --oneline -5", "posix"],
+    ["git -C sub log --oneline -5", "posix"],
     ["git --git-dir=/elsewhere/.git log", "posix"],
     ["git diff --no-index /etc/hosts README.md", "posix"],
     ["locate id_rsa", "posix"],
@@ -476,4 +477,97 @@ describe("免审批命令 — allowlistCandidates", () => {
     expect(allowlistCandidates("ls -la", "posix", [])).toBeNull();
     expect(allowlistCandidates("git add a", "posix", ["git"])).toBeNull();
   });
+});
+
+
+describe("quoted literals and closed text-processing forms", () => {
+  it.each([
+    "rg 'foo|bar' src", 'grep "a;b" notes.md', "grep 'a{2}$' notes.md",
+    "grep '$(literal)`text`' notes.md", "grep 'a>b' notes.md", "grep foo\\|bar notes.md",
+    "sed -n '1,80p' notes.md", "sed -n -e '42p' notes.md",
+    "cat notes.md | sort -nr | uniq -c", "sort -k 1,2 -t , notes.csv",
+    "cut -d , -f 1,3 notes.csv", "cut -c1-20 notes.md", "uniq -f 2 notes.md",
+  ])("automatically covers POSIX read %s", (line) => {
+    expect(commandCover(line, "posix", [])).toEqual([]);
+  });
+  it.each([
+    "Get-Content notes.md | Select-Object -Skip 10 -First 80",
+    "Get-Content notes.md | Measure-Object -Line -Word -Character",
+    "Get-Content notes.md | Sort-Object -Unique | Get-Unique -AsString",
+    "Get-ChildItem | Select-Object -Property Name -First 10",
+    "Select-String -Pattern 'a|b{2}' -Path notes.md",
+    "Select-String -Pattern 'it''s|fine' -Path notes.md",
+  ])("automatically covers PowerShell read %s", (line) => {
+    expect(commandCover(line, "powershell", [])).toEqual([]);
+  });
+  it.each([
+    "sed -i '1p' notes.md", "sed -n '1p;w out' notes.md", "sed -n '1e' notes.md",
+    "sed -n '1r secret' notes.md", "sed -n -f script.sed notes.md",
+    "sort -o out notes.md", "sort --compress-program=sh notes.md", "sort --unknown notes.md",
+    "git diff --ignore-submodules=none", "git diff --submodule=diff", "git grep --recurse-submodules text", "uniq *.txt", "uniq note?.txt", "uniq [ab].txt", "uniq -- *.txt", "uniq notes.md out.md", "uniq -- notes.md out.md", "cut --output-delimiter=x -f1 notes.md",
+    "cat notes.md > out", 'grep "$(touch marker)" notes.md', 'grep "`touch marker`" notes.md',
+    "grep 'ok' notes.md # comment", "cat <(touch marker)", "cat notes.md |", "cat notes.md &&",
+    "rg -iz pattern .", "rg --hostname-bin=script pattern .", "wc --files0-from=list",
+    "strings @arguments", "sha256sum -c checksums", "file -f list", "tail -f notes.md",
+    "git log --show-signature", "git verify-commit HEAD", "git --git-dir=other status",
+    "git DIFF", "CAT notes.md", "file --comp -m custom.magic",
+  ])("requires approval for %s", (line) => {
+    expect(commandCover(line, "posix", [])).toBeNull();
+  });
+  it.each([
+    'Select-String -Pattern "$(Remove-Item notes.md)" -Path notes.md',
+    "Get-Content notes.md | Select-Object -First -1",
+    "Get-Content notes.md | Select-Object -First 10 -OutVariable saved",
+    "Get-ChildItem | Select-Object -Property @{Name='x';Expression={Remove-Item notes.md}}",
+    "Get-Content notes.md | Sort-Object { Remove-Item notes.md }",
+    "Get-Content notes.md | Measure-Object -Unknown", "Get-Content notes.md -Wait",
+    "Get-Content --% notes.md", "Get-Content a.md,b.md",
+    'findstr /d:"docs;../outside" TODO *.md', "findstr /f:list.txt TODO",
+  ])("requires approval for PowerShell %s", (line) => {
+    expect(commandCover(line, "powershell", [])).toBeNull();
+  });
+  it("does not mistake quoted operators for a compound command", () => {
+    expect(isCompound("rg 'foo|bar' .")).toBe(false);
+    expect(isCompound("rg 'foo|bar' . | head")).toBe(true);
+    expect(isCompound('grep "$(id)" .')).toBe(true);
+    expect(isCompound("grep 'unterminated")).toBe(true);
+  });
+  it("preserves POSIX double-quoted backslashes when fencing paths", () => {
+    expect(prepareAutomaticRead('cat "\\/etc/passwd"', "posix", "/p")?.automaticRead.paths).toContain("\\/etc/passwd");
+    expect(commandCover('cat "a\\/../../secret"', "posix", [])).toBeNull();
+  });
+});
+
+describe("automatic read execution plan", () => {
+  it("disables implicit Git diff helpers and preserves pipeline operators and literal arguments", () => {
+    const line = "git --no-pager diff -- notes.md && git show HEAD | head -20";
+    const plan = prepareAutomaticRead(line, "posix", "/project")!;
+    expect(plan.command).toBe("git --no-pager diff --no-ext-diff --no-textconv -- notes.md && git show --no-ext-diff --no-textconv HEAD | head -20");
+    expect(plan.automaticRead.programs).toEqual(["git", "head"]);
+    expect(plan.automaticRead.paths).toContain(".");
+    expect(plan.automaticRead.projectPath).toBe("/project");
+  });
+  it("passes attached option values and quoted paths to filesystem validation", () => {
+    const plan = prepareAutomaticRead("grep -fpatterns 'TODO' 'linked folder/note.md'", "posix", "/project")!;
+    expect(plan.automaticRead.paths).toContain("patterns");
+    expect(plan.automaticRead.paths).toContain("linked folder/note.md");
+  });
+  it("distinguishes Windows switches from root paths during filesystem inspection", () => {
+    const plan = prepareAutomaticRead("findstr /s /i /c:TODO *.md", "powershell", "C:/project")!;
+    expect(plan.automaticRead.paths).not.toContain("/s");
+    expect(plan.automaticRead.paths).toContain("TODO");
+    expect(plan.automaticRead.paths).toContain(".");
+  });
+  it("never upgrades writes or explicit user trust into built-in read authority", () => {
+    expect(prepareAutomaticRead("git add notes.md", "posix", "/project")).toBeNull();
+    expect(prepareAutomaticRead("ls; touch notes.md", "posix", "/project")).toBeNull();
+  });
+});
+
+
+it("new literal quoting cannot turn a user-trusted text processor into an interpreter", () => {
+  expect(allowlistCovers("awk '{system(\"touch marker\")}' notes.md", "posix", ["awk"])).toBeNull();
+  expect(allowlistCovers("sed '1e touch marker' notes.md", "posix", ["sed"])).toBeNull();
+  expect(allowlistCovers("sort --compress-program=sh notes.md", "posix", ["sort"])).toBeNull();
+  expect(commandAccess("mdls -plist out.plist note.md", "posix")).toBe("write");
 });

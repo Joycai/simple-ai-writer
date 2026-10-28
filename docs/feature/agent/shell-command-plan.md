@@ -1,5 +1,7 @@
 # 命令行工具 · `run_command`
 
+> 2026-10-28 更新：只读免审的引号解析、文本处理子集与执行前检查见 §3.9；该节覆盖下面旧决策中「所有 unix 命令都走登录 shell」的说法。
+>
 > 状态：`shipped`——原始实现见 [#561](https://github.com/Joycai/simple-ai-writer/pull/561) / [#563](https://github.com/Joycai/simple-ai-writer/pull/563)；2026-09-15 将审批改成当前策略：跨平台只读白名单免审，其余命令展示原文，普通写命令可按 1–5 条连批且只活到当前运行结束，危险命令永远逐条审批；2026-09-17 加**免审批命令**（作者列出的程序，卡上可「始终允许」，由它们和只读命令组成的单条或 `&&` `||` `;` `|` 串联命令免审，§3.8）。**未做**：可选流式尾行（`tauri::ipc::Channel`）。
 > 一句话：给 agent 一个能跑本机命令的混合权限工具——Windows 走 PowerShell，macOS / Linux 走系统 shell；可证明只读的直接运行，其余先过审批卡。
 > 前置阅读：[`../../reference/tool-presence.md`](../../reference/tool-presence.md)（工具在场性）· [`agent-tool-context-lld.md`](agent-tool-context-lld.md) §5（棘轮）· [`../asr/01-execution-plan.md`](../asr/01-execution-plan.md)（「付费之前先点头」的那张卡，本方案的样板）· [`../latex-pdf-plan.md`](../latex-pdf-plan.md) §5（为什么不装 `tauri-plugin-shell`，本方案沿用其结论）
@@ -249,6 +251,34 @@ allowlistCandidates(line, allowed) → 这行还缺的程序 | null   // 加进�
 **设置**：实验室 → 命令行，开关开着时脚注下面一块：程序名等宽方块（× 移除）、添加框（回车或「添加」，被拒时就地说原因）、常用建议（git · gh · find · pandoc，已在清单里的不显示）、一句内置只读与不可加入的说明。关着时不画——工具缺席，清单无从生效，但保留。
 
 **卡**：见决定 #17。
+
+---
+
+### 3.9 跨平台只读免审收口（2026-10-28）
+
+**原因**：原来的程序名清单已经覆盖基本盘点，但 `rg 'foo|bar'` 被逐字符的复合判断误伤；`sed -n '1,80p'`、`sort | uniq`、PowerShell `Select-Object` 没有读取子集。只加程序名会把 sed 的执行脚本、uniq 的第二个输出参数一起放行，因此这次采用封闭参数语法，并在起进程前补上路径与环境检查。
+
+| 平台 | 新增免审形态 | 仍需审批 |
+| --- | --- | --- |
+| Linux / macOS（GNU / BSD 公共形态） | `sed -n [-e] 'N[,M]p' [files...]`；`sort` 常用排序开关与数值 `-k` / 单字符 `-t`；`uniq` 的计数、过滤与跳过字段，最多一个输入文件；`cut` 数值字段 / 字符范围与单字符分隔符 | sed 其它脚本、`-i` / `-f`；sort 输出文件、压缩程序及未知选项；uniq 第二个位置参数及通配符输入（一个参数展开后也可能变成输出文件）；cut 未列入的选项 |
+| Windows（PowerShell 5.1 / 7） | `Select-Object -First/-Last/-Skip/-SkipLast/-Index N` 与简单 `-Property Name`；`Measure-Object -Line/-Word/-Character` 等固定统计开关；`Sort-Object -Unique/-Descending/-CaseSensitive`；`Get-Unique -AsString/-OnType` | 脚本块、计算属性、未知或缩写参数、`--%`、无界 `Get-Content -Wait`；不把 PowerShell 的 `sort` 当成 GNU sort |
+| 两类语法 | 单引号和双引号中的字面 `| ; > { }` 不算 shell 操作符；PowerShell 双单引号和 POSIX 双引号内反斜杠按各自规则处理；逐段验证后允许读取管道 | 双引号内变量 / 命令替换、未闭合引号、真正的重定向 / 后台运行、注释、脚本表达式、末尾悬空 `|` / `&&` |
+
+保留 `ls/cat/head/wc/grep/rg/find` 和 Windows 原生读取命令。收紧间接读与执行入口：校验清单式哈希 `-c`、`wc/du --files0-from`、`file -f`、`findstr /d:` / `/f:`、`mdls -plist`、响应文件 `@args`、`rg --pre/--hostname-bin/-z`、Git 签名验证命令与显式签名开关不走内置免审；`more`、`lsof` 暂不在内置清单。`awk` 家族与 `sed` 不能整体加入用户免审程序清单，sed 的上述只读子集仍可运行；sort 的外部压缩程序钩子也不能被用户清单覆盖。
+
+**执行链**：`prepareAutomaticRead` 仅给全部由内置读取构成的命令生成执行请求，携带项目根、待检查参数、程序名。它在 Git 的 `diff/show/log/diff-tree/whatchanged` 后插入固定 `--no-ext-diff --no-textconv`，`blame/grep` 后插入 `--no-textconv`，不重组原来的引号和管道。原始命令始终保留用于审批。
+
+`cmd_run` 收到 `automaticRead` 后，在阻塞线程内、spawn 之前调用 `cmd_read.rs`：
+
+1. 项目根通过 `FsScope`，实际 cwd 必须 canonicalize 到该项目内。检查现存参数；通配符检查包含目录；可能隐式递归的工具保守检查整个 cwd 树。检查遍历中的符号链接 / junction 的实际目标，循环用已访问集合终止；越界、断链、特殊文件、权限错误均回卡。被检查的树含 `-` 开头的文件名也回卡，防止 shell 通配展开把 `-o` / `-exec` 文件名变成写入或执行选项；这也会保守拦住部分带 `--` 的合法读取。检查有 20,000 节点 / 1 秒的上限，超限回卡，不用缓存结果替代本次检查。
+2. 程序查找只用项目外的绝对 PATH 目录；拒绝解析回项目的可执行文件。macOS 补充标准 Homebrew 目录，缺少程序回卡。Windows 自动路径只查原生 `.exe` 或列出的系统 cmdlet；原生名称绑定到已核验 `.exe` 的绝对路径，不让 PowerShell 的同名 `.cmd/.ps1` 发现规则抢先。
+3. 自动读取在 unix 用 `/bin/sh -c`，不读登录配置；Windows 保持 `-NoProfile`，只显式导入 PowerShell 自带 Management / Utility 模块并关闭自动模块加载。清空环境后保留必要 OS / 临时目录 / locale 字段；没有 `BASH_ENV`、导出函数、动态库预加载、`RIPGREP_CONFIG_PATH` 或用户模块搜索路径。显式审批与用户清单覆盖的命令仍沿用原来的完整账户 / 登录 shell 行为。
+4. Git 使用禁用系统 / 用户配置、自动取回对象、可选索引锁的环境，以及固定覆盖的 fsmonitor、hooks、签名验证器、submodule 配置。拒绝外部 Git 存储、配置 include / worktree 重定向与 partial clone，以及可能在 status/diff 哈希时运行代码的 filter 配置；显式 submodule 递归 / diff 覆盖选项也回卡；`git -C` / `--git-dir` 等覆盖参数不走内置只读判断，请用工具的 `cwd`。linked worktree 的 `.git` 指针文件需要审批。理由是相对 argv 不能约束 Git 自己的配置和对象库路径。
+5. 仅 spawn 前的 `AUTO_READ_DENIED:` 错误回到原始审批卡；标记 `requiresIndividualApproval`，不提供「始终允许」也不消耗计数连批。即使用户清单已有这个程序，检查失败也不回退到宽授权。进程失败和取消不走这条重试路径。卡上的 compound 仍只表达真实语法，不能用它冒充路径检查失败。
+
+**边界**：这是保守检查，不是 OS 沙箱。已安装的外部程序、项目外 PATH 和正在运行时并发修改文件的本机进程仍处于信任边界内；预检查不能消灭文件替换的 TOCTOU。显式用户程序清单是另一种授权，包含写入的混合串联仍按用户授权运行，不宣称被只读路径隔离。完整 sandbox 或把任意 shell 变成可证明安全的语言不在本次范围内。对大型开发仓库的保守回卡是有意的；写作项目通常较小，精确文件读取不需要扫整棵树。
+
+**回归**：`cli/__tests__/command.test.ts` 覆盖两种语法、GNU/BSD 共用子集与拒绝形态；`run.test.ts` 验证 IPC 标记；`agent/__tests__/cliTools.test.ts` 与 `autoApprove.test.ts` 验证执行前拒绝回卡、原文保留和计数授权隔离；`cmd_read.rs` 内联测试验证路径、链接、Git 配置重定向、环境和真实 Git helper 不执行。Windows 分支有 junction、内置读取管道、原生程序退出码的集成测试；实际 shell 行为需在 Windows 主机验证，不能把 POSIX 主机上的语法单测说成 Windows 集成测试。
 
 ---
 

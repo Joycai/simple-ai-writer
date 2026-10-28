@@ -319,3 +319,8 @@ describe("本次都批准 grants", () => {
     expect(grants(useAgentStore.getState().autoApprove, chatAutoApproveKey("c0"), "proposals")).toBe(true);
   });
 });
+
+
+it("a read rejected by runtime checks cannot consume a counted command grant", () => {
+  expect(canGrantCommand({ compound: false, danger: null, requiresIndividualApproval: true })).toBe(false);
+});

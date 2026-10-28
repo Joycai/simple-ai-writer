@@ -106,3 +106,11 @@ describe("needsLog / sweepLogs", () => {
     expect(files.has("/p/.ai-writer/tmp/cmd/keep.txt")).toBe(true);
   });
 });
+
+
+it("sends automatic-read guards only for the built-in read path", async () => {
+  invoke.mockResolvedValueOnce(result());
+  const automaticRead = { projectPath: "/p", paths: ["linked/note.md"], programs: ["cat"] };
+  await runCommand({ projectPath: "/p", command: "cat linked/note.md", cwd: "/p", timeoutMs: 1000, automaticRead });
+  expect(invoke).toHaveBeenCalledWith("cmd_run", { req: expect.objectContaining({ automaticRead }) });
+});

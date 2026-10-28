@@ -16,6 +16,7 @@
  *     because a 40-second command with no movement reads as a hang.
  */
 
+import type { AutomaticRead } from "./command";
 import { invoke } from "@tauri-apps/api/core";
 import { makeDir, readDir, removeFile, writeFile } from "../fs/fileio";
 import { joinPath } from "../paths";
@@ -41,6 +42,7 @@ interface RunCommandRequest {
   /** Absolute working directory, already checked to be inside the project. */
   cwd: string;
   timeoutMs: number;
+  automaticRead?: AutomaticRead;
   signal?: AbortSignal;
   /** Once a second while the command runs, with the elapsed time. */
   onTick?: (elapsedMs: number) => void;
@@ -85,7 +87,7 @@ export async function runCommand(req: RunCommandRequest): Promise<RunCommandOutc
   let result: CmdResult;
   try {
     result = await invoke<CmdResult>("cmd_run", {
-      req: { runId, command: req.command, cwd: req.cwd, timeoutMs: clampTimeout(req.timeoutMs) },
+      req: { runId, command: req.command, cwd: req.cwd, timeoutMs: clampTimeout(req.timeoutMs), ...(req.automaticRead ? { automaticRead: req.automaticRead } : {}) },
     });
   } finally {
     if (ticker) clearInterval(ticker);

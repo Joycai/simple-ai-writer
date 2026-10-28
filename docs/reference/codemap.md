@@ -679,6 +679,7 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 - **Rust 那一半**在 `src-tauri/src/cmd.rs`（`cmd_shell_info` / `cmd_run` / `cmd_kill` + 受管的句柄表），**不装** `tauri-plugin-shell`：它唯一的安全机制是静态允许清单，对模型现写的一行只能配成 `args: true`，而超时、杀进程组、输出封顶、编码检测、`FsScope` 的 `cwd` 围栏它一样都没有。
 - **前端四个纯模块**各答一个问题：`shell.ts` 识别真实 shell 和它所在的系统（`systemLabel`：系统名 + 版本 + 架构）；`command.ts` 以封闭白名单按 POSIX / PowerShell 判 `read | write`（未知、复合、危险参数默认写入；程序必须是裸名——`./cat` 按 basename 命中会跑项目里的文件；参数不许出项目——免审读取的输出不经作者直接进模型），并给审批卡算 `isCompound` / `looksDangerous`；`output.ts` 截出模型读回的头尾；`run.ts` 编排运行、中止、日志。
 - **免审批清单** `allowlist.ts`（`app:cliAllowlist`，机器本地）：程序名规整成 `programNameOf` 的键；shell / 解释器 / 构建工具 / 提权与 `cd` `export` 这类改后续段环境的内建命令永远拒收，包管理器只放行查看类子命令。`command.ts` 的 `commandCover` 把一行按 `&&` `||` `;` `|` 切段，每段须是只读或被清单覆盖（与只读白名单共用 `plainInvocation` 形状检查，外加按程序的执行钩子表）；`allowlistCandidates` 给卡算「始终允许」该列哪些程序——只在加进去之后这一行本身能免审时给，删除 / 移动类程序从不给（只能在设置页加）。
+- **内置只读执行保护（2026-10-28）**：引号感知的 `shellCode` 与 `wordTokens` 区分字面文本和展开；sed/sort/uniq/cut 与 PowerShell 管道处理器走封闭参数子集。`prepareAutomaticRead` 给纯读取串联生成带路径 / 程序检查信息的请求；Rust `cmd_read.rs` 在 spawn 前验证真实路径与目录链接、限制扫描成本、过滤 PATH、清空环境并关闭 shell profile 与 Git helper。拒绝后回原始卡，`requiresIndividualApproval` 禁止计数连批；用户显式程序信任另走原路径。精确边界与原因见 [shell-command-plan §3.9](../feature/agent/shell-command-plan.md#39-跨平台只读免审收口2026-10-28)。
 - **审批**：`agent/cliTools.ts` 对 `commandCover` 通过的命令直接调用 runner（清单非空时 description 点名这些程序），其余组 `CommandProposal`。`ApprovalCard` 展示写命令原文；「始终允许 <程序>」写清单并批准本张（不要求 `autoApproveKey`——它是设置不是运行授权）；单条普通写命令可按 1–5 条连批，复合或危险命令永远逐条审批（危险表不完整，复合是它的兜底）。`agentStore` 用 `commandLeft` + `commandRun` 扣减并在 run 结束清零。`isAutoApprovable("command")` 为假，正文的布尔授权永不覆盖 shell。
 - **路由**要求 `RouteOptions.commands` + Beta + `IS_TAURI` 三者齐全，description 在交出定义时点名真实系统与 shell（只说 zsh 分不出 BSD 还是 GNU userland）。
 
@@ -958,6 +959,7 @@ Rust 侧。
 
 - `cmd.rs` 是 agent 的 `run_command` 的 Rust 一半（`cmd_shell_info` / `cmd_run` / `cmd_kill`），**刻意不用** `tauri-plugin-shell`（它唯一的安全机制是静态允许清单，对模型运行时现写的一行只能配成 `cmd: pwsh, args: true`，等于把清单关掉；而这个功能真正需要的超时、杀整棵进程树、输出封顶它都没有；`docs/feature/agent/shell-command-plan.md` §2.1）。
   - Windows 用 PowerShell（先 `pwsh`、退回 5.1，`CREATE_NO_WINDOW`，`-Command` 外面包一层 UTF-8 + 退出码）；unix 上是认得的 `$SHELL`（否则平台默认 shell）以 `-l -c` 跑在自己的进程组里。
+  - 纯内置读取另经 `cmd_read.rs` 的执行前路径、程序和环境检查；unix 改用无 profile 的 `/bin/sh`，不继承登录函数 / 读取工具配置。失败回前端审批而不先启动进程（详见 shell-command-plan §3.9）。
   - `cwd` 和每条 `fs_*` 一样过 `FsScope::check`；审批卡是前端状态，所以这边守的是工作目录、超时、输出上限（每路 1 MB，超出后继续读掉丢弃）和杀整棵进程树。
 - 测试内联在 `cmd.rs` / `commands.rs` / `docx.rs` / `fontproto.rs` / `instance.rs` / `lorehash.rs` / `pptx.rs` / `preview.rs` / `print.rs` / `protocol.rs` / `scope.rs` / `secrets.rs` / `sqltx.rs` / `transfer.rs` / `xlsx.rs` / `xlsx_write.rs` 里。
 

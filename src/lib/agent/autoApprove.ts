@@ -93,19 +93,20 @@ export interface AutoApproveState {
 /** The part of a command proposal a grant is judged on. */
 interface CommandGrantSubject {
   compound: boolean;
+  requiresIndividualApproval?: boolean;
   danger: string | null;
 }
 
 /**
- * Whether a command card may offer a batch at all. Read-only commands never
- * create cards; compound and dangerous-looking writes always require their own
+ * Whether a command card may offer a batch at all. Reads that fail runtime
+ * checks, compound and dangerous-looking writes always require their own
  * review. The danger table is a face-changer, not a complete list — `rm *.md`,
  * `git checkout -- .` and `python -c …` all miss it — so it cannot be the only
  * thing between a batch and an arbitrary line. Refusing compound lines keeps a
  * batch granted on `pandoc a.md -o a.epub` from covering `touch x; <anything>`.
  */
 export function canGrantCommand(subject: CommandGrantSubject): boolean {
-  return !subject.compound && subject.danger === null;
+  return !subject.requiresIndividualApproval && !subject.compound && subject.danger === null;
 }
 
 /** Most pictures one press of 批准并连批 may cover. */

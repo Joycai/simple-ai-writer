@@ -23,7 +23,7 @@ import { IS_MAC, IS_WINDOWS } from "../platform";
 import i18n from "../../i18n";
 import type { CommandProposal, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
-import { allowlistCandidates, commandCover, isCompound, looksDangerous } from "../cli/command";
+import { allowlistCandidates, commandCover, isCompound, looksDangerous, prepareAutomaticRead, type AutomaticRead } from "../cli/command";
 import { readCliAllowlist } from "../cli/allowlist";
 import { clampTimeout, DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS } from "../cli/run";
 import { cachedShellInfo, shellInfo, shellLabel, shellSyntax, systemLabel } from "../cli/shell";
@@ -66,11 +66,14 @@ export function describeRunCommand(): string {
     : "";
   return (
     `Run ONE shell command on the author's computer (${system}) — in ${shell}, so write ${syntax} syntax. ` +
-    "Known read-only commands (for example ls/cat/grep/rg or PowerShell Get-ChildItem/Get-Content/Select-String) run without approval. " +
+    "Project reads may run without approval after path checks, in a clean shell (POSIX sh or PowerShell without profiles). " +
+    (syntax === "PowerShell"
+      ? "For bounded reads use Get-Content file.md | Select-Object -First 80; count with Measure-Object -Line. "
+      : "For bounded reads use sed -n '1,80p' file.md; search with rg 'foo|bar' .; count with wc. ") +
+    "Use cwd instead of cd; installed tools vary by machine. " +
     allowedLine +
     "Every other command is shown verbatim on a card FIRST; the author can approve it once or grant a small counted batch. Commands run with their account's full permissions, stdin closed, in the project folder (or `cwd`), and return the exit code, stdout and stderr (long output is cut, with the full log's path for read_file). " +
-    "Use it for what no other tool does: git, converters and scripts the author has installed, counting and listing beyond list_files / search_text. " +
-    "Prefer built-in read/edit tools for project text. One thing per call; do not chain unrelated commands."
+    "Prefer built-in read/edit tools for project text; use this for installed CLIs. Keep calls focused."
   );
 }
 
@@ -81,6 +84,7 @@ async function executeCommand(
   cwd: string,
   timeoutMs: number,
   ctx: ToolContext,
+  automaticRead?: AutomaticRead,
 ): Promise<string> {
   const { runCommand } = await import("../cli/run");
   const outcome = await runCommand({
@@ -88,6 +92,7 @@ async function executeCommand(
     command,
     cwd,
     timeoutMs,
+    automaticRead,
     signal: ctx.signal,
     onTick: (ms) =>
       ctx.onProgress?.({
@@ -145,7 +150,19 @@ export async function runCommandTool(
   // chain with one such link — fall through to the proposal below.
   const syntax = shellSyntax(shell);
   const allowed = readCliAllowlist();
-  if (commandCover(command, syntax, allowed)) {
+  let automaticDenied = false;
+  const prepared = prepareAutomaticRead(command, syntax, ctx.projectPath);
+  if (prepared) {
+    try {
+      return { toolCallId, content: await executeCommand(prepared.command, cwd, timeoutMs, ctx, prepared.automaticRead) };
+    } catch (error) {
+      // Rust emits this prefix only before spawning. Never retry a command
+      // that failed after execution, or turn cancellation into an approval.
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.startsWith("AUTO_READ_DENIED:") || ctx.signal?.aborted) throw error;
+      automaticDenied = true;
+    }
+  } else if ((commandCover(command, syntax, allowed)?.length ?? 0) > 0) {
     return { toolCallId, content: await executeCommand(command, cwd, timeoutMs, ctx) };
   }
 
@@ -157,9 +174,10 @@ export async function runCommandTool(
     cwdLabel: projectRelative(ctx.projectPath, cwd) || ".",
     timeoutMs,
     shell,
-    compound: isCompound(command),
+    compound: isCompound(command, syntax),
+    requiresIndividualApproval: automaticDenied || undefined,
     danger: looksDangerous(command),
-    allowPrograms: allowlistCandidates(command, syntax, allowed) ?? undefined,
+    allowPrograms: automaticDenied ? undefined : allowlistCandidates(command, syntax, allowed) ?? undefined,
     reason: args.reason?.trim() || undefined,
   };
 
