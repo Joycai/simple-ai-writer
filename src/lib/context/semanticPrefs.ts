@@ -22,11 +22,13 @@ export function retrievalThreshold(prefs: SemanticPrefs): number {
     ? finiteScore(prefs.rerankerMinScore, legacy)
     : Math.max(-1, Math.min(1, finiteScore(prefs.cosineMinScore, legacy)));
 }
-const key = (project: string) => SEMANTIC_LORE_PREFIX + toPosixPath(project);
+const key = (project: string | null) => project ? SEMANTIC_LORE_PREFIX + toPosixPath(project) : "ai:semanticDefaults";
 export function semanticPrefs(project: string | null): SemanticPrefs {
-  if (!project) return { ...DEFAULT_SEMANTIC_PREFS };
   try {
-    const r = JSON.parse(readPref(key(project)) ?? "null");
+    const stored = readPref(key(project));
+    // Only an absent project override inherits defaults. Explicit opt-out and
+    // malformed overrides must never be replaced with an enabled default.
+    const r = JSON.parse(stored ?? (project ? readPref(key(null)) : null) ?? "null");
     const legacy = Math.max(-1, Math.min(1, finiteScore(r?.minScore, 0.5)));
     return {
       cosineMinScore: Math.max(-1, Math.min(1, finiteScore(r?.cosineMinScore, legacy))),
@@ -44,7 +46,7 @@ export function subscribeSemanticPrefs(listener: () => void): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
 }
-export function saveSemanticPrefs(project: string, value: SemanticPrefs): void {
+export function saveSemanticPrefs(project: string | null, value: SemanticPrefs): void {
   writePref(key(project), JSON.stringify(value));
   listeners.forEach((listener) => listener());
 }

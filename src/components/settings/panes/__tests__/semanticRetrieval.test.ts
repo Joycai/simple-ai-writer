@@ -93,19 +93,20 @@ it("renders independently saved thresholds with only cosine bounded", () => {
 });
 
 
-it("shows the switch and all configuration disabled without an open project", () => {
+it("allows enabling and configuring defaults without an open project", () => {
   fixture.project = null;
   fixture.prefs.enabled = false;
   const html = renderToStaticMarkup(createElement(SemanticRetrieval));
-  expect(fixture.toggles["semantic.enable"]).toBeDefined();
+  expect(fixture.toggles["semantic.defaultEnable"]).toBeDefined();
   expect(fixture.toggles["semantic.documentEnable"]).toBeDefined();
   expect(fixture.choices["semantic.embedding"]).toBeDefined();
   expect(fixture.choices["semantic.reranker"]).toBeDefined();
-  expect(html).toMatch(/<fieldset[^>]*disabled=""/);
+  expect(html).not.toMatch(/<fieldset[^>]*disabled/);
   expect(html).toContain("semantic.noProject");
   expect(html).toContain("semantic.cosineMinScore");
   expect(html).toContain("semantic.rerankerMinScore");
-  fixture.toggles["semantic.enable"](true);
+  fixture.toggles["semantic.defaultEnable"](true);
   fixture.choices["semantic.embedding"].onChange("vectors");
-  expect(fixture.save).not.toHaveBeenCalled();
+  expect(fixture.save).toHaveBeenCalledWith(null, { ...fixture.prefs, enabled: true });
+  expect(fixture.save).toHaveBeenCalledWith(null, { ...fixture.prefs, embeddingModelId: "vectors" });
 });

@@ -22,3 +22,29 @@ it("validates domains independently and preserves explicit zero", () => {
   expect(retrievalThreshold(semanticPrefs(null))).toBe(0.5);
   expect(retrievalThreshold({ ...semanticPrefs(null), rerankerModelId: "r", rerankerMinScore: Infinity })).toBe(0.5);
 });
+
+
+it("saves defaults without a project and lets unconfigured projects inherit them", () => {
+  const defaults = { ...semanticPrefs(null), enabled: true, documentEnabled: true, embeddingModelId: "vectors", rerankerModelId: "rank", cosineMinScore: 0.7, rerankerMinScore: 2 };
+  saveSemanticPrefs(null, defaults);
+  expect(semanticPrefs(null)).toEqual(defaults);
+  expect(semanticPrefs("/new")).toEqual(defaults);
+  expect(storage.has("semantic:/new")).toBe(false);
+});
+
+it("preserves explicit project opt-out and independent model selections", () => {
+  const own = { ...semanticPrefs(null), enabled: false, embeddingModelId: "own" };
+  saveSemanticPrefs("/existing", own);
+  saveSemanticPrefs(null, { ...semanticPrefs(null), enabled: true, embeddingModelId: "global" });
+  expect(semanticPrefs("/existing")).toMatchObject(own);
+  saveSemanticPrefs("/new", { ...semanticPrefs("/new"), rerankerModelId: "custom" });
+  saveSemanticPrefs(null, { ...semanticPrefs(null), embeddingModelId: "changed" });
+  expect(semanticPrefs("/new")).toMatchObject({ embeddingModelId: "global", rerankerModelId: "custom" });
+  expect(semanticPrefs("/other").embeddingModelId).toBe("changed");
+});
+
+it("does not enable a project with a malformed override through defaults", () => {
+  saveSemanticPrefs(null, { ...semanticPrefs(null), enabled: true });
+  storage.set("semantic:/broken", "{");
+  expect(semanticPrefs("/broken").enabled).toBe(false);
+});

@@ -29,6 +29,7 @@
 import { isSamePath } from "./paths";
 
 export const PREF_KEYS = [
+  "ai:semanticDefaults",
   "app:mcpBeta",
   "app:mcpServers",
   "app:theme",
