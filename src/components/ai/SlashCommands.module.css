@@ -39,3 +39,29 @@
 .hint { color: var(--color-text-muted); }
 .error { color: var(--color-error); font-size: var(--font-size-xs); }
 .settings { color: var(--color-accent); background: transparent; border: 0; padding: var(--space-2) 0; }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--color-bg-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: fadeIn 200ms var(--ease-out);
+}
+.browser {
+  width: min(640px, 100%);
+  max-height: 80vh;
+  overflow: auto;
+  padding: var(--space-4);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  animation: scaleIn 240ms var(--ease-out);
+}

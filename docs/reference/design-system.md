@@ -472,8 +472,9 @@ Presets live in `src/lib/motion.ts` (`springScreen`/`springPanel`/`springDrawer`
 ### Chat command menu
 
 The chat composer's slash-command panel uses existing elevated-surface, border,
-text, accent-selection and shadow tokens. It sits in the composer flow with a
-bounded scroll area; command names use the monospace token. Server statuses and
+text, accent-selection and shadow tokens. Completion floats above the composer with a bounded scroll area. Executing
+`/help` or `/mcp` opens a separate ModalShell dialog with local usage guidance,
+an explicit close action and (for MCP) server discovery controls; command names use the monospace token. Server statuses and
 refresh controls share the same theme palette, including installed themes.
 
 Sent chat messages render executable `/imageGen` and `/server:tool` prefixes as

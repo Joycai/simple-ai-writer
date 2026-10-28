@@ -5,6 +5,7 @@ import { isMcpEnabled, readMcpServers } from "../../lib/mcp/config";
 import { withMcp, type McpTool } from "../../lib/mcp/client";
 import { useAppStore } from "../../stores/appStore";
 import { IS_TAURI } from "../../lib/platform";
+import { ModalShell } from "../common/ModalShell";
 import styles from "./SlashCommands.module.css";
 
 type Catalogue = { revision: string; tools?: McpTool[]; loading?: boolean; failed?: boolean };
@@ -16,16 +17,17 @@ export function useSlashCommands(scope: string, draft: string, setDraft: (text: 
   const [catalogues, setCatalogues] = useState<Record<string, Catalogue>>({});
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
+  const [browser, setBrowser] = useState<"help" | "mcp" | null>(null);
   const [error, setError] = useState(false);
   const controllers = useRef(new Map<string, AbortController>());
   useEffect(() => {
-    setCatalogues({}); setDismissed(null); setError(false);
+    setCatalogues({}); setDismissed(null); setError(false); setBrowser(null);
     return () => { for (const c of controllers.current.values()) c.abort(); };
   }, [scope]);
   const parsed = parseSlash(draft);
   const servers = readMcpServers();
   const enabled = IS_TAURI && isMcpEnabled();
-  const open = !!parsed && dismissed !== draft && (!parsed.request || parsed.command === "mcp" || parsed.command === "help");
+  const open = !browser && !!parsed && dismissed !== draft && (!parsed.request || parsed.command === "mcp" || parsed.command === "help");
   useEffect(() => {
     const panel = panelRef.current;
     const anchor = panel?.parentElement;
@@ -63,14 +65,24 @@ export function useSlashCommands(scope: string, draft: string, setDraft: (text: 
       command: mcpCommand(s.name, tool.name), description: tool.description?.slice(0, 240) || tool.name, unavailable: false,
     }))),
   ];
-  const query = parsed?.command.toLowerCase() ?? "";
-  const matches = entries.filter(e => query === "help" || (query === "mcp" ? e.command === "mcp" || e.command.includes(":") : e.command.toLowerCase().includes(query)));
+  const query = browser ?? parsed?.command.toLowerCase() ?? "";
+  const matches = entries.filter(e => e.command !== browser).filter(e => query === "help" || (query === "mcp" ? e.command === "mcp" || e.command.includes(":") : e.command.toLowerCase().includes(query)));
   const index = Math.min(selected, Math.max(0, matches.length - 1));
   useEffect(() => { setSelected(0); setError(false); }, [draft]);
   useEffect(() => { if (open) selectedRow.current?.scrollIntoView({ block: "nearest" }); }, [index, open]);
-  const pick = (command: string) => { setDismissed(null); setDraft(insertSlashCommand(draft, command)); };
+  const browse = (command: "help" | "mcp") => {
+    setBrowser(command); setDraft(browser ? draft : draft.replace(/^\/[^\s]*[ \t]?/, "")); setDismissed(null);
+  };
+  const pick = (command: string) => {
+    if (command === "help" || command === "mcp") { browse(command); return; }
+    setBrowser(null); setDismissed(null); setDraft(browser ? `/${command} ${draft}` : insertSlashCommand(draft, command));
+  };
   const keyDown = (e: KeyboardEvent<HTMLTextAreaElement>, composing: boolean) => {
-    if (!open || composing) return false;
+    if (composing) return false;
+    if (e.key === "Enter" && !e.shiftKey && (parsed?.command === "help" || parsed?.command === "mcp") && (!open || matches[index]?.command === parsed.command)) {
+      e.preventDefault(); browse(parsed.command); return true;
+    }
+    if (!open) return false;
     if (e.key === "Escape") { e.preventDefault(); setDismissed(draft); return true; }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault(); setSelected((index + (e.key === "ArrowDown" ? 1 : -1) + matches.length) % Math.max(1, matches.length)); return true;
@@ -93,15 +105,12 @@ export function useSlashCommands(scope: string, draft: string, setDraft: (text: 
     }
     return false;
   };
-  // null means a local action or invalid command: preserve the author's draft.
+  // Local actions consume only their command; invalid execution keeps the draft.
   const prepare = (): string | null => {
     const p = parseSlash(draft);
     if (!p) return draft;
-    if (p.command === "help" || p.command === "mcp" || !p.command) {
-      setDismissed(null);
-      panelRef.current?.focus();
-      return null;
-    }
+    if (p.command === "help" || p.command === "mcp") { browse(p.command); return null; }
+    if (!p.command) { setDismissed(null); return null; }
     const target = mcpTarget(p.command);
     // Only known command syntax claims a message. A slash alone does not
     // reserve arbitrary prose or paths, even after the picker is dismissed.
@@ -110,23 +119,18 @@ export function useSlashCommands(scope: string, draft: string, setDraft: (text: 
     if (!valid || !p.request) { setError(true); return null; }
     return commandRequest(p.command, p.request);
   };
-  const panel = <>
-    {open && <div ref={panelRef} className={styles.panel} tabIndex={-1} aria-label={t("slash.title")}
-      onKeyDown={e => {
-        if (e.key === "Escape" && !e.nativeEvent.isComposing && e.keyCode !== 229) {
-          e.preventDefault(); e.stopPropagation(); setDismissed(draft); setDraft(draft);
-        }
-      }}>
-      <div className={styles.heading}>{t("slash.title")}</div>
-      <div id={listId} role="listbox" aria-label={t("slash.title")}>
-        {matches.map((entry, i) => <button key={entry.command} id={`${listId}-${i}`} ref={i === index ? selectedRow : undefined} type="button" role="option" aria-selected={i === index}
-          disabled={entry.unavailable} className={`${styles.row} ${i === index ? styles.selected : ""}`}
-          onMouseDown={e => e.preventDefault()} onClick={() => pick(entry.command)}>
+  const content = <>
+      <div className={styles.heading}>{t(browser ? `slash.${browser}` : "slash.title")}</div>
+      {browser && <p>{t("slash.localHelp")}</p>}
+      <div id={listId} role={browser ? undefined : "listbox"} aria-label={t("slash.title")}>
+        {matches.map((entry, i) => <button key={entry.command} id={`${listId}-${i}`} ref={i === index ? selectedRow : undefined} type="button" role={browser ? undefined : "option"} aria-selected={browser ? undefined : i === index}
+          disabled={entry.unavailable} className={`${styles.row} ${!browser && i === index ? styles.selected : ""}`}
+          onMouseDown={e => { if (!browser) e.preventDefault(); }} onClick={() => pick(entry.command)}>
           <span className={styles.command}>/{entry.command}</span><span>{entry.description}</span>
         </button>)}
-        {!matches.length && <p>{t("slash.noMatches")}</p>}
+        {!matches.length && <p>{t(browser === "mcp" ? "slash.loadHint" : "slash.noMatches")}</p>}
       </div>
-      {parsed?.command === "mcp" && <div className={styles.servers}>
+      {browser === "mcp" && <div className={styles.servers}>
         <p>{t("slash.count", { count: servers.filter(s => s.enabled).length })}</p>
         {!enabled && <p>{t("slash.mcpUnavailable")}</p>}
         {servers.map(server => { const cat = catalogueOf(server.id, server.revision); return <div key={server.id} className={styles.server}>
@@ -134,9 +138,22 @@ export function useSlashCommands(scope: string, draft: string, setDraft: (text: 
           <button type="button" data-slash-control disabled={!enabled || !server.enabled || cat?.loading} onClick={() => void load(server.id)}>{t(cat?.tools ? "slash.refresh" : "slash.load")}</button>
         </div>; })}
       </div>}
-      <button type="button" data-slash-control className={styles.settings} onClick={() => useAppStore.getState().openSettings(parsed?.command === "imageGen" ? "subagents" : "lab")}>{t("slash.settings")}</button>
-      <p className={styles.hint}>{t("slash.hint")}</p>
-    </div>}
+      <button type="button" data-slash-control className={styles.settings} onClick={() => { setBrowser(null); useAppStore.getState().openSettings(parsed?.command === "imageGen" ? "subagents" : "lab"); }}>{t("slash.settings")}</button>
+      <p className={styles.hint}>{t(browser ? "slash.usage" : "slash.hint")}</p>
+  </>;
+  const panel = <>
+    {open && <div ref={panelRef} className={styles.panel} tabIndex={-1} aria-label={t("slash.title")}
+      onKeyDown={e => {
+        if (e.key === "Escape" && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+          e.preventDefault(); e.stopPropagation(); setDismissed(draft); setDraft(draft);
+        }
+      }}>{content}</div>}
+    {browser && <ModalShell overlayClassName={styles.overlay} onClose={() => { setBrowser(null); setDraft(draft); }}>
+      <div className={styles.browser} role="dialog" aria-modal="true" aria-label={t(`slash.${browser}`)}>
+        <button autoFocus type="button" className={styles.settings} onClick={() => { setBrowser(null); setDraft(draft); }}>{t("common.close")}</button>
+        {content}
+      </div>
+    </ModalShell>}
     {error && <p className={styles.error} role="alert">{t("slash.invalid")}</p>}
   </>;
   const inputProps = { role: "combobox" as const, "aria-autocomplete": "list" as const, "aria-expanded": open, "aria-controls": open ? listId : undefined, "aria-activedescendant": open && matches.length ? `${listId}-${index}` : undefined };
