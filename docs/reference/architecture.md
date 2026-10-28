@@ -114,6 +114,7 @@ should cost the author their preferences syncing, not their app starting.
   another machine's project paths. After an import, `appStore.reloadFromPrefs()`
   re-derives the pref-backed slice and repaints — without it the values are
   right in the store and the screen still shows what it computed at startup.
+- **Retrieval defaults** — `ai:semanticDefaults` is a registered portable preference. With no open project, semantic retrieval settings edit these defaults. A missing project override inherits them; existing `lore:semantic:<path>` values remain complete overrides, including explicit opt-out. Indexes remain project-local and configuration changes perform no inference.
 - **Writes** — serialized on one chain, so two `writePref` calls for the same
   key (a slider being dragged) land in call order rather than in whichever
   order the driver finishes them. `writePrefConfirmed` is the explicit exception to

@@ -25,7 +25,6 @@ function ProjectRetrieval({ project }: { project: string | null }) {
   const models = useAiStore((s) => s.models);
   const providers = useAiStore((s) => s.providers);
   const update = (patch: Partial<SemanticPrefs>) => {
-    if (!project) return;
     const next = { ...semanticPrefs(project), ...patch }; setPrefs(next); saveSemanticPrefs(project, next);
   };
   const options = (ranking: boolean, selected: string) => [
@@ -36,16 +35,16 @@ function ProjectRetrieval({ project }: { project: string | null }) {
       ? [{ value: selected, label: t("semantic.unavailableModel") }] : []),
   ];
   return <>
-    <section className={styles.group} aria-label={t("semantic.projectSettings")}>
+    <section className={styles.group} aria-label={t(project ? "semantic.projectSettings" : "semantic.defaultSettings")}>
     <header className={styles.groupHeader}>
-      <div><h3 className={styles.groupTitle}>{t("semantic.projectSettings")}</h3>
+      <div><h3 className={styles.groupTitle}>{t(project ? "semantic.projectSettings" : "semantic.defaultSettings")}</h3>
         <p className={ui.rowDesc}>{project ? t("semantic.project", { name: project.split(/[\\/]/).pop() }) : t("semantic.noProject")}</p>
       </div>
-      <span className={styles.scope}>{t("semantic.projectOnly")}</span>
+      <span className={styles.scope}>{t(project ? "semantic.projectOnly" : "semantic.defaultScope")}</span>
     </header>
-    <fieldset className={styles.groupBody} disabled={!project}>
-    <Row title={t("semantic.enable")} desc={t("semantic.description", { kb: terms.kb })}>
-      <Toggle on={prefs.enabled} onChange={(enabled) => update({ enabled })} label={t("semantic.enable")} />
+    <div className={styles.groupBody}>
+    <Row title={t(project ? "semantic.enable" : "semantic.defaultEnable")} desc={t("semantic.description", { kb: terms.kb })}>
+      <Toggle on={prefs.enabled} onChange={(enabled) => update({ enabled })} label={t(project ? "semantic.enable" : "semantic.defaultEnable")} />
     </Row>
     <div className={styles.projectFields}>
       <Row title={t("semantic.embedding")} desc={t("semantic.embeddingHint")}>
@@ -69,10 +68,10 @@ function ProjectRetrieval({ project }: { project: string | null }) {
           }} />
       </Row>)}
       {project && prefs.enabled && prefs.embeddingModelId && <SemanticIndexPanel project={project} modelId={prefs.embeddingModelId} />}
-      {project && prefs.enabled && !prefs.embeddingModelId && !prefs.rerankerModelId && <p className={ui.rowWarn}>{t("semantic.chooseModel")}</p>}
+      {prefs.enabled && !prefs.embeddingModelId && !prefs.rerankerModelId && <p className={ui.rowWarn}>{t("semantic.chooseModel")}</p>}
       <p className={ui.rowDesc}>{t("semantic.transferHint", { entry: terms.entry })}</p>
     </div>
-    </fieldset>
+    </div>
     </section>
     <p className={ui.rowDesc}>{t("semantic.manageModelsHint")}</p>
   </>;
