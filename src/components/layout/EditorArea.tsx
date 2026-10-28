@@ -1,9 +1,10 @@
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Sparkles } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { editorViewport, useEditorStore } from "../../stores/editorStore";
+import { canSplitEditor, effectiveViewMode } from "../../lib/editor/layout";
 import { loadIntoEditor } from "../../stores/openDocument";
 import { CodeEditor } from "../editor/CodeEditor";
 import { EditorScrollNav } from "../editor/EditorScrollNav";
@@ -25,7 +26,21 @@ const SlidesPreview = lazy(() => import("../editor/SlidesPreview"));
 export function EditorArea() {
   const { t } = useTranslation();
   const { projectPath, activeFilePath } = useProjectStore();
-  const { content, filePath, loadError, viewMode, editorView, setContent } = useEditorStore();
+  const { content, filePath, loadError, editorView, setContent } = useEditorStore();
+  const viewMode = useEditorStore(effectiveViewMode);
+  const areaRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const area = areaRef.current;
+    if (!area) return;
+    const measure = () => useEditorStore.getState().setCanSplit(canSplitEditor(area.clientWidth));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(area);
+    return () => {
+      observer.disconnect();
+      useEditorStore.getState().setCanSplit(false);
+    };
+  }, []);
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
   const terms = useTerms();
 
@@ -90,7 +105,7 @@ export function EditorArea() {
 
   if (!projectPath || !activeFilePath) {
     return (
-      <div className={styles.area}>
+      <div className={styles.area} ref={areaRef}>
         <div className={styles.empty}>
           <div className={styles.emptyInner}>
             <div className={styles.emptyEyebrow}>{terms.emptyEyebrow}</div>
@@ -135,7 +150,7 @@ export function EditorArea() {
 
   if (isImage) {
     return (
-      <div className={styles.area}>
+      <div className={styles.area} ref={areaRef}>
         <div className={styles.panes}>
           <ImagePreview path={activeFilePath} />
         </div>
@@ -154,7 +169,7 @@ export function EditorArea() {
   const notice = kind && fileNoticeReason(kind, failedRead);
   if (notice) {
     return (
-      <div className={styles.area}>
+      <div className={styles.area} ref={areaRef}>
         <FileNotice key={activeFilePath} path={activeFilePath} reason={notice} message={failedRead ?? undefined} />
         <EditorBottomStrip />
       </div>
@@ -165,7 +180,7 @@ export function EditorArea() {
   const showPreview = viewMode === "preview" || viewMode === "split";
 
   return (
-    <div className={styles.area}>
+    <div className={styles.area} ref={areaRef}>
       <div className={styles.panes}>
         {showEditor && (
           <div className={styles.editorPane}>

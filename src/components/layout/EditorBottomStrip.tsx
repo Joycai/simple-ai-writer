@@ -43,23 +43,27 @@ export function EditorBottomStrip({ paragraph, sentence, refsCount = 0 }: Props)
           <>
             <button
               className={styles.markBtn}
+              aria-label={t("editorStrip.markStart")}
               onClick={() => markTargetStart(editorView)}
               title={t("editorStrip.markStartHint", {
                 defaultValue: "在光标处标记 AI 选区的开头（{{mod}}+Shift+[）",
                 mod: MOD_KEY,
               })}
             >
-              ⟦ {t("editorStrip.markStart", { defaultValue: "标记开头" })}
+              <span aria-hidden="true">⟦</span>
+              <span className={styles.markLabel}>{t("editorStrip.markStart", { defaultValue: "标记开头" })}</span>
             </button>
             <button
               className={styles.markBtn}
+              aria-label={t("editorStrip.markEnd")}
               onClick={() => markTargetEnd(editorView)}
               title={t("editorStrip.markEndHint", {
                 defaultValue: "在光标处标记 AI 选区的结尾（{{mod}}+Shift+]）",
                 mod: MOD_KEY,
               })}
             >
-              {t("editorStrip.markEnd", { defaultValue: "标记结尾" })} ⟧
+              <span className={styles.markLabel}>{t("editorStrip.markEnd", { defaultValue: "标记结尾" })}</span>
+              <span aria-hidden="true">⟧</span>
             </button>
             {marked !== null && (
               <span className={styles.markState}>
@@ -96,13 +100,13 @@ export function EditorBottomStrip({ paragraph, sentence, refsCount = 0 }: Props)
             unreadable) is on screen — so it drops out rather than report that
             document's length under another file. */}
         {!!activeFilePath && isTextKind(docKindOf(activeFilePath)) && (
-          <span>
+          <span className={styles.total}>
             {isZh ? "累计 " : "Total "}
             <span className={styles.value}>{wordCount.toLocaleString()}</span>
             {isZh ? " 字" : " words"}
           </span>
         )}
-        <span>
+        <span className={styles.refs}>
           {isZh ? "引用 " : ""}
           <span className={styles.value}>{refsCount}</span>
           {" "}{isZh ? terms.entry : terms.entries}

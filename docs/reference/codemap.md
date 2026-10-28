@@ -115,6 +115,10 @@ The UI vocabulary is **app-level and uniform** (`appTerms`/`useTerms`: 文档/�
 
 ### `src/components/layout/`
 
+编辑区的窄屏规则见 `design-system.md` → 编辑工作区的尺寸适配。`EditorArea` 量实际
+宽度，`editorStore.canSplit` 仅缓存可分屏与否；`lib/editor/layout.ts` 派生实际模式，
+编辑区和 `DocActions` 共用，`viewMode` 保留用户选择以便窗口恢复后重新分屏。
+
 Main layout structure (TitleBar, IconRail, Sidebar, ProjectRow (项目名那一行 + 它的菜单 + 搜索), FileTree (设计稿 01b：行的三个通道、容器查询分档、脚线；口径在 `docs/reference/design-system.md` → 文件面板设计语言), RecentProjects — the sidebar's no-project panel: 已固定 / 最近打开 两节，固定＝换节住而不是行上的标记，见 `docs/feature/file-panel-pin-ui-brief.md` — EditorArea, EditorBottomStrip, AiRail)
 
 **顶栏右半段分两截，各有各的规矩（设计稿 `01e`，`TitleBar.tsx` + `DocActions.tsx`）。** 文档段跟着当前文档来去，全局段（主题 / 语言 / AI）右锚不动。三条：
@@ -484,6 +488,8 @@ clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
 - `sections.ts`——「这一行在哪个小节」的唯一定义，编辑卡与重写卡共用（围栏里的 `#` 不算小节）。
 
 ### `src/lib/editor/`
+
+`layout.ts`：双栏最小宽度与实际视图模式的纯决策；空间不足只降级显示，不覆盖用户选择。
 
 编辑面的纯逻辑与 CodeMirror 扩展，一个文件一件事——组件里只剩接线，所以这些能在 node 下测。
 

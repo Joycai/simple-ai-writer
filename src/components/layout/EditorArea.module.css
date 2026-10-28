@@ -6,21 +6,27 @@
   overflow: hidden;
   background: var(--color-bg-surface);
   min-width: 0;
+  container: editor-area / inline-size;
 }
 
 /* Manuscript empty state — first chapter prompt */
 .empty {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 80px 100px 32px;
+  padding: 48px clamp(20px, 8cqw, 100px) 32px;
   text-align: center;
 }
 
 .emptyInner {
+  flex-shrink: 0;
+  width: 100%;
+  margin-block: auto;
   max-width: 580px;
+  overflow-wrap: anywhere;
 }
 
 .emptyEyebrow {
@@ -63,6 +69,7 @@
 
 .emptyCta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 14px;
@@ -83,6 +90,7 @@
   text-align: center;
 }
 .emptyCtaBtn {
+  max-width: 100%;
   padding: 9px 16px;
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-strong);
@@ -159,4 +167,24 @@
   font: 300 44px/1.18 var(--font-serif);
   color: var(--color-text-primary);
   letter-spacing: -0.012em;
+}
+
+@container editor-area (max-width: 720px) {
+  .emptyTitle { font-size: 34px; }
+  .emptyCta { margin-top: 28px; }
+  .tipGrid { grid-template-columns: 1fr; gap: 10px; margin-top: 24px; }
+}
+
+@container editor-area (max-width: 440px) {
+  .emptyTitle { font-size: 28px; }
+  .emptyHint { font-size: 14px; }
+  .emptyOrnament { margin: 22px 0; }
+}
+
+@media (max-height: 700px) {
+  .empty { padding-top: 24px; padding-bottom: 24px; }
+  .emptyEyebrow { margin-bottom: 14px; }
+  .emptyOrnament { margin: 20px 0; }
+  .emptyCta { margin-top: 24px; padding-top: 16px; }
+  .tipGrid { margin-top: 20px; }
 }

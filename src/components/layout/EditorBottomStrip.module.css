@@ -9,12 +9,15 @@
   color: var(--color-text-muted);
   flex-shrink: 0;
   background: var(--color-bg-surface);
+  gap: 12px;
+  white-space: nowrap;
 }
 
 .right {
   display: flex;
   gap: 20px;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .value {
@@ -33,6 +36,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  overflow-x: auto;
+  flex-shrink: 0;
 }
 
 .markBtn {
@@ -43,6 +49,7 @@
   border: 1px solid var(--color-border);
   font: 400 11px/1 var(--font-sans);
   color: var(--color-text-dim);
+  flex-shrink: 0;
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 .markBtn:hover {
@@ -71,4 +78,23 @@
   color: var(--color-text-muted);
   font-style: italic;
   font-family: var(--font-serif);
+}
+
+@container (max-width: 1000px) {
+  .summon { display: none; }
+}
+@container (max-width: 800px) {
+  .refs { display: none; }
+  .right { gap: 10px; }
+  .strip { padding-inline: 12px; }
+}
+@container (max-width: 640px) {
+  .total { display: none; }
+  .right { display: none; }
+  .markGroup { max-width: 100%; flex-shrink: 1; }
+}
+@container (max-width: 480px) {
+  .markLabel { display: none; }
+  .markBtn { padding-inline: 7px; }
+  .markGroup { gap: 8px; }
 }

@@ -10,6 +10,7 @@ export const TOKEN_CONTRACT: TokenContract = {
     "--ease-settle",
     "--ease-spring",
     "--editor-max-width",
+    "--editor-min-pane-width",
     "--font-mono",
     "--font-sans",
     "--font-serif",

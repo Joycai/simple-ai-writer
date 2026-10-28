@@ -3,13 +3,14 @@ import type { EditorView } from "@codemirror/view";
 import { extractHeadings, countWords, type HeadingNode } from "../lib/fs/markdown";
 import { readFile, writeFile } from "../lib/fs/fileio";
 import type { AiTargetRange } from "../lib/editor/aiTarget";
+import type { ViewMode } from "../lib/editor/layout";
 import { isSamePath } from "../lib/paths";
 
 import { createViewportCache } from "../lib/editor/viewport";
 
 export const editorViewport = createViewportCache();
 
-export type ViewMode = "split" | "editor" | "preview";
+export type { ViewMode } from "../lib/editor/layout";
 /** Which of the breadcrumb's traces is showing — see `EditorState.crumbTrace`. */
 export type CrumbTraceKind = "closed" | "closeFailed" | "saveFailed";
 
@@ -20,6 +21,8 @@ interface EditorState {
   filePath: string | null;
   headings: HeadingNode[];
   viewMode: ViewMode;
+  /** Measured editor room; transient, never a saved preference. */
+  canSplit: boolean;
   isDirty: boolean;
   saveTimer: ReturnType<typeof setTimeout> | null;
   /**
@@ -70,6 +73,7 @@ interface EditorState {
   setContent: (content: string) => void;
   saveNow: () => Promise<void>;
   setViewMode: (mode: ViewMode) => void;
+  setCanSplit: (canSplit: boolean) => void;
   setScrollToLine: (fn: ((line: number) => void) | null) => void;
   /** 光标跳到第 `line` 行（1 基）并滚进视野；编辑器没挂着就先记下。 */
   jumpToLine: (line: number) => void;
@@ -111,6 +115,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   filePath: null,
   headings: [],
   viewMode: "split",
+  canSplit: false,
   isDirty: false,
   saveTimer: null,
   scrollToLine: null,
@@ -236,6 +241,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   setViewMode: (mode) => set({ viewMode: mode }),
+  setCanSplit: (canSplit) => {
+    if (get().canSplit !== canSplit) set({ canSplit });
+  },
 
   setScrollToLine: (fn) => {
     const { pendingJump } = get();
