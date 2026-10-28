@@ -20,13 +20,6 @@ describe("slash command menu", () => {
     expect(html).toContain("slash.imageUnavailable");
     expect(html).toContain('disabled=""');
   });
-  it("shows an unloaded server rather than inventing a zero tool count, escaping names", () => {
-    const html = renderToStaticMarkup(createElement(Menu, { draft: "/mcp" }));
-    expect(html).toContain("slash.notLoaded");
-    expect(html).not.toContain("<script>");
-    expect(html).toContain("&lt;script&gt;");
-    expect(html).toContain("slash.load");
-  });
   it("does not cover a completed execution request with suggestions", () => {
     expect(renderToStaticMarkup(createElement(Menu, { draft: "/imageGen draw a tree", image: true }))).toBe("");
   });
@@ -46,7 +39,7 @@ function composer(draft: string) {
 }
 
 describe("slash composer interactions", () => {
-  it.each(["/help", "/mcp", "/imageGen"])("lets a complete command reach submission: %s", draft => {
+  it.each(["/imageGen"])("lets a complete command reach submission: %s", draft => {
     const { result, setDraft, key } = composer(draft);
     const event = key("Enter");
     expect(result.keyDown(event as never, false)).toBe(false);
@@ -55,11 +48,9 @@ describe("slash composer interactions", () => {
   });
 
   it.each(["/help", "/mcp"])("opens local browsing without sending a model request: %s", draft => {
-    const { result } = composer(draft);
-    const focus = vi.fn();
-    result.panel.props.children[0].props.ref.current = { focus };
+    const { result, setDraft } = composer(draft);
     expect(result.prepare()).toBeNull();
-    expect(focus).toHaveBeenCalledOnce();
+    expect(setDraft).toHaveBeenCalledWith("");
   });
 
   it("submits an image request and leaves Shift+Enter and IME untouched", () => {
@@ -76,7 +67,7 @@ describe("slash composer interactions", () => {
     const { result, setDraft, key } = composer("/mc");
     const event = key("Enter");
     expect(result.keyDown(event as never, false)).toBe(true);
-    expect(setDraft).toHaveBeenCalledWith("/mcp ");
+    expect(setDraft).toHaveBeenCalledWith("");
     expect(event.preventDefault).toHaveBeenCalled();
   });
 
@@ -114,4 +105,15 @@ describe("slash composer interactions", () => {
     renderToStaticMarkup(createElement(Harness));
     expect(prepare()).toBeNull();
   });
+});
+
+it.each(["/help", "/mcp"])("handles local Enter before chat queuing: %s", draft => {
+  const { result, setDraft, key } = composer(draft);
+  expect(result.keyDown(key("Enter") as never, false)).toBe(true);
+  expect(setDraft).toHaveBeenCalledWith("");
+});
+it("preserves text after a local command", () => {
+  const { result, setDraft } = composer("/help keep this request");
+  expect(result.prepare()).toBeNull();
+  expect(setDraft).toHaveBeenCalledWith("keep this request");
 });

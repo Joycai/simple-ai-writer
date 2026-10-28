@@ -184,8 +184,12 @@ buttons. The panel follows the textarea in DOM order, while CSS places it
 visually above; subsequent Tabs reach the footer without cycling back through the
 input. The menu floats above the composer and scrolls within the available viewport
 height, so opening it cannot push the input or send controls below the window.
-Submitting `/help` or `/mcp` focuses the local browser panel; these commands do not
-send a model request. Exact commands pass through to submission instead of repeatedly
+Submitting or selecting `/help` or `/mcp` opens a separate local dialog and consumes
+only the command prefix (trailing draft text is preserved). Help explains usage; MCP
+shows configured servers and explicit Load/Refresh actions. Typing only shows completion
+suggestions. This separates discovery from execution: focusing an already visible menu
+provided no observable feedback. Local Enter is handled before running-chat queuing;
+these commands do not send a model request. Exact commands pass through to submission instead of repeatedly
 inserting the same prefix. Shift+Tab retains native backward traversal. Add a natural
 language request after an execution command, then send. The first version expands
 that command into an explicit request to the existing assistant (the transcript

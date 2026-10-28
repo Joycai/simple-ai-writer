@@ -5140,9 +5140,12 @@
     "notLoaded": "Not loaded",
     "refresh": "Refresh",
     "load": "Load tools",
-    "hint": "↑ ↓ to select · Enter to complete / submit · Esc to close. Add your request after the command; calls use the normal approval flow.",
+    "hint": "↑ ↓ to select · Enter to choose · Esc to close. /help and /mcp open local windows.",
     "invalid": "Choose an available command and add a request after it.",
     "settings": "Configure capabilities",
-    "placeholder": "Type / for commands"
+    "placeholder": "Type / for commands",
+    "localHelp": "This window runs locally and does not send a message to the assistant.",
+    "usage": "Choose an execution command, add your request, then send. Tool calls follow the normal approval flow.",
+    "loadHint": "Load tools from an enabled server below, then choose a tool to add its command."
   }
 }
