@@ -43,12 +43,11 @@ function ProjectRetrieval({ project }: { project: string | null }) {
       </div>
       <span className={styles.scope}>{t("semantic.projectOnly")}</span>
     </header>
-    <div className={styles.groupBody}>
-    <Row title={t("semantic.enable")} desc={t("semantic.description", { kb: terms.kb })}
-      last={!project || !prefs.enabled}>
-      {project && <Toggle on={prefs.enabled} onChange={(enabled) => update({ enabled })} label={t("semantic.enable")} />}
+    <fieldset className={styles.groupBody} disabled={!project}>
+    <Row title={t("semantic.enable")} desc={t("semantic.description", { kb: terms.kb })}>
+      <Toggle on={prefs.enabled} onChange={(enabled) => update({ enabled })} label={t("semantic.enable")} />
     </Row>
-    {project && prefs.enabled && <div className={styles.projectFields}>
+    <div className={styles.projectFields}>
       <Row title={t("semantic.embedding")} desc={t("semantic.embeddingHint")}>
         <Select value={prefs.embeddingModelId} options={options(false, prefs.embeddingModelId)} onChange={(embeddingModelId) => update({ embeddingModelId })} ariaLabel={t("semantic.embedding")} className={common.rowSelect} />
       </Row>
@@ -69,11 +68,11 @@ function ProjectRetrieval({ project }: { project: string | null }) {
             update({ [field]: value }); e.target.value = String(value);
           }} />
       </Row>)}
-      {prefs.embeddingModelId && <SemanticIndexPanel project={project} modelId={prefs.embeddingModelId} />}
-      {!prefs.embeddingModelId && !prefs.rerankerModelId && <p className={ui.rowWarn}>{t("semantic.chooseModel")}</p>}
+      {project && prefs.enabled && prefs.embeddingModelId && <SemanticIndexPanel project={project} modelId={prefs.embeddingModelId} />}
+      {project && prefs.enabled && !prefs.embeddingModelId && !prefs.rerankerModelId && <p className={ui.rowWarn}>{t("semantic.chooseModel")}</p>}
       <p className={ui.rowDesc}>{t("semantic.transferHint", { entry: terms.entry })}</p>
-    </div>}
     </div>
+    </fieldset>
     </section>
     <p className={ui.rowDesc}>{t("semantic.manageModelsHint")}</p>
   </>;

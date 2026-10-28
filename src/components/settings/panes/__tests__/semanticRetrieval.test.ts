@@ -6,6 +6,7 @@ import type { SemanticPrefs } from "../../../../lib/context/semanticPrefs";
 
 type Choice = { value: string; label: string };
 const fixture = vi.hoisted(() => ({
+  project: "/fictional-project" as string | null,
   models: [] as Model[], providers: [{ id: "channel", name: "Local" }],
   prefs: { enabled: true, embeddingModelId: "", rerankerModelId: "", minScore: 0.5 } as SemanticPrefs,
   choices: {} as Record<string, { options: Choice[]; onChange: (value: string) => void }>,
@@ -14,7 +15,7 @@ const fixture = vi.hoisted(() => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("../../../../stores/projectStore", () => ({
-  useProjectStore: (select: (s: { projectPath: string }) => unknown) => select({ projectPath: "/fictional-project" }),
+  useProjectStore: (select: (s: { projectPath: string | null }) => unknown) => select({ projectPath: fixture.project }),
   useTerms: () => ({ kb: "Knowledge Base", entry: "entry" }),
 }));
 vi.mock("../../../../stores/aiStore", () => ({ useAiStore: (select: (s: typeof fixture) => unknown) => select(fixture) }));
@@ -40,6 +41,7 @@ const model = (id: string, type: Model["type"], extra: Partial<Model> = {}): Mod
   priceIn: 0, priceCachedIn: 0, priceOut: 0, ...extra,
 });
 beforeEach(() => {
+  fixture.project = "/fictional-project";
   fixture.models = [model("vectors", "embedding"), model("ranking", "rerank"), model("chat", "text"),
     model("disabled", "embedding", { enabled: false }), model("orphan", "embedding", { providerId: "missing" })];
   fixture.prefs = { enabled: true, embeddingModelId: "", rerankerModelId: "", minScore: 0.5 };
@@ -71,10 +73,13 @@ it("saves the current-document opt-in without changing model selection", () => {
   expect(fixture.save).toHaveBeenCalledWith("/fictional-project", { ...fixture.prefs, documentEnabled: true });
 });
 
-it("hides document retrieval controls when the parent project opt-in is off", () => {
+it("keeps configuration visible and editable before enabling retrieval", () => {
   fixture.prefs.enabled = false;
-  renderToStaticMarkup(createElement(SemanticRetrieval));
-  expect(fixture.toggles["semantic.documentEnable"]).toBeUndefined();
+  const html = renderToStaticMarkup(createElement(SemanticRetrieval));
+  expect(fixture.toggles["semantic.documentEnable"]).toBeDefined();
+  expect(html).not.toMatch(/<fieldset[^>]*disabled/);
+  fixture.choices["semantic.embedding"].onChange("vectors");
+  expect(fixture.save).toHaveBeenCalledWith("/fictional-project", { ...fixture.prefs, embeddingModelId: "vectors" });
 });
 
 it("renders independently saved thresholds with only cosine bounded", () => {
@@ -85,4 +90,22 @@ it("renders independently saved thresholds with only cosine bounded", () => {
   const reranker = inputs.find((s) => s.includes('semantic.rerankerMinScore'));
   expect(reranker).toContain('value="3"');
   expect(reranker).not.toMatch(/ (min|max)=/);
+});
+
+
+it("shows the switch and all configuration disabled without an open project", () => {
+  fixture.project = null;
+  fixture.prefs.enabled = false;
+  const html = renderToStaticMarkup(createElement(SemanticRetrieval));
+  expect(fixture.toggles["semantic.enable"]).toBeDefined();
+  expect(fixture.toggles["semantic.documentEnable"]).toBeDefined();
+  expect(fixture.choices["semantic.embedding"]).toBeDefined();
+  expect(fixture.choices["semantic.reranker"]).toBeDefined();
+  expect(html).toMatch(/<fieldset[^>]*disabled=""/);
+  expect(html).toContain("semantic.noProject");
+  expect(html).toContain("semantic.cosineMinScore");
+  expect(html).toContain("semantic.rerankerMinScore");
+  fixture.toggles["semantic.enable"](true);
+  fixture.choices["semantic.embedding"].onChange("vectors");
+  expect(fixture.save).not.toHaveBeenCalled();
 });

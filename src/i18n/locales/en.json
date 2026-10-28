@@ -4997,7 +4997,7 @@
     "enable": "Enable for this project",
     "description": "Find relevant material even when names and keywords are absent. Applies to writing tasks and assistant chat.",
     "project": "This project · {{name}}",
-    "noProject": "Open a project to enable semantic retrieval.",
+    "noProject": "Open a project to configure and enable semantic retrieval. These settings apply only to the open project.",
     "embedding": "Embedding model",
     "embeddingHint": "Find related descriptions by meaning. Optional when a reranker is selected.",
     "reranker": "Reranker model",

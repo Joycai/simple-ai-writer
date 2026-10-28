@@ -6,7 +6,7 @@
 
 An author can describe a task without naming the relevant knowledge-base entry. Existing name/alias matching and explicit links remain authoritative; this optional channel discovers additional entries from their compact descriptions. The author requested a **per-project opt-in switch**, selectable local or hosted embedding/reranker models, and the existing theme system.
 
-Settings → AI configuration → **Semantic retrieval** is a standalone settings tab. Its first row identifies the current project and has the existing square Toggle. Off is the default. No open project means an explanatory empty state instead of an actionable switch. On reveals an optional embedding selector, optional reranker selector, and separate minimum cosine/reranker scores. At least one model is needed. Neither selection silently falls back to a chat model.
+Settings → AI configuration → **Semantic retrieval** is a standalone settings tab. Its first row identifies the current project and has the existing square Toggle. Off is the default. The project switch, optional embedding/reranker selectors and separate minimum cosine/reranker scores remain visible even when retrieval is off. Without an open project the controls are disabled and the page explains how to enable them. At least one model is needed. Neither selection silently falls back to a chat model.
 
 Model registration lives exclusively in **Channels & Models**. The model type chips and list filters include **Embedding** and **Rerank**. Their shared drawer edits channel-bound identity, fee group and dedicated retrieval format/path; embedding models additionally offer query/document prefixes. Chat limits, thinking, sampling, capability probing and chat-route controls do not apply. Existing theme colours are reused for the new type badges without expanding the theme contract.
 
@@ -14,7 +14,7 @@ The retrieval pane contains only project enablement, typed model selectors, mini
 
 Legacy registrations stored as text models are normalized on DB/backup reads from their existing retrieval format into embedding/rerank types, preserving ids, paths, prefixes, fee groups and project selections. Typed rows missing a retrieval format receive the corresponding default. Both types remain excluded from conversational pickers even when format metadata is absent. Switching a model back to a conversational type clears its retrieval declaration on save so it can be selected for chat again. This unifies model maintenance without changing the retrieval protocol or paid execution flow.
 
-The production Section / Row / Toggle / Select / form controls carry the app's Settings palette and typography. Turning the switch off hides the project controls but preserves configuration and makes no retrieval request. Saving configuration itself never calls a model.
+The production Section / Row / Toggle / Select / form controls carry the app's Settings palette and typography. Turning the switch off preserves the visible, editable project configuration and makes no retrieval request. Index preparation is available only when project retrieval is enabled. Saving configuration itself never calls a model.
 
 ## Pipeline and invariants
 
@@ -147,3 +147,8 @@ The model drawer validates the retrieval path as it is edited using the transpor
 Semantic retrieval graduates from Labs to its own always-visible tab in the AI configuration group, immediately after Context & Memory. It uses the shared Pane and PaneHeader layout and no longer carries a Beta badge. A dedicated tab makes its model, threshold and index controls directly discoverable without entering the experimental-feature list. Model-change and deletion warnings point to the new location in both languages.
 
 Project opt-in remains default-off: graduation changes discoverability, not consent to provider requests. Existing project preferences, model selections and caches retain their keys and need no migration. Opening the tab starts no paid inference. Broader real-document quality and latency measurements remain unverified; graduation does not claim new retrieval-quality evidence.
+
+
+## Visible controls without a project (1.99.32)
+
+A release screenshot exposed an empty-looking standalone pane: no open project removed the switch, while retrieval being off removed all configuration. Keep the switch and fields visible so the feature remains discoverable. A native disabled fieldset prevents interaction without a project; with a project, authors can configure models and thresholds before enabling retrieval. Only index preparation and the missing-model warning remain gated by enablement. Opening the pane, editing preferences and disabling retrieval still start no paid inference.

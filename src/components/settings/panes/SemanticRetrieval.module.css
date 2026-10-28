@@ -4,7 +4,8 @@
 .group { container-type: inline-size; margin-top: var(--space-5); border: 1px solid var(--color-border); background: var(--color-bg-surface); }
 .groupHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: var(--space-4); background: var(--color-bg-elevated); border-bottom: 1px solid var(--color-border); }
 .groupTitle { margin: 0; font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary); }
-.groupBody { padding: 0 var(--space-4) var(--space-4); }
+.groupBody { margin: 0; min-width: 0; border: 0; padding: 0 var(--space-4) var(--space-4); }
+.groupBody:disabled { opacity: 0.55; }
 .scope { display: inline-flex; flex-shrink: 0; padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs); color: var(--color-text-secondary); background: var(--color-tag-bg); }
 .libraryToolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-4) 0; }
 @media (max-width: 700px) {
