@@ -62,6 +62,7 @@ export default function App() {
   // re-rendered the whole app tree ~120×/s and queued a SQLite write each time.
   const layoutRef = useRef<HTMLDivElement>(null);
   const dragWidth = useRef<number | null>(null);
+  const dragBounds = useRef<{ width: number; max: number } | null>(null);
   // And the write itself is coalesced to one per frame: `mousemove` is dispatched
   // at the mouse's sampling rate, not the display's, while every write of
   // `--sidebar-width` invalidates style for the whole layout subtree and forces
@@ -74,11 +75,23 @@ export default function App() {
     layoutRef.current?.style.setProperty("--sidebar-width", `${dragWidth.current}px`);
   };
   const onResizeStart = () => {
+    const layout = layoutRef.current;
+    const sidebar = layout?.querySelector<HTMLElement>("[data-sidebar]");
+    const room = layout?.querySelector<HTMLElement>("[data-editor-room]");
+    if (layout && sidebar && room) {
+      const minimum = parseFloat(getComputedStyle(layout).getPropertyValue("--editor-min-pane-width"));
+      // Measure once per gesture, before any writes, to retain the rAF-only
+      // layout path while dragging. Pressing without movement saves nothing.
+      dragBounds.current = { width: sidebar.offsetWidth, max: sidebar.offsetWidth + room.clientWidth - minimum };
+    }
     layoutRef.current?.setAttribute("data-resizing", "");
   };
   const onResizeDelta = (d: number) => {
-    const cur = dragWidth.current ?? useAppStore.getState().sidebarWidth;
-    dragWidth.current = clampSidebarWidth(cur + d);
+    // Begin at the actual capped width. A press without movement must not
+    // replace the saved preference, and dragging past the cap must not build
+    // up invisible distance that has to be undone before dragging left.
+    const cur = dragWidth.current ?? dragBounds.current?.width ?? useAppStore.getState().sidebarWidth;
+    dragWidth.current = clampSidebarWidth(Math.min(cur + d, dragBounds.current?.max ?? 500));
     if (rafId.current === null) rafId.current = requestAnimationFrame(flushWidth);
   };
   const onResizeEnd = () => {
@@ -95,6 +108,7 @@ export default function App() {
     layoutRef.current?.removeAttribute("data-resizing");
     if (dragWidth.current !== null) setSidebarWidth(dragWidth.current);
     dragWidth.current = null;
+    dragBounds.current = null;
   };
   const { loadConfig } = useAiStore();
   // Not `mainView` from the store — see useMainView: a view whose precondition
@@ -209,7 +223,7 @@ export default function App() {
           <ResizeHandle onDelta={onResizeDelta} onStart={onResizeStart} onEnd={onResizeEnd} />
         )}
 
-        <div style={{ flex: 1, position: "relative", minWidth: 0, overflow: "hidden" }}>
+        <div data-editor-room style={{ flex: 1, position: "relative", minWidth: 0, overflow: "hidden" }}>
           {/* 主视图切换不做转场（方案 044）：⌘1‥⌘5（lib/shortcuts.ts SCREEN_COMBOS）
               直达，属键盘高频动作，AUDIT §1「永不动画」。原先的 AnimatePresence +
               viewSlide 让退场层在弹簧落定（约 0.3s）前与新视图同时挂载——编辑器与

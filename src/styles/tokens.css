@@ -99,6 +99,7 @@
     --tab-bar-width: 56px;       /* legacy alias retained */
     --status-bar-height: 34px;   /* editor bottom strip */
     --editor-max-width: 680px;
+    --editor-min-pane-width: 360px;
 
     /* Letter spacing */
     --letter-label: 0.22em;       /* uppercase Inter Tight labels */

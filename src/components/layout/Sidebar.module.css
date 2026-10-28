@@ -1,5 +1,7 @@
 .sidebar {
-  width: var(--sidebar-width);
+  /* Reserve one useful document pane and the two rails + resize handle.
+     The preference remains intact when a smaller window temporarily caps it. */
+  width: min(var(--sidebar-width), max(160px, calc(100% - var(--icon-rail-width) - var(--ai-rail-width) - 4px - var(--editor-min-pane-width))));
   /* 密度分档量的是这个面板，不是窗口 —— 拖动手柄时 appStore 里还是拖动前的值。 */
   container-type: inline-size;
   height: 100%;

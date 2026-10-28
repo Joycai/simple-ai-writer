@@ -37,7 +37,7 @@ export function Sidebar() {
   const isOutline = activeSideTab === "outline";
 
   return (
-    <div className={`${styles.sidebar} ${sidebarCollapsed ? styles.collapsed : ""}`}>
+    <div data-sidebar className={`${styles.sidebar} ${sidebarCollapsed ? styles.collapsed : ""}`}>
       {/* 项目名 + 项目菜单 + 搜索 —— 设计稿 01b 把原来的四层压到这一层加一条脚线，
           脚线（三个计数 / 剪贴板 / 定位当前文档）长在 FileTree 里，因为它说的三件
           事全是这棵树的事。 */}

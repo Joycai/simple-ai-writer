@@ -20,6 +20,7 @@ import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import { ExportMenu } from "./ExportMenu";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore, type ViewMode } from "../../stores/editorStore";
+import { effectiveViewMode } from "../../lib/editor/layout";
 import { isTextKind, type DocKind } from "../../lib/fs/docKind";
 import { openWithDefaultApp } from "../../lib/fs/fileio";
 import { printHtmlDocument } from "../../lib/fs/export";
@@ -35,7 +36,9 @@ const FEEDBACK_MS = 2000;
 
 export function DocActions({ kind, path }: { kind: DocKind; path: string }) {
   const { t } = useTranslation();
-  const viewMode = useEditorStore((s) => s.viewMode);
+  const viewMode = useEditorStore(effectiveViewMode);
+  const canSplit = useEditorStore((s) => s.canSplit);
+  const viewModes = canSplit ? VIEW_MODES : VIEW_MODES.filter((mode) => mode !== "split");
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const isDirty = useEditorStore((s) => s.isDirty);
   const wordCount = useEditorStore((s) => s.wordCount);
@@ -48,7 +51,7 @@ export function DocActions({ kind, path }: { kind: DocKind; path: string }) {
   // path it decoded, and a mismatch means the new file hasn't decoded yet.
   const dims = imageSize && imageSize.path === path ? imageSize : null;
 
-  const viewItems: ContextMenuEntry[] = VIEW_MODES.map((m) => ({
+  const viewItems: ContextMenuEntry[] = viewModes.map((m) => ({
     kind: "item",
     label: t(`editor.viewMode.${m}`),
     action: () => setViewMode(m),
@@ -60,7 +63,7 @@ export function DocActions({ kind, path }: { kind: DocKind; path: string }) {
         <>
           {/* 宽 / 中：三格连体，当前档实底赭石——作者一眼看见在哪一档。 */}
           <div className={`${styles.viewToggle} ${styles.notNarrow}`}>
-            {VIEW_MODES.map((m) => (
+            {viewModes.map((m) => (
               <button
                 key={m}
                 className={`${styles.viewBtn} ${viewMode === m ? styles.viewBtnActive : ""}`}
