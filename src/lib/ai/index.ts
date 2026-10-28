@@ -91,6 +91,14 @@ function createStallWatch(outer: AbortSignal | undefined, firstMs: number, idleM
 
   return {
     signal: ctrl.signal,
+    /** A new continuation hop gets its own full first-chunk allowance. */
+    restart() {
+      phase = "first-chunk";
+      limit = firstMs;
+      deadline = Date.now() + firstMs;
+      clearTimeout(timer);
+      timer = setTimeout(tick, firstMs);
+    },
     /** A chunk arrived: the stream is alive, and from here the idle limit applies. */
     alive() {
       deadline = Date.now() + idleMs;
@@ -205,7 +213,8 @@ async function sendOnce(req: StreamOptions, plan: RequestPlan): Promise<boolean>
   // parameter fails, the status line arriving before generation — and this is
   // what says so rather than an assumption about the adapters.
   let streamed = false;
-  const watch = createStallWatch(req.signal, firstChunkDeadlineMs(estimated), STREAM_IDLE_MS);
+  const watch = createStallWatch(req.signal, Math.max(firstChunkDeadlineMs(estimated), plan.gemini?.readTimeoutMs ?? 0),
+    Math.max(STREAM_IDLE_MS, plan.gemini?.readTimeoutMs ?? 0));
   const usage = createStreamUsage(req.accounting);
   let outcome: "complete" | "failed" | "cancelled" = "failed";
   const wrapped: StreamOptions = {
@@ -222,6 +231,7 @@ async function sendOnce(req: StreamOptions, plan: RequestPlan): Promise<boolean>
     // A caller's own hook still runs: the live probes read the bodies they sent
     // through it, and replacing it left them asserting on nothing.
     _onRequestBody: (body) => {
+      if (plan.gemini) watch.restart();
       usage.start();
       log.requestBody(body);
       req._onRequestBody?.(body);

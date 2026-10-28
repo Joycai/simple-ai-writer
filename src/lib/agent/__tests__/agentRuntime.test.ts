@@ -113,6 +113,15 @@ describe("runAgent", () => {
     expect(measured.incomparable).toBeUndefined();
   });
 
+  it("uses first-hop input for context diagnostics while retaining every hop for billing", async () => {
+    queueRound([{ text: "done" }, { done: true, inputTokens: 100000, initialInputTokens: 100, outputTokens: 200 }]);
+    const opts = makeOptions();
+    const result = await runAgent(opts);
+    expect(result.inputTokens).toBe(100000);
+    const measured = opts.events.find((e) => e.kind === "round-done");
+    expect(measured).toMatchObject({ actualInputTokens: 100 });
+  });
+
   it("marks a round incomparable when the endpoint reports no usage", async () => {
     // Common on relays. A missing count must never read as "we estimated high"
     // — it is not a measurement at all.

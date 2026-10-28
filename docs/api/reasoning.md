@@ -207,6 +207,12 @@
 `temperature`）。任何同时提供"温度"与"思考强度"两个设置的界面，都会在推理模型
 上让二者互相打架。GPT-5.6 上的实测见 §1.10。
 
+**③ Argon 例外（官方文档，2026-10-27 核对；未实测）**：GenerateContent 的
+`gemini-4-argon` 忽略自定义 temperature/topP/topK，与是否使用思考无关；支持 low/medium/high，
+默认 medium。[迁移指南](https://ai.google.dev/gemini-api/docs/generate-content/latest-model)
+要求移除采样参数及 candidateCount。不能把 Gemini 3.x 的采样行为推广到 Argon，
+也不能据此判断第三方 OpenAI 兼容面的行为。
+
 ### 1.10 OpenAI 族：越界、拒收与改写（2026-09-27，经 OrcaRouter）
 
 [`landscape.md`](landscape.md) §7 第十八个样本「GPT 全家补测」，六个 GPT id × ① ②。回包是 OpenAI 原样的两个 id（gpt-5.6-luna /

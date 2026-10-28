@@ -14,6 +14,8 @@
 > [`anthropic-plan.md`](anthropic-plan.md)（④ 族，已实现）。本轮把同样的三件事
 > ——强度 / 思维链 / 回传——做到 ③ 族。
 
+> **2026-10-27 Argon 更新**：GenerateContent 续接、20 分钟等待与采样参数屏蔽已落地，见 §9。以下 §1–§8 保留原始接入过程；Argon 差异以 §9 为准。
+
 ## 1. 一句话结论
 
 **最难的那件（回传）本来就对；但有一个我们不认识的失败形态。**
@@ -64,9 +66,9 @@ thoughts in the response"*，也就是说思考仍然随响应回来，只是**�
 
 ### 2.3 采样参数：③ 族没有 ④ 族那条禁令
 
-`generationConfig` 的 `temperature` / `topP` / `topK` 在 ③ 族**始终可用**，
+Gemini 3.x 的 `generationConfig.temperature` / `topP` / `topK` 可用，
 不因思考而禁用。这与 ①④ 相反（见 [`api/reasoning.md`](reasoning.md) §1.8）。
-本 app 从不发送这些，所以只是记录，不影响实现。
+本 app 现在会发送作者声明的温度；Argon 忽略采样参数，是型号例外，见 §9。
 
 ### 2.4 目标范围：Gemini 3+（作者决定）
 
@@ -200,3 +202,61 @@ an error."* —— 反过来说，3+ 上发 `thinkingLevel` 就够了。
   改动只是在分支里多认一种 part——签名因此不受影响。
 - **UI 文案补了一句**：Gemini 关不掉思考，「关闭」等于最低档。此前只有 ④ 族的
   文案说了这件事，而 ③ 族走的是另一条 hint。
+
+
+## 9. Gemini 4 Argon（2026-10-27）
+
+**状态：已实现，单元测试覆盖；未发起真实 API 请求。** 官方文档事实与网关实测分开：
+本节依据 [GenerateContent 迁移指南](https://ai.google.dev/gemini-api/docs/generate-content/latest-model)、
+[long decode 指南](https://ai.google.dev/gemini-api/docs/generate-content/long-decode) 与
+[型号页](https://ai.google.dev/gemini-api/docs/models/gemini-4-argon)，核对日期 2026-10-27。
+3.8 Flash 的 OrcaRouter 实测不作为 Argon 已验证的证据。
+
+### 9.1 协议与预算
+
+继续使用无状态 GenerateContent，而不新增 Interactions 适配器：现有工具历史、签名与本地压缩
+可以复用；long decode 在这一协议面已提供。`capability/cells/gemini.ts` 单独保存原生协议的型号
+画像，通过规范化 id 匹配 `gemini-4-argon` 及其后缀；不把它推广到 OpenAI 兼容面或其他 Gemini。
+能力与参数决策在 `planRequest`，适配器与「将发送」摘要共读该计划。
+
+- 全局目录记录统一窗口 1,048,576、保守的单跳输出 65,536 与结构化输出能力。窗口包含输入、
+  思考和正文，不能按两个独立的 1M 相加；目录值仍只用于规划，不自动放宽发送前拦截。Google 官方渠道另依据型号页预填多模态与 PDF
+  声明，不给未测中继复制这份预填，也不把原生视频或音频输入标成已接入。
+- Argon 原生请求明确发 `generationConfig.maxOutputTokens`。默认 65,536，保持单跳成本边界；
+  作者显式填写的模型输出上限作为**全部续接的总预算**。目录、平台、应用缺省不会自动扩大付费预算。
+  需要长输出时，作者可显式填 131,072 / 262,144 等值；实际预算仍须落在剩余统一窗口内。
+- `CONTINUATION` 才自动续接：读取 candidate 上最新 `continuationToken`，下一跳保留原始
+  contents、system、tools、generationConfig，只在顶层增加 token。不把半成品追加到 contents。
+  空正文、仅思考是正常进度。跨跳 parts 保持顺序，工具调用只在最后一跳结束后交付执行层。
+- `MAX_TOKENS` 表示总预算耗尽，保留截断标志，**不自动提高预算**。现有运行时仍可走普通文本
+  截断恢复（新一轮请求），不是从 checkpoint 自动增加预算。续接累计输出已达声明预算、缺 token、重复 token 或超过 128 跳
+  明确失败，防止网关异常造成无限付费循环。不同的 token 本身不能证明网关真的推进。
+
+### 9.2 等待、取消与中断
+
+Argon 的首块与后续空闲等待至少 20 分钟；已有大输入预填充估算更长时保留更长值。
+这是等待数据的时限，不是整次多跳生成的总时限。每跳末 usage/输出刷新等待；作者取消仍立即
+沿 AbortSignal 传递，跳间也检查取消，避免取消后再启动一次请求。其他型号保留原等待策略。
+
+本轮**不自动恢复断流**：已显示的文本无法原地回滚到 checkpoint，盲目重放会重复正文和工具。
+缺终止原因或网络异常明确报失败，保留部分输出与已观察用量。支持 checkpoint 回滚、持久化和
+跨会话恢复需要单独设计；不能把正常 `CONTINUATION` 支持写成网络中断恢复。
+
+### 9.3 温度与思考
+
+Argon 原生协议的温度能力返回 `no/model`，因此模型抽屉、计划和摘要一致不承诺温度生效。
+适配器同时清除 extraBody 中的 temperature/topP/topK/candidateCount，防止旧扩展绕过。
+保留 low/medium/high 的现有 `gemini3` 类目与签名回传；默认不发 level，让服务端用 medium；
+不发送旧 thinkingBudget。未改变 3.8 Flash 的采样行为，也未宣称 Argon 可关闭思考。
+
+### 9.4 用量与上下文不能混为一谈
+
+每跳 `_onRequestBody` 开一个网络尝试，最后一份累计 usage 更新该跳；完成一跳后先标记完成，
+再开始下一跳，沿 `streamUsage` / `recordUsage` 分别持久化。后跳失败或取消不改变前跳已完成状态。
+最终 done 的输入、缓存、输出是各跳末快照之和，仅供汇总显示，不作为另一笔用量再写入。
+上游报价也必须每跳都有才给总价；0 与未报告保持区别。
+
+`initialInputTokens` 单独保留首跳输入，随 API 日志保存，供执行日志的输入估算对照与截断原因判断；
+`inputTokens` 继续保留所有跳的计费用量。否则重复输入会被误判为上下文已满。
+测试覆盖正常多跳、空正文、累计快照、逐跳失败记账、零/缺失报价、签名、取消、断流、
+异常 token、时间边界与其他型号不受影响。实际渠道的工具组合、耗时和续接仍待实测。

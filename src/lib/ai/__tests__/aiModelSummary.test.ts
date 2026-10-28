@@ -37,6 +37,12 @@ describe("wireSummary: video fps", () => {
 });
 
 describe("wireSummary", () => {
+  it("shows Argon's actual generation budget and omits its ignored temperature", () => {
+    const summary = wireSummary({ ...base, modelId: "gemini-4-argon", maxOutput: 262144, temperature: 0.4 }, "gemini");
+    expect(summary).toContainEqual({ key: "generationConfig.maxOutputTokens", value: "262144" });
+    expect(summary.some((item) => item.key === "temperature")).toBe(false);
+  });
+
   it("shows an undeclared model's one real field — the JSON mode structured tasks get by default", () => {
     // Auto resolves to the family's JSON mode (lib/ai/jsonMode.ts), and that
     // *is* sent on structured tasks — so the line says so rather than showing
