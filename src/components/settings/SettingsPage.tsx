@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { X, SlidersHorizontal, Layers, MessageSquare, Info, BookOpen, Keyboard, BarChart3, Tags, Users,
-  RefreshCw, FileType, FlaskConical, Scroll, Palette,
+  RefreshCw, FileType, FlaskConical, Scroll, Palette, Search,
 } from "lucide-react";
 import { type SettingsTab } from "../../stores/appStore";
 import { ModalErrorBoundary } from "../common/ErrorBoundary";
@@ -19,6 +19,7 @@ import { AboutPane } from "./panes/AboutPane";
 import { ProvidersModelsPane } from "./panes/ProvidersModelsPane";
 import { SubAgentsPane } from "./panes/SubAgentsPane";
 import { DocFormatPane } from "./panes/DocFormatPane";
+import { SemanticRetrieval } from "./panes/SemanticRetrieval";
 import { LabPane } from "./panes/LabPane";
 import { ContextMemoryPane } from "./panes/ContextMemoryPane";
 import { isDocxExportEnabled } from "../../lib/docx/flag";
@@ -161,6 +162,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
           {/* Scroll (设计稿 05b): what a conversation reads into the model is
               "one roll" — both the text being read and the thing remembered. */}
           {navBtn("context-memory", <Scroll size={15} />, "systemSettings.tabs.contextMemory")}
+          {navBtn("semantic-retrieval", <Search size={15} />, "semantic.title")}
           {navBtn("usage", <BarChart3 size={15} />, "systemSettings.tabs.usage")}
           {navBtn("lab", <FlaskConical size={15} />, "systemSettings.tabs.lab")}
           <div className={styles.navGroupLabel}>{t("systemSettings.tabs.dataGroup")}</div>
@@ -190,6 +192,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
             {activeTab === "fees" && <FeeGroupsPane />}
             {activeTab === "usage" && <UsagePane onOpenFees={() => setActiveTab("fees")} />}
             {activeTab === "context-memory" && <ContextMemoryPane />}
+            {activeTab === "semantic-retrieval" && <SemanticRetrieval />}
             {activeTab === "lab" && <LabPane onDocxToggled={handleDocxToggled} onNavigate={setActiveTab} />}
             {activeTab === "sync" && <SyncPane />}
             {activeTab === "shortcuts" && <ShortcutsPane />}
