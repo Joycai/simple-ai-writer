@@ -8,7 +8,7 @@
  *   - {@link isCompound} — whether the line uses shell composition. Erring
  *     toward *yes, compound* costs one more card; erring the other way lets
  *     a supposedly simple line cover `git status; rm -rf ~`. So the test is a
- *     character class, not a parser;
+ *     conservative, quote-aware scanner;
  *   - {@link looksDangerous} — a small table that changes the card's face and
  *     withholds the grant row. It never blocks: the author decides, and a
  *     list that pretended to be complete would be trusted as one.
@@ -42,11 +42,42 @@ export function programNameOf(command: string): string {
  * separators, pipes, background, redirections, substitution, a second line,
  * and PowerShell's call operator. Redirections count because `git log >
  * ~/.zshrc` is not a `git` command in any sense a grant should honour.
- */
-const COMPOUND = /[;&|<>`\r\n]|\$\(|\$\{/;
+ *
+ * Mask literal text without losing offsets. Unknown quoting stays approval-only.
+ * Expansion inside double quotes remains visible; single quotes are literal. */
+function shellCode(command: string, syntax: CommandSyntax): string | null {
+  let quote: "'" | '"' | null = null;
+  let code = "";
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    const next = command[i + 1];
+    if (quote === "'") {
+      code += " ";
+      if (ch === "'") {
+        if (syntax === "powershell" && next === "'") { code += " "; i++; }
+        else quote = null;
+      }
+    } else if (syntax === "posix" && ch === "\\") {
+      if (next === undefined || next === "\n" || next === "\r") return null;
+      // Within double quotes, backslash only escapes these shell characters.
+      if (!quote || /[$`"\\]/.test(next)) { code += "  "; i++; }
+      else code += " ";
+    } else if (ch === "`" || ch === "$") {
+      code += ch;
+    } else if (quote === '"') {
+      code += " ";
+      if (ch === '"') quote = null;
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+      code += " ";
+    } else code += ch;
+  }
+  return quote ? null : code;
+}
 
-export function isCompound(command: string): boolean {
-  return COMPOUND.test(command);
+export function isCompound(command: string, syntax: CommandSyntax = "posix"): boolean {
+  const code = shellCode(command, syntax);
+  return code === null || /[;&|<>`\r\n$(){}]/.test(code);
 }
 
 /** Why a command looks dangerous — an id the card turns into words. */
@@ -94,7 +125,7 @@ type CommandAccess = "read" | "write";
 /**
  * Programs whose normal operation only observes state. The list is purposely
  * boring: a tool is absent when it has an execution hook (`awk`, `xargs`), an
- * output-file mode (`sort -o`), too many mutating subcommands (`npm`), or its
+ * too many mutating subcommands (`npm`), or its
  * whole point is to look outside the project (`locate`, `mdfind`) or it can
  * print other processes' environments (`ps e`) — a read that runs without a
  * card still sends its output to the model. Windows installations commonly
@@ -103,14 +134,14 @@ type CommandAccess = "read" | "write";
  */
 const READ_PROGRAMS = new Set([
   "basename", "cat", "cksum", "df", "dirname", "du", "fc-list", "grep",
-  "head", "id", "ls", "md5", "md5sum", "more", "pwd", "readlink",
+  "head", "id", "ls", "md5", "md5sum", "pwd", "readlink",
   "realpath", "sha1sum", "sha224sum", "sha256sum", "sha384sum", "sha512sum",
   "shasum", "strings", "tail", "tree", "uname", "wc", "whereis", "which",
 ]);
 
 const POSIX_READ_PROGRAMS = new Set([
   ...READ_PROGRAMS,
-  "file", "lsof", "mdls", "stat", "sw_vers",
+  "file", "mdls", "stat", "sw_vers",
 ]);
 
 const POWERSHELL_READ_PROGRAMS = new Set([
@@ -137,59 +168,48 @@ const READ_GIT_SUBCOMMANDS = new Set([
   "blame", "count-objects", "describe", "diff", "diff-tree", "for-each-ref",
   "grep", "log", "ls-files", "ls-tree", "merge-base", "name-rev",
   "rev-list", "rev-parse", "shortlog", "show", "show-ref", "status",
-  "verify-commit", "verify-pack", "verify-tag", "whatchanged",
+  "whatchanged",
 ]);
 
 /** Long options on Git's read subcommands that write a file or run a program. */
-const GIT_UNSAFE_LONG_OPTIONS = ["--output", "--ext-diff", "--textconv", "--open-files-in-pager"];
+const GIT_UNSAFE_LONG_OPTIONS = ["--output", "--ext-diff", "--textconv", "--open-files-in-pager", "--show-signature", "--exec", "--filters", "--ignore-submodules", "--submodule", "--recurse-submodules"];
 
 /**
  * Split enough shell words to locate a Git subcommand and inspect arguments.
- * It is not used to execute or rebuild the line. A malformed line returns null
+ * Offsets are also used to insert fixed Git safety options without rebuilding arguments. A malformed line returns null
  * and therefore gets a card. Backslash escapes only in POSIX: in PowerShell it
  * is a path separator (its escape, the backtick, is already compound).
  */
-function shellWords(command: string, syntax: CommandSyntax): string[] | null {
-  const words: string[] = [];
-  let word = "";
+interface ShellWord { value: string; start: number; end: number }
+function wordTokens(command: string, syntax: CommandSyntax): ShellWord[] | null {
+  const words: ShellWord[] = [];
+  let value = "";
+  let start = -1;
   let quote: "'" | '"' | null = null;
-  let escaped = false;
-  let started = false;
-  const escapes = syntax === "posix";
-  for (const ch of command.trim()) {
-    if (escaped) {
-      word += ch;
-      escaped = false;
-      started = true;
-      continue;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    const next = command[i + 1];
+    if (!quote && /\s/.test(ch)) {
+      if (start >= 0) words.push({ value, start, end: i });
+      value = ""; start = -1; continue;
     }
-    if (quote) {
-      if (ch === quote) quote = null;
-      else if (escapes && ch === "\\" && quote === '"') escaped = true;
-      else word += ch;
-      started = true;
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      started = true;
-    } else if (escapes && ch === "\\") {
-      escaped = true;
-      started = true;
-    } else if (/\s/.test(ch)) {
-      if (started) {
-        words.push(word);
-        word = "";
-        started = false;
-      }
-    } else {
-      word += ch;
-      started = true;
-    }
+    if (start < 0) start = i;
+    if (ch === quote) {
+      if (syntax === "powershell" && next === quote) { value += ch; i++; }
+      else quote = null;
+    } else if (!quote && (ch === "'" || ch === '"')) quote = ch;
+    else if (syntax === "posix" && ch === "\\" && quote !== "'"
+      && (!quote || (next !== undefined && /[$`"\\]/.test(next)))) {
+      if (next === undefined || /[\r\n]/.test(next)) return null;
+      value += next; i++;
+    } else value += ch;
   }
-  if (quote || escaped) return null;
-  if (started) words.push(word);
+  if (quote) return null;
+  if (start >= 0) words.push({ value, start, end: command.length });
   return words;
+}
+function shellWords(command: string, syntax: CommandSyntax): string[] | null {
+  return wordTokens(command, syntax)?.map((word) => word.value) ?? null;
 }
 
 /**
@@ -199,26 +219,8 @@ function shellWords(command: string, syntax: CommandSyntax): string[] | null {
  * from the text, so it cannot be fenced.
  */
 function expandsVariable(command: string, syntax: CommandSyntax): boolean {
-  let quote: "'" | '"' | null = null;
-  let escaped = false;
-  for (const ch of command) {
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (syntax === "posix" && ch === "\\" && quote !== "'") {
-      escaped = true;
-    } else if (quote === "'") {
-      if (ch === "'") quote = null;
-    } else if (ch === "$") {
-      return true;
-    } else if (quote === '"') {
-      if (ch === '"') quote = null;
-    } else if (ch === "'" || ch === '"') {
-      quote = ch;
-    }
-  }
-  return false;
+  const code = shellCode(command, syntax);
+  return code === null || /[$`]/.test(code);
 }
 
 /**
@@ -287,27 +289,12 @@ function gitIsReadOnly(words: string[]): boolean {
       i += 1;
       continue;
     }
-    // Uppercase -C changes directory (its value is fenced like any other
-    // argument). Lowercase -c and --config-env inject configuration;
-    // diff.external is enough to turn a read into execution.
-    if (raw === "-C" || word === "--git-dir" || word === "--work-tree"
-      || word === "--namespace" || word === "--super-prefix") {
-      i += 2;
-      continue;
-    }
-    if (raw.startsWith("-C") && raw.length > 2) {
-      i += 1;
-      continue;
-    }
-    if (word === "-c" || word === "--config-env"
-      || /^(?:-c.+|--config-env=)/.test(word)) return false;
-    if (/^(?:--git-dir=|--work-tree=|--namespace=|--super-prefix=)/.test(word)) {
-      i += 1;
-      continue;
-    }
+    // Repository overrides can bypass the runner's repository/config checks.
+    // Use run_command.cwd instead; explicit user trust remains separate.
+    if (raw.startsWith("-")) return false;
     break;
   }
-  const subcommand = words[i]?.toLowerCase();
+  const subcommand = words[i];
   if (!subcommand || !READ_GIT_SUBCOMMANDS.has(subcommand)) return false;
   const args = words.slice(i + 1);
   return !args.some((arg) =>
@@ -327,16 +314,79 @@ function hasMutatingReadFlag(program: string, words: string[]): boolean {
     ].includes(arg.toLowerCase()));
   }
   if (program === "rg" || program === "ripgrep") {
-    return args.some((arg) => arg === "--pre" || arg.startsWith("--pre="));
+    return args.some((arg) => /^--(?:pre|hostname-bin)(?:=|$)/.test(arg) || /^-[^-]*z/.test(arg) || arg === "--search-zip");
   }
   if (program === "file") {
-    return args.some((arg) => /^-[^-]*C/.test(arg) || arg.toLowerCase() === "--compile");
+    return args.some((arg) => /^-[^-]*[Cf]/.test(arg) || (arg.startsWith("--") && ["--compile", "--files-from"].some((opt) => abbreviates(arg, opt))));
   }
   if (program === "tree") {
     // `-o file` writes the listing; `-R` writes 00Tree.html into every level.
     return args.some((arg) => /^-[^-]*[oR]/.test(arg));
   }
   return false;
+}
+
+/** Closed grammars for text processors: flags that are not listed need a card.
+ * In particular uniq's second operand is an output file, and sed scripts are
+ * code even when -i is absent. These forms work with both BSD and GNU tools. */
+function textReadOnly(program: string, args: string[], syntax: CommandSyntax): boolean | null {
+  if (syntax === "powershell" && ["select-object", "measure-object", "sort-object", "get-unique"].includes(program)) {
+    const switches: Record<string, string[]> = {
+      "select-object": ["-unique"],
+      "measure-object": ["-line", "-word", "-character", "-sum", "-average", "-minimum", "-maximum"],
+      "sort-object": ["-descending", "-unique", "-casesensitive"],
+      "get-unique": ["-asstring", "-ontype"],
+    };
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i].toLowerCase();
+      if (switches[program].includes(arg)) continue;
+      if (program === "select-object" && ["-first", "-last", "-skip", "-skiplast", "-index"].includes(arg)) {
+        if (!/^\d{1,7}$/.test(args[++i] ?? "")) return false;
+      } else if (arg === "-property" && program !== "get-unique") {
+        if (!/^[A-Za-z_][A-Za-z_0-9]*$/.test(args[++i] ?? "")) return false;
+      } else return false;
+    }
+    return true;
+  }
+  if (!["sed", "sort", "uniq", "cut"].includes(program)) return null;
+  // PowerShell's `sort` is Sort-Object, not the GNU/BSD utility.
+  if (syntax !== "posix") return false;
+  if (program === "sed") {
+    let i = 0;
+    if (args[i++] !== "-n") return false;
+    if (args[i] === "-e") i++;
+    if (!/^[1-9]\d{0,6}(?:,[1-9]\d{0,6})?p$/.test(args[i++] ?? "")) return false;
+    return args.slice(i).every((a) => !a.startsWith("-"));
+  }
+  let operands = 0;
+  let endOptions = false;
+  let cutSelection = false;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (!endOptions && arg === "--") { endOptions = true; continue; }
+    if (endOptions || !arg.startsWith("-") || arg === "-") {
+      // One lexical operand can expand to input + output for uniq. Until argv
+      // is executed directly, even quoted wildcard names conservatively need a card.
+      if (program === "uniq" && /[*?[]/.test(arg)) return false;
+      operands++; continue;
+    }
+    const flags = program === "sort" ? /^-[bdfginruMsV]+$/ : program === "uniq" ? /^-[cdui]+$/ : /^-[sn]+$/;
+    if (flags.test(arg)) continue;
+    const options = program === "sort" ? "kt" : program === "uniq" ? "fsw" : "bcfd";
+    if (arg.length < 2 || arg[1] === "-" || !options.includes(arg[1])) return false;
+    const value = arg.length > 2 ? arg.slice(2) : args[++i];
+    if (value === undefined) return false;
+    const option = arg[1];
+    if (option === "t" || (program === "cut" && option === "d")) {
+      if (value.length !== 1) return false;
+    } else if (program === "cut") {
+      if (!/^\d+(?:-\d*)?(?:,\d+(?:-\d*)?)*$/.test(value)) return false;
+      cutSelection = true;
+    } else if (program === "sort") {
+      if (!/^\d+(?:\.\d+)?(?:,\d+(?:\.\d+)?)?$/.test(value)) return false;
+    } else if (!/^\d+$/.test(value)) return false;
+  }
+  return (program !== "uniq" || operands <= 1) && (program !== "cut" || cutSelection);
 }
 
 /**
@@ -349,13 +399,14 @@ function hasMutatingReadFlag(program: string, words: string[]): boolean {
  * be looser about shape than the other.
  */
 function plainInvocation(command: string, syntax: CommandSyntax): string[] | null {
-  if (!command.trim() || isCompound(command) || looksDangerous(command)) return null;
+  if (!command.trim() || isCompound(command, syntax) || looksDangerous(command)) return null;
   // Braces are brace expansion in POSIX (`{,/}etc/passwd` builds a path the
   // fence never sees) and script blocks in PowerShell, which also evaluates
   // parenthesised/array expressions inside arguments: `Get-Item (Remove-Item
   // x)` starts with a read cmdlet but writes. Reject the syntax wholesale; a
   // filename containing them merely gets an extra card.
-  if (/[{}]/.test(command) || (syntax === "powershell" && /[()]/.test(command))) return null;
+  const code = shellCode(command, syntax);
+  if (code === null || /[{}()#]/.test(code) || (syntax === "powershell" && /[@,]/.test(code))) return null;
   if (expandsVariable(command, syntax)) return null;
   const words = shellWords(command, syntax);
   if (!words?.length) return null;
@@ -374,16 +425,23 @@ function plainInvocation(command: string, syntax: CommandSyntax): string[] | nul
  * Classify one command for approval. Only a single, non-dangerous invocation
  * of a known read program, by bare name, with every argument inside the
  * project, can be `read`; pipelines, redirections, substitutions, variables,
- * braces, environment-prefix overrides, path-qualified programs and unknown
- * flags all become `write`. This is intentionally not a claim that arbitrary
- * shell can be perfectly parsed — it is a narrow fast path with a closed
+ * braces, environment-prefix overrides and path-qualified programs become
+ * `write`; added text processors also reject unknown flags. This is not a claim
+ * that arbitrary shell can be perfectly parsed — it is a narrow fast path with a closed
  * allowlist.
  */
 export function commandAccess(command: string, syntax: CommandSyntax): CommandAccess {
   const words = plainInvocation(command, syntax);
   if (!words) return "write";
 
+  if (syntax === "posix" && words[0] !== words[0].toLowerCase()) return "write";
+  if (words.slice(1).some((w) => w.startsWith("@") || w.startsWith("--files0-from"))) return "write";
   const program = programNameOf(words[0]);
+  // findstr accepts directory lists and indirect file lists inside one switch.
+  if (program === "findstr" && words.slice(1).some((w) => /^\/[df]:/i.test(w))) return "write";
+  const textRead = textReadOnly(program, words.slice(1), syntax);
+  if (textRead !== null) return textRead ? "read" : "write";
+  if (syntax === "powershell" && words.some((w) => /^-(?:out|error|warning|information|pipeline)variable/i.test(w) || w === "--%" || /^-wait$/i.test(w))) return "write";
   if (program === "git") return gitIsReadOnly(words) ? "read" : "write";
   if (program === "rg" || program === "ripgrep" || program === "find" || program === "tree") {
     return hasMutatingReadFlag(program, words) ? "write" : "read";
@@ -391,6 +449,10 @@ export function commandAccess(command: string, syntax: CommandSyntax): CommandAc
   if (program === "file") {
     return syntax === "posix" && !hasMutatingReadFlag(program, words) ? "read" : "write";
   }
+  if ((/^(?:sha\d+sum|md5sum|shasum|cksum)$/.test(program)
+    && words.slice(1).some((a) => /^-[^-]*c/.test(a) || a.startsWith("--check")))
+    || (program === "tail" && words.slice(1).some((a) => /^-[^-]*[fF]/.test(a) || a.startsWith("--follow")))) return "write";
+  if (program === "mdls" && words.some((w) => w === "-plist")) return "write";
   const allow = syntax === "powershell" ? POWERSHELL_READ_PROGRAMS : POSIX_READ_PROGRAMS;
   return allow.has(program) ? "read" : "write";
 }
@@ -415,6 +477,7 @@ const NEVER_ALLOW = new Set([
   "python", "python2", "python3", "py", "pythonw", "node", "deno", "bun",
   "ruby", "perl", "php", "lua", "luajit", "tclsh", "wish", "osascript",
   "cscript", "wscript", "mshta", "rscript", "julia", "java", "dotnet",
+  "awk", "gawk", "mawk", "nawk", "sed",
   "npx", "bunx", "pnpx", "uvx", "pipx", "go",
   // program launchers and wrappers
   "env", "exec", "eval", "xargs", "nohup", "time", "timeout", "nice",
@@ -566,6 +629,8 @@ function runsAnotherProgram(name: string, words: string[]): boolean {
       // `--data-dir` is where a bare `-d name` is looked up.
       return args.some((a) => /^(?:-F|-L|-d)/.test(a)
         || /^--(?:filter|lua-filter|pdf-engine|pdf-engine-opt|defaults|data-dir)(?:=|$)/i.test(a));
+    case "sort":
+      return args.some((a) => a.startsWith("--") && abbreviates(a, "--compress-program"));
     case "find":
     case "rg":
     case "ripgrep":
@@ -606,48 +671,24 @@ export function allowlistCovers(
  * pieces are, never whether they are safe.
  */
 export function splitChain(command: string, syntax: CommandSyntax): string[] | null {
+  const code = shellCode(command, syntax);
+  if (code === null || /[<>`$]/.test(code)) return null;
   const pieces: string[] = [];
-  let cur = "";
-  let quote: "'" | '"' | null = null;
-  const escapes = syntax === "posix";
-  const push = (): boolean => {
-    if (!cur.trim()) return false;
-    pieces.push(cur.trim());
-    cur = "";
-    return true;
-  };
-  for (let i = 0; i < command.length; i++) {
-    const ch = command[i];
-    const next = command[i + 1];
-    if (ch === "`" || (ch === "$" && (next === "(" || next === "{") && quote !== "'")) return null;
-    if (quote) {
-      cur += ch;
-      if (ch === quote) quote = null;
-      else if (escapes && ch === "\\" && quote === '"' && next !== undefined) cur += command[++i];
-      continue;
-    }
-    if (escapes && ch === "\\") {
-      if (next === undefined || next === "\n" || next === "\r") return null;
-      cur += ch + command[++i];
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      cur += ch;
-    } else if ((ch === "&" && next === "&") || (ch === "|" && next === "|")) {
-      if (!push()) return null;
-      i++;
-    } else if (ch === ";" || ch === "|" || ch === "\n" || ch === "\r") {
-      // `\r\n` is one break; a blank line between commands is not a link.
-      if (!push() && ch !== "\n" && ch !== "\r") return null;
-    } else if (ch === "&" || ch === "<" || ch === ">") {
-      return null;
-    } else {
-      cur += ch;
-    }
+  let start = 0;
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i];
+    if (!/[;&|\r\n]/.test(ch)) continue;
+    const pair = (ch === "&" || ch === "|") && code[i + 1] === ch;
+    if (ch === "&" && !pair) return null;
+    const piece = command.slice(start, i).trim();
+    if (!piece && !/[\r\n]/.test(ch)) return null;
+    if (piece) pieces.push(piece);
+    if (pair) i++;
+    start = i + 1;
+    if ((pair || ch === "|") && !command.slice(start).trim()) return null;
   }
-  if (quote) return null;
-  if (cur.trim()) pieces.push(cur.trim());
+  const last = command.slice(start).trim();
+  if (last) pieces.push(last);
   return pieces.length ? pieces : null;
 }
 
@@ -702,4 +743,57 @@ export function allowlistCandidates(
     missing.add(program);
   }
   return missing.size ? [...missing] : null;
+}
+
+/** Additional checks at the process boundary, not a sandbox or a model option. */
+export interface AutomaticRead {
+  projectPath: string;
+  paths: string[];
+  programs: string[];
+}
+
+/** Prepare the built-in read path. User-trusted programs retain their explicit
+ * approval semantics. Never reuse this transformed line on the approval card. */
+export function prepareAutomaticRead(command: string, syntax: CommandSyntax, projectPath: string):
+  { command: string; automaticRead: AutomaticRead } | null {
+  const pieces = splitChain(command, syntax);
+  if (!pieces?.length || pieces.some((p) => commandAccess(p, syntax) !== "read")) return null;
+  const paths = new Set<string>();
+  const programs = new Set<string>();
+  let offset = 0;
+  let prepared = "";
+  for (const piece of pieces) {
+    const start = command.indexOf(piece, offset);
+    prepared += command.slice(offset, start);
+    const tokens = wordTokens(piece, syntax)!;
+    const words = tokens.map((t) => t.value);
+    const program = programNameOf(words[0]);
+    programs.add(words[0]);
+    for (const word of words.slice(1)) {
+      if (syntax === "powershell" && /^\/[A-Za-z?]{1,2}(?::.*)?$/.test(word)) {
+        const colon = word.indexOf(":");
+        if (colon >= 0 && word.slice(colon + 1)) paths.add(word.slice(colon + 1));
+      } else {
+        for (const value of argumentValues(word, syntax)) if (value) paths.add(value);
+      }
+    }
+    // These commands can recurse or read an implicit working-directory input.
+    if (["git", "rg", "ripgrep", "grep", "find", "tree", "du", "ls", "dir", "gci", "get-childitem", "findstr"].includes(program)) paths.add(".");
+    let safe = piece;
+    if (program === "git") {
+      // Locate the subcommand using exactly the global-option grammar above.
+      let i = 1;
+      while (words[i]?.startsWith("-")) {
+        i += ["-C", "--git-dir", "--work-tree", "--namespace", "--super-prefix"].includes(words[i]) ? 2 : 1;
+      }
+      const sub = words[i];
+      const options = ["diff", "diff-tree", "show", "log", "whatchanged"].includes(sub)
+        ? " --no-ext-diff --no-textconv" : ["blame", "grep"].includes(sub) ? " --no-textconv" : "";
+      if (options) safe = piece.slice(0, tokens[i].end) + options + piece.slice(tokens[i].end);
+    }
+    prepared += safe;
+    offset = start + piece.length;
+  }
+  prepared += command.slice(offset);
+  return { command: prepared, automaticRead: { projectPath, paths: [...paths], programs: [...programs] } };
 }

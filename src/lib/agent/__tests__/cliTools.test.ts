@@ -215,3 +215,32 @@ describe("runCommandTool", () => {
     expect(r.content).toContain("Do not run it or a variant of it");
   });
 });
+
+
+describe("automatic execution denial", () => {
+  it("falls back to the original approval card without an always-allow or counted bypass", async () => {
+    run.mockRejectedValueOnce(new Error("AUTO_READ_DENIED: a link leaves the project"));
+    allowlist.current = ["git"];
+    const ctx = ctxWith(() => ({ approved: false }));
+    await runCommandTool("c", { command: "git diff" }, ctx);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      command: "git diff --no-ext-diff --no-textconv",
+      automaticRead: expect.objectContaining({ projectPath: PROJECT }),
+    }));
+    expect(ctx.seen[0]).toMatchObject({ command: "git diff", compound: false, requiresIndividualApproval: true });
+    expect((ctx.seen[0] as CommandProposal).allowPrograms).toBeUndefined();
+  });
+  it("does not replay a failed process or turn cancellation into a card", async () => {
+    const ctx = ctxWith(() => ({ approved: false }));
+    run.mockRejectedValueOnce(new Error("spawn failed"));
+    await expect(runCommandTool("c", { command: "ls" }, ctx)).rejects.toThrow("spawn failed");
+    expect(ctx.seen).toHaveLength(0);
+    const abort = new AbortController();
+    ctx.signal = abort.signal;
+    abort.abort();
+    run.mockRejectedValueOnce(new Error("AUTO_READ_DENIED: path inspection"));
+    await expect(runCommandTool("c", { command: "ls" }, ctx)).rejects.toThrow("AUTO_READ_DENIED");
+    expect(ctx.seen).toHaveLength(0);
+  });
+});

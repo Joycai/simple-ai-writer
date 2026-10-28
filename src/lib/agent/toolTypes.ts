@@ -528,7 +528,7 @@ export interface TranscribeProposal extends ProposalBase {
  * author's account (docs/feature/agent/shell-command-plan.md §1 不变量 1–3).
  *
  * The command judgements `lib/cli/command` makes are computed before this
- * proposal: read-only lines never create one; compound/danger are carried so
+ * proposal: reads may still need one after runtime checks; compound/danger are carried so
  * the card and the counted-batch gate see the same answer for a write.
  */
 export interface CommandProposal extends ProposalBase {
@@ -542,6 +542,8 @@ export interface CommandProposal extends ProposalBase {
   shell: ShellInfo;
   /** `isCompound(command)`: separators, pipes, redirections, substitution. */
   compound: boolean;
+  /** Runtime could not verify an automatic read; no counted or persistent grant. */
+  requiresIndividualApproval?: boolean;
   /** `looksDangerous(command)`: changes the card's face, never blocks. */
   danger: DangerKind | null;
   /**

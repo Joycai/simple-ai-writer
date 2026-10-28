@@ -37,6 +37,9 @@
 //! stdin is `/dev/null` on both: a command that wants to talk fails at once
 //! instead of parking the whole run on an invisible prompt.
 
+#[path = "cmd_read.rs"]
+mod read;
+
 use crate::blocking::blocking;
 use crate::commands::decode_text;
 use crate::scope::FsScope;
@@ -130,6 +133,7 @@ pub struct CmdRequest {
     /// Absolute working directory, inside a registered root.
     pub cwd: String,
     pub timeout_ms: u64,
+    pub automatic_read: Option<read::AutomaticRead>,
 }
 
 #[derive(Serialize, Debug)]
@@ -463,8 +467,17 @@ fn execute(
     cwd: &Path,
     timeout: Duration,
 ) -> Result<CmdResult, String> {
+    execute_built(shell, running, run_id, build(shell, command, cwd), timeout)
+}
+
+fn execute_built(
+    shell: &ShellInfo,
+    running: &Running,
+    run_id: &str,
+    mut cmd: Command,
+    timeout: Duration,
+) -> Result<CmdResult, String> {
     let start = Instant::now();
-    let mut cmd = build(shell, command, cwd);
     cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -574,7 +587,22 @@ pub async fn cmd_run(
             return Err("Missing run id".into());
         }
         let timeout = Duration::from_millis(req.timeout_ms.clamp(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS));
-        execute(shell(), &running, &req.run_id, &req.command, &cwd, timeout)
+        if let Some(auto) = &req.automatic_read {
+            scope
+                .check(&auto.project_path)
+                .map_err(|e| format!("AUTO_READ_DENIED: {e}"))?;
+            let cmd = read::prepare(auto, &cwd, shell(), &req.command)?;
+            #[allow(unused_mut)]
+            let mut actual_shell = shell().clone();
+            #[cfg(unix)]
+            {
+                actual_shell.kind = "sh".into();
+                actual_shell.path = "/bin/sh".into();
+            }
+            execute_built(&actual_shell, &running, &req.run_id, cmd, timeout)
+        } else {
+            execute(shell(), &running, &req.run_id, &req.command, &cwd, timeout)
+        }
     })
     .await
 }
