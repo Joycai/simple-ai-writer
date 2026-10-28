@@ -5,14 +5,18 @@ import { useAiStore } from "../../../stores/aiStore";
 import { semanticPrefs, saveSemanticPrefs, type SemanticPrefs } from "../../../lib/context/semanticPrefs";
 import { Select } from "../../common/Select";
 import { SemanticIndexPanel } from "./SemanticIndexPanel";
-import { Section, Row, Toggle } from "./bits";
+import { Pane, PaneHeader, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 import common from "../settingsCommon.module.css";
 import styles from "./SemanticRetrieval.module.css";
 
 export function SemanticRetrieval() {
+  const { t } = useTranslation();
   const project = useProjectStore((s) => s.projectPath);
-  return <ProjectRetrieval key={project ?? "none"} project={project} />;
+  return <Pane>
+    <PaneHeader title={t("semantic.title")} sub={t("semantic.paneSub")} />
+    <ProjectRetrieval key={project ?? "none"} project={project} />
+  </Pane>;
 }
 function ProjectRetrieval({ project }: { project: string | null }) {
   const { t } = useTranslation();
@@ -31,7 +35,7 @@ function ProjectRetrieval({ project }: { project: string | null }) {
     ...(selected && !models.some((m) => m.id === selected && m.enabled && providers.some((p) => p.id === m.providerId) && m.type === (ranking ? "rerank" : "embedding"))
       ? [{ value: selected, label: t("semantic.unavailableModel") }] : []),
   ];
-  return <Section label={t("semantic.title", { kb: terms.kb })} action={<span className={ui.badge}>Beta</span>}>
+  return <>
     <section className={styles.group} aria-label={t("semantic.projectSettings")}>
     <header className={styles.groupHeader}>
       <div><h3 className={styles.groupTitle}>{t("semantic.projectSettings")}</h3>
@@ -72,5 +76,5 @@ function ProjectRetrieval({ project }: { project: string | null }) {
     </div>
     </section>
     <p className={ui.rowDesc}>{t("semantic.manageModelsHint")}</p>
-  </Section>;
+  </>;
 }

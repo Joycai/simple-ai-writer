@@ -304,6 +304,7 @@ export type SettingsTab =
   | "prompts"
   | "usage"
   | "context-memory"
+  | "semantic-retrieval"
   | "lab"
   | "shortcuts"
   | "about"

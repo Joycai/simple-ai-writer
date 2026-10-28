@@ -46,7 +46,7 @@ beforeEach(() => {
   fixture.choices = {}; fixture.toggles = {};
   fixture.save.mockClear();
 });
-describe("Labs retrieval model selection", () => {
+describe("Semantic retrieval model selection", () => {
   it("offers enabled models by purpose from existing channels and only saves the project selection", () => {
     const html = renderToStaticMarkup(createElement(SemanticRetrieval));
     expect(fixture.choices["semantic.embedding"].options.map((o) => o.value)).toEqual(["", "vectors"]);

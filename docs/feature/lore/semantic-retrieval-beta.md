@@ -1,16 +1,16 @@
-# Project-scoped semantic retrieval Beta
+# Project-scoped semantic retrieval
 
 > Status: `shipped` · live Ark Agent Plan embedding smoke test verified (2026-10-09); broader retrieval quality remains unverified. Protocol fixtures and offline integration tests cover the implementation.
 
 ## Intent and design
 
-An author can describe a task without naming the relevant knowledge-base entry. Existing name/alias matching and explicit links remain authoritative; this optional channel discovers additional entries from their compact descriptions. The author requested a **per-project Beta switch**, selectable local or hosted embedding/reranker models, and the existing theme system.
+An author can describe a task without naming the relevant knowledge-base entry. Existing name/alias matching and explicit links remain authoritative; this optional channel discovers additional entries from their compact descriptions. The author requested a **per-project opt-in switch**, selectable local or hosted embedding/reranker models, and the existing theme system.
 
-Settings → AI configuration → Labs contains **Semantic retrieval · Beta**. Its first row identifies the current project and has the existing square Toggle. Off is the default. No open project means an explanatory empty state instead of an actionable switch. On reveals an optional embedding selector, optional reranker selector, and separate minimum cosine/reranker scores. At least one model is needed. Neither selection silently falls back to a chat model.
+Settings → AI configuration → **Semantic retrieval** is a standalone settings tab. Its first row identifies the current project and has the existing square Toggle. Off is the default. No open project means an explanatory empty state instead of an actionable switch. On reveals an optional embedding selector, optional reranker selector, and separate minimum cosine/reranker scores. At least one model is needed. Neither selection silently falls back to a chat model.
 
 Model registration lives exclusively in **Channels & Models**. The model type chips and list filters include **Embedding** and **Rerank**. Their shared drawer edits channel-bound identity, fee group and dedicated retrieval format/path; embedding models additionally offer query/document prefixes. Chat limits, thinking, sampling, capability probing and chat-route controls do not apply. Existing theme colours are reused for the new type badges without expanding the theme contract.
 
-Labs contains only project enablement, typed model selectors, minimum relevance and index preparation. A hint directs authors to Channels & Models to manage models. Only enabled models with an existing channel appear as choices. Missing, deleted, disabled or retyped selections stay visibly unavailable until replaced; there is no silent fallback. Models are installation-wide, while enablement and selections use `prefs.ts`'s project-keyed family `lore:semantic:`. Like existing project pins/scope, these are per-project **on this device**, not portable project files or app-config backup entries.
+The retrieval pane contains only project enablement, typed model selectors, minimum relevance and index preparation. A hint directs authors to Channels & Models to manage models. Only enabled models with an existing channel appear as choices. Missing, deleted, disabled or retyped selections stay visibly unavailable until replaced; there is no silent fallback. Models are installation-wide, while enablement and selections use `prefs.ts`'s project-keyed family `lore:semantic:`. Like existing project pins/scope, these are per-project **on this device**, not portable project files or app-config backup entries.
 
 Legacy registrations stored as text models are normalized on DB/backup reads from their existing retrieval format into embedding/rerank types, preserving ids, paths, prefixes, fee groups and project selections. Typed rows missing a retrieval format receive the corresponding default. Both types remain excluded from conversational pickers even when format metadata is absent. Switching a model back to a conversational type clears its retrieval declaration on save so it can be selected for chat again. This unifies model maintenance without changing the retrieval protocol or paid execution flow.
 
@@ -18,7 +18,7 @@ The production Section / Row / Toggle / Select / form controls carry the app's S
 
 ## Pipeline and invariants
 
-The first Beta applies to **writing tasks and assistant chat**, including subsequent chat turns. Roleplay and consistency-review retrieval retain their existing rules. This boundary avoids changing their binding/memory and exhaustive-review semantics in a retrieval experiment.
+Retrieval applies to **writing tasks and assistant chat**, including subsequent chat turns. Roleplay and consistency-review retrieval retain their existing rules. This boundary avoids changing their binding/memory and exhaustive-review semantics for this retrieval feature.
 
 1. Run existing pins, exact matches, facet rules and linked-entry expansion unchanged.
 2. Filter the semantic candidate catalog by the source scope and existing selections/resident exclusions **before transmitting any descriptions**. Pins retain their existing ability to cross the scope fence.
@@ -28,7 +28,7 @@ The first Beta applies to **writing tasks and assistant chat**, including subseq
 6. Load their real bodies through `selectLore`, using only remaining context space. Each semantic entry's summary must also fit; it does **not** receive the normal named-entry L0 guarantee. Existing matches are never displaced. Facets still obey keys, manual mode, exclusions, groups and the whole-facet budget rule. Semantic entries do not recursively expand references.
 7. Report semantic provenance, score, counts, catalog/query/description truncation, top-five cap, budget drops, timeout or unavailable service. Task results show this in the injection report; assistant chat stores it on `context-seeded`, even if no text was injected.
 
-Limits intentionally bound the initial experiment: 256 eligible descriptions in deterministic path order, 1,600 characters per description, 4,000 characters of query, batches of 32 embeddings and 20 seconds for the whole semantic phase by default; the verified Ark Agent Plan endpoint uses batches of 10 and a 60-second whole-phase deadline. Writing-task intent is placed before the selection so a long selection cannot displace the author's request. A larger catalog reports omissions and can be narrowed with the source scope. Pagination, persisted indexes and a general language-model selector are not part of this Beta.
+Retrieval uses bounded limits: 256 eligible descriptions in deterministic path order, 1,600 characters per description, 4,000 characters of query, batches of 32 embeddings and 20 seconds for the whole semantic phase by default; the verified Ark Agent Plan endpoint uses batches of 10 and a 60-second whole-phase deadline. Writing-task intent is placed before the selection so a long selection cannot displace the author's request. A larger catalog reports omissions and can be narrowed with the source scope. Pagination and a general language-model selector are not supported; persistent index preparation is described below.
 
 Embeddings are persisted in the project's `kb_embeddings` table. Each row stores a relative entry path, SHA-256 description hash and validated vector, partitioned by a versioned hash of effective endpoint, model ID and retrieval configuration. Credentials and source descriptions are not stored. Unchanged descriptions survive restarts; edits replace only that entry's row. Deleted entries are pruned across namespaces on the next indexing pass using the full catalog, never the narrowed source scope. Different model/configuration namespaces remain separate and can be reused when switching back. Query embeddings remain fresh.
 
@@ -50,7 +50,7 @@ Offline tests cover wire bodies, response ordering/validation, same-host endpoin
 
 UI review uses fictional in-memory channel/model/project fixtures, never real credentials or author files: on/off, add/save, selectors, light/dark and narrow/wide settings layout. These browser checks do not prove native keyring/HTTP behavior.
 
-Broader model quality and latency remain unverified; the Ark Agent Plan smoke test is recorded in `docs/api/retrieval.md`. Before considering this beyond Beta, evaluate real author-labelled requests against current matching: recovered necessary entries, irrelevant additions, incremental latency and actual usage. Report these separately from protocol correctness. A live endpoint is not selected automatically for testing.
+Broader model quality and latency remain unverified; the Ark Agent Plan smoke test is recorded in `docs/api/retrieval.md`. To assess retrieval quality, evaluate real author-labelled requests against current matching: recovered necessary entries, irrelevant additions, incremental latency and actual usage. Report these separately from protocol correctness. A live endpoint is not selected automatically for testing.
 
 ## Chat report and endpoint correction (1.95.1)
 
@@ -124,9 +124,9 @@ The algorithm version participates in the namespace hash. The first eligible ret
 
 Model settings are app-wide, while retrieval selections belong to each project. Before saving a change to a retrieval model's type, enabled state, endpoint model ID, channel, active route, format, path or input prefixes, the model drawer asks for confirmation. Name and fee-only edits do not interrupt saving. The existing model/channel deletion dialog includes the same dependency policy, including retrieval models removed with a channel.
 
-The active project's embedding and reranker IDs are checked even when retrieval is disabled: switching the Beta off does not remove the binding. A known binding is identified as belonging to the current project. Other projects are explicitly unverified; there is no global project count or filesystem scan. An unbound retrieval model still receives the uncertainty warning because other projects may select it. Existing stale bindings also qualify for deletion warnings.
+The active project's embedding and reranker IDs are checked even when retrieval is disabled: switching retrieval off does not remove the binding. A known binding is identified as belonging to the current project. Other projects are explicitly unverified; there is no global project count or filesystem scan. An unbound retrieval model still receives the uncertainty warning because other projects may select it. Existing stale bindings also qualify for deletion warnings.
 
-Cancel leaves the model intact. Confirm performs the requested mutation but preserves project selections and caches. Automatically clearing or substituting a model could silently change retrieval behavior and provider usage; instead, the warning directs the author to each affected project's Labs retrieval settings to choose a replacement. Changes can require new embeddings and incur usage on the next author-triggered retrieval; the warning itself performs no inference. Channel editing, bulk config import and external config changes are outside this model-edit/deletion guard.
+Cancel leaves the model intact. Confirm performs the requested mutation but preserves project selections and caches. Automatically clearing or substituting a model could silently change retrieval behavior and provider usage; instead, the warning directs the author to each affected project's Semantic retrieval settings to choose a replacement. Changes can require new embeddings and incur usage on the next author-triggered retrieval; the warning itself performs no inference. Channel editing, bulk config import and external config changes are outside this model-edit/deletion guard.
 
 
 ## On-demand progress, score domains and inline validation (1.99.15)
@@ -140,3 +140,10 @@ Project preferences add `cosineMinScore` and `rerankerMinScore`. Reads initializ
 The final scoring stage alone selects its threshold: embedding-only uses cosine; reranker-only and combined retrieval use the reranker threshold. In combined mode the top-30 embedding shortlist is still formed without a cosine cutoff, preserving recall before reranking. KB and current-document retrieval share this decision. These scores are not probabilities and still require model-specific quality tuning.
 
 The model drawer validates the retrieval path as it is edited using the transport's existing same-origin path predicate. An invalid path has an inline, screen-reader-associated error and disables Save; correcting it immediately clears the error. The save-time guard remains. This is local syntax validation, not a network availability test; it never calls an endpoint or spends usage.
+
+
+## Standalone settings tab (1.99.31)
+
+Semantic retrieval graduates from Labs to its own always-visible tab in the AI configuration group, immediately after Context & Memory. It uses the shared Pane and PaneHeader layout and no longer carries a Beta badge. A dedicated tab makes its model, threshold and index controls directly discoverable without entering the experimental-feature list. Model-change and deletion warnings point to the new location in both languages.
+
+Project opt-in remains default-off: graduation changes discoverability, not consent to provider requests. Existing project preferences, model selections and caches retain their keys and need no migration. Opening the tab starts no paid inference. Broader real-document quality and latency measurements remain unverified; graduation does not claim new retrieval-quality evidence.
