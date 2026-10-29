@@ -69,6 +69,7 @@ LLM usage ledger.
   Browser/Node requests do not receive this native-only header directive.
 - `client.ts`: one short-lived session per operation, no shared connection across
   chats. Implements MCP 2025-03-26 / 2025-06-18 / 2025-11-25 initialization,
+  plus compatibility with HTTP endpoints negotiating 2024-11-05,
   negotiated version/session headers, JSON and streamed SSE responses, cursor
   pagination, cancellation, bounded responses and best-effort session DELETE.
   Discovery is capped at 30 seconds; an approved operation at 120 seconds.
@@ -122,6 +123,20 @@ LLM usage ledger.
   call hidden inside polling. Original bytes use `preview: false`.
 
 ## Validation and protocol references
+
+Compatibility decision (2026-10-29): DashScope EnhancedSearch accepts single-endpoint
+HTTP POST but returns `2024-11-05` to the latest-version initialize request. The
+previous allowlist rejected this before discovery. Accept this known tool protocol
+and propagate the negotiated version on subsequent requests; keep unknown versions
+rejected. This follows [version negotiation](https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle)
+without claiming support for the separate legacy HTTP+SSE transport (GET endpoint
+discovery and a separate POST URL). Do not reinitialize or retry tool calls to
+downgrade. Regression tests cover all accepted versions, tool calls, session cleanup,
+and sessionless discovery. Credentials are never committed as fixtures.
+The patched client's opt-in live discovery test passed against EnhancedSearch:
+initialize negotiated `2024-11-05`, the initialized notification succeeded, and
+`tools/list` returned `search_pro`. No search tool was called. This check exercised
+the application's client with Node fetch, not a packaged Tauri webview.
 
 `lib/mcp/__tests__/` covers the JSON import shape, credential isolation, keyring
 failures, revision invalidation, protocol negotiation, JSON/SSE, pagination,

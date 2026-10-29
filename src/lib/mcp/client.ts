@@ -1,4 +1,4 @@
-/** Streamable HTTP, MCP 2025-03-26 / 2025-06-18 / 2025-11-25.
+/** Streamable HTTP, including endpoints negotiating MCP 2024-11-05.
  * Sessions belong to one operation, never global. Calls are never retried:
  * a lost response can already have incurred a charge at the server.
  */
@@ -12,7 +12,9 @@ export interface McpTool {
   inputSchema: Record<string, unknown>;
 }
 export interface McpResult { content: unknown[]; structuredContent?: unknown; isError?: boolean }
-const VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"];
+// Some HTTP endpoints (e.g. DashScope) use the 2024 tool protocol over
+// single-endpoint POST. Accept that negotiation without adding legacy SSE transport.
+const VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const MAX_RESPONSE = 32 * 1024 * 1024;
 
 export class McpClient {
