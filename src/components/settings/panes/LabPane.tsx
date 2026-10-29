@@ -1,4 +1,4 @@
-import { McpServers } from "./McpServers";
+import { isMcpEnabled, setMcpEnabled } from "../../../lib/mcp/config";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SettingsTab } from "../../../stores/appStore";
@@ -53,6 +53,7 @@ interface Props {
  */
 export function LabPane({ onDocxToggled, onNavigate }: Props) {
   const { t } = useTranslation();
+  const [mcpOn, setMcpOn] = useState(isMcpEnabled);
   const [pptxOn, setPptxOn] = useState(isPptxExportEnabled());
   const [docxOn, setDocxOn] = useState(isDocxExportEnabled());
   const [xlsxOn, setXlsxOn] = useState(isXlsxExportEnabled());
@@ -97,7 +98,10 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
     <Pane>
       <PaneHeader title={t("systemSettings.tabs.lab")} sub={t("systemSettings.lab.paneSub")} />
 
-      <McpServers />
+      <Section label={t("mcp.title")}><Row title={t("mcp.enable")} desc={t("mcp.description")}
+        foot={<button className={styles.goLink} onClick={() => onNavigate("mcp")}>{t("mcp.manage.manage")} →</button>}>
+        <Toggle on={mcpOn} onChange={next => { setMcpEnabled(next); setMcpOn(next); }} label={t("mcp.title")} />
+      </Row></Section>
 
       <Section label={t("systemSettings.lab.groupExport")}>
         <Row top title={t("systemSettings.lab.pptxLabel")} desc={t("systemSettings.lab.pptxHint")}>

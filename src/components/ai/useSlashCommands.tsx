@@ -2,26 +2,26 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { parseSlash, insertSlashCommand, mcpCommand, mcpTarget, commandRequest } from "../../lib/agent/slashCommands";
 import { isMcpEnabled, readMcpServers } from "../../lib/mcp/config";
-import { withMcp, type McpTool } from "../../lib/mcp/client";
+import { browseCatalogue, catalogueState, refreshCatalogue, subscribeCatalogues } from "../../lib/mcp/catalogue";
 import { useAppStore } from "../../stores/appStore";
 import { IS_TAURI } from "../../lib/platform";
 import { ModalShell } from "../common/ModalShell";
 import styles from "./SlashCommands.module.css";
 
-type Catalogue = { revision: string; tools?: McpTool[]; loading?: boolean; failed?: boolean };
 export function useSlashCommands(scope: string, draft: string, setDraft: (text: string) => void, imageAvailable: boolean) {
   const { t } = useTranslation();
   const listId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const selectedRow = useRef<HTMLButtonElement>(null);
-  const [catalogues, setCatalogues] = useState<Record<string, Catalogue>>({});
+  const [, redraw] = useState(0);
+  useEffect(() => subscribeCatalogues(() => redraw(n => n + 1)), []);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
   const [browser, setBrowser] = useState<"help" | "mcp" | null>(null);
   const [error, setError] = useState(false);
   const controllers = useRef(new Map<string, AbortController>());
   useEffect(() => {
-    setCatalogues({}); setDismissed(null); setError(false); setBrowser(null);
+    setDismissed(null); setError(false); setBrowser(null);
     return () => { for (const c of controllers.current.values()) c.abort(); };
   }, [scope]);
   const parsed = parseSlash(draft);
@@ -42,21 +42,25 @@ export function useSlashCommands(scope: string, draft: string, setDraft: (text: 
     window.addEventListener("resize", fit);
     return () => { observer.disconnect(); window.removeEventListener("resize", fit); };
   }, [open]);
-  const catalogueOf = (id: string, revision: string) => catalogues[id]?.revision === revision ? catalogues[id] : undefined;
+  const catalogueOf = (id: string, revision: string) => {
+    const server = servers.find(s => s.id === id && s.revision === revision);
+    const state = server ? catalogueState(server) : {};
+    return { tools: state.snapshot?.tools, loading: state.loading, failed: !!state.error, fetchedAt: state.snapshot?.fetchedAt };
+  };
   const load = async (id: string) => {
     const server = readMcpServers().find(s => s.id === id);
-    if (!server?.enabled || !IS_TAURI || !isMcpEnabled()) return;
+    if (!server?.enabled || !enabled) return;
     controllers.current.get(id)?.abort();
-    const controller = new AbortController();
-    controllers.current.set(id, controller);
-    setCatalogues(prev => ({ ...prev, [id]: { revision: server.revision, loading: true } }));
-    try {
-      const tools = await withMcp(server, controller.signal, client => client.listTools(), 30_000);
-      if (!controller.signal.aborted) setCatalogues(prev => ({ ...prev, [id]: { revision: server.revision, tools } }));
-    } catch {
-      if (!controller.signal.aborted) setCatalogues(prev => ({ ...prev, [id]: { revision: server.revision, failed: true } }));
-    }
+    const controller = new AbortController(); controllers.current.set(id, controller);
+    try { await refreshCatalogue(server, controller.signal); } catch { /* shared per-server state renders failure */ }
   };
+  const serverSignature = servers.map(s => `${s.id}:${s.revision}`).join("|");
+  useEffect(() => {
+    if (!enabled || (!open && browser !== "mcp")) return;
+    const controller = new AbortController();
+    for (const server of readMcpServers().filter(s => s.enabled)) void browseCatalogue(server, controller.signal).catch(() => {});
+    return () => controller.abort();
+  }, [enabled, open, browser, serverSignature]);
   const entries = [
     { command: "help", description: t("slash.help"), unavailable: false },
     { command: "mcp", description: t("slash.mcp"), unavailable: false },
@@ -135,10 +139,11 @@ export function useSlashCommands(scope: string, draft: string, setDraft: (text: 
         {!enabled && <p>{t("slash.mcpUnavailable")}</p>}
         {servers.map(server => { const cat = catalogueOf(server.id, server.revision); return <div key={server.id} className={styles.server}>
           <span>{server.name} · {t(!server.enabled ? "slash.disabled" : cat?.loading ? "slash.loading" : cat?.failed ? "slash.failed" : cat?.tools ? "slash.tools" : "slash.notLoaded", { count: cat?.tools?.length })}</span>
+          <small>{cat.fetchedAt ? t("mcp.manage.cached", { date: new Date(cat.fetchedAt).toLocaleString() }) : ""}</small>
           <button type="button" data-slash-control disabled={!enabled || !server.enabled || cat?.loading} onClick={() => void load(server.id)}>{t(cat?.tools ? "slash.refresh" : "slash.load")}</button>
         </div>; })}
       </div>}
-      <button type="button" data-slash-control className={styles.settings} onClick={() => { setBrowser(null); useAppStore.getState().openSettings(parsed?.command === "imageGen" ? "subagents" : "lab"); }}>{t("slash.settings")}</button>
+      <button type="button" data-slash-control className={styles.settings} onClick={() => { setBrowser(null); useAppStore.getState().openSettings(parsed?.command === "imageGen" ? "subagents" : "mcp"); }}>{t("slash.settings")}</button>
       <p className={styles.hint}>{t(browser ? "slash.usage" : "slash.hint")}</p>
   </>;
   const panel = <>

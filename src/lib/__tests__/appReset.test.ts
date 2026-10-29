@@ -1,3 +1,4 @@
+vi.mock("../mcp/catalogue", () => ({ clearMcpCatalogues: vi.fn(async () => {}) }));
 vi.mock("../ai/usageOutbox", () => ({ withUsageClear: vi.fn(async (_scope: string, _project: string | null, clear: () => Promise<void>) => clear()) }));
 /**
  * resetApp — 清除的顺序，以及被拒绝时的停手。

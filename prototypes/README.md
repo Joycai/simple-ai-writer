@@ -11,6 +11,16 @@ pnpm prototypes:build   # standalone site in prototypes/dist/
 pnpm prototypes:preview # serve the built site on :1430
 ```
 
+## MCP management review
+
+Open `/#mcp` for the MCP service manager prototype. Add/edit a service, inspect
+parameters and JSON Schema, search the catalogue, toggle a service, or delete it.
+The review toolbar simulates offline mode, a one-shot 401, and a restart that
+retains the in-memory catalogue. Actual page reload and Reset demo state discard
+all edits. No network requests, disk caches or real credentials are used.
+JSON import supports preview and adding uniquely named services; conflict-update
+selection is deferred to the next prototype iteration.
+
 ## Initial review surfaces
 
 - `/#overview`: the library index and the visual principles.

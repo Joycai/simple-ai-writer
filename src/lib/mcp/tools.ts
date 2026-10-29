@@ -1,25 +1,12 @@
+import { discoverCatalogue, invalidateCatalogue } from "./catalogue";
 import type { ToolContext, McpProposal } from "../agent/toolTypes";
 import type { ToolCall, ToolResult } from "../agent/tools";
 import { enabledMcpServer, isMcpEnabled, isObject, readMcpServers } from "./config";
 import { withMcp, type McpTool } from "./client";
 import { saveMcpResult } from "./results";
 
-// One catalogue per run/endpoint. Approval always rechecks against the server.
-const catalogues = new WeakMap<AbortSignal, Map<string, Promise<McpTool[]>>>();
 async function catalogue(server: ReturnType<typeof enabledMcpServer>, ctx: ToolContext): Promise<McpTool[]> {
-  const load = () => withMcp(server, ctx.signal, (client) => client.listTools(), 30_000);
-  if (!ctx.signal) return load();
-  ctx.signal.throwIfAborted();
-  let cache = catalogues.get(ctx.signal);
-  if (!cache) { cache = new Map(); catalogues.set(ctx.signal, cache); }
-  const key = JSON.stringify([server.id, server.url, server.revision]);
-  let pending = cache.get(key);
-  if (!pending) {
-    pending = load();
-    cache.set(key, pending);
-    void pending.catch(() => cache.delete(key));
-  }
-  return pending;
+  return (await discoverCatalogue(server, ctx.signal)).tools;
 }
 
 export async function discoverMcpTools(call: ToolCall, ctx: ToolContext): Promise<ToolResult> {
@@ -89,7 +76,7 @@ export async function applyMcpCall(proposal: McpProposal, signal?: AbortSignal):
   const result = await withMcp(check(), signal, async (client) => {
     const tool = (await client.listTools()).find((t) => t.name === proposal.tool);
     if (!tool || JSON.stringify(tool) !== proposal.toolSchema) {
-      if (signal) catalogues.delete(signal);
+      await invalidateCatalogue(check());
       throw new Error("MCP tool changed. Discover it and request approval again.");
     }
     check();

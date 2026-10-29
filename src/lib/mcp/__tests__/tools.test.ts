@@ -1,3 +1,4 @@
+import { clearMcpCatalogues } from "../catalogue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpTool } from "../client";
 const server = { id: "1", name: "images", url: "http://localhost:39287/mcp", enabled: true, revision: "1" };
@@ -16,7 +17,9 @@ import type { McpProposal, ToolContext } from "../../agent/toolTypes";
 const call = { id: "c", name: "call_mcp_tool", arguments: JSON.stringify({ server: "images", tool: "generate_image", arguments: { prompt: "flowers" }, reason: "illustrate" }) };
 const context = { projectPath: "/project", loreIndex: [] } as unknown as ToolContext;
 let proposal: McpProposal;
-beforeEach(() => {
+vi.mock("../catalogueDb", () => ({ readCatalogueRow: vi.fn(), writeCatalogueRow: vi.fn(async () => true), deleteCatalogueRow: vi.fn(), clearCatalogueRows: vi.fn() }));
+beforeEach(async () => {
+  await clearMcpCatalogues();
   vi.clearAllMocks(); server.revision = "1"; servers = [server];
   listTools.mockResolvedValue([definition]);
   proposal = { kind: "mcp", id: "p", path: "/project", serverId: "1", serverName: "images", serverUrl: server.url,
@@ -81,7 +84,7 @@ describe("MCP approvals", () => {
     await applyMcpCall(proposal, ctx.signal);
     expect(listTools).toHaveBeenCalledTimes(2);
     await discoverMcpTools({ ...call, arguments: "{}" }, { ...ctx, signal: new AbortController().signal });
-    expect(listTools).toHaveBeenCalledTimes(3);
+    expect(listTools).toHaveBeenCalledTimes(2);
   });
   it("keeps every tool discoverable when aggregate descriptions exceed the index budget", async () => {
     const tools = Array.from({ length: 256 }, (_, i) => ({ ...definition,
