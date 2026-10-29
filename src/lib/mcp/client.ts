@@ -1,7 +1,8 @@
-/** Streamable HTTP, MCP 2025-03-26 / 2025-06-18 / 2025-11-25.
+/** Streamable HTTP, including endpoints negotiating MCP 2024-11-05.
  * Sessions belong to one operation, never global. Calls are never retried:
  * a lost response can already have incurred a charge at the server.
  */
+import { McpError } from "./errors";
 import { fetch } from "../http";
 import { IS_TAURI } from "../platform";
 import { isObject, mcpHeaders, type McpServer } from "./config";
@@ -12,11 +13,14 @@ export interface McpTool {
   inputSchema: Record<string, unknown>;
 }
 export interface McpResult { content: unknown[]; structuredContent?: unknown; isError?: boolean }
-const VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"];
+// Some HTTP endpoints (e.g. DashScope) use the 2024 tool protocol over
+// single-endpoint POST. Accept that negotiation without adding legacy SSE transport.
+const VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const MAX_RESPONSE = 32 * 1024 * 1024;
 
 export class McpClient {
   private session?: string;
+  info: { protocolVersion?: string; name?: string; version?: string } = {};
   private version = VERSIONS[0];
   private serial = 0;
   private headers: Record<string, string> = {};
@@ -35,9 +39,10 @@ export class McpClient {
     const result = await this.rpc("initialize", { protocolVersion: this.version,
       capabilities: {}, clientInfo: { name: "simple-ai-writer", version: "1" } });
     if (!isObject(result) || !VERSIONS.includes(String(result.protocolVersion))) {
-      throw new Error("Unsupported MCP protocol version.");
+      throw new McpError("protocol", "initialize");
     }
     this.version = String(result.protocolVersion);
+    this.info = { protocolVersion: this.version, ...(isObject(result.serverInfo) ? { name: String(result.serverInfo.name ?? ""), version: String(result.serverInfo.version ?? "") } : {}) };
     if (!isObject(result.capabilities) || !isObject(result.capabilities.tools)) {
       throw new Error("This MCP server does not provide tools.");
     }
@@ -63,12 +68,12 @@ export class McpClient {
         redirect: "error", ...{ maxRedirections: 0 }, signal: this.controller.signal,
         body: JSON.stringify({ jsonrpc: "2.0", ...(notification ? {} : { id }), method, ...(params ? { params } : {}) }) });
     } catch {
-      throw new Error(this.controller.signal.aborted ? "MCP request stopped or timed out. The server may still be working; check its task status before retrying." : "MCP connection failed. Check the server and its URL.");
+      throw new McpError(this.controller.signal.aborted ? "cancelled" : "network", method);
     }
     if (!response.ok) {
       await response.body?.cancel();
       // Never echo response bodies: authentication errors can repeat secrets.
-      throw new Error(`MCP HTTP ${response.status}. Check the server connection and credentials. Calls are not retried automatically.`);
+      throw new McpError(response.status === 401 || response.status === 403 ? "auth" : "http", method, response.status);
     }
     if (method === "initialize") this.session = response.headers.get("mcp-session-id") ?? undefined;
     if (notification) { await response.body?.cancel(); return undefined; }

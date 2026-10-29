@@ -16,6 +16,34 @@ function handshake() {
 }
 beforeEach(() => { fetchMock.mockReset(); fetchMock.mockResolvedValue(new Response(null, { status: 204 })); });
 describe("Streamable HTTP MCP", () => {
+  it.each(["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"])(
+    "uses negotiated %s for notifications, discovery, calls and session cleanup", async (version) => {
+      fetchMock.mockResolvedValueOnce(json(1, { protocolVersion: version, capabilities: { tools: {} } },
+        { "mcp-session-id": "session" }))
+        .mockResolvedValueOnce(new Response(null, { status: 202 }))
+        .mockResolvedValueOnce(json(3, { tools: [tool] }))
+        .mockResolvedValueOnce(json(4, { content: [{ type: "text", text: "ok" }] }));
+      await withMcp(server, undefined, async (client) => {
+        expect(await client.listTools()).toEqual([tool]);
+        expect((await client.callTool("draw", {})).content).toEqual([{ type: "text", text: "ok" }]);
+      });
+      const requests = fetchMock.mock.calls.map(([, init]) => init!);
+      expect(JSON.parse(String(requests[0].body)).params.protocolVersion).toBe("2025-11-25");
+      expect(requests).toHaveLength(5);
+      for (const request of requests.slice(1)) {
+        expect(request.headers).toMatchObject({ "MCP-Protocol-Version": version, "Mcp-Session-Id": "session" });
+      }
+      expect(requests[4].method).toBe("DELETE");
+    });
+  it("discovers 2024 tools without requiring a session or a second initialize", async () => {
+    fetchMock.mockResolvedValueOnce(json(1, { protocolVersion: "2024-11-05", capabilities: { tools: { listChanged: false } } }))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(json(3, { tools: [tool] }));
+    expect(await withMcp(server, undefined, (client) => client.listTools())).toEqual([tool]);
+    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init!.body)).method))
+      .toEqual(["initialize", "notifications/initialized", "tools/list"]);
+    expect(new Headers(fetchMock.mock.calls[2][1]!.headers).has("Mcp-Session-Id")).toBe(false);
+  });
   it("negotiates, propagates session headers, pages tools and terminates its session", async () => {
     handshake();
     fetchMock.mockResolvedValueOnce(json(3, { tools: [tool], nextCursor: "next" }))

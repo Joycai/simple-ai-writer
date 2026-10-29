@@ -1,3 +1,4 @@
+vi.mock("../../../lib/mcp/catalogue", () => ({ catalogueState: () => ({}), subscribeCatalogues: () => () => {}, browseCatalogue: vi.fn(), refreshCatalogue: vi.fn() }));
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";

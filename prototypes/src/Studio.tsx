@@ -11,10 +11,12 @@ import {
 import { applyThemeId } from "../../src/lib/theme/scheme";
 import { Select } from "../../src/components/common/Select";
 import { Foundations, Components } from "./System";
+import { McpManagement } from "./McpManagement";
 import { Workspace } from "./Workspace";
 import { themes } from "./fixtures";
 
 const pages = [
+  { id: "mcp", label: "MCP 服务", number: "04", icon: Layers },
   { id: "overview", label: "Overview", number: "00", icon: BookOpen },
   { id: "foundations", label: "Foundations", number: "01", icon: Layers },
   {
@@ -121,11 +123,12 @@ export function Studio() {
           id="studio-content"
           tabIndex={-1}
           className={
-            page === "workspace"
+            (page === "workspace" || page === "mcp")
               ? "studio-content workspace-content"
               : "studio-content"
           }
         >
+          {page === "mcp" && <McpManagement key={revision} />}
           {page === "overview" && <Overview />}
           {page === "foundations" && (
             <Foundations key={revision} theme={theme} />

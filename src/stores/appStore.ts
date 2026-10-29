@@ -294,6 +294,7 @@ export type AiDrawerMode = "generate" | "chat" | "consistency" | "roleplay";
 /** Every pane the settings page renders — `openSettings(tab)` can reach all of
  *  them, so this union and SettingsPage's nav must stay in step. */
 export type SettingsTab =
+  | "mcp"
   | "general"
   | "appearance"
   | "workspace"

@@ -141,7 +141,7 @@ CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, ico
 ### `src/components/ai/`
 
 `components/ai/useSlashCommands.tsx` owns the local command menu and revision-bound
-MCP catalogue discovery; `lib/agent/slashCommands.ts` owns prefix parsing,
+MCP catalogue browsing over the shared persistent directory; `lib/agent/slashCommands.ts` owns prefix parsing,
 namespace encoding and explicit request expansion. `AgentChat` handles picker keys
 before mentions and passes expanded execution requests through normal `sendChat`.
 See `docs/feature/agent/mcp-support.md` → Chat slash commands for the first-version
@@ -210,7 +210,7 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 
 #### 实验室与上下文记忆
 
-- `McpServers` provides the MCP Beta switch, standard JSON import, per-server enable/remove and read-only connection testing. Header values go to the OS keyring and clear from the import field after save; no credentials are reloaded into the form.
+- `McpServers` is the independent MCP settings pane: service list/details, `McpEditor` credential patches, `McpImport` conflict previews, and `McpTools` parameter/schema browsing. `LabPane` retains the Beta switch. `McpDialog` scopes keyboard focus; the pane intercepts Settings Escape while a modal is present. Shared persistent directory state comes from `lib/mcp/catalogue`; no secret values are reloaded into forms.
 
 - `retrievalModelWarning` shares the active-project/unknown-other-project dependency policy between model saves and model/channel deletion. Confirmation preserves project selections; see semantic-retrieval-beta.md § Shared model changes and deletion.
 - `SemanticRetrieval` is a standalone Settings → AI configuration → Semantic retrieval pane with project-scoped opt-in, typed model selectors and themed controls; embedding/rerank registration lives in Channels & Models. Pipeline and bounds: [semantic-retrieval-beta.md](../feature/lore/semantic-retrieval-beta.md).
@@ -676,7 +676,7 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 
 ### `src/lib/mcp/`
 
-`config.ts` stores machine-local endpoints and keyring header credentials; `client.ts` owns bounded Streamable HTTP sessions, JSON/SSE and tool pagination; `tools.ts` returns bounded complete schemas for small services, caches discovery per run, and bridges approval (per-call by default, or an explicit revocable server/session grant); `results.ts` saves images to `assets/mcp` and bounded model reports with full cache files, ending with an image receipt that distinguishes saved bytes from server-side output paths and requests retrieval of existing outputs. MCP appears only on desktop approval surfaces with its Beta and an enabled server. The registry carries two compact bridge schemas; external tool schemas arrive on demand. Design, protocol limits and verification: [mcp-support.md](../feature/agent/mcp-support.md).
+`config.ts` stores machine-local endpoints and keyring header credentials with separate connection/approval revisions; `catalogue.ts` shares cancellable discovery and stale-while-refresh browsing, and `catalogueDb.ts` atomically persists bounded snapshots in config.db; `client.ts` owns bounded Streamable HTTP sessions, JSON/SSE and tool pagination; `tools.ts` returns bounded complete schemas for small services, caches discovery per run, and bridges approval (per-call by default, or an explicit revocable server/session grant); `results.ts` saves images to `assets/mcp` and bounded model reports with full cache files, ending with an image receipt that distinguishes saved bytes from server-side output paths and requests retrieval of existing outputs. MCP appears only on desktop approval surfaces with its Beta and an enabled server. The registry carries two compact bridge schemas; external tool schemas arrive on demand. Design, protocol limits and verification: [mcp-support.md](../feature/agent/mcp-support.md).
 
 ### `src/lib/cli/`
 

@@ -154,6 +154,7 @@ export async function resetApp(): Promise<ResetSummary> {
     ]);
   });
   clearLearned();
+  await (await import("./mcp/catalogue")).clearMcpCatalogues();
 
   // 3. 排版格式和历史遗留的明文密钥表都不在上面那个事务里，理由和
   //    `applyConfigImport` 一样：它们和上面几张表没有外键关系，塞进去只会把

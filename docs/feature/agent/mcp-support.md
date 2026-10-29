@@ -4,9 +4,9 @@
 
 ## Author workflow
 
-Settings → AI configuration → Labs → MCP servers (Beta). Enable the feature,
-paste a standard `mcpServers` object, then choose **Import configuration**.
-The same server name replaces its connection and headers. Test connection performs
+Enable MCP under Settings → AI configuration → Labs, then open **MCP services**
+in the AI navigation group. Add/edit a service with a form, or preview a standard
+`mcpServers` JSON import. Replacing a same-name service requires an explicit choice. Test connection performs
 only `initialize`, `notifications/initialized`, and paginated `tools/list`, then
 closes the session. It never calls a tool or generates an image.
 
@@ -69,6 +69,7 @@ LLM usage ledger.
   Browser/Node requests do not receive this native-only header directive.
 - `client.ts`: one short-lived session per operation, no shared connection across
   chats. Implements MCP 2025-03-26 / 2025-06-18 / 2025-11-25 initialization,
+  plus compatibility with HTTP endpoints negotiating 2024-11-05,
   negotiated version/session headers, JSON and streamed SSE responses, cursor
   pagination, cancellation, bounded responses and best-effort session DELETE.
   Discovery is capped at 30 seconds; an approved operation at 120 seconds.
@@ -86,8 +87,8 @@ LLM usage ledger.
   roleplay, batch jobs and subagents do not inherit the permission. Context
   estimates price the same bridge tools. Off means absent.
 - `tools.ts`: discovery and proposal construction do not call external tools.
-  Catalogue requests share a run-scoped promise cache keyed by server identity,
-  URL and revision; failures are evicted and approval always rechecks live tools.
+  Catalogue requests use the shared persistent directory keyed by server identity
+  and connection revision; approval always rechecks live tools.
   This saves connections without caching executions or retrying paid operations.
   If the compact index's combined descriptions exceed 48,000 characters, it
   falls back to tool names only. A per-description cap alone is insufficient
@@ -122,6 +123,20 @@ LLM usage ledger.
   call hidden inside polling. Original bytes use `preview: false`.
 
 ## Validation and protocol references
+
+Compatibility decision (2026-10-29): DashScope EnhancedSearch accepts single-endpoint
+HTTP POST but returns `2024-11-05` to the latest-version initialize request. The
+previous allowlist rejected this before discovery. Accept this known tool protocol
+and propagate the negotiated version on subsequent requests; keep unknown versions
+rejected. This follows [version negotiation](https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle)
+without claiming support for the separate legacy HTTP+SSE transport (GET endpoint
+discovery and a separate POST URL). Do not reinitialize or retry tool calls to
+downgrade. Regression tests cover all accepted versions, tool calls, session cleanup,
+and sessionless discovery. Credentials are never committed as fixtures.
+The patched client's opt-in live discovery test passed against EnhancedSearch:
+initialize negotiated `2024-11-05`, the initialized notification succeeded, and
+`tools/list` returned `search_pro`. No search tool was called. This check exercised
+the application's client with Node fetch, not a packaged Tauri webview.
 
 `lib/mcp/__tests__/` covers the JSON import shape, credential isolation, keyring
 failures, revision invalidation, protocol negotiation, JSON/SSE, pagination,
@@ -164,6 +179,40 @@ Protocol: [Streamable HTTP 2025-11-25](https://modelcontextprotocol.io/specifica
 This implementation deliberately targets the server's negotiated session-based
 protocol family; it does not claim support for the newer stateless transport.
 
+## Management and persistent catalogues (2026-10-29)
+
+The implemented design is recorded in [mcp-management-ui-plan.md](mcp-management-ui-plan.md).
+The management page has a searchable service list, connection details, tool parameter tables,
+complete JSON Schema, explicit edit/delete actions and per-service errors. The lab retains
+only the Beta gate and a navigation link. Disabled services and Beta-off configurations
+remain editable and locally browsable; only explicit checks can network while disabled.
+
+Credential editing loads header names only. Each saved header is kept, replaced or removed
+explicitly. Mutations serialize, check the editor revision, register a disabled account
+before keyring writes and re-enable only after success. Name/enable changes invalidate
+approvals but retain the connection revision; URL/header edits invalidate both.
+
+`catalogueDb.ts` uses a separate `mcp_catalogues` table in machine-local `config.db`.
+This replaces the proposed JSON files: the existing SQL transaction bridge provides atomic
+replacement plus 64 MiB total eviction without a new file-scope permission. Each snapshot
+is capped at 8 MiB; larger catalogues remain in memory with a visible unsaved notice. The
+table is excluded from configuration backups and cleared on app reset. Snapshots contain
+only tool definitions, protocol/server metadata and successful fetch time, never headers,
+call results, session ids or grants. Corrupt/foreign snapshots are ignored.
+
+Settings, slash browsing and agent discovery share snapshots and in-flight requests, with
+a concurrency cap of two. Reading fresh snapshots does not request the server. Visible
+stale/missing catalogues refresh after 24 hours, with a five-minute automatic failure
+cooldown; manual refresh bypasses cooldown. Failed/cancelled requests preserve the previous
+catalogue and timestamp. Each consumer can cancel its own wait; the last consumer aborts
+the request. Config edits/removal reject late results. Startup does not eagerly contact all
+services. Manual checks do not call tools. Agent discovery refreshes stale snapshots and
+fails if refresh fails (stale snapshots remain available for UI browsing only).
+
+Every execution retains the live definition check and existing approval rules. A changed
+tool invalidates the shared snapshot and requires a new proposal. Cache freshness never
+substitutes for execution authorization; no automatic retry of a tool call was added.
+
 ## Chat slash commands
 
 The chat composer offers `/help`, `/mcp`, `/imageGen` and
@@ -171,8 +220,8 @@ The chat composer offers `/help`, `/mcp`, `/imageGen` and
 requiring no conversational model request. `/mcp` lists configured servers;
 **Load tools** performs bounded discovery only, with per-server loading, error,
 disabled and not-loaded states. **Refresh** replaces the catalogue. Counts refer
-to discovered tools, never an assumed zero. Catalogues are component-local and
-keyed by server revision; they are discarded when the chat changes or composer unmounts.
+to discovered tools, never an assumed zero. Catalogues share the persistent directory with Settings. Changing chats does not
+discard snapshots; changing the endpoint or credentials invalidates them.
 Server/tool names are URL-encoded within shortcuts so spaces and colons cannot
 create ambiguous selections. Tool descriptions render as plain text.
 

@@ -83,6 +83,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | Doc | Status | What it settles |
 |---|---|---|
 | [mcp-support.md](feature/agent/mcp-support.md) | `partial` | Streamable HTTP MCP discovery, keyring credentials, approved calls, session grants and image assets; chat shortcuts `/help`, `/mcp`, `/imageGen`, and server/tool commands; no stdio/OAuth/stateless transport |
+| [mcp-management-ui-plan.md](feature/agent/mcp-management-ui-plan.md) | `shipped` | MCP 管理页重设计：表单添加/编辑、服务详情、工具浏览、持久目录缓存与刷新、错误归属和验收标准 |
 | [long-output-recovery.md](feature/agent/long-output-recovery.md) | `shipped` | 流式正文定期保存、重启后续写与按大纲分节生成 |
 | [unified-agent-plan.md](feature/agent/unified-agent-plan.md) | `shipped` | One tool loop under every AI feature; the two-stage evolution to a chat assistant |
 | [subagent-plan.md](feature/agent/subagent-plan.md) | `shipped` | High-level design. Kept for the feasibility reasoning; the LLD supersedes its detail |

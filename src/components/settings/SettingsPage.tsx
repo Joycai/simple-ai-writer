@@ -20,6 +20,7 @@ import { ProvidersModelsPane } from "./panes/ProvidersModelsPane";
 import { SubAgentsPane } from "./panes/SubAgentsPane";
 import { DocFormatPane } from "./panes/DocFormatPane";
 import { SemanticRetrieval } from "./panes/SemanticRetrieval";
+import { McpServers } from "./panes/McpServers";
 import { LabPane } from "./panes/LabPane";
 import { ContextMemoryPane } from "./panes/ContextMemoryPane";
 import { isDocxExportEnabled } from "../../lib/docx/flag";
@@ -158,6 +159,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
               作者会以为它属于「用量」。 */}
           {navBtn("fees", <Tags size={15} />, "systemSettings.tabs.fees")}
           {navBtn("subagents", <Users size={15} />, "systemSettings.tabs.subagents")}
+          {navBtn("mcp", <Layers size={15} />, "mcp.title")}
           {navBtn("prompts", <MessageSquare size={15} />, "systemSettings.tabs.prompts")}
           {/* Scroll (设计稿 05b): what a conversation reads into the model is
               "one roll" — both the text being read and the thing remembered. */}
@@ -193,6 +195,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
             {activeTab === "usage" && <UsagePane onOpenFees={() => setActiveTab("fees")} />}
             {activeTab === "context-memory" && <ContextMemoryPane />}
             {activeTab === "semantic-retrieval" && <SemanticRetrieval />}
+            {activeTab === "mcp" && <McpServers onLab={() => setActiveTab("lab")} onEscapeInterceptChange={setEscIntercept} />}
             {activeTab === "lab" && <LabPane onDocxToggled={handleDocxToggled} onNavigate={setActiveTab} />}
             {activeTab === "sync" && <SyncPane />}
             {activeTab === "shortcuts" && <ShortcutsPane />}
