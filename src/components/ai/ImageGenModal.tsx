@@ -1,3 +1,4 @@
+import { withImageFamily } from "../../lib/ai/imageFamily";
 /**
  * Generate a picture, for whatever is being illustrated.
  *
@@ -74,7 +75,8 @@ export function ImageGenModal({ target, onClose }: Props) {
   // select empty: with exactly one image model — the common case — the author
   // should never have to choose it.
   const effectiveImageModelId = imageModelId ?? imageModels[0]?.id ?? "";
-  const imageModel = imageModels.find((m) => m.id === effectiveImageModelId) ?? null;
+  const storedImageModel = imageModels.find((m) => m.id === effectiveImageModelId);
+  const imageModel = useMemo(() => storedImageModel ? withImageFamily(storedImageModel) : null, [storedImageModel]);
   const imageProvider = imageModel ? providerFor(imageModel, providers) ?? null : null;
   /**
    * The chat-completions route carries no n/size/aspect fields (see

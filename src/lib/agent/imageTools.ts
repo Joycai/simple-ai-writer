@@ -1,3 +1,4 @@
+import { withImageFamily } from "../ai/imageFamily";
 /**
  * The agent's image tools (L2 — every call blocks on the author's approval).
  *
@@ -73,7 +74,8 @@ async function proposeIllustration(
       content: "Error: this surface cannot review image generation — do not call this tool here.",
     };
   }
-  const model = activeImageModel(ctx);
+  const storedModel = activeImageModel(ctx);
+  const model = storedModel && withImageFamily(storedModel);
   if (!model) {
     return {
       toolCallId,

@@ -1,3 +1,5 @@
+import { resolvedImageCaps } from "./imageFamily";
+import type { ImageDialect } from "./imageDialects";
 /**
  * Image generation client — the sibling of `streamCompletion` for models that
  * return pictures instead of prose.
@@ -31,6 +33,7 @@ import { geminiUrl, openaiUrl, trimBase } from "./urls";
 
 /** The provider coordinates every image call needs. */
 export interface ImageConn {
+  dialect?: ImageDialect;
   baseUrl: string;
   apiKey: string;
   standard: ApiStandard;
@@ -68,6 +71,7 @@ export function imageConnOf(
     authMode: provider.authMode,
     modelId: model.modelId,
     safetySettings: provider.safetySettings,
+    dialect: resolvedImageCaps(model.modelId, model.caps)?.dialect,
     route: model.caps?.route,
     asyncTask: model.caps?.asyncTask,
     comfy: model.caps?.comfy,
@@ -846,6 +850,12 @@ async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResul
           ],
         }],
         stream: false,
+        ...((conn.dialect === "nanobanana" || conn.dialect === "nanobanana-2") ? {
+          extra_body: { google: { image_config: {
+            ...(req.aspect ? { aspect_ratio: req.aspect } : {}),
+            ...(req.imageSize ? { image_size: req.imageSize } : {}),
+          } } },
+        } : {}),
         // Same "only when it isn't the default" rule as the other routes. Most
         // relays serving an image model here return one picture regardless;
         // the UI says so rather than letting the count silently mean nothing.

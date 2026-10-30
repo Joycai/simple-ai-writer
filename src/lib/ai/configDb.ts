@@ -96,7 +96,7 @@ export interface ImageCaps {
   /**
    * Which parameter language the model speaks (lib/ai/imageDialects.ts):
    * "nanobanana" = Gemini's aspectRatio/imageSize, "gpt-image-2" = OpenAI's
-   * size/quality. Absent = generic — the free-form `sizes` list below, which a
+   * size/quality. Absent = infer from model ID, then generic; explicit generic disables inference. The free-form `sizes` list below is superseded when a
    * declared dialect supersedes.
    */
   dialect?: ImageDialect;
@@ -1490,7 +1490,7 @@ const IMAGE_ROUTES: Record<ImageRoute, true> = {
   "images-api": true, chat: true, gemini: true, dashscope: true, comfyui: true, ark: true,
 };
 const IMAGE_DIALECT_IDS: Record<ImageDialect, true> = {
-  nanobanana: true, "gpt-image-2": true, "gpt-image-2.5": true, "grok-imagine": true, "wan2.7": true, "qwen-image": true,
+  generic: true, "nanobanana-2": true, nanobanana: true, "gpt-image-2": true, "gpt-image-2.5": true, "grok-imagine": true, "wan2.7": true, "qwen-image": true,
   "seedream-5-pro": true, "seedream-5-lite": true, "seedream-4": true,
 };
 

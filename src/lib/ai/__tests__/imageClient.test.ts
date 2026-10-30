@@ -11,7 +11,7 @@ import { newChannelEndpoints, normalizeChannel, routeProvider } from "../routes"
 import { platformOrigin } from "../platforms";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
-  dashscopeNativeBase, generateImage, ImageHttpError, isEditUnsupportedError, NoImageError,
+  dashscopeNativeBase, imageConnOf, generateImage, ImageHttpError, isEditUnsupportedError, NoImageError,
   type ImageProgress,
 } from "../image";
 
@@ -1116,7 +1116,7 @@ describe("generateImage · ark route (火山方舟 Seedream)", () => {
 
   it("ignores transparentBackground on a route with no such field", async () => {
     const calls = mockJson({ data: [{ b64_json: PNG_B64 }] });
-    await generateImage({ ...ARK, route: undefined }, { prompt: "a cat", transparentBackground: true });
+    await generateImage({ ...ARK, route: "images-api" }, { prompt: "a cat", transparentBackground: true });
     expect(calls[0].body).not.toHaveProperty("background");
   });
 
@@ -1215,10 +1215,10 @@ describe("generateImage · ark route (火山方舟 Seedream)", () => {
     expect(res.usage).toBeUndefined();
   });
 
-  it("is never derived — an unset route on the same channel stays images-api", async () => {
+  it("derives Ark from a recognized Seedream ID when no route is declared", async () => {
     const calls = mockJson({ data: [{ b64_json: PNG_B64 }] });
     await generateImage({ ...ARK, route: undefined }, { prompt: "a cat" });
-    expect(calls[0].body).not.toHaveProperty("watermark");
+    expect(calls[0].body).toHaveProperty("watermark", false);
   });
 });
 
@@ -1279,5 +1279,28 @@ describe("isEditUnsupportedError", () => {
     expect(isEditUnsupportedError(new NoImageError("I don't support image editing"))).toBe(false);
     // Nor does an error from somewhere else entirely.
     expect(isEditUnsupportedError(new Error("editing is not supported"))).toBe(false);
+  });
+});
+
+
+describe("manual image family on relay aliases", () => {
+  it("sends Nano Banana 2 through Chat with structured Google parameters", async () => {
+    const calls = mockJson({ choices: [{ message: { images: [{ b64_json: PNG_B64 }] } }] });
+    const conn = imageConnOf({ modelId: "relay-art-premium", caps: { dialect: "nanobanana-2" } }, {
+      baseUrl: OPENAI.baseUrl, apiStandard: "openai_compat",
+    }, "k");
+    await generateImage(conn, { prompt: "a cat", aspect: "9:16", imageSize: "2K" });
+    expect(calls[0].url).toContain("/chat/completions");
+    expect(calls[0].body.model).toBe("relay-art-premium");
+    expect(calls[0].body.extra_body).toEqual({ google: { image_config: { aspect_ratio: "9:16", image_size: "2K" } } });
+  });
+  it("keeps an explicit native Gemini endpoint for a renamed Nano Banana model", async () => {
+    const calls = mockJson({ candidates: [{ content: { parts: [{ inlineData: { data: PNG_B64 } }] } }] });
+    const conn = imageConnOf({ modelId: "relay-art", caps: { dialect: "nanobanana-2", route: "gemini" } }, {
+      baseUrl: GEMINI.baseUrl, apiStandard: "openai_compat",
+    }, "k");
+    await generateImage(conn, { prompt: "a cat", imageSize: "512" });
+    expect(calls[0].url).toContain("/models/relay-art:generateContent");
+    expect(calls[0].body.generationConfig).toMatchObject({ imageConfig: { imageSize: "512" } });
   });
 });

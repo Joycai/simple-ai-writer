@@ -52,9 +52,11 @@ const WIRE_SHAPE: Readonly<Record<string, string>> = {
  * 每一条都是在选拼法或措辞，而不是在判有无。
  */
 const CEILING: Readonly<Record<string, number>> = {
+  "lib/ai/imageRoute.ts": 1, // Nano Banana uses native Gemini or relay Chat spelling; not a capability verdict.
+
   // 结构化输出的说明文字三族不同（2）；图像模型 Gemini 方言的预填（1）。服务端工具「为什么」按族的
   // 措辞已改成查表（SEARCH_HINT_KEY 等），不再占名额。
-  "components/settings/panes/ModelDrawer.tsx": 3,
+  "components/settings/panes/ModelDrawer.tsx": 2,
   // Gemini 线路的安全设置默认值与其面板（2）；ComfyUI 渠道走自己的保存分支（1）。
   "components/settings/panes/ProviderDrawer.tsx": 3,
 };

@@ -7,7 +7,7 @@
  * 声明值直接和它们比，答的就不是请求真正去的地方。这条扫 `src/` 全部源码，
  * 除 `imageRoute.ts` 本身外，不许出现这种比较。
  *
- * `chat` / `comfyui` / `ark` 永远不会被推出来，对它们「声明值 ≡ 有效路线」由类型保证，
+ * 只有 `comfyui` 永远不会被推出来，模型族也可以推导 `chat` / `ark`，
  * 所以 `caps.route === "comfyui"` 不在拦的范围里。
  *
  * **被它拦下时。** 改问 `effectiveImageRoute`（抽屉里是 `draftRoute` / `showsAsyncToggle`）。
@@ -22,7 +22,7 @@ const OWNER = "lib/ai/imageRoute.ts";
 
 /** A declared route: `caps.route` (`?.` / `!.`), the drawer's `capsRoute`, a conn's or a draft's `route`. */
 const DECL = String.raw`(?:caps[?!]?\.route|capsRoute|conn\.route|draft\.route)`;
-const DERIVABLE = String.raw`["'](?:images-api|gemini|dashscope)["']`;
+const DERIVABLE = String.raw`["'](?:images-api|gemini|dashscope|chat|ark)["']`;
 const PATTERN = new RegExp(
   [
     String.raw`\b${DECL}\s*[!=]==?\s*${DERIVABLE}`,

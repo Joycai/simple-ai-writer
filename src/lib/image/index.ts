@@ -43,7 +43,7 @@ export function imageRequestParams(
   const error = validateImageSelection(caps, selection);
   if (error) throw new ImageOutputValidationError(error);
   if (selection.sizingMode === "exact") {
-    if (caps?.dialect === "nanobanana") throw new ImageOutputValidationError("mode");
+    if ((caps?.dialect === "nanobanana" || caps?.dialect === "nanobanana-2")) throw new ImageOutputValidationError("mode");
     if (caps?.dialect === "wan2.7" && opts?.edit) {
       const editError = validateImageSelection({ ...caps, overrides: {
         ...caps.overrides, pixels: { ...caps.overrides?.pixels, maxEdge: Math.min(caps.overrides?.pixels?.maxEdge ?? 2048, 2048) },

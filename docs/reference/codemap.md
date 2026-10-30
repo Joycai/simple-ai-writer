@@ -206,6 +206,8 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 
 #### 模型抽屉
 
+- 图片模型族沿用 `caps.dialect`：手动选择优先、ID 保底识别、显式通用关闭识别。`imageFamily.ts` 只补运行时副本，`imageRoute.ts` 统一解析独立的接口覆盖与族默认；详见 `docs/feature/image-route.md` 的 2026-10-30 增补。
+
 - Model-list context sizes use the shared themed badge with binary K/M units (at most one decimal); tooltip and accessible name retain the exact token count and field name. The display-only formatter is separate from editable limits so rounding never changes persisted values.
 
 - `TokenLimitControl` composes the shared `Slider` and `ModelTextInput` rather than styling raw form controls itself. `ModelTextInput` owns the model drawer input appearance, dashed unset state and themed invalid border; all states inherit settings/theme tokens and the global keyboard focus ring.

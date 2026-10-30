@@ -1,3 +1,4 @@
+import { withImageFamily } from "../ai/imageFamily";
 /**
  * Carrying out an approved illustration proposal.
  *
@@ -91,7 +92,8 @@ export async function runIllustration(
   onProgress?: (p: ToolProgress) => void,
 ): Promise<IllustrationOutcome> {
   const { models, providers } = settings;
-  const model = models.find((m) => m.id === proposal.modelId);
+  const storedModel = models.find((m) => m.id === proposal.modelId);
+  const model = storedModel && withImageFamily(storedModel);
   const provider = model ? providerFor(model, providers) : null;
   if (!model || !provider) {
     throw new Error("The image model this proposal was made with is no longer configured.");

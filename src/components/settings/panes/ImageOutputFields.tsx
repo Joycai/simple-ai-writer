@@ -38,7 +38,7 @@ export function ImageOutputFields({ dialect, value, onChange }: {
   const { t } = useTranslation();
   const spec = imageOutputSpec({ dialect, ...value });
   const defaults = value.defaults ?? {};
-  const canExact = dialect !== "nanobanana" && dialect !== "grok-imagine";
+  const canExact = dialect !== "nanobanana" && dialect !== "nanobanana-2" && dialect !== "grok-imagine";
   const setDefault = (key: keyof ImageParamSelection, next: string) => {
     const updated = { ...defaults, [key]: next };
     if (key === "sizingMode" && !next) delete updated.sizingMode;

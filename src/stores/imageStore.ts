@@ -1,3 +1,4 @@
+import { withImageFamily } from "../lib/ai/imageFamily";
 /**
  * One conversational image session: an initial generation, then edits on top,
  * each producing candidates the author picks between.
@@ -152,6 +153,7 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
   },
 
   generate: async (ctx, prompt, opts) => {
+    ctx = { ...ctx, model: withImageFamily(ctx.model) };
     const sessionId = get().sessionId ?? (await get().begin(ctx.projectPath));
     // Resolved before the await: the parent must be the turn on screen when
     // the round started, not whatever the state holds when the result lands.
@@ -176,6 +178,7 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
   },
 
   edit: async (ctx, instruction) => {
+    ctx = { ...ctx, model: withImageFamily(ctx.model) };
     const { sessionId, currentId } = get();
     const parent = get().currentTurn();
     if (!sessionId || !parent) return;

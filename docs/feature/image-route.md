@@ -103,3 +103,30 @@ routeConventions(route)                   // 某条接口上「所有模型都�
   端点），以及上面那条尺寸预填的收回。
 - 模拟抽屉的几个处理函数只抄了 React 的「把结果写回状态」那一层；每个判断——有效路线、开关、预填、存什么——
   调的都是 `imageCapsDraft.ts` 里抽屉自己调的那一个函数，传的也是抽屉传的那一对（标准，声明值）。
+
+
+## 2026-10-30：图片模型族与中转别名
+
+模型抽屉将「参数方言」改为「模型族」，沿用 `caps.dialect` 存储，避免两份声明冲突。
+优先级为 **手动模型族 > 模型 ID 保底识别 > 通用**；显式 `generic` 关闭识别。
+旧的已声明方言不变，未声明的已知 ID 开始使用对应模型族；推导结果不写回数据库。
+自动识别只匹配有明确参数实现的 ID，不把所有 Qwen / Gemini 新版本笼统归到一个族。
+
+接口仍是独立覆盖：**显式 `caps.route` > 模型族默认接口 > 渠道协议默认接口**。
+`effectiveImageRoute` 是唯一解析者，设置页的当前接口提示、异步开关、保存和请求共用它。
+Nano Banana 原生 Gemini 渠道默认 `gemini`，兼容渠道默认 `chat`；GPT Image / Grok 默认
+`images-api`，Wan / Qwen 默认 `dashscope`，Seedream 默认 `ark`。这些是起步默认值，
+不宣称所有中转实现一致；作者可以明确选择中转真正提供的接口。
+因此前文「chat / ark 永不推导」只描述旧实现；现在只有 ComfyUI 始终需要显式声明。
+
+选择不同模型族清空旧的输出选项覆盖与默认值，保留显式接口覆盖。两项控件均复用共享
+主题化 Select，并直接显示生效族和接口。运行时在副本上补全模型族和参考图上限，
+交互出图、agent 审批、实际执行与计费规格选择均使用解析后的能力，原模型 ID 原样发送。
+
+Nano Banana 2 独立于通用 Nano Banana，支持 512 / 1K / 2K / 4K 与其额外画幅；依据
+[Google 官方文档](https://ai.google.dev/gemini-api/docs/generate-content/image-generation?hl=en)
+（2026-10-30 核对，未付费实测）。兼容 Chat 接口发送
+`extra_body.google.image_config.aspect_ratio/image_size`，同时保留提示词画幅说明；
+不支持此扩展的中转仍可能忽略参数，手动选择模型族不能替中转增加能力。
+
+本次不扩展 Grok 编辑协议、Responses 图像工具或异步恢复。Grok 仍默认仅生成。
