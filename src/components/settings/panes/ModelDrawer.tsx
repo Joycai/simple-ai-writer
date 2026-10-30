@@ -21,6 +21,8 @@
  * The 「将发送」 line above the buttons is built by `lib/ai/modelSummary` from
  * the adapters' own body functions, so it cannot drift from the request.
  */
+import { TokenLimitControl } from "./TokenLimitControl";
+import { parseTokenLimit, formatTokenLimit } from "./tokenLimit";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
 import { semanticPrefs } from "../../../lib/context/semanticPrefs";
 import { retrievalModelWarning } from "./retrievalModelWarning";
@@ -76,7 +78,6 @@ import {
 import { clampVideoFps, MAX_VIDEO_FPS, MIN_VIDEO_FPS } from "../../../lib/ai/videoInput";
 import { ASR_DEFAULT_MODEL_ID, asrIdMismatch } from "../../../lib/asr/formats";
 import { validateImageOutputConfig, SEEDREAM_DIALECTS, type ImageDialect } from "../../../lib/ai/imageDialects";
-import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
 import { ChipDivider, DashChip, Field, Fold, Hint, Note, Section, Subhead, ToggleField } from "./ModelDrawerBits";
 import { Select } from "../../common/Select";
@@ -305,8 +306,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
     priceCachedIn: existing?.priceCachedIn ? String(existing.priceCachedIn) : "",
     priceOut: existing?.priceOut ? String(existing.priceOut) : "",
     prefix: existing?.prefix ?? "",
-    contextSize: existing?.contextSize ? String(existing.contextSize) : "",
-    maxOutput: existing?.maxOutput ? String(existing.maxOutput) : "",
+    contextSize: existing?.contextSize ? formatTokenLimit(existing.contextSize) : "",
+    maxOutput: existing?.maxOutput ? formatTokenLimit(existing.maxOutput) : "",
     // Not `existing.temperature ? …` — a stored 0 is a real setting and must
     // not render as the empty field that means "send nothing".
     temperature: existing?.temperature !== undefined ? String(existing.temperature) : "",
@@ -363,8 +364,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
   const capModel = capabilityModelOf({ modelId: form.modelId.trim(), relayUpstream: upstreamChoice });
   // What the model catalog is asked about — the id less this relay's own prefix (connOptions does the same).
   const catalogId = canonicalModelId(form.modelId, onRelay ? { prefixes: channel?.upstreamPrefixes } : undefined);
-  const parsedCtx = Math.min(MAX_CONTEXT_SIZE, Math.max(0, Math.floor(parseInt(form.contextSize, 10) || 0)));
-  const parsedOut = Math.min(MAX_OUTPUT_SIZE, Math.max(0, Math.floor(parseInt(form.maxOutput, 10) || 0)));
+  const parsedCtx = parseTokenLimit(form.contextSize, MAX_CONTEXT_SIZE) ?? 0;
+  const parsedOut = parseTokenLimit(form.maxOutput, MAX_OUTPUT_SIZE) ?? 0;
   // The three value facts on this route (lib/ai/modelSummary.ts): the
   // author's, the tables' answer when a field is left empty, and what each
   // consumer does with the one in force — the notes under the fields, the
@@ -696,7 +697,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
     });
     setForm((f) => ({
       ...f,
-      maxOutput: prof.maxOutput ? String(prof.maxOutput) : "",
+      maxOutput: prof.maxOutput ? formatTokenLimit(prof.maxOutput) : "",
       temperature: prof.temperature !== undefined ? String(prof.temperature) : "",
       reasoningEffort: prof.reasoningEffort ?? "default",
       thinkingCategory: (prof.thinkingCategory ?? "auto") as ThinkingCategoryId | "auto",
@@ -889,7 +890,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
     : costReported ? t("aiConfig.models.feeGroupHintReported") : t("aiConfig.models.feeGroupHintUnbound");
 
   const limitsHas = parsedCtx > 0 || parsedOut > 0;
-  const ctxLabel = (n: number) => (CONTEXT_SIZE_STOPS.includes(n) ? formatContextSize(n) : n.toLocaleString());
+  const ctxLabel = formatTokenLimit;
   const limitsSum = [
     parsedCtx > 0 && ctxLabel(parsedCtx),
     parsedOut > 0 && parsedOut.toLocaleString(),
@@ -1451,41 +1452,16 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
             <Field label={t("aiConfig.models.ctxLabel")} sub={t("aiConfig.models.unitTokens")}
               hint={t("aiConfig.models.briefCtx")} {...whyProps("ctx", t("aiConfig.models.contextSizeHint"))}
               {...sourceNote(parsedCtx, probed.ctx, facts && contextNote(t, facts.contextSize, valueSource))}>
-              <div className={s.chips}>
-                {/* The windows models actually ship with; the active one clears
-                    on a second click, so unset is one click away. */}
-                {/* Left empty, the stop the tables answer is shown dashed —
-                    followed, not typed (the drawer's "chosen, sends nothing"). */}
-                {CONTEXT_SIZE_STOPS.map((n) => (
-                  <DashChip
-                    key={n}
-                    label={formatContextSize(n)}
-                    active={parsedCtx > 0 ? parsedCtx === n : ctxTable === n}
-                    auto={parsedCtx === 0}
-                    onClick={() => setForm({ ...form, contextSize: parsedCtx === n ? "" : String(n) })}
-                  />
-                ))}
-                <input
-                  className={inputCls(parsedCtx === 0, s.exact)}
-                  type="number" min="0" max={MAX_CONTEXT_SIZE} step="1024"
-                  placeholder={ctxTable && !CONTEXT_SIZE_STOPS.includes(ctxTable) ? ctxTable.toLocaleString() : t("aiConfig.hub.exactValue")}
-                  value={form.contextSize}
-                  onChange={(e) => setForm({ ...form, contextSize: e.target.value })}
-                  aria-label={t("aiConfig.models.ctxLabel")}
-                />
-              </div>
+              <TokenLimitControl value={form.contextSize} max={MAX_CONTEXT_SIZE} fallback={ctxTable}
+                label={t("aiConfig.models.ctxLabel")}
+                onChange={(contextSize) => setForm({ ...form, contextSize })} />
             </Field>
             <Field label={t("aiConfig.models.maxOutLabel")} scope={routeScope} sub={t("aiConfig.models.unitTokens")}
               hint={t("aiConfig.models.briefMaxOut")} {...whyProps("maxOut", t("aiConfig.models.maxOutputHint"))}
               {...sourceNote(parsedOut, probed.out, facts && maxOutputNote(t, facts.maxOutput, valueSource))}>
-              <div className={s.numRow}>
-                <input
-                  className={inputCls(parsedOut === 0, s.num)}
-                  type="number" min="0" max={MAX_OUTPUT_SIZE} step="512"
-                  placeholder={outTable ? outTable.toLocaleString() : t("aiConfig.models.phUnknown")}
-                  value={form.maxOutput}
-                  onChange={(e) => setForm({ ...form, maxOutput: e.target.value })} />
-              </div>
+              <TokenLimitControl value={form.maxOutput} max={MAX_OUTPUT_SIZE} fallback={outTable}
+                label={t("aiConfig.models.maxOutLabel")}
+                onChange={(maxOutput) => setForm({ ...form, maxOutput })} />
             </Field>
             <Field label={t("aiConfig.models.probeLabel")} scope={routeScope} hint={t("aiConfig.models.briefProbe")}>
               <ModelProbePanel
@@ -1504,8 +1480,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                   // learned nothing about output length must leave that value alone.
                   setForm((f) => ({
                     ...f,
-                    contextSize: v.contextSize !== undefined ? String(v.contextSize) : f.contextSize,
-                    maxOutput: v.maxOutput !== undefined ? String(v.maxOutput) : f.maxOutput,
+                    contextSize: v.contextSize !== undefined ? formatTokenLimit(v.contextSize) : f.contextSize,
+                    maxOutput: v.maxOutput !== undefined ? formatTokenLimit(v.maxOutput) : f.maxOutput,
                   }));
                   setProbed({ at: v.probedAt, ctx: v.contextSize, out: v.maxOutput });
                 }}
@@ -2124,7 +2100,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
         <span className={hub.escHint}>{t("aiConfig.hub.escToClose")}</span>
         <span className={hub.footSpacer} />
         <button className={styles.btnSecondary} onClick={onClose}>{t("aiConfig.models.cancel")}</button>
-        <button className={styles.btnPrimary} onClick={() => void handleSave()} disabled={!form.modelId.trim() || saving || (isRetrievalModel && !validRetrievalPath(retrieval.path))}>
+        <button className={styles.btnPrimary} onClick={() => void handleSave()} disabled={parseTokenLimit(form.contextSize, MAX_CONTEXT_SIZE) === null || parseTokenLimit(form.maxOutput, MAX_OUTPUT_SIZE) === null || !form.modelId.trim() || saving || (isRetrievalModel && !validRetrievalPath(retrieval.path))}>
           {saving
             ? (existing ? t("aiConfig.models.editing") : t("aiConfig.models.saving"))
             : (existing ? t("aiConfig.models.edit") : t("aiConfig.models.add"))}

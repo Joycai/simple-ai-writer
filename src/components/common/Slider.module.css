@@ -109,3 +109,8 @@
 .disabled .rail { background: var(--stg-card-head, var(--color-bg-elevated)); }
 .disabled .fill { background: var(--stg-border-menu, var(--color-border-strong)); }
 .disabled .thumb { background: var(--stg-knob, var(--color-text-faint)); box-shadow: none; }
+
+.selectableTick { cursor: pointer; }
+.selectableTick:hover .tickLabel,
+.selectableTick:focus-visible .tickLabel { color: var(--color-accent); }
+.disabled .selectableTick { cursor: default; pointer-events: none; }

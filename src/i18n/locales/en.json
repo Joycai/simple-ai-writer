@@ -2922,6 +2922,8 @@
       "priceLabel": "Price",
       "unitUsdPerM": "USD / 1M tokens",
       "unitTokens": "tokens",
+      "tokenLimitHint": "Enter K, M, or a token count; 1K = 1024, 1M = 1024K. Slider step: 4K. Leave blank for the default.",
+      "tokenLimitInvalid": "Enter a whole token count from 0 to {{max}}, optionally using K or M.",
       "ctxLabel": "Context size",
       "maxOutLabel": "Max output",
       "catLabel": "Thinking parameter category",

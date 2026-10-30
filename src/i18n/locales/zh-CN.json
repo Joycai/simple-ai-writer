@@ -2914,6 +2914,8 @@
       "priceLabel": "单价",
       "unitUsdPerM": "USD / 1M tokens",
       "unitTokens": "tokens",
+      "tokenLimitHint": "支持 K、M 或 token 数字；1K = 1024，1M = 1024K。滑动步进 4K，留空使用默认值。",
+      "tokenLimitInvalid": "请输入 0–{{max}} 的整数 token 数，可使用 K 或 M。",
       "ctxLabel": "上下文大小",
       "maxOutLabel": "最大输出长度",
       "catLabel": "思考参数类目",
