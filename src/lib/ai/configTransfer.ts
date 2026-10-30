@@ -401,6 +401,7 @@ export function parseConfigBundle(
       vendor: r.vendor,
       billing_mode: r.billingMode,
       input_price: r.inputPrice,
+      image_token_prices: r.imageTokenPrices ? JSON.stringify(r.imageTokenPrices) : null,
       cache_input_price: r.cacheInputPrice,
       output_price: r.outputPrice,
       request_price: r.requestPrice,

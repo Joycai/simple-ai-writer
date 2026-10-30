@@ -58,7 +58,10 @@ export interface SpecRate {
   price: number;
 }
 
+interface ImageTokenPrices { input: number; cache: number | null; output: number; }
+
 export interface FeeGroup {
+  imageTokenPrices?: ImageTokenPrices;
   id: string;
   name: string;
   /**
@@ -100,6 +103,7 @@ export interface FeeGroup {
  * 算钱），以及缓存价已经落成一个确定的数（`cacheInputPrice ?? inputPrice`）。
  */
 export interface FeeConfig {
+  imageTokenPrices?: ImageTokenPrices;
   billingMode: BillingMode;
   inputPrice: number;
   /** 已落地：组没填时这里是输入价。行上快照的就是这个数。 */
@@ -127,6 +131,7 @@ export const ZERO_FEE: FeeConfig = {
 
 export function feeConfigOf(g: FeeGroup): FeeConfig {
   return {
+    ...(g.imageTokenPrices ? { imageTokenPrices: g.imageTokenPrices } : {}),
     billingMode: g.billingMode,
     inputPrice: g.inputPrice,
     cachePrice: g.cacheInputPrice ?? g.inputPrice,
@@ -315,6 +320,8 @@ export function matchRate(rates: SpecRate[], spec: OutputSpec): SpecRate | null 
  * 单价跟着量一起传，而不是在这里回头查组：回头查当前价，改一次价历史全变。
  */
 export interface Billed {
+  /** Disjoint modality buckets; total counters must not be charged again. */
+  tokenItems?: { inputTokens: number; cacheTokens: number; outputTokens: number; inputPrice: number; cachePrice: number; outputPrice: number }[];
   billingMode: BillingMode;
   /** 与 `cacheTokens` **不重叠**：二者之和才是全部 prompt token。 */
   inputTokens: number;
@@ -387,9 +394,9 @@ export function costOf(b: Billed): CostParts {
     case "token":
       return {
         ...ZERO_PARTS,
-        input: (fin(b.inputTokens) * fin(b.inputPrice)) / 1_000_000,
-        cache: (fin(b.cacheTokens) * fin(b.cachePrice)) / 1_000_000,
-        output: (fin(b.outputTokens) * fin(b.outputPrice)) / 1_000_000,
+        input: ((b.tokenItems ?? [b]).reduce((sum, item) => sum + fin(item.inputTokens) * fin(item.inputPrice), 0)) / 1_000_000,
+        cache: ((b.tokenItems ?? [b]).reduce((sum, item) => sum + fin(item.cacheTokens) * fin(item.cachePrice), 0)) / 1_000_000,
+        output: ((b.tokenItems ?? [b]).reduce((sum, item) => sum + fin(item.outputTokens) * fin(item.outputPrice), 0)) / 1_000_000,
       };
     case "request":
       return {

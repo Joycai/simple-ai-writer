@@ -142,3 +142,21 @@ Chat Completions 的 `delta.refusal` 与 Responses 的 `response.refusal.delta` 
 拒绝与用量并不互斥，应保留终态报告的 usage。
 来源：[OpenAI Chat SDK](https://github.com/openai/openai-python/blob/main/helpers.md)、
 [Responses streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events)。
+
+## 图片事件（文档核对 2026-10-30，未付费实测）
+
+图片 SSE 不属于 Chat token delta：Images API 的生成完成事件为
+`image_generation.completed`，编辑为 `image_edit.completed`，两者最终图片在
+`b64_json`，usage 位于完成事件；partial_image 事件是预览，不是另一张最终图片。
+Responses 的预览字段是 `partial_image_b64`，终态 `response.completed.output[]`
+里 `image_generation_call.result` 为最终图片。断流前已完成的图片与已报告的 usage
+需要分别保留，EOF 本身不是成功终态。
+
+来源：[生成事件](https://developers.openai.com/api/reference/resources/images/generation-streaming-events)、
+[编辑 API](https://developers.openai.com/api/reference/resources/images/methods/edit)、
+[Responses 图片工具](https://developers.openai.com/api/docs/guides/image-generation)。
+
+Grok `/images/edits` 使用 JSON：单图 `image:{url,type:"image_url"}`，多图
+`images:[{url,type:"image_url"}]`，并非 OpenAI multipart 上传。
+来源：[xAI 单图编辑](https://docs.x.ai/developers/model-capabilities/images/editing)、
+[多图编辑](https://docs.x.ai/developers/model-capabilities/images/multi-image-editing)。

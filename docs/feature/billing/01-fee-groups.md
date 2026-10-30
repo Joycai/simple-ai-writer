@@ -567,3 +567,18 @@ known fresh input and an incomplete cost. Evidence fields are the source for bot
 and presence bits, so fallback counters cannot contradict the evidence snapshot.
 Image adapters reuse the existing protocol usage normalizer, preserving reported cache
 counts (including zero) and Gemini thought tokens without inventing missing fields.
+
+## 图片模态与交付证据（1.99.38）
+
+计费组新增可选 `image_token_prices` JSON：图片输入、图片缓存、图片输出单价。
+未配置时保持原有统一 token 价格；配置后原三项用于文本，图片使用独立价格。
+缓存价 null 继承同模态输入价，0 保持免费。UI、数据库、备份和旧组复用签名均保留此字段。
+
+`costOf` 接受互不重叠的 tokenItems，分模态之后绝不再加总量收费。仅在总量和图片
+桶都已知时推导文本余量；未知模态保持不完整，不拿 total_tokens 充当另一笔用量。
+价格与模态证据保存在 usage_evidence，六段金额仍在写入时由唯一算式生成，历史不重价。
+
+图片原始 usage、上游生成数、最终发送／回显规格先于下载收集。可信报价仍受既有
+平台与主机双重白名单约束（0 是报价）；不因图片接口就信任任意 `cost` 字段。
+Ark 的像素折算 token 不参与 token 计费。取消和下载失败通过结算回调写已知证据，
+待完成的异步任务不提前最终结算，恢复沿用 request_id。

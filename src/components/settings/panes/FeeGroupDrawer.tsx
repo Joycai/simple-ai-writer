@@ -60,6 +60,9 @@ interface Draft {
   name: string;
   vendor: string;
   billingMode: BillingMode;
+  imageInputPrice?: string;
+  imageCachePrice?: string;
+  imageOutputPrice?: string;
   inputPrice: string;
   cacheInputPrice: string;
   outputPrice: string;
@@ -78,6 +81,9 @@ function toDraft(g: FeeGroup | null): Draft {
     name: g?.name ?? "",
     vendor: g?.vendor ?? "",
     billingMode: g?.billingMode ?? "token",
+    imageInputPrice: numStr(g?.imageTokenPrices?.input),
+    imageCachePrice: numStr(g?.imageTokenPrices?.cache),
+    imageOutputPrice: numStr(g?.imageTokenPrices?.output),
     inputPrice: numStr(g?.inputPrice),
     // null（＝同输入价）与 0（＝真免费）在表单里也必须分得开：前者是空串。
     cacheInputPrice: g?.cacheInputPrice === null || g?.cacheInputPrice === undefined ? "" : String(g.cacheInputPrice),
@@ -111,6 +117,9 @@ export function draftToGroup(d: Draft): Omit<FeeGroup, "id" | "createdAt"> {
     return out;
   });
   return {
+    ...(d.imageInputPrice?.trim() || d.imageOutputPrice?.trim() ? { imageTokenPrices: {
+      input: num(d.imageInputPrice ?? ""), cache: d.imageCachePrice?.trim() ? num(d.imageCachePrice) : null, output: num(d.imageOutputPrice ?? ""),
+    } } : {}),
     name: d.name.trim(),
     // 空 ＝ 没填，只有一种长相：这一行漏掉就会在保存时把一个已经填好的厂商
     // 静默抹掉（`vendor` 是可选字段，tsc 不会拦）。
@@ -248,6 +257,16 @@ export function FeeGroupDrawer({
               ))}
             </div>
             <div className={s.hint}>{t("aiConfig.fees.cacheHint")}</div>
+            <div className={ui.sectionLabel}>{t("aiConfig.fees.imageTokenPrices")}</div>
+            <div className={s.triple}>
+              {(["imageInputPrice", "imageCachePrice", "imageOutputPrice"] as const).map((key, i) => (
+                <Combobox key={key} className={s.input} suggestions={[]} value={d[key] ?? ""}
+                  ariaLabel={t(`aiConfig.fees.${["input", "cached", "output"][i]}`)}
+                  placeholder={t(`aiConfig.fees.${["input", "cached", "output"][i]}`)}
+                  onChange={value => patch({ [key]: value })} />
+              ))}
+            </div>
+            <div className={s.hint}>{t("aiConfig.fees.imageTokenHint")}</div>
           </div>
         )}
 

@@ -1,3 +1,5 @@
+import type { ImageEvidence } from "./imageEvidence";
+import type { FeeConfig } from "./feeGroup";
 /**
  * 用量行：一次计费请求记下来的那一行，以及**唯一的那个写入口**。
  *
@@ -42,6 +44,8 @@ export interface RecordUsageInput {
   usageEvidence?: {
     outcome: "complete" | "failed" | "cancelled";
     source: "reported" | "unreported";
+    media?: ImageEvidence;
+    tokenPrices?: FeeConfig["imageTokenPrices"];
     fields: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; reportedCost?: number };
   };
   model: Pick<Model, "id" | "fee">;
@@ -117,6 +121,24 @@ export function buildUsageRow(input: RecordUsageInput, nowMs: number = Date.now(
     input.reportedCost ?? null,
   );
   const withRequests: Billed = { ...billed, requests: Math.max(0, input.requests ?? 1) };
+  const modalities = input.usageEvidence?.media?.modalities;
+  if (fee.imageTokenPrices && modalities) {
+    const img = modalities.image ?? {};
+    const text = modalities.text ?? {};
+    const bucket = (part: typeof img, prices: { input: number; cache: number | null; output: number }) => ({
+      inputTokens: Math.max(0, count(part.inputTokens) - count(part.cachedTokens)),
+      cacheTokens: count(part.cachedTokens), outputTokens: count(part.outputTokens),
+      inputPrice: prices.input, cachePrice: prices.cache ?? prices.input, outputPrice: prices.output,
+    });
+    // Derive a complement only when both the total and image bucket exist.
+    const complement = (total: number | undefined, image: number | undefined) =>
+      known(total) && known(image) ? Math.max(0, total! - image!) : undefined;
+    withRequests.tokenItems = [bucket({
+      inputTokens: text.inputTokens ?? complement(inputCount, img.inputTokens),
+      cachedTokens: text.cachedTokens ?? complement(cacheCount, img.cachedTokens),
+      outputTokens: text.outputTokens ?? complement(outputCount, img.outputTokens),
+    }, { input: fee.inputPrice, cache: fee.cachePrice, output: fee.outputPrice }), bucket(img, fee.imageTokenPrices)];
+  }
   // `costOf()` 只调一次，总额与分项都从这一次的结果来——调两次就有了两个
   // 可能不一致的数，而它们不一致的时候没有任何东西会报错。
   const parts = costOf(withRequests);
@@ -126,7 +148,9 @@ export function buildUsageRow(input: RecordUsageInput, nowMs: number = Date.now(
   const usageIncomplete = usageKnown !== 7;
   const interrupted = input.usageEvidence && input.usageEvidence.outcome !== "complete";
   const costIncomplete = !hasReportedCost(input.reportedCost) && (
-    !input.model.fee || !!interrupted || (fee.billingMode === "token"
+    !input.model.fee || !!interrupted
+    || (fee.billingMode === "token" && !!fee.imageTokenPrices && (!modalities || !known(modalities.image?.inputTokens) || !known(modalities.image?.outputTokens) || !known(modalities.image?.cachedTokens)))
+    || (fee.billingMode === "token"
       ? !known(fields ? fields.inputTokens : input.promptTokens)
         || !known(fields ? fields.outputTokens : input.completionTokens)
         || (fee.cachePrice !== fee.inputPrice && !known(fields ? fields.cachedTokens : input.cachedTokens))
@@ -175,7 +199,7 @@ export async function recordUsage(
   input: RecordedUsage,
 ): Promise<void> {
   const row = buildUsageRow(input);
-  const values = [...insertValues(row), input.requestId ?? crypto.randomUUID(), input.usageEvidence ? JSON.stringify(input.usageEvidence) : null,
+  const values = [...insertValues(row), input.requestId ?? crypto.randomUUID(), input.usageEvidence ? JSON.stringify({ ...input.usageEvidence, tokenPrices: feeOf(input.model).imageTokenPrices }) : null,
     row.usageIncomplete ? 1 : 0, row.costIncomplete ? 1 : 0, row.usageKnown];
   await enqueueUsage(projectPath, values);
 }

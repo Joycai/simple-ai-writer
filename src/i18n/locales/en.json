@@ -3075,7 +3075,22 @@
       "capsFamilyAuto": "Auto (identify by model ID)",
       "capsDialectNanobanana2": "Nano Banana 2",
       "capsFamilyEffective": "Effective: {{family}}",
-      "capsRouteEffective": "Effective endpoint: {{route}}"
+      "capsRouteEffective": "Effective endpoint: {{route}}",
+      "imageDriver": "Responses driver model ID",
+      "imageStream": "Stream image results",
+      "imageTaskMode": "Image task",
+      "imageSingle": "Independent images",
+      "imageGroup": "Related image set",
+      "imageLayers": "Layer decomposition (one input image)",
+      "imageSearch": "Allow web search (may incur additional charges)",
+      "imagePending": "Recoverable image tasks",
+      "imagePendingHint": "Retry the same image request to resume polling. Forget only after checking the provider task history.",
+      "imageForget": "Forget task reference",
+      "imageUnknown": "Submission outcome unknown",
+      "imageForgetWarning": "This does not cancel the upstream task or refund its cost. After forgetting, retrying submits a new paid request. Confirm only after checking the upstream task.",
+      "capsRouteResponses": "Responses · image_generation",
+      "capsRouteMinimax": "MiniMax · image_generation",
+      "capsRouteMidjourney": "midjourney-proxy · /mj"
     },
     "probe": {
       "title": "Probe real limits",
@@ -3383,7 +3398,9 @@
       "matchedModelsMore": "Matched model {{models}} and {{more}} more",
       "listCount": "{{groups}} groups · {{vendors}} vendors",
       "listCountNone": "{{groups}} groups · {{vendors}} vendors · {{none}} without one",
-      "sectionCount_one": "{{count}} group"
+      "sectionCount_one": "{{count}} group",
+      "imageTokenPrices": "Image tokens · per million",
+      "imageTokenHint": "Optional separate image input, cache and output prices. Leave input and output blank to use the common token prices. Missing modality usage is marked incomplete."
     }
   },
   "lore": {

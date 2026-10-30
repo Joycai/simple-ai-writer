@@ -1,3 +1,4 @@
+import { parseImageOptions, type ImageOptions } from "./imageOptions";
 /**
  * SQLite-backed AI configuration storage: providers, models, and prompt
  * templates, plus the legacy plaintext-key migration helpers used by keyStore.
@@ -89,6 +90,7 @@ export type AsrFormat = "dashscope-filetrans" | "dashscope-sync";
  * runtime degrades visibly when a request proves the declaration wrong.
  */
 export interface ImageCaps {
+  options?: ImageOptions;
   overrides?: ImageCapabilityOverrides;
   defaults?: ImageParamSelection;
   /** Accepts input images — editing / img2img. False for generate-only endpoints. */
@@ -1487,7 +1489,7 @@ export function parseAsrFormat(raw: unknown): AsrFormat | undefined {
  * would otherwise be dropped from every stored model the day it ships.
  */
 const IMAGE_ROUTES: Record<ImageRoute, true> = {
-  "images-api": true, chat: true, gemini: true, dashscope: true, comfyui: true, ark: true,
+  "images-api": true, chat: true, gemini: true, dashscope: true, comfyui: true, ark: true, responses: true, minimax: true, midjourney: true,
 };
 const IMAGE_DIALECT_IDS: Record<ImageDialect, true> = {
   generic: true, "nanobanana-2": true, nanobanana: true, "gpt-image-2": true, "gpt-image-2.5": true, "grok-imagine": true, "wan2.7": true, "qwen-image": true,
@@ -1520,7 +1522,7 @@ export function parseImageCaps(raw: unknown): ImageCaps | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const r = value as Record<string, unknown>;
 
-  const caps: ImageCaps = { ...parseImageOutputCaps(r) };
+  const caps: ImageCaps = { ...parseImageOutputCaps(r), ...(parseImageOptions(r.options) ? { options: parseImageOptions(r.options) } : {}) };
   if (typeof r.edit === "boolean") caps.edit = r.edit;
   if (listed(IMAGE_DIALECT_IDS, r.dialect)) caps.dialect = r.dialect as ImageDialect;
   // An empty list is kept: it means "send no size", which absent does not.

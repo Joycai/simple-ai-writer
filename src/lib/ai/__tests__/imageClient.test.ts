@@ -45,21 +45,25 @@ function mockJson(payload: unknown, status = 200) {
   return calls;
 }
 
+vi.mock("../imageTasks", () => ({
+  imageTaskKey: vi.fn(async () => "a".repeat(64)), readImageTask: vi.fn(async () => undefined),
+  reserveImageTask: vi.fn(async () => true), saveImageTask: vi.fn(async () => {}), forgetImageTask: vi.fn(async () => {}),
+}));
 afterEach(() => vi.unstubAllGlobals());
 
 /** Base64 whose leading bytes carry a real signature — what mime sniffing keys on. */
-const PNG_B64 = btoa("\x89PNG\r\n\x1a\n" + "0".repeat(60));
-const JPEG_B64 = btoa("\xff\xd8\xff\xe0" + "0".repeat(60));
+import { PNG_B64, JPEG_B64 } from "./imageFixtures";
+
 
 describe("generateImage · OpenAI shape", () => {
   it("turns b64_json into a data URL and reports token usage", async () => {
     mockJson({
-      data: [{ b64_json: "aGk=" }],
+      data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }],
       usage: { input_tokens: 12, output_tokens: 34, input_tokens_details: { cached_tokens: 4 } },
     });
     const res = await generateImage(OPENAI, { prompt: "a cat" });
     expect(res.images).toHaveLength(1);
-    expect(res.images[0].dataUrl).toBe("data:image/png;base64,aGk=");
+    expect(res.images[0].dataUrl).toBe("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==");
     expect(res.usage).toEqual({ inputTokens: 12, outputTokens: 34, cachedTokens: 4 });
     expect(res.requestId).toEqual(expect.any(String));
     const next = await generateImage(OPENAI, { prompt: "a cat" });
@@ -67,12 +71,12 @@ describe("generateImage · OpenAI shape", () => {
   });
 
   it("omits `size` unless the caller asked for one", async () => {
-    const calls = mockJson({ data: [{ b64_json: "aGk=" }] });
+    const calls = mockJson({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] });
     await generateImage(OPENAI, { prompt: "a cat" });
     expect(calls[0].body).not.toHaveProperty("size");
 
     vi.unstubAllGlobals();
-    const sized = mockJson({ data: [{ b64_json: "aGk=" }] });
+    const sized = mockJson({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] });
     await generateImage(OPENAI, { prompt: "a cat", size: "1024x1024" });
     expect(sized[0].body.size).toBe("1024x1024");
   });
@@ -81,12 +85,12 @@ describe("generateImage · OpenAI shape", () => {
     // A signed-URL response costs a second network round-trip that can fail
     // after the generation is already billed. `extraBody` can still drop the
     // field for relays that reject it.
-    const calls = mockJson({ data: [{ b64_json: "aGk=" }] });
+    const calls = mockJson({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] });
     await generateImage(OPENAI, { prompt: "a cat" });
     expect(calls[0].body.response_format).toBe("b64_json");
 
     vi.unstubAllGlobals();
-    const overridden = mockJson({ data: [{ b64_json: "aGk=" }] });
+    const overridden = mockJson({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] });
     await generateImage(OPENAI, { prompt: "a cat", extraBody: { response_format: undefined } });
     expect(overridden[0].body.response_format).toBeUndefined();
   });
@@ -104,7 +108,7 @@ describe("generateImage · OpenAI shape", () => {
         ? new Response(JSON.stringify({
             error: { message: "Unknown parameter: 'response_format'.", param: "response_format" },
           }), { status: 400, headers: { "content-type": "application/json" } })
-        : new Response(JSON.stringify({ data: [{ b64_json: "aGk=" }] }), {
+        : new Response(JSON.stringify({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] }), {
             status: 200, headers: { "content-type": "application/json" },
           });
     }));
@@ -123,12 +127,12 @@ describe("generateImage · OpenAI shape", () => {
   it("sends `n` only when it isn't the default", async () => {
     // dall-e-3 rejects any n but 1, and omitting it means 1 everywhere — the
     // same rule the edit and Gemini routes already followed.
-    const one = mockJson({ data: [{ b64_json: "aGk=" }] });
+    const one = mockJson({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] });
     await generateImage(OPENAI, { prompt: "x", n: 1 });
     expect(one[0].body).not.toHaveProperty("n");
 
     vi.unstubAllGlobals();
-    const many = mockJson({ data: [{ b64_json: "aGk=" }, { b64_json: "aGk=" }] });
+    const many = mockJson({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }, { b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] });
     await generateImage(OPENAI, { prompt: "x", n: 2 });
     expect(many[0].body.n).toBe(2);
   });
@@ -136,7 +140,7 @@ describe("generateImage · OpenAI shape", () => {
   it("reads the format off the bytes instead of assuming PNG", async () => {
     // gpt-image-1 takes an output_format, and relays return whatever their
     // upstream produced — a JPEG saved as `.png` opens nowhere.
-    const jpeg = btoa("\xff\xd8\xff\xe0\x00\x10JFIF");
+    const jpeg = JPEG_B64;
     mockJson({ data: [{ b64_json: jpeg }] });
     const res = await generateImage(OPENAI, { prompt: "x" });
     expect(res.images[0].mime).toBe("image/jpeg");
@@ -145,9 +149,9 @@ describe("generateImage · OpenAI shape", () => {
   it("accepts base64 delivered in the `url` field", async () => {
     // A common relay habit. Fetching it as a link happens to work in a browser
     // and does not in Tauri's reqwest transport.
-    mockJson({ data: [{ url: "data:image/webp;base64,aGk=" }] });
+    mockJson({ data: [{ url: "data:image/webp;base64,UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoCAAIAAUAmJaACdLoB+AADsAD+8ut//NgVzXPv9//S4P0uD9Lg/9KQAAA=" }] });
     const res = await generateImage(OPENAI, { prompt: "x" });
-    expect(res.images[0]).toEqual({ dataUrl: "data:image/webp;base64,aGk=", mime: "image/webp" });
+    expect(res.images[0]).toEqual({ dataUrl: "data:image/webp;base64,UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoCAAIAAUAmJaACdLoB+AADsAD+8ut//NgVzXPv9//S4P0uD9Lg/9KQAAA=", mime: "image/webp" });
   });
 
   it("refuses a download that isn't an image", async () => {
@@ -181,7 +185,7 @@ describe("generateImage · OpenAI shape", () => {
         }
         return String(url).endsWith("/dead")
           ? new Response("gone", { status: 404 })
-          : new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), { status: 200, headers: { "content-type": "image/png" } });
+          : new Response(Uint8Array.from(atob(PNG_B64), c => c.charCodeAt(0)), { status: 200, headers: { "content-type": "image/png" } });
       }),
     );
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -194,7 +198,7 @@ describe("generateImage · OpenAI shape", () => {
   it("downloads a URL response into bytes rather than storing the link", async () => {
     // Signed URLs expire; a gallery entry pointing at one would rot within the
     // hour, so the adapter must inline the bytes at generation time.
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const png = Uint8Array.from(atob(PNG_B64), c => c.charCodeAt(0));
     let call = 0;
     vi.stubGlobal(
       "fetch",
@@ -212,7 +216,7 @@ describe("generateImage · OpenAI shape", () => {
     const res = await generateImage(OPENAI, { prompt: "a cat" });
     expect(call).toBe(2);
     expect(res.images[0].dataUrl.startsWith("data:image/png;base64,")).toBe(true);
-    expect(atob(res.images[0].dataUrl.split(",")[1])).toBe("\x89PNG");
+    expect(atob(res.images[0].dataUrl.split(",")[1])).toBe(atob(PNG_B64));
   });
 
   it("surfaces an error delivered inside a 200 body", async () => {
@@ -230,7 +234,7 @@ describe("generateImage · Gemini shape", () => {
   it("extracts inlineData and keeps any accompanying text", async () => {
     const calls = mockJson({
       candidates: [{
-        content: { parts: [{ text: "here you go" }, { inlineData: { mimeType: "image/webp", data: "aGk=" } }] },
+        content: { parts: [{ text: "here you go" }, { inlineData: { mimeType: "image/webp", data: "UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoCAAIAAUAmJaACdLoB+AADsAD+8ut//NgVzXPv9//S4P0uD9Lg/9KQAAA=" } }] },
         finishReason: "STOP",
       }],
       usageMetadata: { promptTokenCount: 7, candidatesTokenCount: 1290, cachedContentTokenCount: 0, thoughtsTokenCount: 10 },
@@ -239,7 +243,7 @@ describe("generateImage · Gemini shape", () => {
     expect(calls[0].url).toContain(":generateContent");
     expect((calls[0].body.generationConfig as Record<string, unknown>).responseModalities)
       .toEqual(["TEXT", "IMAGE"]);
-    expect(res.images[0]).toEqual({ dataUrl: "data:image/webp;base64,aGk=", mime: "image/webp" });
+    expect(res.images[0]).toEqual({ dataUrl: "data:image/webp;base64,UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoCAAIAAUAmJaACdLoB+AADsAD+8ut//NgVzXPv9//S4P0uD9Lg/9KQAAA=", mime: "image/webp" });
     expect(res.text).toBe("here you go");
     expect(res.usage).toEqual({ inputTokens: 7, outputTokens: 1300, cachedTokens: 0 });
   });
@@ -270,17 +274,17 @@ describe("generateImage · chat route", () => {
 
   it("posts to /chat/completions instead of the images endpoint", async () => {
     const calls = mockJson({
-      choices: [{ message: { images: [{ image_url: { url: "data:image/png;base64,aGk=" } }] } }],
+      choices: [{ message: { images: [{ image_url: { url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" } }] } }],
     });
     const res = await generateImage(RELAY, { prompt: "a cat" });
     expect(calls[0].url).toBe("https://api.example.com/v1/chat/completions");
     expect(calls[0].body.model).toBe("img-1");
-    expect(res.images[0].dataUrl).toBe("data:image/png;base64,aGk=");
+    expect(res.images[0].dataUrl).toBe("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==");
   });
 
   it("pulls the image out of markdown in the message text", async () => {
     mockJson({
-      choices: [{ message: { content: "画好了：\n![img](data:image/webp;base64,aGk=)" } }],
+      choices: [{ message: { content: "画好了：\n![img](data:image/webp;base64,UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoCAAIAAUAmJaACdLoB+AADsAD+8ut//NgVzXPv9//S4P0uD9Lg/9KQAAA=)" } }],
     });
     const res = await generateImage(RELAY, { prompt: "a cat" });
     expect(res.images[0].mime).toBe("image/webp");
@@ -292,7 +296,7 @@ describe("generateImage · chat route", () => {
     mockJson({
       choices: [{ message: { content: [
         { type: "text", text: "done" },
-        { type: "image_url", image_url: { url: "data:image/png;base64,aGk=" } },
+        { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" } },
       ] } }],
     });
     const res = await generateImage(RELAY, { prompt: "a cat" });
@@ -352,7 +356,7 @@ describe("generateImage · chat route", () => {
         status: 200, headers: { "content-type": "image/png" },
       });
     }));
-    const res = await generateImage(RELAY, { prompt: "make it green", images: ["data:image/png;base64,aGk="] });
+    const res = await generateImage(RELAY, { prompt: "make it green", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="] });
     expect(calls[1]).toBe(link);
     expect(res.images).toHaveLength(1);
     // The link's content-type said PNG; the bytes are JPEG, and the bytes win.
@@ -366,7 +370,7 @@ describe("generateImage · chat route", () => {
   });
 
   it("is only taken when declared — openai_compat defaults to the images API", async () => {
-    const calls = mockJson({ data: [{ b64_json: "aGk=" }] });
+    const calls = mockJson({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] });
     await generateImage({ ...OPENAI, standard: "openai_compat" }, { prompt: "x" });
     expect(calls[0].url).toBe("https://api.example.com/v1/images/generations");
   });
@@ -375,7 +379,7 @@ describe("generateImage · chat route", () => {
 describe("generateImage · aspect ratio", () => {
   it("sends the ratio to Gemini, which has no size parameter", async () => {
     const calls = mockJson({
-      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "aGk=" } }] } }],
+      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" } }] } }],
     });
     await generateImage(GEMINI, { prompt: "x", aspect: "9:16", size: "1024x1024" });
     const cfg = calls[0].body.generationConfig as Record<string, unknown>;
@@ -385,7 +389,7 @@ describe("generateImage · aspect ratio", () => {
 
   it("sends the resolution tier as imageConfig.imageSize alongside the ratio", async () => {
     const calls = mockJson({
-      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "aGk=" } }] } }],
+      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" } }] } }],
     });
     await generateImage(GEMINI, { prompt: "x", aspect: "16:9", imageSize: "2K" });
     const cfg = calls[0].body.generationConfig as Record<string, unknown>;
@@ -394,7 +398,7 @@ describe("generateImage · aspect ratio", () => {
 
   it("omits imageConfig entirely when neither field is set", async () => {
     const calls = mockJson({
-      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "aGk=" } }] } }],
+      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" } }] } }],
     });
     await generateImage(GEMINI, { prompt: "x" });
     const cfg = calls[0].body.generationConfig as Record<string, unknown>;
@@ -404,18 +408,18 @@ describe("generateImage · aspect ratio", () => {
 
 describe("generateImage · quality tier", () => {
   it("sends `quality` on the OpenAI route only when set", async () => {
-    let calls = mockJson({ data: [{ b64_json: "aGk=" }] });
+    let calls = mockJson({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] });
     await generateImage(OPENAI, { prompt: "x", quality: "high" });
     expect(calls[0].body.quality).toBe("high");
 
-    calls = mockJson({ data: [{ b64_json: "aGk=" }] });
+    calls = mockJson({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] });
     await generateImage(OPENAI, { prompt: "x" });
     expect(calls[0].body).not.toHaveProperty("quality");
   });
 });
 
 describe("generateImage · editing", () => {
-  const SOURCE = "data:image/png;base64,aGk=";
+  const SOURCE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==";
 
   /** Stub fetch for a multipart request, capturing the parsed form. */
   function mockMultipart(payload: unknown) {
@@ -441,7 +445,7 @@ describe("generateImage · editing", () => {
     // The header must come from the webview's FormData serialization, boundary
     // included — declaring it by hand breaks every such request. See
     // docs/feature/image-generation-plan.md §2.3.
-    const calls = mockMultipart({ data: [{ b64_json: "aGk=" }] });
+    const calls = mockMultipart({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] });
     await generateImage(OPENAI, { prompt: "make it blue", images: [SOURCE] });
 
     expect(calls[0].url).toBe("https://api.example.com/v1/images/edits");
@@ -469,7 +473,7 @@ describe("generateImage · editing", () => {
             { status: 400, headers: { "content-type": "application/json" } },
           );
         }
-        return new Response(JSON.stringify({ data: [{ b64_json: "aGk=" }] }), {
+        return new Response(JSON.stringify({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] }), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
@@ -497,7 +501,7 @@ describe("generateImage · editing", () => {
             { status: 400, headers: { "content-type": "application/json" } },
           );
         }
-        return new Response(JSON.stringify({ data: [{ b64_json: "aGk=" }] }), {
+        return new Response(JSON.stringify({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] }), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
@@ -526,21 +530,21 @@ describe("generateImage · editing", () => {
   it("switches to the plural field name for several inputs", async () => {
     // `image` for one, `image[]` for many — older endpoints only know the
     // singular form, so sending the plural always would break them.
-    const calls = mockMultipart({ data: [{ b64_json: "aGk=" }] });
+    const calls = mockMultipart({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] });
     await generateImage(OPENAI, { prompt: "blend", images: [SOURCE, SOURCE] });
     expect(calls[0].form.getAll("image[]")).toHaveLength(2);
     expect(calls[0].form.get("image")).toBeNull();
   });
 
   it("sends the mask when one is given", async () => {
-    const calls = mockMultipart({ data: [{ b64_json: "aGk=" }] });
+    const calls = mockMultipart({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] });
     await generateImage(OPENAI, { prompt: "repaint", images: [SOURCE], mask: SOURCE });
     expect(calls[0].form.get("mask")).toBeInstanceOf(Blob);
   });
 
   it("keeps Gemini on one endpoint, with the source image inline", async () => {
     const calls = mockJson({
-      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "aGk=" } }] } }],
+      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" } }] } }],
     });
     await generateImage(GEMINI, { prompt: "make it blue", images: [SOURCE] });
     expect(calls[0].url).toContain(":generateContent");
@@ -576,7 +580,7 @@ describe("generateImage · dashscope route", () => {
     route: "dashscope" as const,
   };
   const NATIVE = "https://dashscope.aliyuncs.com/api/v1";
-  const IMAGE_PART = { image: "data:image/png;base64,aGk=" };
+  const IMAGE_PART = { image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" };
 
   /** Like mockJson, but keeps the request headers too. */
   function mockDashscope(payload: unknown, status = 200) {
@@ -639,7 +643,7 @@ describe("generateImage · dashscope route", () => {
     expect(params.size).toBe("1024*1024");
     expect(params.n).toBe(1);
     expect(params.watermark).toBe(false);
-    expect(res.images[0].dataUrl).toBe("data:image/png;base64,aGk=");
+    expect(res.images[0].dataUrl).toBe("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==");
   });
 
   it("sends an edit as image parts before the instruction, on the same endpoint", async () => {
@@ -660,7 +664,7 @@ describe("generateImage · dashscope route", () => {
   });
 
   it("downloads a URL answer immediately — DashScope links die in 24 hours", async () => {
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const png = Uint8Array.from(atob(PNG_B64), c => c.charCodeAt(0));
     let call = 0;
     vi.stubGlobal(
       "fetch",
@@ -690,7 +694,7 @@ describe("generateImage · dashscope route", () => {
     mockDashscope({ code: "DataInspectionFailed", message: "inappropriate content" }, 400);
     let caught: unknown;
     try {
-      await generateImage(DASHSCOPE, { prompt: "x", images: ["data:image/png;base64,aGk="] });
+      await generateImage(DASHSCOPE, { prompt: "x", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="] });
     } catch (e) {
       caught = e;
     }
@@ -717,7 +721,7 @@ describe("generateImage · dashscope route", () => {
 
     it("submits with X-DashScope-Async and polls the task to completion", async () => {
       vi.useFakeTimers();
-      const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+      const png = Uint8Array.from(atob(PNG_B64), c => c.charCodeAt(0));
       const calls: { url: string; headers: Headers; method: string }[] = [];
       let poll = 0;
       vi.stubGlobal(
@@ -762,7 +766,7 @@ describe("generateImage · dashscope route", () => {
       // 的工具步——那和端点挂了长得一模一样。上限是有用的那一半：把「是不是卡了」
       // 变成「它还有八分钟」。
       vi.useFakeTimers();
-      const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+      const png = Uint8Array.from(atob(PNG_B64), c => c.charCodeAt(0));
       let poll = 0;
       vi.stubGlobal(
         "fetch",
@@ -807,7 +811,7 @@ describe("generateImage · dashscope route", () => {
     it("同步路由一次都不报——一个请求没有中间状态可言", async () => {
       // 那种「先动起来再说」的假进度条正是这里要避免的：一条 tick 就是一句
       // 「我知道进展」，而同步路由在发出去和答回来之间什么都不知道。
-      mockJson({ data: [{ b64_json: "aGk=" }] });
+      mockJson({ data: [{ b64_json: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==" }] });
       const seen: ImageProgress[] = [];
       await generateImage(OPENAI, { prompt: "x", onProgress: (p) => seen.push(p) });
       expect(seen).toEqual([]);
@@ -879,7 +883,7 @@ describe("generateImage · ComfyUI route", () => {
     comfy: { workflow: JSON.stringify(WORKFLOW) },
   };
 
-  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+  const png = Uint8Array.from(atob(PNG_B64), c => c.charCodeAt(0));
 
   afterEach(() => vi.useRealTimers());
 
@@ -1020,7 +1024,7 @@ describe("generateImage · ComfyUI route", () => {
     }, 0);
 
     const pending = generateImage(conn, {
-      prompt: "a cat", negative: "blurry", images: ["data:image/png;base64,aGk="],
+      prompt: "a cat", negative: "blurry", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="],
     });
     pending.catch(() => {});
     await vi.advanceTimersByTimeAsync(1_000);
@@ -1040,7 +1044,7 @@ describe("generateImage · ComfyUI route", () => {
   it("refuses input images when the workflow has no LoadImage slot — before any upload", async () => {
     const calls = mockComfy({}, 0);
     await expect(
-      generateImage(COMFY, { prompt: "x", images: ["data:image/png;base64,aGk="] }),
+      generateImage(COMFY, { prompt: "x", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="] }),
     ).rejects.toThrow(/no LoadImage node/);
     expect(calls.some((c) => c.url.endsWith("/upload/image"))).toBe(false);
   });
@@ -1050,7 +1054,7 @@ describe("generateImage · ComfyUI route", () => {
     const conn = { ...COMFY, comfy: { workflow: JSON.stringify(wf) } };
     mockComfy({}, 0);
     await expect(
-      generateImage(conn, { prompt: "x", images: ["data:a;base64,aGk=", "data:a;base64,aGk="] }),
+      generateImage(conn, { prompt: "x", images: ["data:a;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==", "data:a;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="] }),
     ).rejects.toThrow(/1 image input/);
   });
 
@@ -1102,13 +1106,13 @@ describe("generateImage · ark route (火山方舟 Seedream)", () => {
 
   it("asks for transparency as the pair the endpoint insists on, only when told to", async () => {
     const plain = mockJson({ data: [{ b64_json: PNG_B64 }] });
-    await generateImage(ARK, { prompt: "edit", images: ["data:image/png;base64,aGk="] });
+    await generateImage(ARK, { prompt: "edit", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="] });
     expect(plain[0].body).not.toHaveProperty("background");
     expect(plain[0].body).not.toHaveProperty("output_format");
 
     vi.unstubAllGlobals();
     const kept = mockJson({ data: [{ b64_json: PNG_B64 }] });
-    await generateImage(ARK, { prompt: "edit", images: ["data:image/png;base64,aGk="], transparentBackground: true });
+    await generateImage(ARK, { prompt: "edit", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="], transparentBackground: true });
     // Transparent output with jpeg is a 400, so both or neither.
     expect(kept[0].body.background).toBe("transparent");
     expect(kept[0].body.output_format).toBe("png");
@@ -1138,7 +1142,7 @@ describe("generateImage · ark route (火山方舟 Seedream)", () => {
       { status: 400, payload: { error: { code: "InvalidParameter", param: "image", message: "The parameter `image` specified in the request are not valid: transparent background requires a PNG input with at least one transparent pixel." } } },
       { status: 200, payload: { data: [{ b64_json: PNG_B64 }] } },
     ]);
-    const res = await generateImage(ARK, { prompt: "edit", images: ["data:image/png;base64,aGk="], transparentBackground: true });
+    const res = await generateImage(ARK, { prompt: "edit", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="], transparentBackground: true });
     expect(calls).toHaveLength(2);
     expect(calls[0].background).toBe("transparent");
     expect(calls[1]).not.toHaveProperty("background");
@@ -1162,13 +1166,13 @@ describe("generateImage · ark route (火山方舟 Seedream)", () => {
 
   it("sends references as a JSON `image` field — one as a string, several as an array, mime lowercased", async () => {
     const one = mockJson({ data: [{ b64_json: PNG_B64 }] });
-    await generateImage(ARK, { prompt: "edit", images: ["data:image/PNG;base64,aGk="] });
-    expect(one[0].body.image).toBe("data:image/png;base64,aGk=");
+    await generateImage(ARK, { prompt: "edit", images: ["data:image/PNG;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="] });
+    expect(one[0].body.image).toBe("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==");
 
     vi.unstubAllGlobals();
     const two = mockJson({ data: [{ b64_json: PNG_B64 }] });
-    await generateImage(ARK, { prompt: "edit", images: ["data:image/png;base64,aGk=", "data:image/jpeg;base64,aGk="] });
-    expect(two[0].body.image).toEqual(["data:image/png;base64,aGk=", "data:image/jpeg;base64,aGk="]);
+    await generateImage(ARK, { prompt: "edit", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==", "data:image/jpeg;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="] });
+    expect(two[0].body.image).toEqual(["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg==", "data:image/jpeg;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="]);
     // Still the generations path — Seedream has no /images/edits.
     expect(two[0].url).toMatch(/\/images\/generations$/);
   });
@@ -1203,7 +1207,7 @@ describe("generateImage · ark route (火山方舟 Seedream)", () => {
 
   it("throws a refusal with its code — never read as 'cannot edit'", async () => {
     mockJson({ data: [{ error: { code: "OutputImageSensitiveContentDetected", message: "no" } }] });
-    const err = await generateImage(ARK, { prompt: "a cat", images: ["data:image/png;base64,aGk="] }).catch((e) => e);
+    const err = await generateImage(ARK, { prompt: "a cat", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="] }).catch((e) => e);
     expect(err).toBeInstanceOf(ImageHttpError);
     expect(err.code).toBe("OutputImageSensitiveContentDetected");
     expect(isEditUnsupportedError(err)).toBe(false);

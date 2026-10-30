@@ -3067,7 +3067,22 @@
       "capsFamilyAuto": "自动（按模型 ID 识别）",
       "capsDialectNanobanana2": "Nano Banana 2",
       "capsFamilyEffective": "当前生效：{{family}}",
-      "capsRouteEffective": "当前接口：{{route}}"
+      "capsRouteEffective": "当前接口：{{route}}",
+      "imageDriver": "Responses 主模型 ID",
+      "imageStream": "流式接收图片",
+      "imageTaskMode": "图片任务",
+      "imageSingle": "独立图片",
+      "imageGroup": "关联组图",
+      "imageLayers": "拆分图层（需一张输入图）",
+      "imageSearch": "允许联网搜索（可能另行计费）",
+      "imagePending": "待恢复的图片任务",
+      "imagePendingHint": "重新运行相同图片请求将继续查询原任务。核对供应商任务记录后，才可清除恢复记录。",
+      "imageForget": "清除恢复记录",
+      "imageUnknown": "提交结果未知",
+      "imageForgetWarning": "这不会取消上游任务或退还费用。清除后再次运行会提交新的付费请求。请先核对上游任务，再确认清除。",
+      "capsRouteResponses": "Responses · image_generation",
+      "capsRouteMinimax": "MiniMax · image_generation",
+      "capsRouteMidjourney": "midjourney-proxy · /mj"
     },
     "probe": {
       "title": "探测真实上限",
@@ -3374,7 +3389,9 @@
       "matchedModels": "命中模型 {{models}}",
       "matchedModelsMore": "命中模型 {{models}} 等 {{n}} 个",
       "listCount": "{{groups}} 个组 · {{vendors}} 个厂商",
-      "listCountNone": "{{groups}} 个组 · {{vendors}} 个厂商 · {{none}} 个没填"
+      "listCountNone": "{{groups}} 个组 · {{vendors}} 个厂商 · {{none}} 个没填",
+      "imageTokenPrices": "图片 token · 每百万",
+      "imageTokenHint": "可单独填写图片输入、缓存和输出价格。输入与输出均留空时沿用通用 token 价格。上游未报告模态明细时，用量标记为不完整。"
     }
   },
   "lore": {

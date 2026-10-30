@@ -42,7 +42,7 @@ export function rateSpan(g: FeeGroup): string {
 
 /** 组真的会收钱吗。全 0 的组（本机 Ollama）读作「不收」，行首方块画成虚线。 */
 export function isPriced(g: FeeGroup): boolean {
-  if (g.billingMode === "token") return g.inputPrice > 0 || g.outputPrice > 0;
+  if (g.billingMode === "token") return g.inputPrice > 0 || g.outputPrice > 0 || (g.imageTokenPrices?.input ?? 0) > 0 || (g.imageTokenPrices?.cache ?? 0) > 0 || (g.imageTokenPrices?.output ?? 0) > 0;
   if (g.billingMode === "request") return g.requestPrice > 0;
   return ratePrices(g).length > 0;
 }
@@ -73,7 +73,9 @@ export function feeSummary(g: FeeGroup | null, w: FeeLabelWords): string {
     // 缓存价留空 ＝ 同输入价。摘要里写出继承来的那个数，而不是留白：
     // 「没写」和「不收」在这一格上长得一样，钱却差着一整笔。
     const cache = g.cacheInputPrice ?? g.inputPrice;
-    return `${w.token} · ${formatPrice(g.inputPrice)} / ${formatPrice(cache)} / ${formatPrice(g.outputPrice)}`;
+    const image = g.imageTokenPrices;
+    return `${w.token} · ${formatPrice(g.inputPrice)} / ${formatPrice(cache)} / ${formatPrice(g.outputPrice)}`
+      + (image ? ` · ${w.perUnit.image} token ${formatPrice(image.input)} / ${formatPrice(image.cache ?? image.input)} / ${formatPrice(image.output)}` : "");
   }
   if (g.billingMode === "request") return `${w.request} · $${formatPrice(g.requestPrice)}${w.perRequest}`;
   const span = rateSpan(g) || w.noRates;

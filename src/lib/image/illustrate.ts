@@ -9,7 +9,7 @@ import { withImageFamily } from "../ai/imageFamily";
  */
 
 import i18n from "../../i18n";
-import { generateImage, imageConnOf, isEditUnsupportedError, type ImageProgress } from "../ai/image";
+import { generateImage, imageConnOf, isEditUnsupportedError, type ImageProgress, type ImageResult } from "../ai/image";
 import type { ToolProgress } from "../agent/events";
 import { imageCostFor } from "../ai/configDb";
 import type { IllustrateProposal } from "../agent/registry";
@@ -18,7 +18,7 @@ import { imageForModel } from "./normalize";
 import { loadApiKey } from "../keyStore";
 import { addLoreImage } from "../lore";
 import { imageMarkdown, saveDocumentAsset, saveImageInFolder } from "./assets";
-import { imageRequestParams, imageSelectedSpec, inputImageSize, mayBeTransparentPng, recordImageUsage } from "./index";
+import { imageRequestParams, imageSelectedSpec, inputImageSize, mayBeTransparentPng, recordImageUsage, settleImageResult } from "./index";
 import { keepsTransparentBackground } from "../ai/imageDialects";
 import { recordGeneration } from "./session";
 import { providerFor } from "../ai/routes";
@@ -120,7 +120,9 @@ export async function runIllustration(
     ? { negative: proposal.negative.trim() }
     : {};
   const progress = onProgress ? { onProgress: (p: ImageProgress) => onProgress(imageWaitProgress(p)) } : {};
-  const req = { prompt: proposal.prompt, n: 1, ...negative, ...imageRequestParams(model.caps, sel), signal, ...progress };
+  const settle = (inputImages: number) => (result: ImageResult) => settleImageResult(projectPath, model,
+    proposal.sourcePath ? "image-edit" : "image-gen", inputImages, result);
+  const req = { onSettled: settle(0), prompt: proposal.prompt, n: 1, ...negative, ...imageRequestParams(model.caps, sel), signal, ...progress };
 
   // Input images: the picture being edited, plus any references a generation
   // leans on. Either kind makes the call image-conditioned, so both ride the
@@ -158,12 +160,12 @@ export async function runIllustration(
       && images.length === 1
       && mayBeTransparentPng(images[0]);
     const editReq = {
-      prompt: proposal.prompt, n: 1, ...negative, ...editParams, signal, ...progress,
+      onSettled: settle(images.length), prompt: proposal.prompt, n: 1, ...negative, ...editParams, signal, ...progress,
       ...(keepTransparent ? { transparentBackground: true } : {}),
     };
     try {
       sentParams = editParams;
-      result = await generateImage(conn, { ...editReq, images });
+      result = await generateImage(conn, { ...editReq, images, referenceOnly: !proposal.sourcePath });
     } catch (err) {
       if (!isEditUnsupportedError(err)) throw err;
       sentParams = imageRequestParams(model.caps, sel);
@@ -177,7 +179,7 @@ export async function runIllustration(
 
   const billedSpec = imageSelectedSpec(model.caps, sel);
   await recordImageUsage(projectPath, model, proposal.sourcePath ? "image-edit" : "image-gen",
-    result.images.length, result.usage, billedSpec, degraded ? 0 : inputPaths.length, result.requestId);
+    result.images.length, result.usage, billedSpec, degraded ? 0 : inputPaths.length, result.requestId, result.evidence);
   const image = result.images[0];
   if (!image) throw new Error("The model returned no image.");
   const { bytes, ext } = dataUrlToBytes(image.dataUrl);

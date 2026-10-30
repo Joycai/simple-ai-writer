@@ -18,6 +18,7 @@ import type { ApiStandard, ImageRoute } from "../../../lib/ai/types";
 /** The image section as the drawer holds it. */
 export interface ImageCapsDraft {
   modelId?: string;
+  options?: ImageCaps["options"];
   /** The declared route; "" = 自动. */
   route: ImageRoute | "";
   /** "" = generic (the free-form sizes list). */
@@ -35,6 +36,7 @@ export interface ImageCapsDraft {
 /** The draft a stored row opens as — the inverse of `imageCapsToSave` for every field the drawer shows. */
 export function draftFromCaps(caps: ImageCaps | undefined): ImageCapsDraft {
   return {
+    ...(caps?.options ? { options: caps.options } : {}),
     route: caps?.route ?? "",
     dialect: caps?.dialect ?? "",
     edit: caps?.edit ?? false,
@@ -121,6 +123,7 @@ export function imageCapsToSave(
   const prev = existing?.caps;
   const prevRoute = prev ? draftRoute(existing?.standard, { route: prev.route ?? "", dialect: prev.dialect }) : undefined;
   return {
+    ...(draft.options ? { options: draft.options } : {}),
     edit: isComfy ? comfySlots > 0 : draft.edit,
     ...(isComfy && comfySlots > 0 ? { maxRefs: comfySlots } : {}),
     // Off comfyui the drawer has no control for the cap, so it keeps the one

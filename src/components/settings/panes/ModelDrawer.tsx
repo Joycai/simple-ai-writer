@@ -1,3 +1,5 @@
+import { ImageTaskRecovery } from "./ImageTaskRecovery";
+import { Combobox } from "../../common/Combobox";
 import { inferImageFamily, resolvedImageCaps } from "../../../lib/ai/imageFamily";
 /**
  * The model editor — 设计稿 05c · 模型编辑.
@@ -171,7 +173,7 @@ const DIALECT_LABEL_KEY: Record<string, string> = {
   "seedream-5-lite": "aiConfig.models.capsDialectSeedream5Lite",
   "seedream-4": "aiConfig.models.capsDialectSeedream4",
 };
-const ROUTE_LABEL_KEY: Record<string, string> = {
+const ROUTE_LABEL_KEY: Record<ImageRoute | "", string> = {
   "": "aiConfig.models.capsRouteAuto",
   "images-api": "aiConfig.models.capsRouteImages",
   "chat": "aiConfig.models.capsRouteChat",
@@ -179,6 +181,9 @@ const ROUTE_LABEL_KEY: Record<string, string> = {
   "dashscope": "aiConfig.models.capsRouteDashscope",
   "comfyui": "aiConfig.models.capsRouteComfyui",
   "ark": "aiConfig.models.capsRouteArk",
+  responses: "aiConfig.models.capsRouteResponses",
+  minimax: "aiConfig.models.capsRouteMinimax",
+  midjourney: "aiConfig.models.capsRouteMidjourney",
 };
 
 const shortDate = (ms: number): string => {
@@ -345,6 +350,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
   });
   // Out of `form` for a different reason: the price row below casts `form` to
   // Record<string, string> to index its fields, which a boolean would break.
+  const [imageOptions, setImageOptions] = useState(existing?.caps?.options ?? {});
   const [capsEditOverride, setCapsEdit] = useState<boolean | undefined>(existing?.caps?.edit);
   const capsEdit = capsEditOverride ?? resolvedImageCaps(form.modelId, { dialect: form.capsDialect || undefined })?.edit ?? stored.edit;
   // dashscope route only: the async submit-and-poll flow (wan text-to-image).
@@ -648,6 +654,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
   // on (docs/feature/image-route.md).
   const effectiveDialect = form.capsDialect || inferImageFamily(form.modelId);
   const imageDraft: ImageCapsDraft = {
+    options: imageOptions,
     modelId: form.modelId,
     route: form.capsRoute as ImageRoute | "",
     dialect: form.capsDialect,
@@ -1989,8 +1996,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                     // images (Nano Banana natively, GPT-Image via /images/edits,
                     // Wan up to 9 refs) — seed the capability so the common
                     // case needs no thought.
+                    setImageOptions(o => ({ responsesModel: o.responsesModel }));
                     const chosen = v || inferImageFamily(form.modelId);
-                    if (chosen) setCapsEdit(chosen !== "grok-imagine" && chosen !== "generic");
+                    if (chosen) setCapsEdit(chosen !== "generic");
                   }} />
               </Field>
             </Fold>
@@ -2004,6 +2012,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                   { value: "gemini", label: t("aiConfig.models.capsRouteGemini") },
                   { value: "dashscope", label: t("aiConfig.models.capsRouteDashscope") },
                   { value: "ark", label: t("aiConfig.models.capsRouteArk") },
+                  { value: "responses", label: t("aiConfig.models.capsRouteResponses") },
+                  { value: "minimax", label: t("aiConfig.models.capsRouteMinimax") },
+                  { value: "midjourney", label: t("aiConfig.models.capsRouteMidjourney") },
                   // Behind the Beta flag — but a model already declared onto
                   // this route keeps its option, so flipping the flag off never
                   // turns an imported workflow into unviewable dead data.
@@ -2026,6 +2037,30 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                   if (seed.edit) setCapsEdit(true);
                 }} />
             </Field>
+            <Fold open={form.capsRoute === "responses"}>
+              <Field label={t("aiConfig.models.imageDriver")} hint="">
+                <Combobox className={s.fieldSelect} suggestions={[]} value={imageOptions.responsesModel ?? ""}
+                  onChange={responsesModel => setImageOptions(o => ({ ...o, responsesModel }))} />
+              </Field>
+            </Fold>
+            <Fold open={!!imageOptions.stream || form.capsRoute === "responses" || ["gpt-image-2", "gpt-image-2.5", "seedream-5-lite", "seedream-4"].includes(effectiveDialect ?? "")}>
+              <ToggleField hint="" title={t("aiConfig.models.imageStream")} on={imageOptions.stream ?? false}
+                onChange={stream => setImageOptions(o => ({ ...o, stream }))} />
+            </Fold>
+            <Fold open={effectiveDialect?.startsWith("seedream-") ?? false}>
+              <Field label={t("aiConfig.models.imageTaskMode")} hint="">
+                <Select className={s.fieldSelect} value={imageOptions.seedreamMode ?? "single"}
+                  options={[{ value: "single", label: t("aiConfig.models.imageSingle") },
+                    ...(effectiveDialect === "seedream-5-pro" ? [{ value: "layers", label: t("aiConfig.models.imageLayers") }]
+                      : [{ value: "group", label: t("aiConfig.models.imageGroup") }])]}
+                  onChange={seedreamMode => setImageOptions(o => ({ ...o, seedreamMode: seedreamMode as "single" | "group" | "layers" }))} />
+              </Field>
+              <Fold open={effectiveDialect === "seedream-5-lite" || !!imageOptions.webSearch}>
+                <ToggleField hint="" title={t("aiConfig.models.imageSearch")} on={imageOptions.webSearch ?? false}
+                  onChange={webSearch => setImageOptions(o => ({ ...o, webSearch }))} />
+              </Fold>
+            </Fold>
+            {provider && <ImageTaskRecovery endpoint={provider.baseUrl} modelId={form.modelId} />}
             {/* PR1 of the comfyui route cannot take input images — the
                 declaration is forced false on save, so the switch would lie. */}
             <Fold open={!isComfy}>

@@ -133,3 +133,26 @@ REST 每跳 usage 只覆盖该跳，流内累计，取最后一份；跨跳分�
 `CONTINUATION` 携带 candidate.continuationToken，可用原请求及该 token 在同一总输出预算内续接；
 `MAX_TOKENS` 是总预算耗尽，提高 maxOutputTokens 才能从 checkpoint 继续，原值重发会 400。
 单次流式 65,536、非流式 32,768；思考与正文共同使用输出预算，整个模型的统一窗口为 1,048,576。
+
+## 图片接口用量（文档核对 2026-10-30，未付费实测）
+
+Images `input_tokens_details` 分 text_tokens / image_tokens，input_tokens 是合计。
+output_tokens_details 有细项时按细项；直接 Images API 的 output_tokens 按其契约为
+图片输出 token。不能把此结论外推到含主模型文本输出的 Responses。
+Responses 的部分图片缓存命中不会出现在响应 token 明细中，缺失不是 0。
+来源：[OpenAI 图片指南与缓存说明](https://developers.openai.com/api/docs/guides/image-generation)、
+[Images 生成事件](https://developers.openai.com/api/reference/resources/images/generation-streaming-events)。
+
+Seedream usage.generated_images 是生成张数，output_tokens 是像素折算的参考量。
+Lite 的搜索次数在 tool_usage 中，不能当普通输出 token。组图是一个关联集合；
+Pro/Flash 拆层的 data 带 z_index、bounding_box、name、description。
+来源：[BytePlus 图片 API](https://docs.byteplus.com/zh-CN/docs/modelark/image-generation-api?redirect=1)。
+
+MiniMax 独立 `/v1/image_generation` 使用 base_resp 检查错误，metadata.success_count
+可为字符串。人物参考的 subject_reference 与任意图片编辑不同。
+来源：[文生图](https://platform.minimax.io/docs/api-reference/image-generation-t2i)、
+[人物参考](https://platform.minimax.io/docs/api-reference/image-generation-i2i)。
+
+Imagen 的 Gemini API surface 已关闭，官方建议迁移 Gemini 图片模型；不要把旧
+`:predict` 例子视为当前可用接口。
+来源：[Google Imagen](https://ai.google.dev/gemini-api/docs/imagen.md)。

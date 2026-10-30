@@ -22,10 +22,10 @@ export function resolvedImageCaps(modelId: string, caps?: ImageCaps): ImageCaps 
   if (caps?.route === "comfyui") return caps;
   const dialect = caps?.dialect ?? inferImageFamily(modelId);
   if (!dialect) return caps;
-  const maxRefs = dialect === "nanobanana-2" ? 14
+  const maxRefs = dialect === "grok-imagine" ? 3 : dialect === "nanobanana-2" ? 14
     : dialect === "seedream-5-pro" ? 10
       : dialect === "seedream-5-lite" || dialect === "seedream-4" ? 14 : undefined;
-  return { ...(dialect !== "generic" ? { edit: dialect !== "grok-imagine" } : {}),
+  return { ...(dialect !== "generic" ? { edit: true } : {}),
     ...(maxRefs ? { maxRefs } : {}), ...caps, dialect };
 }
 

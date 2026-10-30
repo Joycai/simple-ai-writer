@@ -186,7 +186,7 @@ export function authModesFor(standard: ApiStandard): AuthMode[] {
  * `effectiveImageRoute` (lib/ai/imageRoute.ts), the only derivation in the app
  * (docs/feature/image-route.md).
  */
-export type ImageRoute = "images-api" | "chat" | "gemini" | "dashscope" | "comfyui" | "ark";
+export type ImageRoute = "images-api" | "chat" | "gemini" | "dashscope" | "comfyui" | "ark" | "responses" | "minimax" | "midjourney";
 
 /**
  * The optional processing hint that rides beside an image URL.
