@@ -1,0 +1,30 @@
+.control {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  width: 100%;
+}
+.row {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+.slider {
+  flex: 1 1 320px;
+  min-width: 0;
+  padding-inline: var(--space-2);
+}
+.input {
+  flex: 0 0 104px;
+  width: 104px;
+  text-align: right;
+}
+.hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.error {
+  color: var(--color-error);
+}

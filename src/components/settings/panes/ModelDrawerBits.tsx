@@ -14,12 +14,18 @@
  *                   "auto / default" is hollow and dashed (chosen, sends nothing),
  *                   and a locked value has no pointer.
  */
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import { Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 import s from "./ModelDrawer.module.css";
+
+/** Themed model-drawer text field: owns its default, unset and invalid states. */
+export function ModelTextInput({ unset = false, className = "", ...props }: ComponentProps<"input"> & { unset?: boolean }) {
+  return <input {...props} type="text"
+    className={`${s.input} ${s.mono} ${unset ? s.unset : ""} ${className}`} />;
+}
 
 export function Fold({ open, children }: { open: boolean; children: ReactNode }) {
   return (

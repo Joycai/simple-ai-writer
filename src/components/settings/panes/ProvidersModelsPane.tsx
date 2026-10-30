@@ -1,3 +1,4 @@
+import { formatTokenBadge } from "./tokenLimit";
 import { semanticPrefs } from "../../../lib/context/semanticPrefs";
 import { retrievalDeletionWarning } from "./retrievalModelWarning";
 import { isRerankFormat } from "../../../lib/ai/retrievalConfig";
@@ -595,10 +596,12 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                       <span className={hub.modelName}>{m.name}</span>
                       <span className={hub.modelId}>{m.modelId}</span>
                       {m.contextSize ? (
-                        <span className={hub.modelCtx}>
+                        <span className={`${ui.badge} ${hub.modelCtx}`}
+                          title={`${t("aiConfig.models.ctxLabel")}: ${m.contextSize.toLocaleString()} ${t("aiConfig.models.unitTokens")}`}
+                          aria-label={`${t("aiConfig.models.ctxLabel")}: ${m.contextSize.toLocaleString()} ${t("aiConfig.models.unitTokens")}`}>
                           {/* The green dot = this number was measured, not typed (设计稿 05c). */}
                           {isMeasured(m.contextSize, m.probedContextSize) && <span className={hub.measDot} />}
-                          {m.contextSize.toLocaleString()} ctx
+                          {formatTokenBadge(m.contextSize)}
                         </span>
                       ) : null}
                       <span className={hub.groupSpacer} />

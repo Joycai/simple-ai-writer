@@ -780,7 +780,7 @@ export function unitRateFor(
 export const MAX_CONTEXT_SIZE = 2_000_000;
 
 /** Upper bound for the per-model max-output setting (tokens). */
-export const MAX_OUTPUT_SIZE = 262_144;
+export const MAX_OUTPUT_SIZE = 1_048_576;
 
 /**
  * Upper bound for the per-model sampling temperature.

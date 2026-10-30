@@ -337,6 +337,7 @@
   transition: border-color var(--transition-fast);
 }
 .input:focus { border-color: var(--color-accent); }
+.input[aria-invalid="true"] { border-color: var(--color-error); }
 .input::placeholder { color: var(--stg-text-placeholder); }
 /* Rule 2 for an input: empty = dashed. Applied by the component, never by
    :placeholder-shown — a chip row's exact-value box is empty while a chip

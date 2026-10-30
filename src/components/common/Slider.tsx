@@ -40,6 +40,8 @@ interface Props {
   ticks?: SliderTick[];
   /** Land on a tick when the pointer is within 4px of it. */
   snapToTicks?: boolean;
+  /** Make the themed tick labels selectable without a separate preset row. */
+  selectableTicks?: boolean;
   step: SliderStep;
   /** Arrow keys with Shift move this many steps at once. */
   shiftMultiplier?: number;
@@ -53,7 +55,7 @@ const SNAP_PX = 4;
 
 export function Slider({
   value, width, min, max, onChange, onCommit, scale = "linear", ticks = [], snapToTicks = false,
-  step, shiftMultiplier = 1, disabled = false, ariaLabel, valueText,
+  step, shiftMultiplier = 1, disabled = false, ariaLabel, valueText, selectableTicks = false,
 }: Props) {
   const trackRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
@@ -177,9 +179,27 @@ export function Slider({
         />
       </div>
       {ticks.length > 0 && (
-        <div className={styles.ticks} aria-hidden>
+        <div className={styles.ticks} aria-hidden={selectableTicks ? undefined : true}>
           {ticks.map((t) => (
-            <div key={t.value} className={styles.tick} style={{ left: `${toPos(t.value) * 100}%` }}>
+            <div key={t.value} className={`${styles.tick} ${selectableTicks ? styles.selectableTick : ""}`}
+              style={{ left: `${toPos(t.value) * 100}%` }}
+              role={selectableTicks ? "button" : undefined}
+              tabIndex={selectableTicks && !disabled ? 0 : undefined}
+              aria-label={selectableTicks ? `${ariaLabel}: ${t.label}` : undefined}
+              aria-disabled={selectableTicks ? disabled : undefined}
+              onClick={selectableTicks ? () => {
+                if (disabled) return;
+                setSnapping(true);
+                onChange(t.value);
+                onCommit?.(t.value);
+              } : undefined}
+              onKeyDown={selectableTicks ? (e) => {
+                if (disabled || (e.key !== "Enter" && e.key !== " ")) return;
+                e.preventDefault();
+                setSnapping(true);
+                onChange(t.value);
+                onCommit?.(t.value);
+              } : undefined}>
               <span className={styles.tickMark} />
               <span className={styles.tickLabel}>{t.label}</span>
             </div>
