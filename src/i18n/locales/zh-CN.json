@@ -1,4 +1,14 @@
 {
+  "themeMenu": {
+    "appearance": "外观主题",
+    "markdown": "Markdown 排版",
+    "settings": "外观设置…",
+    "back": "返回",
+    "unavailable": "不可用，请前往外观设置查看",
+    "loading": "正在加载主题…",
+    "loadFailed": "主题加载失败，请前往外观设置重试",
+    "markdownHint": "应用于 Markdown 预览"
+  },
   "mcp": {
     "enable": "启用 MCP 工具",
     "title": "MCP 服务器（Beta）",

@@ -1,20 +1,20 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, Check, MoreHorizontal, Sparkles } from "lucide-react";
-import { useAppStore, type ThemeMode, type Language } from "../../stores/appStore";
+import { AlertTriangle, Check, MoreHorizontal } from "lucide-react";
+import { useAppStore, type Language } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore, type CrumbTraceKind } from "../../stores/editorStore";
 import { closeDocument } from "../../stores/openDocument";
-import { IS_TAURI, MOD_K } from "../../lib/platform";
+import { IS_TAURI } from "../../lib/platform";
 import { CLOSE_DOC_COMBOS, combosLabel } from "../../lib/shortcuts";
 import { docKindOf, isTextKind } from "../../lib/fs/docKind";
 import { ContextMenu } from "../common/ContextMenu";
+import { ThemeMenu } from "./ThemeMenu";
 import { DocActions } from "./DocActions";
 import { useWindowControls } from "./useWindowControls";
 import styles from "./TitleBar.module.css";
 import { baseName, toPosixPath } from "../../lib/paths";
 
-const THEME_ORDER: ThemeMode[] = ["dark", "light", "system"];
 const LANG_ORDER: Language[] = ["zh-CN", "en"];
 /** 与 useGlobalShortcuts 派发的是同一份绑定；mac 上是两条（见 CLOSE_DOC_COMBOS）。 */
 const CLOSE_KEY = combosLabel(CLOSE_DOC_COMBOS);
@@ -49,11 +49,8 @@ export function TitleBar() {
   // Field selectors: this bar shows the live word count, so it re-renders per
   // keystroke by design — but it must not also re-render on every unrelated
   // appStore / editorStore / projectStore write (panel widths, editor content).
-  const theme = useAppStore((s) => s.theme);
-  const setTheme = useAppStore((s) => s.setTheme);
   const language = useAppStore((s) => s.language);
   const setLanguage = useAppStore((s) => s.setLanguage);
-  const setShowAiDrawer = useAppStore((s) => s.setShowAiDrawer);
   const projectPath = useProjectStore((s) => s.projectPath);
   const activeFilePath = useProjectStore((s) => s.activeFilePath);
   const isDirty = useEditorStore((s) => s.isDirty);
@@ -75,10 +72,6 @@ export function TitleBar() {
   const kind = activeFilePath ? docKindOf(activeFilePath) : null;
   const hasTextDoc = isTextKind(kind);
 
-  const cycleTheme = () => {
-    const idx = THEME_ORDER.indexOf(theme);
-    setTheme(THEME_ORDER[(idx + 1) % THEME_ORDER.length]);
-  };
   const cycleLang = () => {
     const idx = LANG_ORDER.indexOf(language);
     setLanguage(LANG_ORDER[(idx + 1) % LANG_ORDER.length]);
@@ -164,14 +157,8 @@ export function TitleBar() {
             </>
           )}
 
-          {/* 全局段：右锚，永不动（除了窄档里前两件并进 ⋯）。 */}
-          <button
-            className={`${styles.ctrl} ${styles.notNarrow}`}
-            onClick={cycleTheme}
-            title={t("titleBar.themeCycle")}
-          >
-            {t(`settings.${theme}`)}
-          </button>
+          {/* Theme stays directly reachable at every width. */}
+          <ThemeMenu />
           <button
             className={`${styles.ctrl} ${styles.notNarrow}`}
             onClick={cycleLang}
@@ -180,26 +167,13 @@ export function TitleBar() {
             {language === "zh-CN" ? t("language.chinese") : t("language.english")}
           </button>
 
-          <span className={`${styles.sepThin} ${styles.notNarrow}`} />
-
-          {/* No mode passed: the generic summon button reopens the drawer on
-              whatever tab was last used. */}
-          <button
-            className={styles.aiBtn}
-            onClick={() => setShowAiDrawer(true)}
-            title={t("titleBar.summonAi")}
-          >
-            <Sparkles size={11} />
-            AI · {MOD_K}
-          </button>
-
           <button
             className={`${styles.ctrl} ${styles.narrowOnly}`}
             onClick={(e) => {
               const r = e.currentTarget.getBoundingClientRect();
               setMoreAt({ x: r.left, y: r.bottom + 4 });
             }}
-            title={`${t("settings.theme")} · ${t("settings.language")}`}
+            title={t("settings.language")}
           >
             <MoreHorizontal size={14} />
           </button>
@@ -208,7 +182,6 @@ export function TitleBar() {
               x={moreAt.x}
               y={moreAt.y}
               items={[
-                { kind: "item", label: `${t("settings.theme")} · ${t(`settings.${theme}`)}`, action: cycleTheme },
                 {
                   kind: "item",
                   label: `${t("settings.language")} · ${language === "zh-CN" ? t("language.chinese") : t("language.english")}`,
