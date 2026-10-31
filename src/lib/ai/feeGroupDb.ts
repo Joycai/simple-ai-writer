@@ -53,6 +53,7 @@ export async function ensureFeeGroupSchema(db: Db) {
   // 会成环——layering.test.ts 的零环约束会当场拦下。
   const cols = await db.select<{ name: string }[]>(`PRAGMA table_info(fee_groups)`);
   await addFeeGroupColumn(db, cols, "vendor", "TEXT");
+  await addFeeGroupColumn(db, cols, "image_token_prices", "TEXT");
 }
 
 /**
@@ -134,8 +135,19 @@ function vendorOf(v: unknown): string | undefined {
   return s || undefined;
 }
 
+function parseImageTokenPrices(raw: unknown): FeeGroup["imageTokenPrices"] {
+  if (typeof raw !== "string") return undefined;
+  try {
+    const v = JSON.parse(raw);
+    const valid = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0;
+    if (valid(v.input) && valid(v.output) && (v.cache === null || valid(v.cache))) return v;
+  } catch { /* malformed config remains unconfigured */ }
+  return undefined;
+}
+
 export function rowToFeeGroup(r: Record<string, unknown>): FeeGroup {
   return {
+    ...(parseImageTokenPrices(r.image_token_prices) ? { imageTokenPrices: parseImageTokenPrices(r.image_token_prices) } : {}),
     id: String(r.id ?? ""),
     name: typeof r.name === "string" ? r.name : "",
     vendor: vendorOf(r.vendor),
@@ -172,8 +184,8 @@ export function feeGroupUpsert(g: FeeGroup): { sql: string; values: unknown[] } 
   return {
     sql: `INSERT INTO fee_groups
       (id, name, vendor, billing_mode, input_price, cache_input_price, output_price, request_price,
-       output_unit, output_rates, input_unit_price, input_free_units, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       output_unit, output_rates, input_unit_price, input_free_units, created_at, image_token_prices)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         vendor = excluded.vendor,
@@ -185,13 +197,15 @@ export function feeGroupUpsert(g: FeeGroup): { sql: string; values: unknown[] } 
         output_unit = excluded.output_unit,
         output_rates = excluded.output_rates,
         input_unit_price = excluded.input_unit_price,
-        input_free_units = excluded.input_free_units`,
+        input_free_units = excluded.input_free_units,
+        image_token_prices = excluded.image_token_prices`,
     values: [
       // 空厂商写 null 而不是空串：库里「没填」也只有一种长相。
       g.id, g.name, g.vendor?.trim() || null,
       g.billingMode, g.inputPrice, g.cacheInputPrice, g.outputPrice, g.requestPrice,
       g.outputUnit, serializeSpecRates(g.outputRates), g.inputUnitPrice, g.inputFreeUnits,
       g.createdAt || Math.floor(Date.now() / 1000),
+      g.imageTokenPrices ? JSON.stringify(g.imageTokenPrices) : null,
     ],
   };
 }
@@ -336,7 +350,7 @@ export async function migrateModelPricesToFeeGroups(db: Db): Promise<number> {
   const sigOf = (g: FeeGroup) => JSON.stringify([
     g.billingMode, g.inputPrice, g.cacheInputPrice, g.outputPrice,
     g.requestPrice, g.outputUnit, serializeSpecRates(g.outputRates),
-    g.inputUnitPrice, g.inputFreeUnits,
+    g.inputUnitPrice, g.inputFreeUnits, g.imageTokenPrices,
   ]);
   const reuse = new Map(existing.map((g) => [sigOf(g), g.id]));
   const remap = new Map<string, string>();

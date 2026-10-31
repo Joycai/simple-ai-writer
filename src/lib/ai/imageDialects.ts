@@ -1,3 +1,5 @@
+import type { ImageRoute } from "./types";
+import { effectiveImageRoute } from "./imageRoute";
 /**
  * Image-model parameter dialects.
  *
@@ -59,7 +61,7 @@
 
 /** The declared dialect ids. Absent = generic (free-form size list). */
 export type ImageDialect =
-  | "nanobanana" | "gpt-image-2" | "gpt-image-2.5" | "grok-imagine" | "wan2.7" | "qwen-image"
+  | "generic" | "nanobanana-2" | "nanobanana" | "gpt-image-2" | "gpt-image-2.5" | "grok-imagine" | "wan2.7" | "qwen-image"
   | "seedream-5-pro" | "seedream-5-lite" | "seedream-4";
 
 /** The generic wire fields a dialect resolves the author's choices into. */
@@ -172,7 +174,7 @@ export class ImageOutputValidationError extends Error {
 export function validateImageSelection(caps: ImageOutputCaps | undefined, sel: ImageParamSelection, checkMode = true): ImageOutputError | undefined {
   const spec = imageOutputSpec(caps);
   if (checkMode && sel.sizingMode && !spec.modes.includes(sel.sizingMode)) return "mode";
-  if (sel.sizingMode === "exact" && (caps?.dialect === "nanobanana" || caps?.dialect === "grok-imagine")) return "mode";
+  if (sel.sizingMode === "exact" && (caps?.dialect === "nanobanana" || caps?.dialect === "nanobanana-2" || caps?.dialect === "grok-imagine")) return "mode";
   if (sel.quality && !spec.qualities.includes(sel.quality)) return "quality";
   if (sel.sizingMode !== "exact") {
     // Legacy callers retain dialect fallback behaviour; overrides are strict.
@@ -198,7 +200,7 @@ export function validateImageOutputConfig(caps: ImageOutputCaps): ImageOutputErr
   const p = spec.pixels;
   if (!spec.modes.length) return "mode";
   // Gemini has no pixel-size field. An override cannot invent an API spelling.
-  if ((caps.dialect === "nanobanana" || caps.dialect === "grok-imagine") && spec.modes.includes("exact")) return "mode";
+  if ((caps.dialect === "nanobanana" || caps.dialect === "nanobanana-2" || caps.dialect === "grok-imagine") && spec.modes.includes("exact")) return "mode";
   if (spec.aspects.some((a) => a !== "auto" && (!/^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(a) || a.split(":").some((n) => Number(n) <= 0)))) return "aspect";
   const preset = imageDialect(caps.dialect);
   // Table-backed/computed dialects cannot gain tiers without a conversion rule.
@@ -340,6 +342,14 @@ const NANOBANANA: ImageDialectSpec = {
     ...(sel.aspect ? { aspect: sel.aspect } : {}),
     ...(sel.resolution ? { imageSize: sel.resolution } : {}),
   }),
+};
+
+// Gemini 3.1 Flash Image: the model-specific tier and ratios are not valid for all Gemini images.
+const NANOBANANA_2: ImageDialectSpec = {
+  ...NANOBANANA,
+  id: "nanobanana-2",
+  resolutions: ["1K", "2K", "4K", "512"],
+  aspects: [...WIDE_ASPECTS, "1:4", "4:1", "1:8", "8:1"],
 };
 
 const GPT_IMAGE_2: ImageDialectSpec = {
@@ -567,10 +577,9 @@ const SEEDREAM_5_LITE = seedreamDialect("seedream-5-lite", SEEDREAM_LITE);
 const SEEDREAM_4 = seedreamDialect("seedream-4", SEEDREAM_4X);
 
 /** Declared dialects that only exist behind the ark route (火山方舟). */
-export const SEEDREAM_DIALECTS: readonly ImageDialect[] = ["seedream-5-pro", "seedream-5-lite", "seedream-4"];
 
 export const IMAGE_DIALECTS: readonly ImageDialectSpec[] = [
-  NANOBANANA, GPT_IMAGE_2, GPT_IMAGE_2_5, GROK_IMAGINE, WAN_2_7, QWEN_IMAGE, SEEDREAM_5_PRO, SEEDREAM_5_LITE, SEEDREAM_4,
+  NANOBANANA, NANOBANANA_2, GPT_IMAGE_2, GPT_IMAGE_2_5, GROK_IMAGINE, WAN_2_7, QWEN_IMAGE, SEEDREAM_5_PRO, SEEDREAM_5_LITE, SEEDREAM_4,
 ];
 
 /** The spec for a declared dialect, or null for generic / unknown values. */
@@ -588,6 +597,6 @@ export function imageDialect(id: string | undefined): ImageDialectSpec | null {
  * which rebuilds caps from its form and would drop a declaration it has no
  * control for (docs/feature/image-generation-plan.md PR7, 09-23 增补).
  */
-export function keepsTransparentBackground(caps: { route?: string; dialect?: string } | undefined): boolean {
-  return caps?.route === "ark" && caps.dialect === "seedream-5-pro";
+export function keepsTransparentBackground(caps: { route?: ImageRoute; dialect?: ImageDialect } | undefined): boolean {
+  return effectiveImageRoute("openai", caps) === "ark" && caps?.dialect === "seedream-5-pro";
 }

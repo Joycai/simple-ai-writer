@@ -90,6 +90,7 @@ const provider: Required<Provider> = {
 const caps: Required<ImageCaps> = {
   overrides: { qualities: ["high"], modes: ["ratio", "exact"], pixels: { step: 64 } },
   defaults: { aspect: "3:2", quality: "high", sizingMode: "ratio" },
+  options: { stream: true, webSearch: true, responsesModel: "driver", seedreamMode: "group" },
   edit: true,
   dialect: "qwen-image",
   sizes: ["1024x1024", "1328x1328"],
@@ -153,6 +154,7 @@ const model: Required<Omit<Model, "fee">> = {
 
 /** 计费组：整行都要跨机器带过去，价才不会在新机器上变成 0。 */
 const feeGroup: Required<FeeGroup> = {
+  imageTokenPrices: { input: 10, cache: null, output: 30 },
   id: "fg1",
   name: "即梦 4.0 · 按张",
   vendor: "字节 · 火山方舟",

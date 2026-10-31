@@ -2757,8 +2757,8 @@
       "reasoningEffortXhigh": "极高",
       "reasoningEffortMax": "最高",
       "pricePerImageLabel": "每张价格 (USD)",
-      "capsDialectLabel": "参数方言",
-      "capsDialectHint": "模型接受哪套生图参数。Nano Banana（Gemini 系）按官方口径发比例（10 档）与分辨率档位（1K/2K/4K）；GPT Image 2 按官方口径发像素尺寸（两边被 16 整除、比例 1:3~3:1、上限 3840x2160）与质量档位（low/medium/high）；万相 Wan 2.7 发 宽*高（边长 768~4096，4K 仅 -pro；改图只发 1K/2K 档位，画幅跟随原图）；Qwen-Image 3.0 只收 宽*高（总像素 ≤ 2048²），按面积分 1K/2K 两档计费——不填尺寸端点默认按 2K 出图并按 2K 收费，所以这套方言永远发尺寸、默认 1K，改图按原图画幅算。Seedream（火山方舟）发档位，选了比例则发文档里该档位 × 比例对应的像素；档位按版本不同（5.0 pro 1K/1.5K/2K，5.0 lite 2K/3K/4K，4.5 / 4.0 2K/4K），按张计费。选「通用」则沿用下方的支持尺寸列表。",
+      "capsDialectLabel": "模型族",
+      "capsDialectHint": "手动选择优先于模型 ID 识别，适用于中转站改名的模型。模型族决定参数与默认出图接口；中转站采用不同接口时，可在下方单独指定。选择通用可关闭自动识别。",
       "capsDialectGeneric": "通用（按支持尺寸列表）",
       "capsDialectNanobanana": "Nano Banana（Gemini 系）",
       "capsDialectGptImage2": "GPT Image 2（OpenAI）",
@@ -3063,7 +3063,26 @@
       "noteOutUnknown": "未知 · 预算用默认，不发送",
       "noteSameLosesGate": "{{note}}，但发送前不再拦截",
       "noteSameChangesWire": "{{note}}；max_tokens 改发 {{sent}}",
-      "noteProbedUnused": "实测 {{value}}（{{date}}）未采用"
+      "noteProbedUnused": "实测 {{value}}（{{date}}）未采用",
+      "capsFamilyAuto": "自动（按模型 ID 识别）",
+      "capsDialectNanobanana2": "Nano Banana 2",
+      "capsFamilyEffective": "当前生效：{{family}}",
+      "capsRouteEffective": "当前接口：{{route}}",
+      "imageDriver": "Responses 主模型 ID",
+      "imageStream": "流式接收图片",
+      "imageTaskMode": "图片任务",
+      "imageSingle": "独立图片",
+      "imageGroup": "关联组图",
+      "imageLayers": "拆分图层（需一张输入图）",
+      "imageSearch": "允许联网搜索（可能另行计费）",
+      "imagePending": "待恢复的图片任务",
+      "imagePendingHint": "重新运行相同图片请求将继续查询原任务。核对供应商任务记录后，才可清除恢复记录。",
+      "imageForget": "清除恢复记录",
+      "imageUnknown": "提交结果未知",
+      "imageForgetWarning": "这不会取消上游任务或退还费用。清除后再次运行会提交新的付费请求。请先核对上游任务，再确认清除。",
+      "capsRouteResponses": "Responses · image_generation",
+      "capsRouteMinimax": "MiniMax · image_generation",
+      "capsRouteMidjourney": "midjourney-proxy · /mj"
     },
     "probe": {
       "title": "探测真实上限",
@@ -3370,7 +3389,9 @@
       "matchedModels": "命中模型 {{models}}",
       "matchedModelsMore": "命中模型 {{models}} 等 {{n}} 个",
       "listCount": "{{groups}} 个组 · {{vendors}} 个厂商",
-      "listCountNone": "{{groups}} 个组 · {{vendors}} 个厂商 · {{none}} 个没填"
+      "listCountNone": "{{groups}} 个组 · {{vendors}} 个厂商 · {{none}} 个没填",
+      "imageTokenPrices": "图片 token · 每百万",
+      "imageTokenHint": "可单独填写图片输入、缓存和输出价格。输入与输出均留空时沿用通用 token 价格。上游未报告模态明细时，用量标记为不完整。"
     }
   },
   "lore": {

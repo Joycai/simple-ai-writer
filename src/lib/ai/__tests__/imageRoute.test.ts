@@ -39,7 +39,7 @@ describe("effectiveImageRoute", () => {
     }
   });
 
-  it("never derives chat, comfyui or ark — for them the declaration is the answer", () => {
+  it("falls back to protocol defaults when no model family is known", () => {
     const derived = new Set(STANDARDS.map((s) => effectiveImageRoute(s)));
     for (const r of ["chat", "comfyui", "ark"] as const) expect(derived.has(r)).toBe(false);
   });
@@ -90,7 +90,7 @@ describe("「将发送」 lists the effective route", () => {
   it("names what 自动 resolves to on this route", () => {
     const image = { type: "image" as const, modelId: "wan2.7-image" };
     expect(wireSummary(image, "dashscope_compat")[0]).toEqual({ key: "route", value: "dashscope" });
-    expect(wireSummary(image, "openai_compat")[0]).toEqual({ key: "route", value: "images-api" });
+    expect(wireSummary(image, "openai_compat")[0]).toEqual({ key: "route", value: "dashscope" });
     expect(wireSummary({ ...image, caps: { route: "chat" } }, "dashscope_compat")[0])
       .toEqual({ key: "route", value: "chat" });
   });

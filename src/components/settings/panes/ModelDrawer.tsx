@@ -1,3 +1,6 @@
+import { ImageTaskRecovery } from "./ImageTaskRecovery";
+import { Combobox } from "../../common/Combobox";
+import { inferImageFamily, resolvedImageCaps } from "../../../lib/ai/imageFamily";
 /**
  * The model editor — 设计稿 05c · 模型编辑.
  *
@@ -77,7 +80,7 @@ import {
 } from "../../../lib/ai/configDb";
 import { clampVideoFps, MAX_VIDEO_FPS, MIN_VIDEO_FPS } from "../../../lib/ai/videoInput";
 import { ASR_DEFAULT_MODEL_ID, asrIdMismatch } from "../../../lib/asr/formats";
-import { validateImageOutputConfig, SEEDREAM_DIALECTS, type ImageDialect } from "../../../lib/ai/imageDialects";
+import { validateImageOutputConfig, type ImageDialect } from "../../../lib/ai/imageDialects";
 import { ModelProbePanel } from "../ModelProbePanel";
 import { ChipDivider, DashChip, Field, Fold, Hint, Note, Section, Subhead, ToggleField } from "./ModelDrawerBits";
 import { Select } from "../../common/Select";
@@ -90,7 +93,7 @@ import { CapabilityMatrix } from "./CapabilityMatrix";
 import { ValueFactMatrix } from "./ValueFactMatrix";
 import { UpstreamSection } from "./UpstreamFields";
 import {
-  draftFromCaps, imageCapsToSave, routeSeed, showsAsyncToggle, type ImageCapsDraft,
+  draftFromCaps, draftRoute, imageCapsToSave, routeSeed, showsAsyncToggle, type ImageCapsDraft,
 } from "./imageCapsDraft";
 
 /** i18n key per workflow-import parse failure (lib/comfy/workflow.ts). */
@@ -158,6 +161,8 @@ const SO_LABEL_KEY: Record<StructuredOutputMode, string> = {
 
 const DIALECT_LABEL_KEY: Record<string, string> = {
   "": "aiConfig.models.capsDialectGeneric",
+  "generic": "aiConfig.models.capsDialectGeneric",
+  "nanobanana-2": "aiConfig.models.capsDialectNanobanana2",
   "nanobanana": "aiConfig.models.capsDialectNanobanana",
   "gpt-image-2": "aiConfig.models.capsDialectGptImage2",
   "gpt-image-2.5": "imageOutput.gpt25",
@@ -168,7 +173,7 @@ const DIALECT_LABEL_KEY: Record<string, string> = {
   "seedream-5-lite": "aiConfig.models.capsDialectSeedream5Lite",
   "seedream-4": "aiConfig.models.capsDialectSeedream4",
 };
-const ROUTE_LABEL_KEY: Record<string, string> = {
+const ROUTE_LABEL_KEY: Record<ImageRoute | "", string> = {
   "": "aiConfig.models.capsRouteAuto",
   "images-api": "aiConfig.models.capsRouteImages",
   "chat": "aiConfig.models.capsRouteChat",
@@ -176,6 +181,9 @@ const ROUTE_LABEL_KEY: Record<string, string> = {
   "dashscope": "aiConfig.models.capsRouteDashscope",
   "comfyui": "aiConfig.models.capsRouteComfyui",
   "ark": "aiConfig.models.capsRouteArk",
+  responses: "aiConfig.models.capsRouteResponses",
+  minimax: "aiConfig.models.capsRouteMinimax",
+  midjourney: "aiConfig.models.capsRouteMidjourney",
 };
 
 const shortDate = (ms: number): string => {
@@ -342,7 +350,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
   });
   // Out of `form` for a different reason: the price row below casts `form` to
   // Record<string, string> to index its fields, which a boolean would break.
-  const [capsEdit, setCapsEdit] = useState(stored.edit);
+  const [imageOptions, setImageOptions] = useState(existing?.caps?.options ?? {});
+  const [capsEditOverride, setCapsEdit] = useState<boolean | undefined>(existing?.caps?.edit);
+  const capsEdit = capsEditOverride ?? resolvedImageCaps(form.modelId, { dialect: form.capsDialect || undefined })?.edit ?? stored.edit;
   // dashscope route only: the async submit-and-poll flow (wan text-to-image).
   const [capsAsync, setCapsAsync] = useState(stored.asyncTask);
   // comfyui route only: the imported API-format workflow JSON, verbatim.
@@ -642,7 +652,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
   // below — the async switch, what a save keeps, what a change seeds — reads
   // the *effective* route through it, the answer the image client dispatches
   // on (docs/feature/image-route.md).
+  const effectiveDialect = form.capsDialect || inferImageFamily(form.modelId);
   const imageDraft: ImageCapsDraft = {
+    options: imageOptions,
+    modelId: form.modelId,
     route: form.capsRoute as ImageRoute | "",
     dialect: form.capsDialect,
     edit: capsEdit,
@@ -712,8 +725,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
     // the same seed the endpoint dropdown gives.
     if (isImageModel) {
       const seed = routeSeed(
-        { standard: provider?.apiStandard, route: imageDraft.route },
-        { standard: nextProvider.apiStandard, route: imageDraft.route },
+        { standard: provider?.apiStandard, ...imageDraft },
+        { standard: nextProvider.apiStandard, ...imageDraft },
         form.capsSizes,
       );
       const seedSizes = seed.sizes;
@@ -763,7 +776,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
             standard: channel ? routeProvider(channel, activeFamily(existing, channel))?.apiStandard : undefined,
           })
         : undefined;
-      const outputError = caps && validateImageOutputConfig(caps);
+      const outputError = caps && validateImageOutputConfig(resolvedImageCaps(form.modelId, caps)!);
       if (outputError) { setError(t(`imageOutput.errors.${outputError}`)); return; }
       const shared = {
         retrieval: isRetrievalModel ? retrieval : undefined,
@@ -941,11 +954,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
     form.prefix.trim() !== "" && t("aiConfig.models.prefixLabelShort"),
   ].filter(Boolean).join(" · ");
 
-  const imageHas = !!form.capsDialect || !!form.capsRoute || capsEdit || sizes.length > 0
+  const imageHas = !!effectiveDialect || !!form.capsRoute || capsEdit || sizes.length > 0
     || (asyncShown && capsAsync) || !!comfyWorkflow;
   const imageSum = [
-    t(DIALECT_LABEL_KEY[isComfy ? "" : form.capsDialect] ?? DIALECT_LABEL_KEY[""]),
-    t(ROUTE_LABEL_KEY[form.capsRoute] ?? ROUTE_LABEL_KEY[""]),
+    t(DIALECT_LABEL_KEY[isComfy ? "" : effectiveDialect ?? ""] ?? DIALECT_LABEL_KEY[""]),
+    t(ROUTE_LABEL_KEY[draftRoute(provider?.apiStandard, imageDraft) ?? ""]),
     (isComfy ? !!comfyWorkflow : capsEdit) && t("aiConfig.models.sumEdit"),
   ].filter(Boolean).join(" · ");
 
@@ -1266,8 +1279,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                     : isRerankFormat(retrieval.format) ? "openai-embedding" : retrieval.format;
                   setRetrieval((config) => config.format === format ? config : { format, path: RETRIEVAL_PATHS[format] });
                 }
-                const seedDialect =
-                  type === "image" && !existing && !form.capsDialect && family === "gemini";
+
                 // Becoming a transcription model picks its (only) endpoint
                 // and, when the identity fields are still empty, the
                 // recommended DashScope id and a name; leaving it drops the
@@ -1280,14 +1292,14 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                       translateFormat: "" as const,
                     }
                   : { asrFormat: "" as const };
-                setForm({ ...form, type, ...asrSeed, ...(seedDialect ? { capsDialect: "nanobanana" as const } : {}) });
+                setForm({ ...form, type, ...asrSeed });
                 if (type === "image" && !existing && provider) {
                   // Both by the route the pictures would actually go to — 自动
                   // on DashScope's native route is DashScope, and edits.
                   const decl = imageDraft.route ? { route: imageDraft.route } : undefined;
-                  setCapsEdit(defaultImageCaps(provider.apiStandard, decl).edit ?? false);
+                  setCapsEdit(resolvedImageCaps(form.modelId, { dialect: form.capsDialect || undefined })?.edit ?? defaultImageCaps(provider.apiStandard, decl).edit ?? false);
                   const seedSizes = routeSeed(
-                    null, { standard: provider.apiStandard, route: imageDraft.route }, form.capsSizes,
+                    null, { standard: provider.apiStandard, ...imageDraft }, form.capsSizes,
                   ).sizes;
                   if (seedSizes !== undefined) setForm((f) => ({ ...f, capsSizes: seedSizes }));
                 }
@@ -1956,11 +1968,13 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
             {/* Cloud parameter dialects mean nothing to a local workflow — the
                 free-form sizes list is comfyui's whole vocabulary. */}
             <Fold open={!isComfy}>
-              <Field label={t("aiConfig.models.capsDialectLabel")} hint={t("aiConfig.models.briefDialect")}
+              <Field label={t("aiConfig.models.capsDialectLabel")} hint={t("aiConfig.models.capsFamilyEffective", { family: effectiveDialect ? t(DIALECT_LABEL_KEY[effectiveDialect]) : t("aiConfig.models.capsDialectGeneric") })}
                 {...whyProps("dialect", t("aiConfig.models.capsDialectHint"))}>
                 <Select className={s.fieldSelect} value={form.capsDialect}
                   options={[
-                    { value: "", label: t("aiConfig.models.capsDialectGeneric") },
+                    { value: "", label: t("aiConfig.models.capsFamilyAuto") },
+                    { value: "generic", label: t("aiConfig.models.capsDialectGeneric") },
+                    { value: "nanobanana-2", label: t("aiConfig.models.capsDialectNanobanana2") },
                     { value: "nanobanana", label: t("aiConfig.models.capsDialectNanobanana") },
                     { value: "gpt-image-2", label: t("aiConfig.models.capsDialectGptImage2") },
                     { value: "gpt-image-2.5", label: t("imageOutput.gpt25") },
@@ -1977,23 +1991,18 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                       ...f,
                       capsDialect: v as ImageDialect | "",
                       imageOutput: { overrides: undefined, defaults: undefined },
-                      // Wan only exists behind DashScope's native protocol, so
-                      // picking the dialect answers the route question too.
-                      // Only fills a blank — an explicit route choice stands.
-                      ...(v === "wan2.7" && !f.capsRoute ? { capsRoute: "dashscope" } : {}),
-                      ...(v === "grok-imagine" && !f.capsRoute ? { capsRoute: "images-api" } : {}),
-                      // Same for Seedream: its body only exists on the ark route.
-                      ...(SEEDREAM_DIALECTS.includes(v as ImageDialect) && !f.capsRoute ? { capsRoute: "ark" } : {}),
                     }));
                     // Every declared dialect belongs to models that take input
                     // images (Nano Banana natively, GPT-Image via /images/edits,
                     // Wan up to 9 refs) — seed the capability so the common
                     // case needs no thought.
-                    if (v) setCapsEdit(v !== "grok-imagine");
+                    setImageOptions(o => ({ responsesModel: o.responsesModel }));
+                    const chosen = v || inferImageFamily(form.modelId);
+                    if (chosen) setCapsEdit(chosen !== "generic");
                   }} />
               </Field>
             </Fold>
-            <Field label={t("aiConfig.models.capsRouteLabel")} hint={t("aiConfig.models.briefRoute")}
+            <Field label={t("aiConfig.models.capsRouteLabel")} hint={t("aiConfig.models.capsRouteEffective", { route: t(ROUTE_LABEL_KEY[draftRoute(provider?.apiStandard, imageDraft) ?? ""]) })}
               {...whyProps("route", t("aiConfig.models.capsRouteHint"))}>
               <Select className={s.fieldSelect} value={form.capsRoute}
                 options={[
@@ -2003,6 +2012,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                   { value: "gemini", label: t("aiConfig.models.capsRouteGemini") },
                   { value: "dashscope", label: t("aiConfig.models.capsRouteDashscope") },
                   { value: "ark", label: t("aiConfig.models.capsRouteArk") },
+                  { value: "responses", label: t("aiConfig.models.capsRouteResponses") },
+                  { value: "minimax", label: t("aiConfig.models.capsRouteMinimax") },
+                  { value: "midjourney", label: t("aiConfig.models.capsRouteMidjourney") },
                   // Behind the Beta flag — but a model already declared onto
                   // this route keeps its option, so flipping the flag off never
                   // turns an imported workflow into unviewable dead data.
@@ -2016,8 +2028,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                   // the effective one, so 自动 on the native route counts as
                   // DashScope and picking it explicitly there changes nothing.
                   const seed = routeSeed(
-                    { standard: provider?.apiStandard, route: imageDraft.route },
-                    { standard: provider?.apiStandard, route: capsRoute as ImageRoute | "" },
+                    { standard: provider?.apiStandard, ...imageDraft },
+                    { standard: provider?.apiStandard, ...imageDraft, route: capsRoute as ImageRoute | "" },
                     form.capsSizes,
                   );
                   const seedSizes = seed.sizes;
@@ -2025,6 +2037,30 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                   if (seed.edit) setCapsEdit(true);
                 }} />
             </Field>
+            <Fold open={form.capsRoute === "responses"}>
+              <Field label={t("aiConfig.models.imageDriver")} hint="">
+                <Combobox className={s.fieldSelect} suggestions={[]} value={imageOptions.responsesModel ?? ""}
+                  onChange={responsesModel => setImageOptions(o => ({ ...o, responsesModel }))} />
+              </Field>
+            </Fold>
+            <Fold open={!!imageOptions.stream || form.capsRoute === "responses" || ["gpt-image-2", "gpt-image-2.5", "seedream-5-lite", "seedream-4"].includes(effectiveDialect ?? "")}>
+              <ToggleField hint="" title={t("aiConfig.models.imageStream")} on={imageOptions.stream ?? false}
+                onChange={stream => setImageOptions(o => ({ ...o, stream }))} />
+            </Fold>
+            <Fold open={effectiveDialect?.startsWith("seedream-") ?? false}>
+              <Field label={t("aiConfig.models.imageTaskMode")} hint="">
+                <Select className={s.fieldSelect} value={imageOptions.seedreamMode ?? "single"}
+                  options={[{ value: "single", label: t("aiConfig.models.imageSingle") },
+                    ...(effectiveDialect === "seedream-5-pro" ? [{ value: "layers", label: t("aiConfig.models.imageLayers") }]
+                      : [{ value: "group", label: t("aiConfig.models.imageGroup") }])]}
+                  onChange={seedreamMode => setImageOptions(o => ({ ...o, seedreamMode: seedreamMode as "single" | "group" | "layers" }))} />
+              </Field>
+              <Fold open={effectiveDialect === "seedream-5-lite" || !!imageOptions.webSearch}>
+                <ToggleField hint="" title={t("aiConfig.models.imageSearch")} on={imageOptions.webSearch ?? false}
+                  onChange={webSearch => setImageOptions(o => ({ ...o, webSearch }))} />
+              </Fold>
+            </Fold>
+            {provider && <ImageTaskRecovery endpoint={provider.baseUrl} modelId={form.modelId} />}
             {/* PR1 of the comfyui route cannot take input images — the
                 declaration is forced false on save, so the switch would lie. */}
             <Fold open={!isComfy}>
@@ -2039,14 +2075,14 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
             {/* A declared dialect knows its sizes — the free-form list only
                 exists for the generic case, so it folds rather than compete.
                 comfyui is always generic: a stored dialect is ignored there. */}
-            <Fold open={!form.capsDialect || isComfy}>
+            <Fold open={!effectiveDialect || effectiveDialect === "generic" || isComfy}>
               <Field label={t("aiConfig.models.capsSizesLabel")} hint={t("aiConfig.models.briefSizes")}>
                 <input className={inputCls(sizes.length === 0, s.mono)} placeholder={t("aiConfig.models.phNoSize")}
                   value={form.capsSizes}
                   onChange={(e) => setForm({ ...form, capsSizes: e.target.value })} />
               </Field>
             </Fold>
-            <ImageOutputFields dialect={isComfy ? undefined : form.capsDialect || undefined}
+            <ImageOutputFields dialect={isComfy ? undefined : effectiveDialect}
               value={form.imageOutput} onChange={(imageOutput) => setForm((f) => ({ ...f, imageOutput: { overrides: imageOutput.overrides, defaults: imageOutput.defaults } }))} />
             <Fold open={asyncShown}>
               <ToggleField

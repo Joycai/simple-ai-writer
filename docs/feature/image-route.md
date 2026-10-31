@@ -103,3 +103,88 @@ routeConventions(route)                   // 某条接口上「所有模型都�
   端点），以及上面那条尺寸预填的收回。
 - 模拟抽屉的几个处理函数只抄了 React 的「把结果写回状态」那一层；每个判断——有效路线、开关、预填、存什么——
   调的都是 `imageCapsDraft.ts` 里抽屉自己调的那一个函数，传的也是抽屉传的那一对（标准，声明值）。
+
+
+## 2026-10-30：图片模型族与中转别名
+
+模型抽屉将「参数方言」改为「模型族」，沿用 `caps.dialect` 存储，避免两份声明冲突。
+优先级为 **手动模型族 > 模型 ID 保底识别 > 通用**；显式 `generic` 关闭识别。
+旧的已声明方言不变，未声明的已知 ID 开始使用对应模型族；推导结果不写回数据库。
+自动识别只匹配有明确参数实现的 ID，不把所有 Qwen / Gemini 新版本笼统归到一个族。
+
+接口仍是独立覆盖：**显式 `caps.route` > 模型族默认接口 > 渠道协议默认接口**。
+`effectiveImageRoute` 是唯一解析者，设置页的当前接口提示、异步开关、保存和请求共用它。
+Nano Banana 原生 Gemini 渠道默认 `gemini`，兼容渠道默认 `chat`；GPT Image / Grok 默认
+`images-api`，Wan / Qwen 默认 `dashscope`，Seedream 默认 `ark`。这些是起步默认值，
+不宣称所有中转实现一致；作者可以明确选择中转真正提供的接口。
+因此前文「chat / ark 永不推导」只描述旧实现；现在只有 ComfyUI 始终需要显式声明。
+
+选择不同模型族清空旧的输出选项覆盖与默认值，保留显式接口覆盖。两项控件均复用共享
+主题化 Select，并直接显示生效族和接口。运行时在副本上补全模型族和参考图上限，
+交互出图、agent 审批、实际执行与计费规格选择均使用解析后的能力，原模型 ID 原样发送。
+
+Nano Banana 2 独立于通用 Nano Banana，支持 512 / 1K / 2K / 4K 与其额外画幅；依据
+[Google 官方文档](https://ai.google.dev/gemini-api/docs/generate-content/image-generation?hl=en)
+（2026-10-30 核对，未付费实测）。兼容 Chat 接口发送
+`extra_body.google.image_config.aspect_ratio/image_size`，同时保留提示词画幅说明；
+不支持此扩展的中转仍可能忽略参数，手动选择模型族不能替中转增加能力。
+
+本次不扩展 Grok 编辑协议、Responses 图像工具或异步恢复。Grok 仍默认仅生成。
+
+## 2026-10-30 审查缺口补齐（1.99.38）
+
+本节接续手动模型族功能。旧文里的「仅同步」「chat/ark 永不推导」是历史约束，
+以模型族解析规则和下列实现为准。新增功能不发起自动付费探测。
+
+### 交付、用量与恢复
+
+- Grok 族的编辑请求走 JSON `/images/edits`，单图为 `image`、多图为 `images`，
+  最多三张；原模型 ID 保持不变。族默认现在允许编辑，作者显式的关闭仍然优先。
+- `generateImage` 持有一次调用的 evidence，在解析图片前收集上游用量、实际规格、
+  原始 usage 与报告张数。结算回调在候选图片／配图写盘前运行，失败也保留已知用量；
+  两本账仍只通过 `recordUsage` 和既有持久收据投递。同一结果沿用同一 request ID。
+- 下载取消不再抛弃前面的图片。最终交付经过 base64、头部尺寸和 WebView 实际解码；
+  无效的单张被排除，全部无效则报错。预览帧不作为最终图片、不计张数。
+- 规格按实际发送参数记录；OpenAI 编辑尺寸回退同步更新，DashScope 的回显尺寸、
+  OpenAI 顶层规格与同尺寸的 `data[].size` 优先。万相编辑的 4K→2K 调整不会再按
+  UI 的 4K 选项记账。Ark 的 `generated_images` 优先于下载成功数，pixel-proxy
+  `output_tokens` 只保留在原始证据里，绝不作为语言 token 收费。
+- `image_tasks` 在 config.db 保存任务 ID、结算 ID 与时间；请求指纹覆盖端点、
+  模型、凭据和参数，但只持久化摘要，不存密钥或提示词。提交前用唯一键抢占，
+  同一请求不能并发重复 POST；收到任务 ID 后落库，再轮询。停止只是停止等待。
+  同一参数重试／重启后重新运行会继续 GET 原任务；最终交付后移除恢复引用。
+- 如果网络在提交阶段断开，无法知道是否创建任务，保留「提交结果未知」占位，
+  禁止自动重发。模型抽屉可查看任务 ID／时间，并在核对上游后通过主题确认框
+  清除引用。清除不取消上游任务、不退款；再次运行会提交新请求。无任务 ID 时
+  客户端无法从供应商恢复未知提交，这个限制不能用自动重试掩盖。
+
+### 新增的可选接口与任务
+
+- **Responses 图片工具**：显式选 `responses` 出图端点，并填写主模型 ID。
+  模型条目 ID 是 `image_generation` 工具的模型，不能拿它当主模型。请求不保存
+  服务端对话状态，输入图以 `input_image` 发送。一次一张；掩码编辑使用 Images API。
+- **流式**：Images 生成／编辑、Responses、Seedream 支持型号可显式开启。
+  独立 SSE 解帧支持跨块数据、终止事件与中断；已完成图片在断流时保留。
+  OpenAI 的 partial 帧显示为临时预览，完成帧才进入候选与用量。
+- **Seedream**：独立图片仍为 N 次请求；组图为一次请求，`max_images` 是上限，
+  与参考图总数限制一起校验。Pro/Flash 的拆层要求恰好一张输入图，不与透明编辑
+  合用；Lite 可显式允许联网搜索（可能另行收费）。不支持的组合在请求前拒绝。
+  组图／图层完整保存到 `.ai-writer/image-results/<requestId>/`，manifest 保留文件、
+  层名、描述、z-index 和 bounding box。此处交付的是图片与图层清单，不新增画布编辑器。
+- **MiniMax**：显式原生 `/image_generation` 路由，校验状态信封、字符串形式的
+  success_count、尺寸与张数。人物参考与通用编辑分开；不把人物参考协议宣称为任意改图。
+- **midjourney-proxy**：显式 `/mj` 路由，仅对应该开源代理协议，不宣称为 Midjourney
+  官方 API。提交／查询沿用任务防重与恢复；交付一张结果网格，作者提示词中的比例优先。
+- **Imagen**：没有接入已关闭的 Gemini API Imagen surface。Google 官方页目前明确
+  标注关闭，推荐迁往 Gemini 图片模型；这不是可通过客户端修复的缺口。
+
+所有新增选择与开关使用现有 Select、Combobox、ToggleField、ConfirmDialog，沿用主题
+令牌，没有原生 select、系统 confirm 或硬编码颜色。新 options 与图片模态单价都走
+现有配置备份／还原路径，离线往返测试覆盖。
+
+### 验证与已知边界
+
+验证使用离线 HTTP/SSE 夹具、真实 SQLite 任务抢占、取消后恢复、双账收据与配置往返。
+没有调用付费服务，因此这些是协议文档与模拟回包验证，不能作为中转站实测结论。
+Responses 缓存细项缺失保持 unknown；搜索等额外账项原样保留在 usage 中，未有可信
+报价或对应单价时不得声称精确结算。原始协议来源见 `docs/api/usage.md` 和 `streaming.md`。

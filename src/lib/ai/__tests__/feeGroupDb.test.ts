@@ -206,11 +206,11 @@ describe("ensureFeeGroupSchema", () => {
   it("老库缺 vendor 时补一列", async () => {
     const { db, executed } = fakeDb(["id", "name", "billing_mode"]);
     await ensureFeeGroupSchema(db);
-    expect(alters(executed)).toEqual(["ALTER TABLE fee_groups ADD COLUMN vendor TEXT"]);
+    expect(alters(executed)).toEqual(["ALTER TABLE fee_groups ADD COLUMN vendor TEXT", "ALTER TABLE fee_groups ADD COLUMN image_token_prices TEXT"]);
   });
 
   it("列已经在就不再补——补列这一步每次启动都跑", async () => {
-    const { db, executed } = fakeDb(["id", "name", "vendor", "billing_mode"]);
+    const { db, executed } = fakeDb(["id", "name", "vendor", "billing_mode", "image_token_prices"]);
     await ensureFeeGroupSchema(db);
     expect(alters(executed)).toEqual([]);
   });

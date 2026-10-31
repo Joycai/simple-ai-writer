@@ -1,3 +1,4 @@
+import { withImageFamily } from "../lib/ai/imageFamily";
 /**
  * One conversational image session: an initial generation, then edits on top,
  * each producing candidates the author picks between.
@@ -21,7 +22,7 @@ import { generateImage, imageConnOf, isEditUnsupportedError, type ImageResult } 
 import type { ImageSizingMode } from "../lib/ai/imageDialects";
 import type { Model, Provider } from "../lib/ai/configDb";
 import { imageForModel } from "../lib/image/normalize";
-import { imageRequestParams, imageSelectedSpec, inputImageSize, recordImageUsage } from "../lib/image";
+import { imageRequestParams, imageSelectedSpec, inputImageSize, recordImageUsage, settleImageResult } from "../lib/image";
 import { discardSession, sweepScratch, writeCandidates } from "../lib/image/session";
 
 /** One calibration verdict attached to a turn (lib/image/calibrate.ts). */
@@ -88,6 +89,7 @@ interface ImageSessionState {
   /** The turn on screen; edits branch from it. */
   currentId: string | null;
   running: boolean;
+  preview: string | null;
   error: string | null;
   /**
    * Identity of the run that owns the current state.
@@ -135,6 +137,7 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
   turns: [],
   currentId: null,
   running: false,
+  preview: null,
   error: null,
   runToken: 0,
 
@@ -152,12 +155,13 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
   },
 
   generate: async (ctx, prompt, opts) => {
+    ctx = { ...ctx, model: withImageFamily(ctx.model) };
     const sessionId = get().sessionId ?? (await get().begin(ctx.projectPath));
     // Resolved before the await: the parent must be the turn on screen when
     // the round started, not whatever the state holds when the result lands.
     const parent = opts?.append ? get().currentTurn() : null;
     const token = ++runSeq;
-    set({ runToken: token, running: true, error: null });
+    set({ runToken: token, running: true, preview: null, error: null });
     try {
       const result = await callModel(ctx, prompt, []);
       if (get().runToken !== token) return void bill(ctx, "image-gen", result);
@@ -171,16 +175,17 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
     } catch (e) {
       if ((e as Error).name !== "AbortError" && get().runToken === token) set({ error: messageOf(e) });
     } finally {
-      if (get().runToken === token) set({ running: false });
+      if (get().runToken === token) set({ running: false, preview: null });
     }
   },
 
   edit: async (ctx, instruction) => {
+    ctx = { ...ctx, model: withImageFamily(ctx.model) };
     const { sessionId, currentId } = get();
     const parent = get().currentTurn();
     if (!sessionId || !parent) return;
     const token = ++runSeq;
-    set({ runToken: token, running: true, error: null });
+    set({ runToken: token, running: true, preview: null, error: null });
     try {
       const sourcePath = get().currentImagePath();
       const source = sourcePath ? (await imageForModel(sourcePath)).dataUrl : null;
@@ -223,7 +228,7 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
     } catch (e) {
       if ((e as Error).name !== "AbortError" && get().runToken === token) set({ error: messageOf(e) });
     } finally {
-      if (get().runToken === token) set({ running: false });
+      if (get().runToken === token) set({ running: false, preview: null });
     }
   },
 
@@ -278,6 +283,7 @@ function messageOf(e: unknown): string {
 }
 
 function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<ImageResult> {
+  const token = useImageStore.getState().runToken;
   return generateImage(
     imageConnOf(ctx.model, ctx.provider, ctx.apiKey),
     {
@@ -293,6 +299,8 @@ function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<I
         { edit: images.length > 0, ...(images[0] ? { inputSize: inputImageSize(images[0]) } : {}) },
       ),
       signal: ctx.signal,
+      onPreview: (image) => { if (useImageStore.getState().runToken === token) useImageStore.setState({ preview: image.dataUrl }); },
+      onSettled: (result) => settleImageResult(ctx.projectPath, ctx.model, images.length ? "image-edit" : "image-gen", images.length, result),
     },
   );
 }
@@ -305,7 +313,7 @@ function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<I
  * the author actually paid.
  */
 function bill(ctx: RunContext, task: "image-gen" | "image-edit", result: ImageResult): void {
-  void recordImageUsage(ctx.projectPath, ctx.model, task, result.images.length, result.usage, specOf(ctx), inputsOf(task), result.requestId);
+  void recordImageUsage(ctx.projectPath, ctx.model, task, result.images.length, result.usage, specOf(ctx), inputsOf(task), result.requestId, result.evidence);
 }
 
 /**
@@ -344,6 +352,7 @@ async function materialize(
     specOf(ctx),
     inputsOf(turn.parentId ? "image-edit" : "image-gen"),
     result.requestId,
+    result.evidence,
   );
   const candidates = await writeCandidates(ctx.projectPath, sessionId, id, result.images);
   return { id, ...turn, candidates, chosen: 0, text: result.text };

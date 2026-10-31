@@ -11,9 +11,11 @@
  * declaration (docs/feature/image-route.md).
  */
 
+import { inferImageFamily } from "./imageFamily";
+import type { ImageDialect } from "./imageDialects";
 import { familyOf, type ApiStandard, type ImageRoute, type ProtocolFamily } from "./types";
 
-/** The routes a model can land on without declaring one. */
+/** Protocol-only fallback when neither a declaration nor a model family decides. */
 type DerivedImageRoute = "images-api" | "gemini" | "dashscope";
 
 /**
@@ -21,8 +23,7 @@ type DerivedImageRoute = "images-api" | "gemini" | "dashscope";
  * so the next family does not compile until it picks one — the fifth fell
  * through a `=== "gemini" ? … : "images-api"` into a 404.
  *
- * `chat`, `comfyui` and `ark` are never derived, so for them the declaration
- * *is* the effective route; the type above is what guarantees that.
+ * Model-family defaults below may also select chat or ark. ComfyUI is always explicit.
  */
 const DERIVED: Record<ProtocolFamily, DerivedImageRoute> = {
   openai: "images-api",
@@ -39,6 +40,8 @@ const DERIVED: Record<ProtocolFamily, DerivedImageRoute> = {
 /** The declarations the answer depends on — structural, so `ImageCaps` and `ImageConn` both fit. */
 interface ImageRouteDecl {
   route?: ImageRoute;
+  dialect?: ImageDialect;
+  modelId?: string;
   asyncTask?: boolean;
 }
 
@@ -46,8 +49,16 @@ interface ImageRouteDecl {
  * The route this model's image calls take. `standard` is the model's current
  * route's standard (`providerFor(model).apiStandard`), not the channel's primary.
  */
-export function effectiveImageRoute(standard: ApiStandard, decl?: Pick<ImageRouteDecl, "route">): ImageRoute {
-  return decl?.route || DERIVED[familyOf(standard)];
+export function effectiveImageRoute(standard: ApiStandard, decl?: ImageRouteDecl): ImageRoute {
+  if (decl?.route) return decl.route;
+  const dialect = decl?.dialect ?? inferImageFamily(decl?.modelId ?? "");
+  if (dialect?.startsWith("seedream-")) return "ark";
+  if (dialect === "wan2.7" || dialect === "qwen-image") return "dashscope";
+  if (dialect === "nanobanana" || dialect === "nanobanana-2") {
+    return familyOf(standard) === "gemini" ? "gemini" : "chat";
+  }
+  if (dialect === "gpt-image-2" || dialect === "gpt-image-2.5" || dialect === "grok-imagine") return "images-api";
+  return DERIVED[familyOf(standard)];
 }
 
 /**

@@ -1,11 +1,19 @@
+import { costReportHeaders, costReportingPlatform } from "./reportedCost";
+import { imageEvents } from "./imageEvents";
+import type { ImageOptions } from "./imageOptions";
+import { imageTaskKey, readImageTask, reserveImageTask, saveImageTask, forgetImageTask } from "./imageTasks";
+import { validateGeneratedImage } from "../image/validateGenerated";
+import { captureImageEvidence, type ImageEvidence } from "./imageEvidence";
+import type { PlatformId } from "./platforms";
+import { resolvedImageCaps } from "./imageFamily";
+import type { ImageDialect } from "./imageDialects";
 /**
  * Image generation client — the sibling of `streamCompletion` for models that
  * return pictures instead of prose.
  *
- * Deliberately NOT built on the streaming path: an image response is one JSON
- * body carrying base64 (or a short-lived URL), with no SSE, no token deltas and
- * no tool loop. Threading that through `StreamChunk` would bend every text
- * consumer around a case it can never hit.
+ * Separate from conversational StreamChunk: image transports return complete
+ * artifacts and evidence, with optional SSE previews and completed images.
+ * They do not run the conversational tool loop.
  *
  * One entry point for both generation and editing: every provider expresses an
  * edit as "the same endpoint, with input images attached", so a second function
@@ -31,6 +39,9 @@ import { geminiUrl, openaiUrl, trimBase } from "./urls";
 
 /** The provider coordinates every image call needs. */
 export interface ImageConn {
+  options?: ImageOptions;
+  platform?: PlatformId;
+  dialect?: ImageDialect;
   baseUrl: string;
   apiKey: string;
   standard: ApiStandard;
@@ -58,16 +69,19 @@ export interface ImageConn {
  */
 export function imageConnOf(
   model: Pick<Model, "modelId" | "caps">,
-  provider: Pick<Provider, "baseUrl" | "apiStandard" | "authMode" | "safetySettings">,
+  provider: Pick<Provider, "baseUrl" | "apiStandard" | "authMode" | "safetySettings" | "platform">,
   apiKey: string,
 ): ImageConn {
   return {
+    platform: provider.platform,
     baseUrl: provider.baseUrl,
     apiKey,
     standard: provider.apiStandard,
     authMode: provider.authMode,
     modelId: model.modelId,
     safetySettings: provider.safetySettings,
+    options: model.caps?.options,
+    dialect: resolvedImageCaps(model.modelId, model.caps)?.dialect,
     route: model.caps?.route,
     asyncTask: model.caps?.asyncTask,
     comfy: model.caps?.comfy,
@@ -102,9 +116,16 @@ export interface ImageProgress {
 }
 
 interface ImageRequest {
+  /** Settlement runs before materialization, including failed downloads. */
+  onSettled?: (result: ImageResult) => Promise<void>;
+  onPreview?: (image: GeneratedImage) => void;
+  /** Internal per-invocation evidence, never persisted as request parameters. */
+  evidence?: ImageEvidence;
   prompt: string;
   /** Input images as base64 data URLs. Non-empty turns the call into an edit. */
   images?: string[];
+  /** Input images are references for a new image, not a requested edit. */
+  referenceOnly?: boolean;
   /**
    * Edit mask as a base64 data URL — transparent where the model may repaint.
    * OpenAI's edits endpoint only; the other routes have no equivalent field
@@ -162,6 +183,7 @@ interface ImageRequest {
 }
 
 export interface GeneratedImage {
+  layer?: { name?: string; description?: string; zIndex?: number; boundingBox?: unknown };
   /** base64 data URL — every adapter normalizes to this, URLs included. */
   dataUrl: string;
   mime: string;
@@ -170,6 +192,7 @@ export interface GeneratedImage {
 export interface ImageResult {
   /** Stable for this generation; reused by every accounting path. */
   requestId?: string;
+  evidence?: ImageEvidence;
   images: GeneratedImage[];
   /** Commentary some models return alongside the picture (Gemini does). */
   text?: string;
@@ -294,11 +317,20 @@ function withDeadline(signal: AbortSignal | undefined, ms: number): { signal: Ab
 }
 
 /**
- * Generate images. Dispatches on the provider's wire protocol, the same split
- * `streamCompletion` makes.
+ * Read usage evidence before decoding or downloading any returned image.
  */
+async function readImageJson(res: Response, label: string, conn: ImageConn, req: ImageRequest): Promise<unknown> {
+  const raw = await readJson(res, label);
+  if (req.evidence) captureImageEvidence(req.evidence, raw, conn);
+  return raw;
+}
+
 export async function generateImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
-  const requestId = crypto.randomUUID();
+  conn = { ...conn, dialect: resolvedImageCaps(conn.modelId, { dialect: conn.dialect })?.dialect };
+  let requestId: string = crypto.randomUUID();
+  const evidence: ImageEvidence = { outcome: "failed", spec: { size: req.imageSize ?? req.size ?? (typeof req.extraBody?.resolution === "string" ? req.extraBody.resolution : undefined), quality: req.quality } };
+  req = { ...req, evidence };
+  let result: ImageResult = { images: [], requestId, evidence };
   const route = effectiveImageRoute(conn.standard, conn);
   // Logged like `streamCompletion` is. These calls bill per attempt and their
   // failures are the least reproducible in the app, so leaving them out of the
@@ -320,12 +352,41 @@ export async function generateImage(conn: ImageConn, req: ImageRequest): Promise
   });
 
   try {
-    const result = await dispatchImage(route, effectiveAsyncTask(conn.standard, conn), conn, req, log);
+    const received = await dispatchImage(route, effectiveAsyncTask(conn.standard, conn), conn, req, log);
+    requestId = evidence.requestId ?? requestId;
+    result = { ...received, requestId, evidence };
+    const valid: GeneratedImage[] = [];
+    const failures: unknown[] = [];
+    for (const img of received.images) {
+      try { valid.push(await validateGeneratedImage(img)); } catch (e) { failures.push(e); }
+    }
+    result.images = valid;
+    evidence.outcome = req.signal?.aborted ? "cancelled" : failures.length || evidence.partial ? "failed" : "complete";
+    if (!valid.length) throw failures[0] ?? new NoImageError();
+    if (failures.length) result.text = [result.text, `${failures.length} invalid image(s) discarded.`].filter(Boolean).join("\n");
+    if (evidence.partial && !result.text) result.text = "Only part of the image request completed.";
     log.success({ images: result.images.length, usage: result.usage, text: result.text });
-    return { ...result, requestId };
+    return result;
   } catch (e) {
+    evidence.outcome = req.signal?.aborted ? "cancelled" : "failed";
     log.error(e);
+    if (evidence.pendingTask) throw new Error(`Image task ${evidence.pendingTask} is still recoverable. Retry the same request to resume polling. ${e instanceof Error ? e.message : String(e)}`);
     throw e;
+  } finally {
+    result.requestId = evidence.requestId ?? requestId;
+    result.usage ??= evidence.usage;
+    // A pending async job is not settled: its final receipt must keep the same ID.
+    let settled = true;
+    try { if (!evidence.pendingTask) await req.onSettled?.(result); }
+    catch (error) {
+      settled = false;
+      console.warn("[image] result settlement needs recovery", error);
+      result.text = [result.text, `Result storage needs recovery: ${String(error)}`].filter(Boolean).join("\n");
+    }
+    if (settled && evidence.taskKey && evidence.outcome === "complete") {
+      try { await forgetImageTask(evidence.taskKey); }
+      catch (error) { console.warn("[image] could not clear completed task reference", error); }
+    }
   }
 }
 
@@ -337,6 +398,9 @@ function dispatchImage(
   log: ImageCallLogger,
 ): Promise<ImageResult> {
   switch (route) {
+    case "responses": return responsesImage(conn, req);
+    case "minimax": return minimaxImage(conn, req);
+    case "midjourney": return midjourneyImage(conn, req);
     case "gemini":
       // One endpoint for both: the input images simply become extra parts.
       return geminiImage(conn, req);
@@ -360,7 +424,8 @@ function dispatchImage(
       // The OpenAI protocol is the odd one out: editing is a different URL
       // with a different encoding (multipart), not the same call with extra
       // fields.
-      return req.images?.length ? openaiEdit(conn, req) : openaiImage(conn, req);
+      return conn.dialect === "grok-imagine" ? grokImage(conn, req)
+        : req.images?.length ? openaiEdit(conn, req) : openaiImage(conn, req);
   }
 }
 
@@ -540,7 +605,6 @@ async function tryLinkedImage(url: string, signal: AbortSignal | undefined, fail
   try {
     return await urlToDataUrl(url, signal);
   } catch (e) {
-    if (signal?.aborted || (e as Error)?.name === "AbortError") throw e;
     failures.push(e);
     console.warn("[image] a generated picture could not be downloaded; keeping the rest", e);
     return undefined;
@@ -606,6 +670,7 @@ async function openaiImage(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...costReportHeaders(costReportingPlatform(conn)),
         ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}),
       },
       body: JSON.stringify({
@@ -618,6 +683,7 @@ async function openaiImage(
         ...(req.size ? { size: req.size } : {}),
         ...(req.quality ? { quality: req.quality } : {}),
         ...req.extraBody,
+        ...(conn.options?.stream ? { stream: true, partial_images: 1 } : {}),
       }),
       signal: deadline.signal,
     });
@@ -634,7 +700,33 @@ async function openaiImage(
     if (askB64 && namesResponseFormat(err)) return openaiImage(conn, req, false);
     throw err;
   }
-  return parseOpenAiImagePayload(await readJson(res, "Image API error"), req.signal);
+  if (res.headers.get("content-type")?.includes("text/event-stream")) return collectImageStream(res, conn, req);
+  return parseOpenAiImagePayload(await readImageJson(res, "Image API error", conn, req), req.signal);
+}
+
+/** xAI edits use JSON; OpenAI's multipart body is not wire-compatible. */
+async function grokImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
+  const refs = req.images ?? [];
+  if (refs.length > 3) throw new Error("Grok supports at most 3 reference images.");
+  if (req.mask) throw new Error("Grok does not support an edit mask.");
+  const deadline = withDeadline(req.signal, GENERATE_TIMEOUT_MS);
+  try {
+    const res = await fetch(openaiUrl(conn.baseUrl, refs.length ? "/images/edits" : "/images/generations"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...costReportHeaders(costReportingPlatform(conn)), ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}) },
+      signal: deadline.signal,
+      body: JSON.stringify({
+        model: conn.modelId, prompt: req.prompt, n: req.n ?? 1, response_format: "b64_json",
+        ...(req.aspect ? { aspect_ratio: req.aspect } : {}),
+        ...(req.quality ? { quality: req.quality } : {}),
+        ...req.extraBody,
+        ...(refs.length === 1 ? { image: { url: refs[0], type: "image_url" } }
+          : refs.length > 1 ? { images: refs.map(url => ({ url, type: "image_url" })) } : {}),
+      }),
+    });
+    if (!res.ok) throw new ImageHttpError("Image API error", res.status, await res.text());
+    return await parseOpenAiImagePayload(await readImageJson(res, "Image API error", conn, req), deadline.signal);
+  } finally { deadline.done(); }
 }
 
 /** True when an error is specifically about the `response_format` field. */
@@ -740,6 +832,7 @@ async function openaiEdit(
   sizeRetry = true,
 ): Promise<ImageResult> {
   const url = openaiUrl(conn.baseUrl, "/images/edits");
+  if (req.evidence) req.evidence.spec = { size: req.size, quality: req.quality };
   const form = new FormData();
   form.append("model", conn.modelId);
   form.append("prompt", req.prompt);
@@ -758,6 +851,7 @@ async function openaiEdit(
   }
   if (req.size) form.append("size", req.size);
   if (req.quality) form.append("quality", req.quality);
+  if (conn.options?.stream) { form.append("stream", "true"); form.append("partial_images", "1"); }
   if (req.n && req.n > 1) form.append("n", String(req.n));
   // Carried like every other route does — a relay that needs an extra field to
   // accept an edit had no way to get one here, with nothing saying why.
@@ -771,7 +865,7 @@ async function openaiEdit(
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}) },
+      headers: { ...costReportHeaders(costReportingPlatform(conn)), ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}) },
       body: form,
       signal: deadline.signal,
     });
@@ -784,10 +878,161 @@ async function openaiEdit(
       }
       throw err;
     }
-    return await parseOpenAiImagePayload(await readJson(res, "Image edit error"), req.signal);
+    if (res.headers.get("content-type")?.includes("text/event-stream")) return await collectImageStream(res, conn, req);
+    return await parseOpenAiImagePayload(await readImageJson(res, "Image edit error", conn, req), req.signal);
   } finally {
     deadline.done();
   }
+}
+
+/** MiniMax image-01 has a dedicated endpoint, not OpenAI Images. */
+async function minimaxImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
+  if (req.images?.length && !req.referenceOnly) throw new Error("MiniMax image-01 supports subject references, not general image editing. Use a model with editing support.");
+  if ((req.images?.length ?? 0) > 1) throw new Error("MiniMax accepts one character reference.");
+  if ((req.n ?? 1) > 9 || req.prompt.length > 1500) throw new Error("MiniMax accepts at most 9 images and a 1500-character prompt.");
+  const dimensions = req.size?.split(/[x*×]/).map(Number);
+  if (dimensions && (dimensions.length !== 2 || dimensions.some(n => !Number.isInteger(n) || n < 512 || n > 2048 || n % 8))) {
+    throw new Error("MiniMax dimensions must be multiples of 8 between 512 and 2048.");
+  }
+  const deadline = withDeadline(req.signal, GENERATE_TIMEOUT_MS);
+  try {
+    const res = await fetch(openaiUrl(conn.baseUrl, "/image_generation"), {
+      method: "POST", signal: deadline.signal,
+      headers: { "Content-Type": "application/json", ...costReportHeaders(costReportingPlatform(conn)), ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}) },
+      body: JSON.stringify({ model: conn.modelId, prompt: req.prompt, n: req.n ?? 1, response_format: "url",
+        ...(req.images?.length ? { subject_reference: [{ type: "character", image_file: req.images[0] }] } : {}),
+        ...(dimensions ? { width: dimensions[0], height: dimensions[1] } : req.aspect ? { aspect_ratio: req.aspect } : {}),
+        ...req.extraBody }),
+    });
+    if (!res.ok) throw new ImageHttpError("Image API error", res.status, await res.text());
+    const raw = await readJson(res, "Image API error") as { base_resp?: { status_code?: number; status_msg?: string }; metadata?: { success_count?: string }; data?: { image_urls?: string[] } };
+    if (raw.base_resp?.status_code !== 0) throw new ImageHttpError("Image API error", 200, JSON.stringify(raw.base_resp ?? raw));
+    const count = Number(raw.metadata?.success_count);
+    if (req.evidence && raw.metadata?.success_count !== undefined && Number.isInteger(count) && count >= 0) {
+      req.evidence.generatedImages = count;
+      req.evidence.rawUsage = raw.metadata;
+    }
+    return await collectDashscopeImages(raw.data?.image_urls ?? [], [], deadline.signal);
+  } finally { deadline.done(); }
+}
+
+/** Explicit midjourney-proxy dialect; not a claim that Midjourney offers this API. */
+async function midjourneyImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
+  if ((req.n ?? 1) !== 1) throw new Error("midjourney-proxy returns one image grid per task.");
+  if (req.mask) throw new Error("midjourney-proxy does not accept edit masks.");
+  const base = trimBase(conn.baseUrl).replace(/\/(?:v1|mj)$/, "");
+  const body = { prompt: req.prompt + (req.aspect && !/--(?:ar|aspect)\s/.test(req.prompt) ? ` --ar ${req.aspect}` : ""), base64Array: req.images ?? [] };
+  const key = await imageTaskKey(`${base}/mj`, conn.modelId, conn.apiKey, body);
+  let saved = await readImageTask(key);
+  const deadline = withDeadline(req.signal, DASHSCOPE_TASK_TIMEOUT_MS);
+  const headers = { "Content-Type": "application/json", "mj-api-secret": conn.apiKey };
+  try {
+    if (!saved) {
+      if (!await reserveImageTask(key, { endpoint: conn.baseUrl, modelId: conn.modelId })) throw new Error("An identical image task is being submitted. Retry to resume it.");
+      const res = await fetch(`${base}/mj/submit/imagine`, { method: "POST", headers, body: JSON.stringify(body), signal: deadline.signal });
+      if (!res.ok) {
+        if ([400, 401, 403, 404, 422].includes(res.status)) await forgetImageTask(key);
+        throw new ImageHttpError("Image API error", res.status, await res.text());
+      }
+      const submitted = await readJson(res, "Image API error") as { code?: number; result?: string };
+      if (![1, 21, 22].includes(submitted.code ?? 0) || !submitted.result) throw new ImageHttpError("Image API error", 200, JSON.stringify(submitted));
+      saved = { taskId: submitted.result, requestId: crypto.randomUUID(), submittedAt: Date.now() };
+      await saveImageTask(key, saved);
+    }
+    if (!saved.taskId) throw new Error("The previous image submission has an unknown outcome. Check the proxy task history before submitting again.");
+    if (req.evidence) Object.assign(req.evidence, { taskKey: key, requestId: saved.requestId, pendingTask: saved.taskId });
+    for (let polls = 0; ; polls++) {
+      const res = await fetch(`${base}/mj/task/${encodeURIComponent(saved.taskId)}/fetch`, { headers, signal: deadline.signal });
+      if (!res.ok) throw new ImageHttpError("Image task error", res.status, await res.text(), "task");
+      const task = await readJson(res, "Image task error") as { status?: string; imageUrl?: string; failReason?: string };
+      if (task.status === "SUCCESS" && task.imageUrl) {
+        if (req.evidence) { delete req.evidence.pendingTask; req.evidence.generatedImages = 1; }
+        return { images: [await urlToDataUrl(task.imageUrl, deadline.signal)] };
+      }
+      if (task.status === "FAILURE") {
+        if (req.evidence) delete req.evidence.pendingTask;
+        await forgetImageTask(key);
+        throw new Error(task.failReason || "Image task failed");
+      }
+      req.onProgress?.({ phase: "running", polls, elapsedMs: Date.now() - saved.submittedAt, timeoutMs: DASHSCOPE_TASK_TIMEOUT_MS });
+      await sleep(DASHSCOPE_POLL_SLOW_MS, deadline.signal);
+    }
+  } finally { deadline.done(); }
+}
+
+/** Responses has a conversational driver and a separately selected image tool model. */
+async function responsesImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
+  if ((req.n ?? 1) !== 1) throw new Error("Responses image generation returns one result per request.");
+  if (req.mask) throw new Error("This Responses image route does not accept masks; select Images API for masked edits.");
+  const driver = conn.options?.responsesModel?.trim();
+  if (!driver) throw new Error("Select a Responses driver model in this image model's settings.");
+  const deadline = withDeadline(req.signal, GENERATE_TIMEOUT_MS);
+  try {
+    const res = await fetch(openaiUrl(conn.baseUrl, "/responses"), {
+      method: "POST", signal: deadline.signal,
+      headers: { "Content-Type": "application/json", ...costReportHeaders(costReportingPlatform(conn)), ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}) },
+      body: JSON.stringify({ model: driver, store: false, instructions: "",
+        input: [{ role: "user", content: [{ type: "input_text", text: req.prompt },
+          ...(req.images ?? []).map(image_url => ({ type: "input_image", image_url }))] }],
+        tools: [{ type: "image_generation", model: conn.modelId,
+          ...(req.size ? { size: req.size } : {}), ...(req.quality ? { quality: req.quality } : {}),
+          ...(conn.options?.stream ? { partial_images: 1 } : {}) }],
+        tool_choice: { type: "image_generation" }, stream: conn.options?.stream ?? false,
+      }),
+    });
+    if (!res.ok) throw new ImageHttpError("Image API error", res.status, await res.text());
+    if (res.headers.get("content-type")?.includes("text/event-stream")) return await collectImageStream(res, conn, req);
+    const raw = await readImageJson(res, "Image API error", conn, req) as { output?: Record<string, unknown>[] };
+    const images = (raw.output ?? []).filter(o => o.type === "image_generation_call" && typeof o.result === "string")
+      .map(o => imageFromBase64(o.result as string));
+    if (!images.length) throw new NoImageError();
+    return { images, usage: req.evidence?.usage };
+  } finally { deadline.done(); }
+}
+
+/** Final images survive a stream error; preview frames never count as delivered images. */
+async function collectImageStream(res: Response, conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
+  const deadline = withDeadline(req.signal, GENERATE_TIMEOUT_MS);
+  const images: GeneratedImage[] = [];
+  const seen = new Set<string>();
+  let complete = false;
+  const add = async (event: Record<string, unknown>) => {
+    const b64 = event.b64_json ?? event.result;
+    const url = event.url;
+    const id = typeof b64 === "string" ? b64 : typeof url === "string" ? url : undefined;
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    if (typeof b64 === "string") images.push(imageFromBase64(b64));
+    else if (typeof url === "string") {
+      const image = await tryLinkedImage(url, req.signal, []);
+      if (image) images.push(image);
+    }
+  };
+  try {
+    for await (const event of imageEvents(res, deadline.signal)) {
+      const preview = event.partial_image_b64 ?? ((event.type === "image_generation.partial_image" || event.type === "image_edit.partial_image") ? event.b64_json : undefined);
+      if (typeof preview === "string" && req.onPreview) {
+        try { req.onPreview(await validateGeneratedImage(imageFromBase64(preview))); }
+        catch { /* corrupt previews never become final results */ }
+      }
+      if (req.evidence) captureImageEvidence(req.evidence, event.response ?? event, conn);
+      if (event.type === "error" || event.type === "response.failed") throw new ImageHttpError("Image stream error", 200, JSON.stringify(event));
+      if (event.type === "image_generation.partial_succeeded" || event.type === "image_generation.completed" || event.type === "image_edit.completed") await add(event);
+      if (event.type === "response.output_item.done") await add((event.item ?? {}) as Record<string, unknown>);
+      if (event.type === "response.completed") {
+        const output = (event.response as { output?: Record<string, unknown>[] })?.output ?? [];
+        for (const item of output) if (item.type === "image_generation_call") await add(item);
+      }
+      if (event.type === "response.completed" || event.type === "image_generation.completed" || event.type === "image_edit.completed") complete = true;
+    }
+    if (!complete) throw new Error("Image stream ended before completion");
+  } catch (e) {
+    if (!images.length) throw e;
+    if (req.evidence) req.evidence.partial = true;
+    return { images, text: `Partial image result: ${e instanceof Error ? e.message : String(e)}` };
+  } finally { deadline.done(); }
+  if (!images.length) throw new NoImageError();
+  return { images, usage: req.evidence?.usage };
 }
 
 // ─── Chat completions (relay-hosted image models) ────────────────────────────
@@ -825,6 +1070,7 @@ async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResul
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...costReportHeaders(costReportingPlatform(conn)),
         ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}),
       },
       body: JSON.stringify({
@@ -846,6 +1092,12 @@ async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResul
           ],
         }],
         stream: false,
+        ...((conn.dialect === "nanobanana" || conn.dialect === "nanobanana-2") ? {
+          extra_body: { google: { image_config: {
+            ...(req.aspect ? { aspect_ratio: req.aspect } : {}),
+            ...(req.imageSize ? { image_size: req.imageSize } : {}),
+          } } },
+        } : {}),
         // Same "only when it isn't the default" rule as the other routes. Most
         // relays serving an image model here return one picture regardless;
         // the UI says so rather than letting the count silently mean nothing.
@@ -860,7 +1112,7 @@ async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResul
 
   if (!res.ok) throw new ImageHttpError("Image API error", res.status, await res.text());
 
-  const json = (await readJson(res, "Image API error")) as {
+  const json = (await readImageJson(res, "Image API error", conn, req)) as {
     choices?: { message?: {
       content?: string | { type?: string; text?: string; image_url?: { url?: string } }[];
       images?: ({ image_url?: { url?: string }; url?: string; b64_json?: string } | string)[];
@@ -990,7 +1242,7 @@ async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
   try {
     res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...geminiAuthHeaders(conn.apiKey, conn.authMode) },
+      headers: { "Content-Type": "application/json", ...geminiAuthHeaders(conn.apiKey, conn.authMode), ...costReportHeaders(costReportingPlatform(conn)) },
       body: JSON.stringify({
         contents,
         generationConfig: {
@@ -1011,7 +1263,7 @@ async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
 
   if (!res.ok) throw new ImageHttpError("Gemini image error", res.status, await res.text());
 
-  const json = (await readJson(res, "Gemini image error")) as {
+  const json = (await readImageJson(res, "Gemini image error", conn, req)) as {
     candidates?: {
       content?: { parts?: { text?: string; inlineData?: { mimeType?: string; data?: string } }[] };
       finishReason?: string;
@@ -1120,7 +1372,8 @@ function dashscopeBody(conn: ImageConn, req: ImageRequest): Record<string, unkno
 function dashscopeHeaders(conn: ImageConn): Record<string, string> {
   return {
     "Content-Type": "application/json",
-    ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}),
+    ...costReportHeaders(costReportingPlatform(conn)),
+        ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}),
   };
 }
 
@@ -1196,7 +1449,7 @@ async function dashscopeImage(conn: ImageConn, req: ImageRequest): Promise<Image
   }
 
   if (!res.ok) throw new ImageHttpError("Image API error", res.status, await res.text());
-  const json = (await readJson(res, "Image API error")) as { code?: string; output?: DashscopeOutput };
+  const json = (await readImageJson(res, "Image API error", conn, req)) as { code?: string; output?: DashscopeOutput };
   // Status 200 with `code` set is how DashScope delivers e.g.
   // DataInspectionFailed — an ImageHttpError so the structured code survives.
   if (json.code) throw new ImageHttpError("Image API error", 200, JSON.stringify(json));
@@ -1238,21 +1491,28 @@ async function dashscopeAsyncImage(conn: ImageConn, req: ImageRequest, log: Imag
   const base = dashscopeNativeBase(conn.baseUrl);
   const deadline = withDeadline(req.signal, DASHSCOPE_TASK_TIMEOUT_MS);
   try {
-    const res = await fetch(`${base}/services/aigc/image-generation/generation`, {
-      method: "POST",
-      headers: { ...dashscopeHeaders(conn), "X-DashScope-Async": "enable" },
-      body: JSON.stringify(dashscopeBody(conn, req)),
-      signal: deadline.signal,
-    });
-    if (!res.ok) throw new ImageHttpError("Image API error", res.status, await res.text());
-    const submitted = (await readJson(res, "Image API error")) as {
-      code?: string;
-      output?: { task_id?: string };
-    };
-    if (submitted.code) throw new ImageHttpError("Image API error", 200, JSON.stringify(submitted));
-    const taskId = submitted.output?.task_id;
-    if (!taskId) throw new ImageHttpError("Image API error", 200, JSON.stringify(submitted).slice(0, 400));
-    // The one fact a hung poll would otherwise take with it.
+    const body = dashscopeBody(conn, req);
+    const key = await imageTaskKey(base, conn.modelId, conn.apiKey, body);
+    let saved = await readImageTask(key);
+    if (!saved) {
+      if (!await reserveImageTask(key, { endpoint: conn.baseUrl, modelId: conn.modelId })) throw new Error("An identical image request is being submitted. Retry to resume it.");
+      const res = await fetch(`${base}/services/aigc/image-generation/generation`, {
+        method: "POST", headers: { ...dashscopeHeaders(conn), "X-DashScope-Async": "enable" },
+        body: JSON.stringify(body), signal: deadline.signal,
+      });
+      if (!res.ok) {
+        if ([400, 401, 403, 404, 422].includes(res.status)) await forgetImageTask(key);
+        throw new ImageHttpError("Image API error", res.status, await res.text());
+      }
+      const submitted = await readJson(res, "Image API error") as { code?: string; output?: { task_id?: string } };
+      if (submitted.code || !submitted.output?.task_id) throw new ImageHttpError("Image API error", 200, JSON.stringify(submitted));
+      saved = { taskId: submitted.output.task_id, requestId: crypto.randomUUID(), submittedAt: Date.now() };
+      try { await saveImageTask(key, saved); }
+      catch (e) { throw new Error(`Could not save image task ${saved.taskId}; do not submit again. ${String(e)}`); }
+    }
+    if (!saved.taskId) throw new Error("The previous image submission has an unknown outcome. Check the provider task history before submitting again.");
+    const taskId = saved.taskId;
+    if (req.evidence) Object.assign(req.evidence, { requestId: saved.requestId, taskKey: key, pendingTask: taskId });
     log.note({ taskId });
 
     let polls = 0;
@@ -1269,7 +1529,7 @@ async function dashscopeAsyncImage(conn: ImageConn, req: ImageRequest, log: Imag
           signal: deadline.signal,
         });
         if (!poll.ok) throw new ImageHttpError("Image task error", poll.status, await poll.text(), "task");
-        json = (await readJson(poll, "Image task error")) as { output?: DashscopeOutput };
+        json = (await readImageJson(poll, "Image task error", conn, req)) as { output?: DashscopeOutput };
       } catch (e) {
         // The generation is already paid for and a poll is a cheap GET, so a
         // network blip or a 429 is worth riding out — but only a few in a row,
@@ -1290,11 +1550,14 @@ async function dashscopeAsyncImage(conn: ImageConn, req: ImageRequest, log: Imag
         continue;
       }
       if (status === "SUCCEEDED") {
+        if (req.evidence) delete req.evidence.pendingTask;
         const { urls, texts } = parseDashscopeOutput(json.output);
         return await collectDashscopeImages(urls, texts, deadline.signal);
       }
       // FAILED / CANCELED / anything unrecognized. The failure's code and
       // message live inside `output`, which parseErrorBody reads top-level.
+      if (req.evidence) delete req.evidence.pendingTask;
+      await forgetImageTask(key);
       throw new ImageHttpError("Image task error", 200, JSON.stringify(json.output ?? json), "task");
     }
   } finally {
@@ -1331,18 +1594,32 @@ function lowercaseDataUrlMime(url: string): string {
  * `watermark: false` is always written: upstream stamps 「AI 生成」 on every
  * image unless told otherwise, and bills it the same. It sits before
  * `extraBody` so an author who wants the mark can still ask for it.
- * `sequential_image_generation` is never sent — its default is off, and 5.0
- * pro rejects the field outright. `transparentBackground` becomes the two
+ * Group/layer/search options are validated against the declared model family.
+ * `transparentBackground` becomes the two
  * fields the endpoint insists on together: transparent output must be png.
  */
 function arkImageBody(conn: ImageConn, req: ImageRequest): Record<string, unknown> {
   const refs = (req.images ?? []).map(lowercaseDataUrlMime);
+  const mode = conn.options?.seedreamMode ?? "single";
+  if (refs.length > (conn.dialect === "seedream-5-pro" ? 10 : 14)) throw new Error("Too many Seedream reference images.");
+  const size = mode === "layers" && req.size && /[x*]/i.test(req.size) ? "auto" : req.size;
+  if (req.evidence) req.evidence.spec.size = size;
+  if (mode === "layers" && (conn.dialect !== "seedream-5-pro" || refs.length !== 1 || req.transparentBackground)) {
+    throw new Error("Layer decomposition requires Seedream Pro/Flash, exactly one input and no transparent-edit mode.");
+  }
+  if (mode === "group" && conn.dialect === "seedream-5-pro") throw new Error("This model does not support grouped images.");
+  if (conn.options?.webSearch && conn.dialect !== "seedream-5-lite") throw new Error("Web search requires Seedream 5.0 Lite.");
+  if (conn.options?.stream && conn.dialect === "seedream-5-pro") throw new Error("This model does not support image streaming.");
   return {
     model: conn.modelId,
     prompt: req.prompt,
     // One reference goes as a string, several as an array — both documented.
     ...(refs.length === 1 ? { image: refs[0] } : refs.length > 1 ? { image: refs } : {}),
-    ...(req.size ? { size: req.size } : {}),
+    ...(size ? { size } : {}),
+    ...(mode === "layers" ? { layer_decomposition: true } : {}),
+    ...(mode === "group" ? { sequential_image_generation: "auto", sequential_image_generation_options: { max_images: Math.max(1, Math.min(req.n ?? 1, 15 - refs.length)) } } : {}),
+    ...(conn.options?.webSearch ? { tools: [{ type: "web_search" }] } : {}),
+    ...(conn.options?.stream ? { stream: true } : {}),
     response_format: "b64_json",
     watermark: false,
     ...(req.transparentBackground ? { background: "transparent", output_format: "png" } : {}),
@@ -1372,8 +1649,18 @@ function isNoTransparentPixelError(err: unknown): boolean {
  * reported in `text`, not thrown: the successful ones are already paid for.
  */
 async function arkImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
-  const n = Math.max(1, req.n ?? 1);
-  const settled = await Promise.allSettled(Array.from({ length: n }, () => arkImageOnce(conn, req)));
+  const n = conn.options?.seedreamMode && conn.options.seedreamMode !== "single" ? 1 : Math.max(1, req.n ?? 1);
+  const evidence = Array.from({ length: n }, (): ImageEvidence => ({ outcome: "failed", spec: { ...req.evidence?.spec } }));
+  const settled = await Promise.allSettled(evidence.map(e => arkImageOnce(conn, { ...req, evidence: e })));
+  if (req.evidence) {
+    req.evidence.generatedImages = evidence.reduce((sum, e) => sum + (e.generatedImages ?? 0), 0);
+    req.evidence.rawUsage = evidence.map(e => e.rawUsage);
+    req.evidence.partial = settled.some(s => s.status === "rejected") || evidence.some(e => e.partial);
+    req.evidence.requests = settled.filter(s => s.status === "fulfilled").length;
+    if (evidence.every(e => e.spec.size === evidence[0]?.spec.size)) req.evidence.spec = evidence[0].spec;
+    req.evidence.reportedCost = evidence.every(e => e.reportedCost !== undefined)
+      ? evidence.reduce((sum, e) => sum + e.reportedCost!, 0) : undefined;
+  }
   const images: GeneratedImage[] = [];
   const failures: unknown[] = [];
   for (const s of settled) {
@@ -1405,13 +1692,15 @@ async function arkImageRequest(conn: ImageConn, req: ImageRequest): Promise<Gene
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...costReportHeaders(costReportingPlatform(conn)),
         ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}),
       },
       body: JSON.stringify(arkImageBody(conn, req)),
       signal: deadline.signal,
     });
     if (!res.ok) throw new ImageHttpError("Image API error", res.status, await res.text());
-    return await parseArkImagePayload(await readJson(res, "Image API error"), deadline.signal);
+    if (res.headers.get("content-type")?.includes("text/event-stream")) return (await collectImageStream(res, conn, req)).images;
+    return await parseArkImagePayload(await readImageJson(res, "Image API error", conn, req), deadline.signal);
   } finally {
     deadline.done();
   }
@@ -1431,7 +1720,7 @@ async function arkImageRequest(conn: ImageConn, req: ImageRequest): Promise<Gene
  */
 async function parseArkImagePayload(raw: unknown, signal?: AbortSignal): Promise<GeneratedImage[]> {
   const json = raw as {
-    data?: { b64_json?: string; url?: string; error?: { code?: string; message?: string } }[];
+    data?: { b64_json?: string; url?: string; name?: string; description?: string; z_index?: number; bounding_box?: unknown; error?: { code?: string; message?: string } }[];
     error?: { code?: string; message?: string } | string;
   };
   if (json.error) throw new ImageHttpError("Image API error", 200, JSON.stringify({ error: json.error }));
@@ -1439,6 +1728,7 @@ async function parseArkImagePayload(raw: unknown, signal?: AbortSignal): Promise
   const failures: unknown[] = [];
   let refused: { code?: string; message?: string } | undefined;
   for (const entry of json.data ?? []) {
+    const before = images.length;
     if (entry.b64_json) images.push(imageFromBase64(entry.b64_json));
     else if (entry.url?.startsWith("data:")) images.push(imageFromDataUrl(entry.url));
     // A 24-hour link when the author's extraBody asked for `url`.
@@ -1446,6 +1736,9 @@ async function parseArkImagePayload(raw: unknown, signal?: AbortSignal): Promise
       const img = await tryLinkedImage(entry.url, signal, failures);
       if (img) images.push(img);
     } else if (entry.error) refused ??= entry.error;
+    if (images.length > before && (entry.z_index !== undefined || entry.bounding_box !== undefined)) {
+      images[images.length - 1].layer = { name: entry.name, description: entry.description, zIndex: entry.z_index, boundingBox: entry.bounding_box };
+    }
   }
   if (images.length) return images;
   if (!refused) throwIfNoneArrived(images, failures);
@@ -1616,7 +1909,7 @@ async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogg
     // A 400 here carries node_errors — missing custom nodes, renamed
     // checkpoints — which is exactly what the author needs to see verbatim.
     if (!res.ok) throw new ImageHttpError("ComfyUI error", res.status, await res.text());
-    const submitted = (await readJson(res, "ComfyUI error")) as { prompt_id?: string };
+    const submitted = (await readImageJson(res, "ComfyUI error", conn, req)) as { prompt_id?: string };
     if (!submitted.prompt_id) {
       throw new ImageHttpError("ComfyUI error", 200, JSON.stringify(submitted).slice(0, 400));
     }
@@ -1636,7 +1929,7 @@ async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogg
       try {
         const poll = await fetch(`${base}/history/${promptId}`, { signal: deadline.signal });
         if (!poll.ok) throw new ImageHttpError("ComfyUI task error", poll.status, await poll.text(), "task");
-        const json = (await readJson(poll, "ComfyUI task error")) as Record<string, ComfyHistoryEntry>;
+        const json = (await readImageJson(poll, "ComfyUI task error", conn, req)) as Record<string, ComfyHistoryEntry>;
         entry = json[promptId];
       } catch (e) {
         // A loopback blip is rare but a restarting ComfyUI is not — ride out a

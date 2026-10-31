@@ -1,3 +1,7 @@
+vi.mock("../../../../lib/ai/imageTasks", () => ({
+  imageTaskKey: vi.fn(async () => "a".repeat(64)), readImageTask: vi.fn(async () => undefined),
+  reserveImageTask: vi.fn(async () => true), saveImageTask: vi.fn(async () => {}), forgetImageTask: vi.fn(async () => {}),
+}));
 /**
  * The drawer and the image client agree on where a model's pictures go
  * (docs/feature/image-route.md §4).

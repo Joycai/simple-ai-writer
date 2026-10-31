@@ -1,3 +1,4 @@
+import { withImageFamily } from "../../lib/ai/imageFamily";
 /**
  * Generate a picture, for whatever is being illustrated.
  *
@@ -74,7 +75,8 @@ export function ImageGenModal({ target, onClose }: Props) {
   // select empty: with exactly one image model — the common case — the author
   // should never have to choose it.
   const effectiveImageModelId = imageModelId ?? imageModels[0]?.id ?? "";
-  const imageModel = imageModels.find((m) => m.id === effectiveImageModelId) ?? null;
+  const storedImageModel = imageModels.find((m) => m.id === effectiveImageModelId);
+  const imageModel = useMemo(() => storedImageModel ? withImageFamily(storedImageModel) : null, [storedImageModel]);
   const imageProvider = imageModel ? providerFor(imageModel, providers) ?? null : null;
   /**
    * The chat-completions route carries no n/size/aspect fields (see
@@ -82,8 +84,11 @@ export function ImageGenModal({ target, onClose }: Props) {
    * nothing — the count select in particular, where picking 4 used to bill
    * for one picture and explain nothing.
    */
+  const streamPreview = useImageStore(s => s.preview);
   const chatRoute = !!imageModel && !!imageProvider
     && effectiveImageRoute(imageProvider.apiStandard, imageModel.caps) === "chat";
+  const singleResultRoute = chatRoute || ["responses", "midjourney"].includes(imageModel?.caps?.route ?? "")
+    || imageModel?.caps?.options?.seedreamMode === "layers";
   /**
    * ComfyUI is the one route with a real negative-prompt field, and the one
    * where folding the negative into the prompt would *hurt*: SD attracts what
@@ -199,7 +204,7 @@ export function ImageGenModal({ target, onClose }: Props) {
 
   const busy = building || generating || saving || calibrating;
   /** What this run will actually ask for — the chat route only ever returns one. */
-  const effectiveCount = chatRoute ? 1 : count;
+  const effectiveCount = singleResultRoute ? 1 : count;
   // 带上作者选的规格：按尺寸 / 质量分档的组，不带规格会估成 $0，而卡上一个
   // 假的 0 比没有估价更糟。估和记共用 `priceSpec`，口径只有一份。
   const outputSelection = { sizingMode, aspect, resolution, quality, size };
@@ -619,7 +624,7 @@ export function ImageGenModal({ target, onClose }: Props) {
                 )}
                 <div className={gen.fieldNarrow}>
                   <label className={styles.label}>{t("lore.imageGen.countLabel")}</label>
-                  <Select className={gen.selectInput} value={String(effectiveCount)} disabled={busy || chatRoute}
+                  <Select className={gen.selectInput} value={String(effectiveCount)} disabled={busy || singleResultRoute}
                     onChange={(v) => setCount(parseInt(v, 10))}
                     options={Array.from({ length: MAX_COUNT }, (_, i) => ({
                       value: String(i + 1),
@@ -713,6 +718,9 @@ export function ImageGenModal({ target, onClose }: Props) {
                 </div>
               )}
 
+              {generating && streamPreview && (
+                <div className={gen.grid}><div className={gen.thumb}><img src={streamPreview} alt={t("aiConfig.models.imageStream")} /></div></div>
+              )}
               {currentTurn && (
                 <div className={styles.section}>
                   <label className={styles.label}>{t("lore.imageGen.resultsLabel")}</label>

@@ -206,6 +206,8 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 
 #### 模型抽屉
 
+- 图片模型族沿用 `caps.dialect`：手动选择优先、ID 保底识别、显式通用关闭识别。`imageFamily.ts` 只补运行时副本，`imageRoute.ts` 统一解析独立的接口覆盖与族默认；详见 `docs/feature/image-route.md` 的 2026-10-30 增补。
+
 - Model-list context sizes use the shared themed badge with binary K/M units (at most one decimal); tooltip and accessible name retain the exact token count and field name. The display-only formatter is separate from editable limits so rounding never changes persisted values.
 
 - `TokenLimitControl` composes the shared `Slider` and `ModelTextInput` rather than styling raw form controls itself. `ModelTextInput` owns the model drawer input appearance, dashed unset state and themed invalid border; all states inherit settings/theme tokens and the global keyboard focus ring.
@@ -358,7 +360,8 @@ CommandPalette, onboarding flow, library view (文库: only what the author pick
 价格在**计费组**上（`feeGroup*`），模型只持有 `feeGroupId`；用量行由 `usageRow.ts` 的 `recordUsage` 唯一入口写两处（项目库 + `config.db`），行上自带当时的价，`costOf()` 是唯一的算式；读那一侧（`usage.ts`）、给老行补分项（`usageBackfill.ts`，唯一改写历史行的地方）、用量条分段（`usageMeter.ts`）、上游报价换算（`reportedCost.ts`）各一个文件。**逐文件的分工、不变量和理由都在 [`docs/feature/billing/01-fee-groups.md`](../feature/billing/01-fee-groups.md) 的「模块」一节**，改这些文件之前读那里；硬规则在 `AGENTS.md`「计费与用量」。
 
 #### 图片与日志
-- **which endpoint an image model draws through** (`imageRoute.ts` — `effectiveImageRoute`: the declared `ImageCaps.route`, else a `Record<ProtocolFamily, …>` default by the family of the model's *current* route, so 自动 on DashScope's native route is `dashscope`). The only derivation: the client (`generateImage`, fed by the one conn builder `imageConnOf`), the generate modal, 「将发送」, `defaultImageCaps` and the drawer (`panes/imageCapsDraft.ts`) all read it; `asyncTask` only through `effectiveAsyncTask`. `chat` / `comfyui` / `ark` are never derived, so a declaration read is fine for those three and **forbidden** for the other three — `src/lib/__tests__/imageRouteOwner.test.ts` scans for it. See `docs/feature/image-route.md`
+- **which endpoint an image model draws through** (`imageRoute.ts` — `effectiveImageRoute`: the declared `ImageCaps.route`, else a `Record<ProtocolFamily, …>` default by the family of the model's *current* route, so 自动 on DashScope's native route is `dashscope`). The only derivation: the client (`generateImage`, fed by the one conn builder `imageConnOf`), the generate modal, 「将发送」, `defaultImageCaps` and the drawer (`panes/imageCapsDraft.ts`) all read it; `asyncTask` only through `effectiveAsyncTask`. Only `comfyui` is always explicit; image-family defaults may derive `chat` and `ark`. Endpoint decisions use the resolver — `src/lib/__tests__/imageRouteOwner.test.ts` scans for it. See `docs/feature/image-route.md`
+- Image delivery: `imageEvidence.ts` captures usage/specs before downloads, `imageEvents.ts` frames SSE, `imageTasks.ts` reserves and resumes async IDs in config.db. `imageOptions.ts` owns explicit stream/Responses/Seedream options; `lib/image/validateGenerated.ts` validates final bytes and `resultBundle.ts` keeps related sets/layer metadata outside scratch. Decisions and limits: `docs/feature/image-route.md` → 2026-10-30 审查缺口补齐.
 - the one builder for an image content part (`imagePart.ts` — eight call sites hand a picture to a model, and the `detail` hint the author sets (`app:imageDetail`: unset = send no field, which is what every endpoint reads as `auto`) has to reach all eight or none; only ① and ② have a spelling for it, and they put it in different places — see `docs/api/landscape.md` §1)
 - `apiLog.ts`
 - `tokenEstimate.ts`

@@ -17,6 +17,8 @@ import type { ApiStandard, ImageRoute } from "../../../lib/ai/types";
 
 /** The image section as the drawer holds it. */
 export interface ImageCapsDraft {
+  modelId?: string;
+  options?: ImageCaps["options"];
   /** The declared route; "" = 自动. */
   route: ImageRoute | "";
   /** "" = generic (the free-form sizes list). */
@@ -34,6 +36,7 @@ export interface ImageCapsDraft {
 /** The draft a stored row opens as — the inverse of `imageCapsToSave` for every field the drawer shows. */
 export function draftFromCaps(caps: ImageCaps | undefined): ImageCapsDraft {
   return {
+    ...(caps?.options ? { options: caps.options } : {}),
     route: caps?.route ?? "",
     dialect: caps?.dialect ?? "",
     edit: caps?.edit ?? false,
@@ -53,17 +56,19 @@ const declOf = (route: ImageRoute | ""): { route?: ImageRoute } => (route ? { ro
  * Absent standard (the channel is gone) leaves nothing to derive from, so the
  * declaration answers alone.
  */
-export function draftRoute(standard: ApiStandard | undefined, draft: Pick<ImageCapsDraft, "route">): ImageRoute | undefined {
-  return standard ? effectiveImageRoute(standard, declOf(draft.route)) : draft.route || undefined;
+export function draftRoute(standard: ApiStandard | undefined, draft: Pick<ImageCapsDraft, "route"> & Partial<Pick<ImageCapsDraft, "dialect" | "modelId">>): ImageRoute | undefined {
+  return standard ? effectiveImageRoute(standard, { ...declOf(draft.route), dialect: draft.dialect || undefined, modelId: draft.modelId }) : draft.route || undefined;
 }
 
 /** Whether the async switch is on screen: the call would go to DashScope native. */
-export function showsAsyncToggle(standard: ApiStandard | undefined, draft: Pick<ImageCapsDraft, "route">): boolean {
+export function showsAsyncToggle(standard: ApiStandard | undefined, draft: Pick<ImageCapsDraft, "route"> & Partial<Pick<ImageCapsDraft, "dialect" | "modelId">>): boolean {
   return draftRoute(standard, draft) === "dashscope";
 }
 
 /** One side of a route change: the standard it is asked on and the declared route. */
 interface RouteSide {
+  dialect?: ImageDialect | "";
+  modelId?: string;
   standard: ApiStandard | undefined;
   route: ImageRoute | "";
 }
@@ -116,8 +121,9 @@ export function imageCapsToSave(
     : 0;
   const route = draftRoute(standard, draft);
   const prev = existing?.caps;
-  const prevRoute = prev ? draftRoute(existing?.standard, { route: prev.route ?? "" }) : undefined;
+  const prevRoute = prev ? draftRoute(existing?.standard, { route: prev.route ?? "", dialect: prev.dialect }) : undefined;
   return {
+    ...(draft.options ? { options: draft.options } : {}),
     edit: isComfy ? comfySlots > 0 : draft.edit,
     ...(isComfy && comfySlots > 0 ? { maxRefs: comfySlots } : {}),
     // Off comfyui the drawer has no control for the cap, so it keeps the one

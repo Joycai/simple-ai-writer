@@ -1,3 +1,6 @@
+import { saveImageBundle } from "./resultBundle";
+import type { ImageResult } from "../ai/image";
+import type { ImageEvidence } from "../ai/imageEvidence";
 /**
  * Image generation domain: prompt building (./promptGen), size negotiation and
  * usage accounting. The wire client itself lives in lib/ai/image.ts alongside
@@ -43,7 +46,7 @@ export function imageRequestParams(
   const error = validateImageSelection(caps, selection);
   if (error) throw new ImageOutputValidationError(error);
   if (selection.sizingMode === "exact") {
-    if (caps?.dialect === "nanobanana") throw new ImageOutputValidationError("mode");
+    if ((caps?.dialect === "nanobanana" || caps?.dialect === "nanobanana-2")) throw new ImageOutputValidationError("mode");
     if (caps?.dialect === "wan2.7" && opts?.edit) {
       const editError = validateImageSelection({ ...caps, overrides: {
         ...caps.overrides, pixels: { ...caps.overrides?.pixels, maxEdge: Math.min(caps.overrides?.pixels?.maxEdge ?? 2048, 2048) },
@@ -177,6 +180,7 @@ export async function recordImageUsage(
   spec: { size?: unknown; quality?: unknown; seconds?: unknown } = {},
   inputImages = 0,
   requestId?: string,
+  evidence?: ImageEvidence,
 ): Promise<void> {
   // `model.id`，不是 `model.modelId`：别的写入方记的都是配置里的内部 id，
   // 这里曾经记供应商的模型串，于是同一列里混了两套标识空间，用量卷不出
@@ -188,10 +192,23 @@ export async function recordImageUsage(
     promptTokens: usage?.inputTokens,
     completionTokens: usage?.outputTokens,
     cachedTokens: usage?.cachedTokens,
-    outputUnits: images,
-    spec,
+    outputUnits: evidence?.generatedImages ?? images,
+    spec: evidence?.spec ?? spec,
     inputImages,
     // 出图不走四个对话适配器，没有上游报价。
-    reportedCost: null,
+    reportedCost: evidence?.reportedCost ?? null,
+    ...(evidence ? { usageEvidence: { outcome: evidence.outcome, source: evidence.rawUsage ? "reported" as const : "unreported" as const,
+      fields: { ...usage, ...evidence.usage, reportedCost: evidence.reportedCost }, media: evidence },
+      requests: evidence.requests ?? (evidence.outcome === "complete" ? 1 : 0) } : {}),
   });
+}
+
+/** One receipt before materialization, with structured multi-image output kept together. */
+export async function settleImageResult(projectPath: string | null, model: Model, task: string, inputs: number, result: ImageResult): Promise<void> {
+  await recordImageUsage(projectPath, model, task, result.images.length, result.usage,
+    result.evidence?.spec, inputs, result.requestId, result.evidence);
+  if (projectPath && result.images.length && (model.caps?.options?.seedreamMode === "group" || result.images.some(i => i.layer))) {
+    const manifest = await saveImageBundle(projectPath, result);
+    result.text = [result.text, manifest].filter(Boolean).join("\n");
+  }
 }
