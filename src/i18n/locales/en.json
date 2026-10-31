@@ -1,4 +1,14 @@
 {
+  "themeMenu": {
+    "appearance": "Appearance theme",
+    "markdown": "Markdown typography",
+    "settings": "Appearance settings…",
+    "back": "Back",
+    "unavailable": "Unavailable — see Appearance settings",
+    "loading": "Loading themes…",
+    "loadFailed": "Could not load themes. Retry in Appearance settings.",
+    "markdownHint": "Applies to Markdown previews"
+  },
   "mcp": {
     "enable": "Enable MCP tools",
     "title": "MCP servers (Beta)",

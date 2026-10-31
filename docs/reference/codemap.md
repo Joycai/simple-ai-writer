@@ -121,7 +121,9 @@ The UI vocabulary is **app-level and uniform** (`appTerms`/`useTerms`: 文档/�
 
 Main layout structure (TitleBar, IconRail, Sidebar, ProjectRow (项目名那一行 + 它的菜单 + 搜索), FileTree (设计稿 01b：行的三个通道、容器查询分档、脚线；口径在 `docs/reference/design-system.md` → 文件面板设计语言), RecentProjects — the sidebar's no-project panel: 已固定 / 最近打开 两节，固定＝换节住而不是行上的标记，见 `docs/feature/file-panel-pin-ui-brief.md` — EditorArea, EditorBottomStrip, AiRail)
 
-**顶栏右半段分两截，各有各的规矩（设计稿 `01e`，`TitleBar.tsx` + `DocActions.tsx`）。** 文档段跟着当前文档来去，全局段（主题 / 语言 / AI）右锚不动。三条：
+`ThemeMenu.tsx` 提供主界面的两级主题快捷选择，复用 appStore 与 themeStore；窄窗口子菜单原位显示，键盘分级返回。AI 入口在 AiRail，理由与交互契约见 design-system.md → 主界面主题菜单。
+
+**顶栏右半段分两截，各有各的规矩（设计稿 `01e`，`TitleBar.tsx` + `DocActions.tsx`）。** 文档段跟着当前文档来去，全局段（主题 / 语言）右锚不动。三条：
 
 - **谁在场由扩展名决定，不在场就不渲染**——一张名单一类文件，`lib/fs/docKind.ts` 的 `DocKind` 六个值就是设计稿表 B 的五行（`markdown` / `html` / `slides` / `image` / `convertible` / `opaque`）。`.html` 的导出只剩「打印 · PDF」（三条导出都先 `renderMarkdown`，把页面源码再渲染一遍不是导出，见 `printHtmlDocument`）；图片与读不出来的没有视图切换、没有字数，空位换成「用默认应用打开」/「转换文档」。
 - **跟着文档走的读数认的是缓冲区，不是 `activeFilePath`。** 打开图片或可转换的 `docx / xlsx / pdf / pptx`（`isViewOnlyKind`——按扩展名就知道，`EditorArea` 根本不去读）时缓冲区**故意**停在上一篇文档——AI 那一侧靠 `WritingFocus.settled` 判断"还没就绪"（`stores/openDocument`），所以缓冲区不能清。代价是顶栏自己认路：`ExportMenu` 用 `useWritingFocus()` + `isExportableDocument`，字数 / 保存点 / 面包屑的「已修改」用 `isTextKind(docKindOf(...))`。用 `activeFilePath` 当条件的写法都错，而且错得很安静（图片打开时导出的是上一篇的正文、文件名却取自图片名）。同一条的反面：**一个手势里既打开文件又发一轮对话**（文件树的「新建目录说明并交给助手」）要先 `whenFocusSettles(path)` 等缓冲区追上，否则那一轮取到的焦点是点击前的那一篇——对话输入框没有 `settled` 门，作者在那里打字时本来就看着编辑器。
@@ -805,6 +807,7 @@ the theme system (`docs/feature/theme-system-plan.md`). `scheme.ts` is the **onl
 
 #### 启动加载与设置面板
 - Boot reads only the selected files (`main.tsx`) — and the chosen font pack's faces, so the first frame is already in that font
+- 主界面主题菜单首次打开也调用 `themeStore.load()`，完整扫描与设置共享；目录监听仍只在设置打开期间启用。
 - Settings → 外观 (`components/settings/panes/AppearancePane.tsx` composes it, 设计稿 05m; the cards and bands are `AppearanceThemes.tsx`, 设计稿 05i) scans the folders, and `stores/themeStore.ts` follows the open project and **watches both folders while Settings is open** (`tauri-plugin-fs`'s `watch` feature — the one place the app watches the disk — reloading on a change and leaving the same trace the button does).
 
 #### 拒绝理由与内置排版主题

@@ -209,20 +209,6 @@
 }
 .viewBtnActive:hover { color: var(--color-card); }
 
-.aiBtn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 11px;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-sienna);
-  font: 500 11px/1 var(--font-sans);
-  cursor: pointer;
-  transition: background var(--transition-fast);
-}
-.aiBtn:hover { background: var(--color-bg-elevated); }
-
 /* Borderless text controls (导出 / 主题 / 语言) — 设计稿 01a keeps these as
    plain words in the meta row, not boxed buttons. */
 .ctrl {
@@ -313,7 +299,7 @@
    阈值是按**英文**那一串量出来的：英文宽档右侧比中文长约 84px，中文在同一道阈值
    下自然成立，所以不为英文另设一档（设计稿 01e 屏 1f）。
    让位顺序 = 表 A：先走三件文字（分组段 · 已修改 · 保存态的字），再走三件控件
-   （视图切换收下拉 · 导出收图标 · 主题/语言并进 ⋯）外加字数的单位，名字最后才让。 */
+   （视图切换收下拉 · 导出收图标 · 主题收图标、语言并进 ⋯）外加字数的单位，名字最后才让。 */
 @container topbar (max-width: 1159px) {
   .wideOnly { display: none !important; }
 }
