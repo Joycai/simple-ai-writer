@@ -6,6 +6,7 @@ import { useAppStore, type ThemeMode } from "../../stores/appStore";
 import { useThemeStore } from "../../stores/themeStore";
 import { displayThemeName, type ThemeEntry } from "../../lib/theme/registry";
 import { useScheme } from "../../lib/theme/scheme";
+import { themeMenuPosition } from "./themeMenuPosition";
 import styles from "./ThemeMenu.module.css";
 
 type Page = "ui" | "markdown";
@@ -33,6 +34,7 @@ export function ThemeMenu() {
   const branches = useRef<Partial<Record<Page, HTMLButtonElement | null>>>({});
   const keyboardChild = useRef(false);
   const returnBranch = useRef<Page | null>(null);
+  const openAtEnd = useRef(false);
   const isZh = i18n.language.startsWith("zh");
   const name = (entry: ThemeEntry) => displayThemeName(entry, isZh);
   const selectedName = (entries: ThemeEntry[], id: string) => {
@@ -43,9 +45,15 @@ export function ThemeMenu() {
   const back = () => { returnBranch.current = page; setPage(null); };
   const select = (action: () => void) => { close(); action(); };
   const enter = (next: Page, keyboard = false) => {
-    keyboardChild.current = keyboard;
+    // Removing the focused child would otherwise leave focus on document.body.
+    keyboardChild.current = keyboard || !!child.current?.contains(document.activeElement);
     setPage(next);
     if (page === next && keyboard) focusable(child.current)[0]?.focus();
+  };
+
+  const leaveChild = (target: HTMLButtonElement) => {
+    if (child.current?.contains(document.activeElement)) target.focus();
+    setPage(null);
   };
 
   useEffect(() => {
@@ -59,18 +67,14 @@ export function ThemeMenu() {
     const place = () => {
       const anchor = trigger.current?.getBoundingClientRect();
       if (!anchor || !root.current) return;
-      const width = root.current.offsetWidth;
-      const height = root.current.offsetHeight;
-      const left = Math.max(8, Math.min(anchor.right - width, window.innerWidth - width - 8));
-      const top = Math.max(8, Math.min(anchor.bottom + 6, window.innerHeight - height - 8));
-      const childWidth = child.current?.offsetWidth ?? width;
-      const rightFits = left + width + childWidth + 8 <= window.innerWidth;
-      const leftFits = left - childWidth >= 8;
-      const stacked = !rightFits && !leftFits;
       const row = page ? branches.current[page]?.getBoundingClientRect() : null;
-      const rowTop = row ? top + row.top - root.current.getBoundingClientRect().top : top;
-      const childTop = stacked ? top : Math.max(8, Math.min(rowTop, window.innerHeight - (child.current?.offsetHeight ?? 0) - 8));
-      setPosition({ left, top, childLeft: stacked ? left : rightFits ? left + width : left - childWidth, childTop, stacked });
+      setPosition(themeMenuPosition({
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        anchor,
+        root: { width: root.current.offsetWidth, height: root.current.offsetHeight },
+        child: { width: child.current?.offsetWidth ?? root.current.offsetWidth, height: child.current?.offsetHeight ?? 0 },
+        rowOffset: row ? row.top - root.current.getBoundingClientRect().top : 0,
+      }));
     };
     place();
     const observer = new ResizeObserver(place);
@@ -83,7 +87,11 @@ export function ThemeMenu() {
   }, [open, page]);
 
   useLayoutEffect(() => {
-    if (open) focusable(root.current)[0]?.focus();
+    if (open) {
+      const items = focusable(root.current);
+      items[openAtEnd.current ? items.length - 1 : 0]?.focus();
+      openAtEnd.current = false;
+    }
   }, [open]);
   useLayoutEffect(() => {
     if (page && (keyboardChild.current || position.stacked)) focusable(child.current)[0]?.focus();
@@ -106,7 +114,8 @@ export function ThemeMenu() {
       event.preventDefault(); event.stopPropagation();
       if (page) back(); else close();
     }
-    if (event.key === "Tab") { event.preventDefault(); close(); }
+    // Restore the trigger before the native Tab action, which then leaves the menu.
+    if (event.key === "Tab") close();
   };
   const renderEntry = (entry: ThemeEntry) => {
     const checked = entry.kind === "markdown" ? markdown === entry.id : (entry.scheme === "dark" ? dark : light) === entry.id;
@@ -127,7 +136,7 @@ export function ThemeMenu() {
   return <>
     <button ref={trigger} className={styles.trigger} aria-label={t("settings.theme")} title={t("settings.theme")}
       aria-haspopup="menu" aria-expanded={open} onClick={() => open ? close() : setOpen(true)}
-      onKeyDown={(e) => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); setOpen(true); } }}>
+      onKeyDown={(e) => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); openAtEnd.current = e.key === "ArrowUp"; setOpen(true); } }}>
       <Palette size={14} /><span className={styles.triggerLabel}>{t("settings.theme")}</span><ChevronDown size={12} />
     </button>
     {open && createPortal(<div className={styles.overlay} data-context-menu onMouseDown={close}>
@@ -136,12 +145,12 @@ export function ThemeMenu() {
         onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => keys(e, false)}>
         <div className={styles.modes} role="group" aria-label={t("systemSettings.appearance.modeLabel")}>
           {modes.map((value) => <button key={value} role="menuitemradio" aria-checked={mode === value}
-            className={styles.mode} onFocus={() => setPage(null)} onMouseEnter={() => setPage(null)}
+            className={styles.mode} onFocus={() => setPage(null)} onMouseEnter={(e) => leaveChild(e.currentTarget)}
             onClick={() => select(() => useAppStore.getState().setTheme(value))}>{t(`settings.${value}`)}</button>)}
         </div>
         {(["ui", "markdown"] as Page[]).map((value) => <button key={value} ref={(el) => { branches.current[value] = el; }}
           role="menuitem" aria-haspopup="menu" aria-expanded={page === value} className={styles.item}
-          onMouseEnter={() => enter(value)} onClick={() => enter(value, true)}
+          onMouseEnter={() => { if (!position.stacked) enter(value); }} onClick={() => enter(value, true)}
           onFocus={() => { if (page && page !== value) setPage(null); }}
           onKeyDown={(e) => { if (e.key === "ArrowRight") { e.preventDefault(); enter(value, true); } }}>
           <span className={styles.label}>{t(value === "ui" ? "themeMenu.appearance" : "themeMenu.markdown")}
@@ -150,7 +159,7 @@ export function ThemeMenu() {
         </button>)}
         {(loading || error) && <p className={styles.note} role="status">{t(error ? "themeMenu.loadFailed" : "themeMenu.loading")}</p>}
         <div className={styles.divider} />
-        <button role="menuitem" className={styles.item} onFocus={() => setPage(null)} onMouseEnter={() => setPage(null)}
+        <button role="menuitem" className={styles.item} onFocus={() => setPage(null)} onMouseEnter={(e) => leaveChild(e.currentTarget)}
           onClick={() => select(() => useAppStore.getState().openSettings("appearance"))}>{t("themeMenu.settings")}</button>
       </div>
       {page && <div ref={child} role="menu" aria-label={t(page === "ui" ? "themeMenu.appearance" : "themeMenu.markdown")}
