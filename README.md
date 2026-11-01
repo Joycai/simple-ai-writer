@@ -268,7 +268,7 @@ src-tauri/             # Tauri/Rust desktop backend
 prototypes/            # isolated React design studio and fictional UI fixtures
 server/                # optional standalone sync/config-backup server
 docs/                  # living architecture, API, feature, and issue documentation
-themes/                # downloadable themes: Journal, the Phycat suite, and the Morandi Garden pair
+themes/                # downloadable themes: Journal, the Phycat suite, and the Morandi Garden light/dark appearances and shared typography
 ```
 
 For the maintained source map and subsystem invariants, read [`docs/reference/codemap.md`](docs/reference/codemap.md). [`docs/README.md`](docs/README.md) indexes all design and implementation documents with their current status.

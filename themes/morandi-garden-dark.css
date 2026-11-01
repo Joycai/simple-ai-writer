@@ -1,0 +1,100 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   莫兰迪花园 · 暮色 — 外观主题 / an appearance theme
+
+   莫兰迪花园浅色配色的原创深色延伸：绿调炭灰底、雾豆绿强调、灰陶棕陪衬。
+   保留灰紫与玫瑰色语义色，复用 morandi-garden.css 排版；明度台阶由应用生成器生成。
+   An original dark companion to the Morandi Garden light adaptation: charcoal
+   green grounds, misty sage accent and muted clay. Pair with morandi-garden.css.
+   Light palette inspiration: Kitsunee-CN/MorandiGarden (MIT, as declared in its README).
+   Source: https://github.com/Kitsunee-CN/MorandiGarden
+   Independently written; no upstream fonts or Typora interface code are bundled.
+
+   怎么用 / How to use
+     1. 设置 → 外观 → 「打开主题文件夹」，把这个文件放进去。
+        Settings → Appearance → "Open themes folder", drop it in.
+        外观主题只能装在这里；项目的 .ai-writer/themes/ 只收排版主题。
+        Appearance themes install here only; a project's .ai-writer/themes/
+        takes typography themes.
+     2. 设置页开着时文件夹是被监听的，卡片自己出现；否则点「重新载入」。
+        The folder is watched while Settings is open; otherwise hit Reload.
+     3. 在「外观主题」里选中它——它排在「深色时」那一档。
+        Pick it under "Appearance themes", in the "When dark" band.
+
+   改它 / Making it yours
+     · 文件名就是主题 id（morandi-garden-dark.css → morandi-garden-dark）。复制一份改个名，就是新主题。
+       The file name is the theme id. Copy and rename = a new theme.
+     · 只有下面这 41 个核心令牌要写，其余两百多个界面颜色应用自己按公式推。
+       Only the 41 core tokens below need writing — the app derives the rest.
+     · 写别的（别的选择器、普通 CSS 属性、@media）会被逐条丢弃并在设置卡片上
+       列出原因，文件本身永远不会被改写。
+       Anything else (other selectors, plain properties, @media) is dropped
+       rule by rule and listed on the settings card; the file is never rewritten.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 元数据 / Metadata ───────────────────────────────────────────────────── */
+:root {
+  --theme-name: 莫兰迪花园 · 暮色;
+  --theme-kind: ui;
+  --theme-scheme: dark;
+  --theme-extends: night;
+  --theme-version: 1;
+  --theme-author: Codex / Kitsunee-CN (palette inspiration);
+}
+
+/* ── 令牌 / Tokens ───────────────────────────────────────────────────────── */
+:root {
+  /* 底 / Grounds */
+  --color-bg-base:            #252925;
+  --color-bg-surface:         #202420;
+  --color-bg-elevated:        #323632;
+  --color-bg-hover:           #3C403C;
+  --color-bg-tinted:          #323632;   /* ＝抬起的面 / = the elevated ground */
+  --color-bg-overlay:         rgba(0, 0, 0, 0.55);
+
+  /* 文字 / Text */
+  --color-text-primary:       #E3E8E3;
+  --color-text-secondary:     #B8BCB8;
+  --color-text-muted:         #8F938F;
+  --color-text-faint:         #5D615D;
+  --color-text-ghost:         #3D413D;
+
+  /* 强调 / Accent */
+  --color-sienna:             #A5B5A0;   /* 唯一强调色：1px 线、填底、焦点环三用 / the one accent: rules, fills, focus ring */
+  --color-sienna-hover:       #C1D2BC;   /* 深底上按下＝更亮 / on a dark ground, pressed = lighter */
+  --color-amber:              #C1A99A;   /* 第二色 / the companion */
+  --color-amber-soft:         rgba(193, 169, 154, 0.28);
+
+  /* 线 / Rules */
+  --color-border:             #363A36;
+  --color-border-soft:        #363A36;
+  --color-border-strong:      #5D615D;
+
+  /* 状态 / Status */
+  --color-success:            #8CB57E;
+  --color-warning:            #C9A45A;
+  --color-error:              #D4756B;
+
+  /* 模型能力标签 / Model-type tags */
+  --color-type-text-bg:       rgba(199, 206, 138, 0.18);
+  --color-type-text-fg:       #C8CE8A;
+  --color-type-multimodal-bg: rgba(224, 150, 110, 0.18);
+  --color-type-multimodal-fg: #E29A72;
+  --color-type-image-bg:      rgba(196, 150, 200, 0.18);
+  --color-type-image-fg:      #CBA6D3;
+  --color-type-video-bg:      rgba(156, 174, 220, 0.18);
+  --color-type-video-fg:      #9CAEDC;
+  --color-type-vision-bg:     rgba(150, 196, 156, 0.18);
+  --color-type-vision-fg:     #9FCBA6;
+  --color-type-asr-bg:        rgba(220, 150, 168, 0.18);
+  --color-type-asr-fg:        #DBA2B2;
+
+  /* 投影与毛玻璃 / Elevation and glass */
+  --shadow-sm:                0 1px 3px rgba(0, 0, 0, 0.40);
+  --shadow-md:                0 4px 16px rgba(0, 0, 0, 0.36);
+  --shadow-lg:                0 8px 32px rgba(0, 0, 0, 0.50);
+  --shadow-xl:                0 16px 56px rgba(0, 0, 0, 0.60);
+  --shadow-drawer:            -28px 0 56px rgba(0, 0, 0, 0.55);
+  --glass-bg:                 rgba(32, 36, 32, 0.8);
+  --glass-bg-strong:          rgba(32, 36, 32, 0.62);
+  --glass-border:             1px solid rgba(227, 232, 227, 0.07);
+}
