@@ -305,3 +305,7 @@ S1 是最大也最值钱的一片：它本身就是对今天「176 个只在两�
 Morandi Garden now uses a tighter heading scale and tracking, upright tinted quotes, neutral code surfaces, softer nested-list guides and horizontal table rules with subtle alternating rows. These distinguish content types without making every block compete with the headings; colours still derive from appearance tokens. See `themes/morandi-garden.md`. Phycat Neon restores `overflow-x: auto` on code blocks: its decorative clipping previously overrode the shared Markdown scrolling rule and hid long lines.
 
 Journal and Phycat follow the same refinement pass. Journal retains automatic numbering and serif body text; accent section headings and a lightly tinted abstract block improve scanning without turning a formal report into cards. Its table now has only the three booktabs rules promised by the theme (top, header, bottom), with scalable cell padding. Phycat retains its filled pill headings and quote ornament; lower headings are quieter, quotes have full-contrast text, tables lose vertical grid lines and allow wrapped headers, and code surfaces remain neutral even on hover. All new colours derive from appearance tokens; long code lines keep horizontal scrolling in both themes.
+
+### 莫兰迪花园深色配套（2026-11-01）
+
+新增 `morandi-garden-dark.css`，以低彩度绿灰背景、提亮的豆绿强调和灰陶棕延续浅色主题。明度沿生成器的深色台阶，保证菜单抬升、悬停和按钮文字可辨。复用 `morandi-garden.css`，因为它已有令牌驱动的标题、引文与表格颜色；复制一份深色排版会让后续排版调整分叉。两级主题菜单继续读取共享核心与推导令牌，不增加独立配色。

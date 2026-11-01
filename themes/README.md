@@ -41,7 +41,7 @@ The pairing is not a binding: neither typography theme writes a literal colour �
 
 ## 莫兰迪花园 / Morandi Garden
 
-[`morandi-garden-light.css`](morandi-garden-light.css)（浅色外观 / light appearance）与 [`morandi-garden.css`](morandi-garden.css)（排版 / typography）是一组豆绿与暖棕主题。安装、出处与适配取舍见 [Morandi Garden guide](morandi-garden.md)。
+[`morandi-garden-light.css`](morandi-garden-light.css)（浅色外观 / light appearance）与 [`morandi-garden.css`](morandi-garden.css)（排版 / typography）是一组豆绿与暖棕主题；新增 [`morandi-garden-dark.css`](morandi-garden-dark.css)（深色外观 / dark appearance），以炭灰绿、雾豆绿和灰陶棕延续同一配色，复用上述排版。安装、出处与适配取舍见 [Morandi Garden guide](morandi-garden.md)。
 
 ---
 
