@@ -7,21 +7,23 @@ import styles from "./AiRail.module.css";
 export function AiRail() {
   const { t } = useTranslation();
   const setShowAiDrawer = useAppStore((s) => s.setShowAiDrawer);
+  const label = t("titleBar.summonAi");
+  const labelRows = label.match(/AI|[^\s]/gu) ?? [];
 
   return (
     <div className={styles.rail}>
-      {/* No mode passed: this is the generic "summon the assistant" handle, so
-          the drawer reopens on whatever tab was last used. The shortcut is
-          shown in the tooltip only — mixing "AI 助手" with "· Ctrl+J" in the
-          same vertical-rl string reorients the Latin runs sideways against
-          the upright CJK ones, producing garbled-looking text. */}
+      {/* No mode passed: reopen the last-used tab. Explicit horizontal rows
+          keep AI together and avoid vertical-writing wrapping in the webview. */}
       <button
         className={styles.handle}
         onClick={() => setShowAiDrawer(true)}
-        title={`${t("titleBar.summonAi")} · ${MOD_KEY === "⌘" ? "⌘J" : "Ctrl+J"}`}
+        aria-label={label}
+        title={`${label} · ${MOD_KEY === "⌘" ? "⌘J" : "Ctrl+J"}`}
       >
         <Sparkles size={14} aria-hidden="true" />
-        <span>{t("titleBar.summonAi")}</span>
+        <span className={styles.label} aria-hidden="true">
+          {labelRows.map((row, index) => <span key={index}>{row}</span>)}
+        </span>
       </button>
       <span className={styles.spacer} />
     </div>
