@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { installExternalLinkNavigation } from "../externalLinks";
+import { assistantLinkPath, installExternalLinkNavigation } from "../externalLinks";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn().mockResolvedValue(undefined) }));
 
@@ -10,23 +10,25 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function setup() {
+function setup(inAssistant = false) {
+  const openFile = vi.fn();
   const listeners = new Map<string, (event: MouseEvent) => void>();
   vi.stubGlobal("document", {
-    addEventListener: (type: string, listener: (event: MouseEvent) => void) => listeners.set(type, listener),
-    removeEventListener: (type: string) => listeners.delete(type),
+    addEventListener: (type: string, listener: (event: MouseEvent) => void, capture = false) => listeners.set(`${type}:${capture}`, listener),
+    removeEventListener: (type: string, _listener: unknown, capture = false) => listeners.delete(`${type}:${capture}`),
   });
-  const dispose = installExternalLinkNavigation();
+  const dispose = installExternalLinkNavigation({ projectPath: () => "/project", openFile });
   const click = (href: string | null, options: Partial<MouseEvent> = {}) => {
     const event = {
       type: "click", button: 0, defaultPrevented: false,
-      target: { closest: () => href === null ? null : { getAttribute: () => href } },
-      ...options, preventDefault: vi.fn(),
+      target: { closest: (selector: string) => selector === "[data-ai-surface]" ? (inAssistant ? {} : null) : href === null ? null : { getAttribute: () => href, closest: () => inAssistant ? {} : null } },
+      ...options, preventDefault: vi.fn(() => { event.defaultPrevented = true; }),
     };
-    listeners.get(event.type)?.(event as unknown as MouseEvent);
+    listeners.get(`${event.type}:true`)?.(event as unknown as MouseEvent);
+    listeners.get(`${event.type}:false`)?.(event as unknown as MouseEvent);
     return event;
   };
-  return { click, dispose, listeners };
+  return { click, dispose, listeners, openFile };
 }
 
 describe("external link navigation", () => {
@@ -61,9 +63,43 @@ describe("external link navigation", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { click, dispose, listeners } = setup();
     expect(click("https://example.com").preventDefault).toHaveBeenCalledOnce();
-    await Promise.resolve();
-    expect(warn).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledOnce());
     dispose();
     expect(listeners.size).toBe(0);
+  });
+});
+
+
+describe("assistant file navigation", () => {
+  it.each([
+    ["reports/result.html", "/project/reports/result.html"],
+    ["./%E6%8A%A5%E5%91%8A.html#part", "/project/报告.html"],
+    ["/project/result.html?view=1", "/project/result.html"],
+    ["file:///project/result.html", "/project/result.html"],
+  ])("opens %s through app state without navigating the webview", (href, path) => {
+    const { click, openFile } = setup(true);
+    const event = click(href);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(openFile).toHaveBeenCalledExactlyOnceWith(path);
+    expect(event.preventDefault.mock.invocationCallOrder[0]).toBeLessThan(openFile.mock.invocationCallOrder[0]);
+  });
+
+  it("handles external links once even when capture and bubble both run", () => {
+    const { click } = setup(true);
+    expect(click("https://example.com").preventDefault).toHaveBeenCalledOnce();
+    expect(openUrl).toHaveBeenCalledExactlyOnceWith("https://example.com");
+  });
+
+  it.each(["../outside.html", "%2e%2e/outside.html", "file:///tmp/outside.html", ".ai-writer/project.db", "javascript:alert(1)"])("cancels refused link %s", (href) => {
+    const { click, openFile } = setup(true);
+    expect(click(href).preventDefault).toHaveBeenCalledOnce();
+    expect(openFile).not.toHaveBeenCalled();
+    expect(openUrl).not.toHaveBeenCalled();
+  });
+
+  it("resolves Windows paths and refuses local links without a project", () => {
+    expect(assistantLinkPath("C:/project", "file:///C:/project/report.html")).toBe("C:/project/report.html");
+    expect(assistantLinkPath(null, "report.html")).toBeNull();
+    expect(assistantLinkPath("/project", "file://remote/report.html")).toBeNull();
   });
 });

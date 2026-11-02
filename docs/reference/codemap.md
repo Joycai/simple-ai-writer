@@ -872,7 +872,7 @@ document import into the workspace:
 ### `src/lib/` 根模块
 
 #### 多开与基础模块
-- `externalLinks.ts` 在 App 挂载时注册 document 级点击代理：HTTP(S) 链接交给系统默认浏览器，mailto 交给默认邮件应用；先同步取消 WebView 导航，打开失败也不能替换应用页面。覆盖动态 Markdown、嵌套链接内容、修饰键和中键点击；已处理事件、文内锚点、相对路径及知识库引用保留原行为。协议相对 URL 按 HTTPS 打开。HTML 沙箱 iframe 有独立文档，不在此代理范围内。
+- `externalLinks.ts` 在 App 挂载时注册 document 级点击代理：HTTP(S) 链接交给系统默认浏览器，mailto 交给默认邮件应用；先同步取消 WebView 导航，打开失败也不能替换应用页面。覆盖动态 Markdown、嵌套链接内容、修饰键和中键点击；已处理事件、文内锚点及知识库引用保留原行为。助手区域在捕获阶段接管，防止组件停止冒泡时漏掉导航；相对路径以当前项目根目录解析，项目内文件经 App 注入的文件树同款打开流程处理（HTML 仍走隔离预览），越界路径和未知协议取消导航。其他区域的相对路径保留原行为。原因是未接管的 HTML 链接会替换主 WebView，表现为 UI 崩溃。协议相对 URL 按 HTTPS 打开。HTML 沙箱 iframe 有独立文档，不在此代理范围内。
 - `project.ts`
 - `keyStore.ts`
 - `recentProjects.ts` (the recent-projects list and its pin set, pure: parsing, the cap that counts only unpinned entries, and the cross-instance merge `prefs.writePrefMerged` applies at persist time; the pinned section renders from the pin row, not the recents; both rows are machine-local)

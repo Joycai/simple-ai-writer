@@ -38,6 +38,7 @@ import { useWindowTitle } from "./useWindowTitle";
 import { launchProjectPath } from "./lib/instance";
 import { installCitationNavigation } from "./lib/lore/citations";
 import { installExternalLinkNavigation } from "./lib/externalLinks";
+import { useProjectStore } from "./stores/projectStore";
 import { installNavigationHistory } from "./stores/navStore";
 import { fillLayer } from "./lib/motion";
 
@@ -48,7 +49,13 @@ const SettingsPage = lazy(() =>
 );
 
 export default function App() {
-  useEffect(installExternalLinkNavigation, []);
+  useEffect(() => installExternalLinkNavigation({
+    projectPath: () => useProjectStore.getState().projectPath,
+    openFile: (path) => {
+      useAppStore.getState().setMainView("editor");
+      useProjectStore.getState().setActiveFilePath(path);
+    },
+  }), []);
   const {
     sidebarWidth, setSidebarWidth,
     sidebarCollapsed,
