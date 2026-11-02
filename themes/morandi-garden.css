@@ -7,9 +7,8 @@
  * Independently written adaptation of its coloured headings, sage heading rule,
  * list guides, rounded quotes, airy tables and rose links.
  *
- * 颜色全部读应用令牌：配 morandi-garden-light.css 最接近原作，也随深色外观变化。
- * All colours follow app tokens; pair with morandi-garden-light.css for the
- * source palette. Purple / blue / rose use the app's readable semantic hues.
+ * 颜色优先读独立内容色板；未启用时回退应用配色，排版保持不变。
+ * Colours prefer the independent content palette and fall back to app tokens.
  *
  * 使用：设置 → 外观 → 打开主题文件夹，复制本文件，在 Markdown 排版主题中选中。
  * 也可放入项目的 .ai-writer/themes/，用于该项目。字体使用本机已安装字体并回退
@@ -24,7 +23,7 @@
   --theme-name: 莫兰迪花园 · 排版;
   --theme-kind: markdown;
   --theme-extends: clean;
-  --theme-version: 2;
+  --theme-version: 3;
   --theme-author: Codex / Kitsunee-CN (design inspiration);
 }
 
@@ -76,7 +75,7 @@
 .md-body h1 {
   letter-spacing: var(--md-h1-letter);
   color: var(--md-color-h1, var(--color-amber));
-  border-bottom: 0.075em solid var(--md-color-border);
+  border-bottom: 0.075em solid var(--md-color-heading-rule, var(--md-color-border));
   padding-bottom: 0.3em;
 }
 .md-body h2 {
@@ -99,7 +98,7 @@
   color: var(--morandi-rose);
   font-weight: 600;
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--morandi-rose) 35%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--md-color-link-decoration, var(--morandi-rose)) 55%, transparent);
   text-underline-offset: 0.22em;
 }
 .md-body a:hover { text-decoration-color: var(--morandi-rose); }
@@ -135,9 +134,13 @@
   margin-top: 0.5em;
   margin-bottom: 0.5em;
   margin-left: 0.15em;
-  border-left: 1px solid var(--morandi-list-rule);
+  border-left: 1px solid var(--md-color-list-1, var(--morandi-list-rule));
   padding-left: 1.5em;
 }
+.md-body li li > ul,
+.md-body li li > ol { border-left-color: var(--md-color-list-2, var(--morandi-list-rule)); }
+.md-body li li li > ul,
+.md-body li li li > ol { border-left-color: var(--md-color-list-3, var(--morandi-list-rule)); }
 .md-body ul ul { list-style-type: circle; }
 .md-body ul ul ul { list-style-type: square; }
 
@@ -163,21 +166,21 @@
 .md-body th,
 .md-body td {
   border: none;
-  border-bottom: 1px solid var(--morandi-table-rule);
+  border-bottom: 1px solid var(--md-color-table-border, var(--morandi-table-rule));
   padding: 0.7em 1em;
 }
 .md-body th {
   background: color-mix(in srgb, var(--md-color-accent) 10%, var(--color-bg-base));
   color: var(--md-color-accent);
   font-weight: 700;
-  border-bottom: 2px solid var(--morandi-table-rule);
+  border-bottom: 2px solid var(--md-color-table-border, var(--morandi-table-rule));
 }
 .md-body tbody tr:nth-child(even) {
   background: color-mix(in srgb, var(--md-color-accent) 3%, var(--color-bg-base));
 }
 .md-body tbody tr:hover { background: var(--md-quote-bg); }
 .md-body hr {
-  background: color-mix(in srgb, var(--md-color-accent) 28%, var(--color-bg-base));
+  background: var(--md-color-hr, color-mix(in srgb, var(--md-color-accent) 28%, var(--color-bg-base)));
   margin: 2.5em 0;
 }
 .md-body img { border-radius: 0.5em; margin-inline: auto; }

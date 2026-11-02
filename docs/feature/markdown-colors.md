@@ -38,3 +38,11 @@ HTML 和 PDF 共用导出 CSS：跟随模式保留原有行为；独立自动模
 - `node node_modules/vitest/vitest.mjs run src/lib/theme/__tests__`：契约、色值快照、对比度、文件回退、命名空间及兼容引用。
 - `node node_modules/vitest/vitest.mjs run --exclude '**/live.*.test.ts'`：本地前端回归，跳过需要外部服务的实时 API 探针。
 - Vite 启动后打开 `/scripts/browser/content-colors.html`：使用真实主题加载器、莫兰迪排版和 ThemeMenu 检查四种明暗组合、正文内外按钮隔离、留白背景、偏好恢复、菜单键盘与窗口边界。可在宽／窄窗口重复运行，页面显示 PASS 或失败原因。
+
+## 莫兰迪细化（2.0.1）
+
+界面采用灰绿工作区、独立浮层和选中背景，强边框不再借用暖棕；正文保留原版纸色、文字与六级标题。深色正文是原创适配，降低代码和表头背景亮度。链接正文保留较深玫瑰色以保证可读性，下划线使用原版 `#DE7487`。原版参考：https://github.com/Kitsunee-CN/MorandiGarden/blob/main/morandigarden.css 。
+
+新增可选 `--md-color-` 后缀：`table-border`、`heading-rule`、`hr`、`quote-bg-2`、`quote-bg-3`、`list-1` / `list-2` / `list-3`、`link-decoration`。缺失时分别回退到当前内容色板的 border、quote-bg、h3/h2/h1、link，不从界面取色，也不要求旧色板补写。嵌套引用按深度应用背景；莫兰迪表格取消斑马纹，保留现有排版的横线结构；列表使用已有嵌套容器画线，避免原版固定高度产生越界线。
+
+字号、间距、字体、表格网格结构不随配色改变。菜单使用已有 bg-raised 浮层语义令牌，顶层与二级菜单共用；内容色板仍不能写入界面令牌。

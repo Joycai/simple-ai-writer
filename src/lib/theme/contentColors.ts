@@ -28,7 +28,16 @@ export const CONTENT_TOKENS = [
   "--md-color-code-text",
   "--md-color-table-head",
   "--md-color-table-alt",
-  "--md-color-selection"
+  "--md-color-selection",
+  "--md-color-table-border",
+  "--md-color-heading-rule",
+  "--md-color-hr",
+  "--md-color-quote-bg-2",
+  "--md-color-quote-bg-3",
+  "--md-color-list-1",
+  "--md-color-list-2",
+  "--md-color-list-3",
+  "--md-color-link-decoration",
 ];
 export const CONTENT_IDS = ["morandi-content-light", "morandi-content-dark"];
 // Frozen example palettes (checked against themes/*.css in tests).
@@ -82,6 +91,15 @@ export function contentPaletteCss(entry: ThemeEntry, scope = "html[data-md-theme
     "code-text": core["--color-type-image-fg"], "table-head": core["--color-bg-elevated"], "table-alt": core["--color-bg-tinted"], selection: core["--color-bg-hover"],
   };
   const colors = { ...Object.fromEntries(Object.entries(defaults).map(([k,v]) => [`--md-color-${k}`,v])), ...entry.tokens };
+  // Derive optional details after merging user colours so old palettes remain coherent.
+  const detailDefaults: Record<string, string> = {
+    "table-border": "border", "heading-rule": "border", hr: "border",
+    "quote-bg-2": "quote-bg", "quote-bg-3": "quote-bg",
+    "list-1": "h3", "list-2": "h2", "list-3": "h1", "link-decoration": "link",
+  };
+  for (const [detail, fallback] of Object.entries(detailDefaults)) {
+    colors[`--md-color-${detail}`] ??= colors[`--md-color-${fallback}`];
+  }
   const alias: Record<string,string> = {
     "bg-base":"bg", "bg-surface":"bg", "bg-elevated":"surface", "bg-tinted":"surface", "bg-hover":"table-head",
     "text-primary":"text", "text-secondary":"dim", "text-muted":"faint", "text-faint":"faint", "text-ghost":"faint",
@@ -105,10 +123,11 @@ ${compat}
   ${scope} a { color: var(--md-color-link); }
   ${scope} a:hover { color: var(--md-color-link-hover); }
   ${scope} blockquote { background-color: var(--md-color-quote-bg); border-left-color: var(--md-color-quote-1); }
-  ${scope} blockquote blockquote { border-left-color: var(--md-color-quote-2); }
-  ${scope} blockquote blockquote blockquote { border-left-color: var(--md-color-quote-3); }
+  ${scope} blockquote blockquote { border-left-color: var(--md-color-quote-2); background-color: var(--md-color-quote-bg-2); }
+  ${scope} blockquote blockquote blockquote { border-left-color: var(--md-color-quote-3); background-color: var(--md-color-quote-bg-3); }
   ${scope} code { color: var(--md-color-code-text); background-color: var(--md-color-surface); }
   ${scope} pre, ${scope} pre code { color: var(--md-color-text); background-color: var(--md-color-surface); }
+  ${scope} th, ${scope} td { border-color: var(--md-color-table-border); }
   ${scope} th { background-color: var(--md-color-table-head); }
   ${scope} tbody tr:nth-child(even) { background-color: var(--md-color-table-alt); }
   ${scope}::selection, ${scope} ::selection { background: var(--md-color-selection); color: var(--md-color-text); }`;

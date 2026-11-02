@@ -35,6 +35,26 @@ describe("independent content colours", () => {
     expect(result.tokens).toEqual({ "--md-color-bg": "#ffffff" });
     expect(result.problems).toHaveLength(6);
   });
+  it("derives optional details from an old custom palette rather than UI colours", () => {
+    const css = contentPaletteCss({ ...BUILTIN_CONTENT_THEMES[0], tokens: {
+      "--md-color-border": "#123456", "--md-color-quote-bg": "#234567",
+      "--md-color-h3": "#345678", "--md-color-link": "#456789",
+    } });
+    expect(css).toContain("--md-color-table-border: #123456;");
+    expect(css).toContain("--md-color-heading-rule: #123456;");
+    expect(css).toContain("--md-color-quote-bg-2: #234567;");
+    expect(css).toContain("--md-color-quote-bg-3: #234567;");
+    expect(css).toContain("--md-color-list-1: #345678;");
+    expect(css).toContain("--md-color-link-decoration: #456789;");
+  });
+  it("accepts optional detail tokens without relaxing the UI colour fence", () => {
+    const result = validateContentRules([rule(":root", {
+      "--md-color-table-border": "#123456", "--md-color-quote-bg-2": "#234567",
+      "--color-bg-raised": "#345678",
+    })], "custom");
+    expect(result.tokens).toEqual({ "--md-color-table-border": "#123456", "--md-color-quote-bg-2": "#234567" });
+    expect(result.problems).toHaveLength(1);
+  });
   it("maps typography variables while preserving the entire legacy fallback", () => {
     expect(contentCompatibleCss("color: var(--color-text-primary, var(--backup, #fff)); background: #123456;"))
       .toBe("color: var(--md-legacy-color-text-primary, var(--color-text-primary, var(--backup, #fff))); background: #123456;");

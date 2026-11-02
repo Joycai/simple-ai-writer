@@ -3,7 +3,7 @@
   --theme-name: 莫兰迪内容 · 豆绿;
   --theme-kind: markdown-color;
   --theme-scheme: light;
-  --theme-version: 1;
+  --theme-version: 2;
   --md-color-bg: #FBFDFB;
   --md-color-text: #403C3C;
   --md-color-dim: #62665F;
@@ -25,6 +25,15 @@
   --md-color-quote-3: #6F7F88;
   --md-color-code-text: #7A6F89;
   --md-color-table-head: #EAF0EB;
-  --md-color-table-alt: #F4F7F4;
+  --md-color-table-alt: #FBFDFB;
   --md-color-selection: #DCE7DE;
+  --md-color-table-border: #7EA388;
+  --md-color-heading-rule: #DDE6DF;
+  --md-color-hr: #CCD8CF;
+  --md-color-quote-bg-2: #F1F6F2;
+  --md-color-quote-bg-3: #F7FAF7;
+  --md-color-list-1: #7A6F89;
+  --md-color-list-2: #506956;
+  --md-color-list-3: #7A5F52;
+  --md-color-link-decoration: #DE7487;
 }
