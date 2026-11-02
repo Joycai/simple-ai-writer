@@ -26,6 +26,7 @@
  * makes its injection point irrelevant; the markdown sheet must simply come
  * after the generator's, which appending guarantees.
  */
+import { BUILTIN_CONTENT_THEMES, CONTENT_IDS, contentCompatibleCss, contentPaletteCss, resolveContentTheme } from "./contentColors";
 import { TOKEN_CONTRACT } from "./contractData";
 import {
   BUILTIN_MARKDOWN_THEMES, BUILTIN_UI_THEMES, buildRegistry, installableEntries, isBuiltinMarkdownId, isBuiltinUiId,
@@ -43,7 +44,7 @@ export type { SelectedThemes };
 const UI_STYLE_ID = "theme-user";
 const MD_STYLE_ID = "theme-markdown-user";
 
-let current: Registry = { ui: [...BUILTIN_UI_THEMES], markdown: [...BUILTIN_MARKDOWN_THEMES] };
+let current: Registry = { content: [...BUILTIN_CONTENT_THEMES], ui: [...BUILTIN_UI_THEMES], markdown: [...BUILTIN_MARKDOWN_THEMES] };
 /** The validated files behind `current` — the whole folders once `scanned`. */
 let userFiles: ScannedThemeFile[] = [];
 let projectFiles: ScannedThemeFile[] = [];
@@ -170,9 +171,10 @@ export async function inlinedMarkdownCss(entry: ThemeEntry): Promise<string> {
   const key = entry.path ?? entry.id;
   const hit = inlined.get(key);
   if (hit && hit.css === entry.css) return hit.out;
-  const out = entry.assets?.length && entry.path && isTauri
+  const raw = entry.assets?.length && entry.path && isTauri
     ? await inlineAssets(entry.css, themeBaseDir(entry.path), entry.assets)
     : entry.css;
+  const out = contentCompatibleCss(raw);
   inlined.set(key, { css: entry.css, out });
   return out;
 }
@@ -193,6 +195,9 @@ async function installMarkdownSheet(): Promise<void> {
   const css = await inlinedMarkdownCss(entry);
   if (seq !== mdInstallSeq) return; // a later selection already superseded this one
   setStyle(MD_STYLE_ID, css);
+  setStyle("theme-content-colors", selectedContentCss());
+  const contentStyle = typeof document !== "undefined" ? document.getElementById?.("theme-content-colors") : null;
+  if (contentStyle) document.head.appendChild(contentStyle);
 }
 
 /**
@@ -237,7 +242,7 @@ const merge = (have: ScannedThemeFile[], add: ScannedThemeFile[]) =>
 export function fileBackedIds(selected: SelectedThemes): string[] {
   const ui = [selected.light, selected.dark].filter((id) => !isBuiltinUiId(id));
   const md = isBuiltinMarkdownId(selected.markdown) ? [] : [selected.markdown];
-  return [...new Set([...ui, ...md])];
+  return [...new Set([...ui, ...md, ...[selected.contentLight, selected.contentDark].filter((id): id is string => !!id && !CONTENT_IDS.includes(id))])];
 }
 
 /**
@@ -319,4 +324,20 @@ export function applyResolvedMarkdownTheme(id: string): ThemeEntry {
   if (selection.markdown !== id) rebuildRegistry({ ...selection, markdown: id });
   else void installMarkdownSheet();
   return resolvedMarkdownTheme();
+}
+
+/** Independent content colours are always installed after typography. */
+export function selectedContentCss(exported = false): string {
+  const mode = selection.contentMode ?? "follow";
+  if (mode === "follow") return "";
+  const block = (scheme: ColorScheme, scope: string) => {
+    const entry = resolveContentTheme(current.content ?? [],
+      (scheme === "light" ? selection.contentLight : selection.contentDark) ?? `morandi-content-${scheme}`, scheme);
+    const canvas = exported ? `html { background-color: ${entry.tokens?.["--md-color-bg"] ?? TOKEN_CONTRACT.coreValues[scheme]["--color-bg-base"]}; color-scheme: ${scheme}; }` : "";
+    return `${canvas}\n${contentPaletteCss(entry, scope)}`;
+  };
+  const scope = "html[data-md-theme] .md-body";
+  if (mode !== "auto") return block(mode, scope);
+  if (exported) return `${block("light", scope)}\n@media (prefers-color-scheme: dark) { ${block("dark", scope)} }`;
+  return `${block("light", 'html[data-md-theme][data-scheme="light"] .md-body')}\n${block("dark", 'html[data-md-theme][data-scheme="dark"] .md-body')}`;
 }

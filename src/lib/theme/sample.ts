@@ -71,12 +71,13 @@ export function sampleDocument(
   sizing: SampleSize = CARD_SAMPLE,
   /** The `@font-face` rules of the font pack `fontScheme` names, if it is one (appStore `fontFaces[scheme]`). */
   faces = "",
+  contentCss = "",
 ): string {
   const baseId = (entry.source === "builtin" ? entry.id : entry.extends) as MarkdownThemeId;
   const md = markdownThemeCss(baseId, "body");
   const palette = exportPaletteCss(appearance, appearance, `${md}\n${userCss}`, TOKEN_CONTRACT, scheme, fontScheme);
   const t = isZh ? SAMPLE_TEXT.zh : SAMPLE_TEXT.en;
-  return `<!DOCTYPE html><html data-md-theme="${baseId}"><head><meta charset="utf-8"><style>
+  return `<!DOCTYPE html><html data-md-theme="${baseId}" data-scheme="${scheme}"><head><meta charset="utf-8"><style>
 ${faces}
 ${palette}
 html, body { margin: 0; }
@@ -89,5 +90,6 @@ body {
 }
 ${md}
 ${userCss}
+${contentCss}
 </style></head><body class="md-body"><h2>${esc(t.h)}</h2><p>${esc(t.p)}</p>${sizing.long ? `<p>${esc(t.p2)}</p>` : ""}<blockquote>${esc(t.q)}</blockquote></body></html>`;
 }

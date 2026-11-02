@@ -1685,6 +1685,7 @@ function AssistantBody({ text, className }: { text: string; className?: string }
   return (
     <div
       ref={ref}
+      data-md-content
       className={className ? `${styles.assistantBody} ${className}` : styles.assistantBody}
     />
   );

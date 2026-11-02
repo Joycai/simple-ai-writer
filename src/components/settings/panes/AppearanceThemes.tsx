@@ -29,7 +29,7 @@ import {
 import { SCHEME_ATTR, THEME_ATTR, useScheme, type ColorScheme } from "../../../lib/theme/scheme";
 import { exportThemeToFolder } from "../../../lib/theme/exportFile";
 import { TOKEN_CONTRACT } from "../../../lib/theme/contractData";
-import { inlinedMarkdownCss } from "../../../lib/theme/install";
+import { inlinedMarkdownCss, selectedContentCss } from "../../../lib/theme/install";
 import { isFontPackId } from "../../../lib/theme/fontPacks";
 import { sampleDocument, type SampleSize } from "../../../lib/theme/sample";
 import { PROJECT_THEMES_DIR } from "../../../lib/theme/scan";
@@ -446,6 +446,9 @@ function MdSample({
   sizing?: SampleSize;
   className?: string;
 }) {
+  useAppStore((state) => `${state.contentMode}:${state.contentLight}:${state.contentDark}`);
+  useThemeStore((state) => state.content);
+  const contentCss = selectedContentCss();
   const [userCss, setUserCss] = useState<string>("");
   // The frame can't see the page's `@font-face` rules — hand the packs' in.
   const faces = useAppStore((st) => (isFontPackId(fontScheme) ? st.fontFaces[fontScheme] ?? "" : ""));
@@ -456,8 +459,8 @@ function MdSample({
     return () => { cancelled = true; };
   }, [entry]);
   const doc = useMemo(
-    () => sampleDocument(entry, userCss, appearance, scheme, isZh, fontScheme, sizing, faces),
-    [entry, userCss, appearance, scheme, isZh, fontScheme, sizing, faces],
+    () => sampleDocument(entry, userCss, appearance, scheme, isZh, fontScheme, sizing, faces, contentCss),
+    [entry, userCss, appearance, scheme, isZh, fontScheme, sizing, faces, contentCss],
   );
   return (
     <iframe

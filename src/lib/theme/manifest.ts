@@ -8,7 +8,7 @@
  * and this module decides what they mean.
  *
  *   --theme-name     宣纸          the name the grid shows (required)
- *   --theme-kind     ui | markdown (absent = ui)
+ *   --theme-kind     ui | markdown | markdown-color (absent = ui)
  *   --theme-scheme   light | dark  (ui: required — which band it belongs to)
  *   --theme-extends  paper | night (ui: the same-polarity built-in, and only that)
  *                    manuscript | clean | … (markdown: the built-in it sits on)
@@ -17,12 +17,12 @@
 import type { ColorScheme } from "./scheme";
 import { BUILTIN_THEME_FOR_SCHEME } from "./scheme";
 
-export type ThemeKind = "ui" | "markdown";
+export type ThemeKind = "ui" | "markdown" | "markdown-color";
 
 interface ThemeMeta {
   name: string;
   kind: ThemeKind;
-  /** ui only. */
+  /** UI and content palette polarity. */
   scheme?: ColorScheme;
   extends: string;
   version?: string;
@@ -102,8 +102,8 @@ export function readThemeMeta(pairs: Record<string, string>, rule = 1): MetaRead
   const problems: ThemeProblem[] = [];
   const name = get("name");
   const kindRaw = get("kind");
-  const kind: ThemeKind = kindRaw === "markdown" ? "markdown" : "ui";
-  if (kindRaw !== undefined && kindRaw !== "ui" && kindRaw !== "markdown") {
+  const kind: ThemeKind = kindRaw === "markdown" || kindRaw === "markdown-color" ? kindRaw : "ui";
+  if (kindRaw !== undefined && kindRaw !== "ui" && kindRaw !== "markdown" && kindRaw !== "markdown-color") {
     problems.push({ rule, selector: `${THEME_META_PREFIX}kind`, reason: "badKind", params: { kind: kindRaw } });
   }
 
@@ -113,14 +113,16 @@ export function readThemeMeta(pairs: Record<string, string>, rule = 1): MetaRead
 
   const missing: string[] = [];
   if (!name) missing.push(`${THEME_META_PREFIX}name`);
-  if (kind === "ui" && !scheme) missing.push(`${THEME_META_PREFIX}scheme`);
+  if (kind !== "markdown" && !scheme) missing.push(`${THEME_META_PREFIX}scheme`);
   if (missing.length) {
     problems.push({ rule, selector: ":root", reason: "missingMeta", params: { fields: missing.join(" / ") } });
     return { problems };
   }
 
   let ext = get("extends");
-  if (kind === "ui") {
+  if (kind === "markdown-color") {
+    ext = scheme === "dark" ? "content-dark" : "content-light";
+  } else if (kind === "ui") {
     const expected = BUILTIN_THEME_FOR_SCHEME[scheme as ColorScheme];
     if (ext !== undefined && ext !== expected) {
       problems.push({ rule, selector: `${THEME_META_PREFIX}extends`, reason: "badExtendsUi", params: { base: expected } });
@@ -144,7 +146,7 @@ export function readThemeMeta(pairs: Record<string, string>, rule = 1): MetaRead
     meta: {
       name: name as string,
       kind,
-      ...(kind === "ui" ? { scheme } : {}),
+      ...(kind !== "markdown" ? { scheme } : {}),
       extends: ext,
       ...(version ? { version } : {}),
       ...(author ? { author } : {}),

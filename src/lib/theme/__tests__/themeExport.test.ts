@@ -158,7 +158,7 @@ describe("sampleDocument — the typography card's frame", () => {
     // The base it extends, scoped to body, then the file's own rules after it.
     expect(doc).toContain("--md-font-body: var(--font-sans)");
     expect(doc.indexOf("--md-font-body: Kaiti")).toBeGreaterThan(doc.indexOf("--md-font-body: var(--font-sans)"));
-    expect(doc).toContain('<html data-md-theme="clean">');
+    expect(doc).toContain('<html data-md-theme="clean" data-scheme="dark">');
     expect(doc).toContain('<body class="md-body"><h2>第三章 · 渡口</h2>');
     expect(doc).toContain("<blockquote>");
   });

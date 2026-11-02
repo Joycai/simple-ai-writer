@@ -29,6 +29,7 @@
  * test, and it is also the list a theme file will be validated against.
  */
 import { describe, expect, it } from "vitest";
+import { CONTENT_TOKENS } from "../contentColors";
 import { cssBlocks, declaredNames, parseTokenContract, stripCssComments, type CssBlock } from "../contract";
 import { TOKEN_CONTRACT } from "../contractData";
 
@@ -216,14 +217,14 @@ describe("derive defaults (tokens.derive)", () => {
  */
 describe("no dangling custom-property reference", () => {
   const files = walk("src").filter((f) => /\.(css|ts|tsx)$/.test(f) && !f.includes("__tests__"));
-  const declaredAnywhere = new Set<string>();
+  const declaredAnywhere = new Set<string>(CONTENT_TOKENS);
   const refs: { file: string; name: string }[] = [];
   for (const f of files) {
     const text = f.endsWith(".css") ? stripComments(read(f)) : read(f);
     for (const m of text.matchAll(/(--[\w-]+)\s*["']?\s*:/g)) declaredAnywhere.add(m[1]);
     for (const m of text.matchAll(/var\(\s*(--[\w-]+)/g)) {
       // `var(--color-*)` in a prose comment is a family, not a reference.
-      if (!m[1].endsWith("-")) refs.push({ file: f, name: m[1] });
+      if (!m[1].endsWith("-") && text[m.index! + m[0].length] !== "$" && text[m.index! + m[0].length] !== "[") refs.push({ file: f, name: m[1] });
     }
   }
 

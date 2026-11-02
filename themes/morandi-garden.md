@@ -45,3 +45,7 @@ Dusk extends the light palette with charcoal-green grounds, a misty sage accent 
 ```bash
 node .claude/skills/make-theme/scripts/check-theme.mjs themes/morandi-garden-dark.css --preview --with themes/morandi-garden.css
 ```
+
+## 独立内容配色
+
+设置 → 外观 → Markdown 配色中可直接选择内置莫兰迪内容明暗色板，界面配色与文章配色可以不同。配合本排版可恢复六色标题、暖棕引用边线和独立玫瑰色链接；默认跟随模式保持旧版外观。详情见 [配色分离说明](../docs/feature/markdown-colors.md)。

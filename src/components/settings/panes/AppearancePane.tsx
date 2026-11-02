@@ -10,6 +10,7 @@
  * is how they meet while writing. Cards, bands and the three broken-theme
  * states are 05i's and live in `AppearanceThemes.tsx`.
  */
+import { ContentColors } from "./ContentColors";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -181,6 +182,7 @@ export function AppearancePane() {
         </Section>
       </div>
 
+      <ContentColors />
       <div ref={refs.md} className={a.anchor}>
         <Section label={t("systemSettings.appearance.mdThemeLabel")} action={<MdThemeCount />}>
           <MarkdownThemeGrid />

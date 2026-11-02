@@ -1,0 +1,67 @@
+<!-- Development browser regression: serve with Vite and open /scripts/browser/content-colors.html. PASS appears below the fixture. -->
+<!DOCTYPE html><html data-md-theme="clean" data-scheme="dark" data-theme="night"><head><meta charset="utf-8"><style>
+body {background:var(--color-bg-base);color:var(--color-text-primary);font:16px sans-serif;margin:24px}button{background:var(--color-bg-elevated);color:var(--color-text-primary);border:1px solid var(--color-border);padding:10px} main{display:grid;grid-template-columns:180px 1fr;gap:20px}.md-body{padding:24px}[data-md-surface]{min-height:600px}.legacy{color:var(--color-type-asr-fg)}
+</style></head><body><button id="outside">界面按钮</button><main><aside>文件列表<br>设置<br>AI 面板</aside><section data-md-surface><article class="md-body"><h1>莫兰迪内容配色</h1><h2>豆绿章节</h2><h3>灰紫标题</h3><p>正文与 <a href="#">玫瑰链接</a>，<code>行内代码</code>。</p><blockquote>暖棕引用竖线</blockquote><pre><code>const palette = "Morandi";</code></pre><table><thead><tr><th>项目</th><th>说明</th></tr></thead><tbody><tr><td>配色</td><td>独立内容</td></tr><tr><td>界面</td><td>保持原样</td></tr></tbody></table><button id="inside">内嵌程序按钮</button><p class="legacy">旧主题颜色引用</p></article></section></main><pre id="result">RUNNING</pre>
+<script>window.addEventListener("error",e=>document.querySelector("#result").textContent="ERROR "+e.message);window.addEventListener("unhandledrejection",e=>document.querySelector("#result").textContent="ERROR "+e.reason);</script><script type="module">
+import '/src/styles/tokens.css';
+import {installMarkdownThemeStyles} from '/src/lib/theme/markdownThemes.ts';
+import {ensureSelectedLoaded,selectedContentCss,inlinedMarkdownCss} from '/src/lib/theme/install.ts';
+import {validateThemeText} from '/src/lib/theme/validate.ts';
+import {TOKEN_CONTRACT} from '/src/lib/theme/contractData.ts';
+import morandi from '/themes/morandi-garden.css?raw';
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {ThemeMenu} from '/src/components/layout/ThemeMenu.tsx';
+import {useAppStore} from '/src/stores/appStore.ts';
+const result=document.querySelector('#result'); const checks=[];
+const check=(ok,label)=>{if(!ok)throw new Error(label);checks.push(label)};
+const css=(el,key)=>getComputedStyle(document.querySelector(el))[key];
+try {
+ installMarkdownThemeStyles();
+ const v=validateThemeText(morandi+'\n.md-body .legacy { color: var(--color-type-asr-fg); }','morandi-garden',TOKEN_CONTRACT);
+ const legacy=await inlinedMarkdownCss({id:'fixture',source:'user',css:v.css,kind:'markdown',name:'test',extends:'clean',usable:true,kept:0,problems:[]});
+ const style=document.createElement('style');style.textContent=legacy;document.head.append(style);
+ const base={light:'paper',dark:'night',markdown:'clean'};
+ for(const ui of ['light','dark']){
+   document.documentElement.dataset.scheme=ui;document.documentElement.dataset.theme=ui==='light'?'paper':'night';
+   await ensureSelectedLoaded(base);await new Promise(r=>setTimeout(r,0));
+   const outside=css('#outside','backgroundColor'), inside=css('#inside','backgroundColor');
+   for(const content of ['light','dark']){
+    await ensureSelectedLoaded({...base,contentMode:content});await new Promise(r=>setTimeout(r,0));
+    check(css('#outside','backgroundColor')===outside,`${ui}/${content}: outside UI unchanged`);
+    check(css('#inside','backgroundColor')===inside,`${ui}/${content}: embedded UI unchanged`);
+    check(css('.md-body','backgroundColor')===(content==='light'?'rgb(251, 253, 251)':'rgb(37, 41, 37)'),`${ui}/${content}: correct document background`);
+    check(css('[data-md-surface]','backgroundColor')===css('.md-body','backgroundColor'),`${ui}/${content}: full surface background`);
+    check(css('.legacy','color')===css('a','color'),`${ui}/${content}: legacy UI colour reference follows content`);
+    check(css('h1','color')===(content==='light'?'rgb(122, 95, 82)':'rgb(193, 169, 154)'),`${ui}/${content}: correct heading`);
+   }
+ }
+ await ensureSelectedLoaded({...base,contentMode:'auto'});await new Promise(r=>setTimeout(r,0));
+ document.documentElement.dataset.scheme='light';check(css('.md-body','backgroundColor')==='rgb(251, 253, 251)','auto responds to UI scheme');
+ await ensureSelectedLoaded(base);await new Promise(r=>setTimeout(r,0));
+ check(!document.querySelector('#theme-content-colors'),'follow removes independent sheet');
+ await ensureSelectedLoaded({...base,contentMode:'light'});await new Promise(r=>setTimeout(r,0));
+ document.documentElement.dataset.scheme='dark';document.documentElement.dataset.theme='night';
+ check(selectedContentCss(true).includes('#FBFDFB'),'export carries content palette');
+ const app=useAppStore.getState();
+ app.setContentColors('dark');await new Promise(r=>setTimeout(r,50));
+ check(localStorage.getItem('app:contentMode')==='dark','content choice persisted');
+ app.reloadFromPrefs(['app:contentMode']);await new Promise(r=>setTimeout(r,50));
+ check(useAppStore.getState().contentMode==='dark','preference reload preserves content mode');
+ const host=document.createElement('div');document.body.prepend(host);createRoot(host).render(React.createElement(ThemeMenu));
+ await new Promise(r=>setTimeout(r,100));
+ host.querySelector('button').click();await new Promise(r=>setTimeout(r,100));
+ const branch=[...document.querySelectorAll('[role="menuitem"][aria-haspopup]')].find(b=>b.textContent.includes('配色')||b.textContent.includes('colours'));
+ check(!!branch,'content menu branch available');
+ branch.focus();branch.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));await new Promise(r=>setTimeout(r,100));
+ check(document.activeElement.closest('[role="menu"]')!==branch.closest('[role="menu"]'),'ArrowRight enters submenu');
+ for(const menu of document.querySelectorAll('[role="menu"]')){ if(getComputedStyle(menu).visibility==='hidden')continue;const r=menu.getBoundingClientRect();check(r.left>=0&&r.right<=innerWidth+1,'menu fits viewport'); }
+ document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await new Promise(r=>setTimeout(r,50));
+ check(document.activeElement===branch,'Escape restores branch focus');
+ document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await new Promise(r=>setTimeout(r,50));
+ check(document.activeElement===host.querySelector('button'),'Escape restores trigger focus');
+ app.setContentColors('light');await new Promise(r=>setTimeout(r,50));
+ result.textContent='PASS '
++checks.length+' checks\n'+checks.join('\n');
+}catch(e){result.textContent='FAIL '+e.stack;}
+</script></body></html>

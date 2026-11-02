@@ -1,0 +1,30 @@
+/* MorandiGarden-inspired content palette. No application UI tokens. */
+:root {
+  --theme-name: 莫兰迪内容 · 暮色;
+  --theme-kind: markdown-color;
+  --theme-scheme: dark;
+  --theme-version: 1;
+  --md-color-bg: #252925;
+  --md-color-text: #E3E8E3;
+  --md-color-dim: #B8BCB8;
+  --md-color-faint: #9FA59B;
+  --md-color-accent: #A5B5A0;
+  --md-color-surface: #323632;
+  --md-color-border: #545C54;
+  --md-color-link: #DBA2B2;
+  --md-color-link-hover: #ECC0CB;
+  --md-color-h1: #C1A99A;
+  --md-color-h2: #A5B5A0;
+  --md-color-h3: #B9ACC7;
+  --md-color-h4: #A5B8C0;
+  --md-color-h5: #BBAFA4;
+  --md-color-h6: #AAA99F;
+  --md-color-quote-bg: #2F3530;
+  --md-color-quote-1: #C1A99A;
+  --md-color-quote-2: #B9ACC7;
+  --md-color-quote-3: #A5B8C0;
+  --md-color-code-text: #B9ACC7;
+  --md-color-table-head: #363F37;
+  --md-color-table-alt: #2B302B;
+  --md-color-selection: #495C4B;
+}

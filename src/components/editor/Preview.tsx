@@ -48,7 +48,9 @@ export function Preview({ source, basePath, filePath = null }: Props) {
   const stepZoom = useAppStore((s) => s.stepPreviewZoom);
   // Mermaid bakes a palette into each rendered SVG, so a theme switch has to
   // rebuild the diagrams; the rest of the page follows the tokens on its own.
-  const scheme = useScheme();
+  const uiScheme = useScheme();
+  const contentMode = useAppStore((s) => s.contentMode);
+  const scheme = contentMode === "light" || contentMode === "dark" ? contentMode : uiScheme;
 
   // ⌘/Ctrl + wheel over the page, the gesture every reader already knows.
   //
@@ -251,6 +253,7 @@ export function Preview({ source, basePath, filePath = null }: Props) {
     <div className={styles.wrap}>
       <div
         className={styles.preview}
+        data-md-surface
         data-preview-scroller
         ref={scrollerRef}
         onScroll={(event) => {

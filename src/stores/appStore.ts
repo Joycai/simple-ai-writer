@@ -41,6 +41,7 @@ import {
   snapPreviewZoom,
   stepPreviewZoom,
 } from "../lib/editor/previewZoom";
+import type { ContentMode } from "../lib/theme/contentColors";
 import { DEFAULT_MARKDOWN_THEME } from "../lib/theme/markdownThemes";
 import { BUILTIN_THEME_FOR_SCHEME, type ColorScheme } from "../lib/theme/scheme";
 import {
@@ -269,6 +270,9 @@ function prefBackedState() {
     language: storedLang(),
     fontScheme: storedFontScheme(),
     markdownTheme: storedMarkdownTheme(),
+    contentMode: (["auto", "light", "dark"].includes(readPref("app:contentMode") ?? "") ? readPref("app:contentMode") : "follow") as ContentMode,
+    contentLight: readPref("app:contentLight") || "morandi-content-light",
+    contentDark: readPref("app:contentDark") || "morandi-content-dark",
     previewZoom: storedPreviewZoom(),
     sidebarWidth: storedSidebarWidth(),
     rightPanelWidth: storedRightPanelWidth(),
@@ -359,6 +363,10 @@ interface AppState {
    */
   fontFaces: Partial<Record<FontPackId, string>>;
   markdownTheme: string;
+  contentMode: ContentMode;
+  contentLight: string;
+  contentDark: string;
+  setContentColors: (mode: ContentMode, light?: string, dark?: string) => void;
   /**
    * How large the rendered preview draws, as a factor on the ladder in
    * `lib/editor/previewZoom`. An appearance preference like the markdown
@@ -552,8 +560,8 @@ function resolveTheme(mode: ThemeMode): "dark" | "light" {
   return mode;
 }
 
-const selectedThemes = (s: { themeLight: string; themeDark: string; markdownTheme: string }): SelectedThemes =>
-  ({ light: s.themeLight, dark: s.themeDark, markdown: s.markdownTheme });
+const selectedThemes = (s: { themeLight: string; themeDark: string; markdownTheme: string; contentMode?: ContentMode; contentLight?: string; contentDark?: string }): SelectedThemes =>
+  ({ light: s.themeLight, dark: s.themeDark, markdown: s.markdownTheme, contentMode: s.contentMode, contentLight: s.contentLight, contentDark: s.contentDark });
 
 /**
  * Writes `data-theme` (the theme the registry resolves for the polarity —
@@ -768,6 +776,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     return removal;
   },
 
+  setContentColors: (contentMode, light, dark) => {
+    const contentLight = light ?? get().contentLight;
+    const contentDark = dark ?? get().contentDark;
+    writePref("app:contentMode", contentMode);
+    writePref("app:contentLight", contentLight);
+    writePref("app:contentDark", contentDark);
+    set({ contentMode, contentLight, contentDark });
+    void ensureSelectedLoaded(selectedThemes(get()));
+  },
   setMarkdownTheme: (markdownTheme) => {
     writePref(MD_THEME_KEY, markdownTheme);
     set({ markdownTheme });
@@ -1017,7 +1034,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         get().refreshFontPacks();
       }
     }
-    if (touched(MD_THEME_KEY)) {
+    if (touched(MD_THEME_KEY) || ["app:contentMode", "app:contentLight", "app:contentDark"].some(touched)) {
       const selected = selectedThemes(next);
       void ensureSelectedLoaded(selected).then(() => applyMarkdownTheme(next.markdownTheme));
     }
@@ -1089,6 +1106,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // module was imported, so the first frame is already the author's theme.
   applyTheme(s.theme, selectedThemes(s));
   applyFontScheme(s.fontScheme);
+  void ensureSelectedLoaded(selectedThemes(s));
   applyMarkdownTheme(s.markdownTheme);
   // Off disk; outside Tauri there is no disk to read. The chosen pack's faces
   // are already in (main.tsx's boot() preloads them before the first paint);

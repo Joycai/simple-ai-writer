@@ -30,6 +30,7 @@
  * promises the author that in so many words.
  */
 import { THEME_META_PREFIX, type ThemeKind, type ThemeProblem, type ThemeReasonCode } from "./manifest";
+import { CONTENT_TOKENS } from "./contentColors";
 import { tokenTier, type TokenContract } from "./contract";
 
 // CSSRule.type constants — numeric, and the same in every engine. Newer
@@ -128,9 +129,8 @@ function readMetaPairs(rules: ArrayLike<RuleLike>): Record<string, string> {
 
 /** The kind a file declares, read before validation; anything but `markdown` is ui. */
 export function themeKindOf(rules: ArrayLike<RuleLike>): ThemeKind {
-  return readMetaPairs(rules)[`${THEME_META_PREFIX}kind`]?.trim().replace(/^["']|["']$/g, "") === "markdown"
-    ? "markdown"
-    : "ui";
+  const kind = readMetaPairs(rules)[`${THEME_META_PREFIX}kind`]?.trim().replace(/^["']|["']$/g, "");
+  return kind === "markdown" || kind === "markdown-color" ? kind : "ui";
 }
 
 // ─── ui themes ───────────────────────────────────────────────────────────────
@@ -462,7 +462,19 @@ export function validateMarkdownRules(rules: ArrayLike<RuleLike>): MarkdownTheme
   return { kind: "markdown", meta, css, assets: [...assets], problems, kept, ownFonts, ownColors };
 }
 
-export type ThemeValidation = UiThemeValidation | MarkdownThemeValidation;
+export function validateContentRules(rules: ArrayLike<RuleLike>, id: string) {
+  const result = validateUiRules(rules, id, { core: CONTENT_TOKENS, derived: [], scale: [] });
+  // Content palettes are literal colours only: no external resources or UI dependencies.
+  for (const [name, value] of Object.entries(result.tokens)) {
+    if (!/^#[0-9a-f]{6}$/i.test(value)) {
+      delete result.tokens[name];
+      result.kept--;
+      result.problems.push({ rule: 0, selector: name, reason: "uiProperty" });
+    }
+  }
+  return { ...result, kind: "markdown-color" as const };
+}
+export type ThemeValidation = UiThemeValidation | MarkdownThemeValidation | ReturnType<typeof validateContentRules>;
 
 /** Decide the kind from the header, then run that kind's walk. */
 export function validateThemeRules(
@@ -470,7 +482,7 @@ export function validateThemeRules(
   id: string,
   contract: Pick<TokenContract, "scale" | "core" | "derived">,
 ): ThemeValidation {
-  return themeKindOf(rules) === "markdown" ? validateMarkdownRules(rules) : validateUiRules(rules, id, contract);
+  return themeKindOf(rules) === "markdown-color" ? validateContentRules(rules, id) : themeKindOf(rules) === "markdown" ? validateMarkdownRules(rules) : validateUiRules(rules, id, contract);
 }
 
 function atRuleHead(rule: RuleLike): string {
