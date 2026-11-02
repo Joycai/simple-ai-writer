@@ -1,13 +1,15 @@
 <!-- Development browser regression: serve with Vite and open /scripts/browser/content-colors.html. PASS appears below the fixture. -->
 <!DOCTYPE html><html data-md-theme="clean" data-scheme="dark" data-theme="night"><head><meta charset="utf-8"><style>
 body {background:var(--color-bg-base);color:var(--color-text-primary);font:16px sans-serif;margin:24px}button{background:var(--color-bg-elevated);color:var(--color-text-primary);border:1px solid var(--color-border);padding:10px} main{display:grid;grid-template-columns:180px 1fr;gap:20px}.md-body{padding:24px}[data-md-surface]{min-height:600px}.legacy{color:var(--color-type-asr-fg)}
-</style></head><body><button id="outside">界面按钮</button><main><aside>文件列表<br>设置<br>AI 面板</aside><section data-md-surface><article class="md-body"><h1>莫兰迪内容配色</h1><h2>豆绿章节</h2><h3>灰紫标题</h3><p>正文与 <a href="#">玫瑰链接</a>，<code>行内代码</code>。</p><blockquote>暖棕引用竖线</blockquote><pre><code>const palette = "Morandi";</code></pre><table><thead><tr><th>项目</th><th>说明</th></tr></thead><tbody><tr><td>配色</td><td>独立内容</td></tr><tr><td>界面</td><td>保持原样</td></tr></tbody></table><button id="inside">内嵌程序按钮</button><p class="legacy">旧主题颜色引用</p></article></section></main><pre id="result">RUNNING</pre>
+</style></head><body><button id="outside">界面按钮</button><main><aside>文件列表<br>设置<br>AI 面板</aside><section data-md-surface><article class="md-body"><h1>莫兰迪内容配色</h1><h2>豆绿章节</h2><h3>灰紫标题</h3><p>正文与 <a href="#">玫瑰链接</a>，<code>行内代码</code>。</p><blockquote>暖棕引用竖线<blockquote>二级引用<blockquote>三级引用</blockquote></blockquote></blockquote><ul><li>一级<ul><li>二级<ul><li>三级<ul><li>四级</li></ul></li></ul></li></ul></li></ul><hr><pre><code>const palette = "Morandi";</code></pre><table><thead><tr><th>项目</th><th>说明</th></tr></thead><tbody><tr><td>配色</td><td>独立内容</td></tr><tr><td>界面</td><td>保持原样</td></tr></tbody></table><button id="inside">内嵌程序按钮</button><p class="legacy">旧主题颜色引用</p></article></section></main><pre id="result">RUNNING</pre>
 <script>window.addEventListener("error",e=>document.querySelector("#result").textContent="ERROR "+e.message);window.addEventListener("unhandledrejection",e=>document.querySelector("#result").textContent="ERROR "+e.reason);</script><script type="module">
 import '/src/styles/tokens.css';
 import {installMarkdownThemeStyles} from '/src/lib/theme/markdownThemes.ts';
 import {ensureSelectedLoaded,selectedContentCss,inlinedMarkdownCss} from '/src/lib/theme/install.ts';
 import {validateThemeText} from '/src/lib/theme/validate.ts';
 import {TOKEN_CONTRACT} from '/src/lib/theme/contractData.ts';
+import uiLight from '/themes/morandi-garden-light.css?raw';
+import uiDark from '/themes/morandi-garden-dark.css?raw';
 import morandi from '/themes/morandi-garden.css?raw';
 import React from 'react';
 import {createRoot} from 'react-dom/client';
@@ -21,9 +23,12 @@ try {
  const v=validateThemeText(morandi+'\n.md-body .legacy { color: var(--color-type-asr-fg); }','morandi-garden',TOKEN_CONTRACT);
  const legacy=await inlinedMarkdownCss({id:'fixture',source:'user',css:v.css,kind:'markdown',name:'test',extends:'clean',usable:true,kept:0,problems:[]});
  const style=document.createElement('style');style.textContent=legacy;document.head.append(style);
+ const uiStyle=document.createElement('style');document.head.append(uiStyle);
  const base={light:'paper',dark:'night',markdown:'clean'};
  for(const ui of ['light','dark']){
    document.documentElement.dataset.scheme=ui;document.documentElement.dataset.theme=ui==='light'?'paper':'night';
+   const uiTokens=validateThemeText(ui==='light'?uiLight:uiDark, 'fixture-ui', TOKEN_CONTRACT).tokens;
+   uiStyle.textContent=':root {'+Object.entries(uiTokens).map(([k,v])=>k+':'+v+';').join('')+'}';
    await ensureSelectedLoaded(base);await new Promise(r=>setTimeout(r,0));
    const outside=css('#outside','backgroundColor'), inside=css('#inside','backgroundColor');
    for(const content of ['light','dark']){
@@ -33,6 +38,12 @@ try {
     check(css('.md-body','backgroundColor')===(content==='light'?'rgb(251, 253, 251)':'rgb(37, 41, 37)'),`${ui}/${content}: correct document background`);
     check(css('[data-md-surface]','backgroundColor')===css('.md-body','backgroundColor'),`${ui}/${content}: full surface background`);
     check(css('.legacy','color')===css('a','color'),`${ui}/${content}: legacy UI colour reference follows content`);
+    check(css('blockquote','backgroundColor')!==css('blockquote blockquote','backgroundColor'),`${ui}/${content}: nested quote wash`);
+    check(css('blockquote blockquote','backgroundColor')!==css('blockquote blockquote blockquote','backgroundColor'),`${ui}/${content}: third quote wash`);
+    check(css('tbody tr:nth-child(even)','backgroundColor')===css('.md-body','backgroundColor'),`${ui}/${content}: no zebra stripe`);
+    check(css('td','borderBottomColor')===(content==='light'?'rgb(126, 163, 136)':'rgb(89, 109, 94)'),`${ui}/${content}: table border palette`);
+    check(css('li > ul','borderLeftColor')===(content==='light'?'rgb(122, 111, 137)':'rgb(185, 172, 199)'),`${ui}/${content}: list guide palette`);
+    check(css('hr','backgroundColor')===(content==='light'?'rgb(204, 216, 207)':'rgb(72, 86, 75)'),`${ui}/${content}: separator palette`);
     check(css('h1','color')===(content==='light'?'rgb(122, 95, 82)':'rgb(193, 169, 154)'),`${ui}/${content}: correct heading`);
    }
  }
@@ -55,12 +66,12 @@ try {
  check(!!branch,'content menu branch available');
  branch.focus();branch.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));await new Promise(r=>setTimeout(r,100));
  check(document.activeElement.closest('[role="menu"]')!==branch.closest('[role="menu"]'),'ArrowRight enters submenu');
- for(const menu of document.querySelectorAll('[role="menu"]')){ if(getComputedStyle(menu).visibility==='hidden')continue;const r=menu.getBoundingClientRect();check(r.left>=0&&r.right<=innerWidth+1,'menu fits viewport'); }
+ for(const menu of document.querySelectorAll('[role="menu"]')){ if(getComputedStyle(menu).visibility==='hidden')continue;check(getComputedStyle(menu).backgroundColor==='rgb(50, 56, 50)','menu uses Morandi raised surface');const r=menu.getBoundingClientRect();check(r.left>=0&&r.right<=innerWidth+1,'menu fits viewport'); }
  document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await new Promise(r=>setTimeout(r,50));
  check(document.activeElement===branch,'Escape restores branch focus');
  document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await new Promise(r=>setTimeout(r,50));
  check(document.activeElement===host.querySelector('button'),'Escape restores trigger focus');
- app.setContentColors('light');await new Promise(r=>setTimeout(r,50));
+ app.setContentColors(new URLSearchParams(location.search).get('preview')==='dark'?'dark':'light');await new Promise(r=>setTimeout(r,50));
  result.textContent='PASS '
 +checks.length+' checks\n'+checks.join('\n');
 }catch(e){result.textContent='FAIL '+e.stack;}

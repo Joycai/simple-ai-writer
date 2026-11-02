@@ -37,7 +37,7 @@
   --theme-kind: ui;
   --theme-scheme: dark;
   --theme-extends: night;
-  --theme-version: 1;
+  --theme-version: 2;
   --theme-author: Codex / Kitsunee-CN (palette inspiration);
 }
 
@@ -46,15 +46,15 @@
   /* 底 / Grounds */
   --color-bg-base:            #252925;
   --color-bg-surface:         #202420;
-  --color-bg-elevated:        #323632;
-  --color-bg-hover:           #3C403C;
-  --color-bg-tinted:          #323632;   /* ＝抬起的面 / = the elevated ground */
+  --color-bg-elevated:        #323832;
+  --color-bg-hover:           #3B433B;
+  --color-bg-tinted:          #323832;   /* ＝抬起的面 / = the elevated ground */
   --color-bg-overlay:         rgba(0, 0, 0, 0.55);
 
   /* 文字 / Text */
   --color-text-primary:       #E3E8E3;
-  --color-text-secondary:     #B8BCB8;
-  --color-text-muted:         #8F938F;
+  --color-text-secondary:     #B8C0B5;
+  --color-text-muted:         #98A393;
   --color-text-faint:         #5D615D;
   --color-text-ghost:         #3D413D;
 
@@ -65,9 +65,9 @@
   --color-amber-soft:         rgba(193, 169, 154, 0.28);
 
   /* 线 / Rules */
-  --color-border:             #363A36;
-  --color-border-soft:        #363A36;
-  --color-border-strong:      #5D615D;
+  --color-border:             #454E44;
+  --color-border-soft:        #363E35;
+  --color-border-strong:      #6B7866;
 
   /* 状态 / Status */
   --color-success:            #8CB57E;
@@ -76,17 +76,17 @@
 
   /* 模型能力标签 / Model-type tags */
   --color-type-text-bg:       rgba(199, 206, 138, 0.18);
-  --color-type-text-fg:       #C8CE8A;
+  --color-type-text-fg:       #C4C993;
   --color-type-multimodal-bg: rgba(224, 150, 110, 0.18);
-  --color-type-multimodal-fg: #E29A72;
+  --color-type-multimodal-fg: #D69C7C;
   --color-type-image-bg:      rgba(196, 150, 200, 0.18);
-  --color-type-image-fg:      #CBA6D3;
+  --color-type-image-fg:      #C9ABCF;
   --color-type-video-bg:      rgba(156, 174, 220, 0.18);
-  --color-type-video-fg:      #9CAEDC;
+  --color-type-video-fg:      #A1B0D5;
   --color-type-vision-bg:     rgba(150, 196, 156, 0.18);
-  --color-type-vision-fg:     #9FCBA6;
+  --color-type-vision-fg:     #A2C6A8;
   --color-type-asr-bg:        rgba(220, 150, 168, 0.18);
-  --color-type-asr-fg:        #DBA2B2;
+  --color-type-asr-fg:        #D4A7B4;
 
   /* 投影与毛玻璃 / Elevation and glass */
   --shadow-sm:                0 1px 3px rgba(0, 0, 0, 0.40);
@@ -97,4 +97,11 @@
   --glass-bg:                 rgba(32, 36, 32, 0.8);
   --glass-bg-strong:          rgba(32, 36, 32, 0.62);
   --glass-border:             1px solid rgba(227, 232, 227, 0.07);
+}
+
+/* 独立的浮层和选中背景 / Raised surfaces and selection. */
+:root {
+  --color-bg-raised: #323832;
+  --color-bg-selected: #3F4D40;
+  --color-on-accent: #202420;
 }

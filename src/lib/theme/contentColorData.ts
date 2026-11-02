@@ -22,8 +22,17 @@ export const MORANDI_CONTENT_COLORS: Record<string, string>[] = [
     "--md-color-quote-3": "#6F7F88",
     "--md-color-code-text": "#7A6F89",
     "--md-color-table-head": "#EAF0EB",
-    "--md-color-table-alt": "#F4F7F4",
-    "--md-color-selection": "#DCE7DE"
+    "--md-color-table-alt": "#FBFDFB",
+    "--md-color-selection": "#DCE7DE",
+    "--md-color-table-border": "#7EA388",
+    "--md-color-heading-rule": "#DDE6DF",
+    "--md-color-hr": "#CCD8CF",
+    "--md-color-quote-bg-2": "#F1F6F2",
+    "--md-color-quote-bg-3": "#F7FAF7",
+    "--md-color-list-1": "#7A6F89",
+    "--md-color-list-2": "#506956",
+    "--md-color-list-3": "#7A5F52",
+    "--md-color-link-decoration": "#DE7487"
   },
   {
     "--md-color-bg": "#252925",
@@ -31,7 +40,7 @@ export const MORANDI_CONTENT_COLORS: Record<string, string>[] = [
     "--md-color-dim": "#B8BCB8",
     "--md-color-faint": "#9FA59B",
     "--md-color-accent": "#A5B5A0",
-    "--md-color-surface": "#323632",
+    "--md-color-surface": "#2D332E",
     "--md-color-border": "#545C54",
     "--md-color-link": "#DBA2B2",
     "--md-color-link-hover": "#ECC0CB",
@@ -46,8 +55,17 @@ export const MORANDI_CONTENT_COLORS: Record<string, string>[] = [
     "--md-color-quote-2": "#B9ACC7",
     "--md-color-quote-3": "#A5B8C0",
     "--md-color-code-text": "#B9ACC7",
-    "--md-color-table-head": "#363F37",
-    "--md-color-table-alt": "#2B302B",
-    "--md-color-selection": "#495C4B"
+    "--md-color-table-head": "#303A32",
+    "--md-color-table-alt": "#252925",
+    "--md-color-selection": "#495C4B",
+    "--md-color-table-border": "#596D5E",
+    "--md-color-heading-rule": "#414C43",
+    "--md-color-hr": "#48564B",
+    "--md-color-quote-bg-2": "#2C322D",
+    "--md-color-quote-bg-3": "#292E29",
+    "--md-color-list-1": "#B9ACC7",
+    "--md-color-list-2": "#A5B5A0",
+    "--md-color-list-3": "#C1A99A",
+    "--md-color-link-decoration": "#DBA2B2"
   }
 ];
