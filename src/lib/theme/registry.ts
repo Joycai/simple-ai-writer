@@ -9,6 +9,7 @@
  * kinds — the ui fields (`scheme`, `tokens`) and the markdown fields (`css`,
  * `ownFonts`…) are optional and set by kind.
  */
+import { BUILTIN_CONTENT_THEMES, CONTENT_IDS, type ContentMode } from "./contentColors";
 import type { ColorScheme } from "./scheme";
 import { BUILTIN_THEME_FOR_SCHEME } from "./scheme";
 import {
@@ -107,12 +108,16 @@ export interface ScannedThemeFile {
 }
 
 export interface SelectedThemes {
+  contentMode?: ContentMode;
+  contentLight?: string;
+  contentDark?: string;
   light: string;
   dark: string;
   markdown: string;
 }
 
 export interface Registry {
+  content?: ThemeEntry[];
   ui: ThemeEntry[];
   markdown: ThemeEntry[];
 }
@@ -157,6 +162,8 @@ export function buildRegistry(
   dirs: RegistryDirs,
 ): Registry {
   const ui: ThemeEntry[] = [];
+  const userContent: ThemeEntry[] = [];
+  const projectContent: ThemeEntry[] = [];
   const userMd: ThemeEntry[] = [];
   const projectMd: ThemeEntry[] = [];
   /**
@@ -176,7 +183,7 @@ export function buildRegistry(
     const id = themeIdFromFileName(f.fileName);
     if (!id) continue;
     const e = entryFromFile(id, f, "user");
-    (e.kind === "markdown" ? userMd : ui).push(e);
+    (e.kind === "markdown-color" ? userContent : e.kind === "markdown" ? userMd : ui).push(e);
   }
   for (const f of projectFiles) {
     const id = themeIdFromFileName(f.fileName);
@@ -189,6 +196,8 @@ export function buildRegistry(
         ...e, kind: "markdown", scheme: undefined, tokens: undefined, usable: false,
         problems: [{ rule: 0, selector: f.fileName, reason: "uiInProject" }, ...e.problems],
       });
+    } else if (e.kind === "markdown-color") {
+      projectContent.push(e);
     } else {
       projectMd.push(e);
       overrideIds.add(e.id);
@@ -220,7 +229,12 @@ export function buildRegistry(
       source: "user", path: `${dirs.user}/${fileName}`, fileName, problems: [], kept: 0, usable: false, missing: true,
     });
   }
-  return { ui: uiAll, markdown: mdAll };
+  const content = [...BUILTIN_CONTENT_THEMES, ...userContent.filter((e) => !projectContent.some((p) => p.id === e.id)), ...projectContent];
+  for (const scheme of ["light", "dark"] as const) {
+    const id = scheme === "light" ? selected.contentLight : selected.contentDark;
+    if (id && !content.some((e) => e.id === id)) content.push({ id, name: id, kind: "markdown-color", scheme, extends: `content-${scheme}`, source: "user", missing: true, usable: false, problems: [], kept: 0 });
+  }
+  return { ui: uiAll, markdown: mdAll, content };
 }
 
 function entryFromFile(id: string, f: ScannedThemeFile, source: "user" | "project"): ThemeEntry {
@@ -249,6 +263,10 @@ function entryFromFile(id: string, f: ScannedThemeFile, source: "user" | "projec
     ...(meta.author ? { author: meta.author } : {}),
     kept: v.kept,
   };
+  if (v.kind === "markdown-color") {
+    return { ...named, kind: "markdown-color", scheme: meta.scheme, tokens: v.tokens,
+      usable: !CONTENT_IDS.includes(id), problems: CONTENT_IDS.includes(id) ? [{ rule: 0, reason: "reservedMdId", params: { id } }, ...allProblems] : allProblems };
+  }
   if (v.kind === "ui") {
     const scheme = meta.scheme as ColorScheme;
     if (isBuiltinUiId(id)) {

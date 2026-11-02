@@ -19,6 +19,7 @@
  * differently-coloured ground reads as a bug), and its accent and body text
  * clear the contrast its own header claims.
  */
+import { CONTENT_TOKENS } from "../contentColors";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -182,7 +183,8 @@ describe("themes/ — the shipped examples", () => {
       const css = readFileSync(THEMES_DIR + file, "utf-8");
       const meta = metaOf(css);
       const id = themeIdFromFileName(file);
-      const isUi = meta["--theme-kind"] !== "markdown";
+      const isContent = meta["--theme-kind"] === "markdown-color";
+      const isUi = meta["--theme-kind"] === "ui";
 
       it("has an installable id", () => {
         expect(id).not.toBeNull();
@@ -194,7 +196,15 @@ describe("themes/ — the shipped examples", () => {
         expect(readme).toContain(`\`${file}\``);
       });
 
-      if (isUi) {
+      if (isContent) {
+        it("declares a complete isolated content palette", () => {
+          expect(readThemeMeta(meta).meta?.kind).toBe("markdown-color");
+          const values = Object.fromEntries(blocks(css).flatMap((b) => declarations(b.body)).filter(([k]) => !k.startsWith("--theme-")));
+          expect(Object.keys(values).sort()).toEqual([...CONTENT_TOKENS].sort());
+          for (const value of Object.values(values)) expect(value).toMatch(/^#[0-9a-f]{6}$/i);
+          for (const key of ["text", "dim", "link", "code-text"]) expect(contrast(values[`--md-color-${key}`], values["--md-color-bg"])).toBeGreaterThanOrEqual(4.5);
+        });
+      } else if (isUi) {
         const { bad, tokens } = uiViolations(css, id ?? "");
 
         it("declares complete appearance metadata on its polarity's base", () => {

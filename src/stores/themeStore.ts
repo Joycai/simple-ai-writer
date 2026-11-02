@@ -36,6 +36,7 @@ interface ReloadDiff {
 interface ThemeState {
   ui: ThemeEntry[];
   markdown: ThemeEntry[];
+  content: ThemeEntry[];
   /** True once the folders have been scanned in full. */
   loaded: boolean;
   loading: boolean;
@@ -58,7 +59,7 @@ const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 
 const selected = () => {
   const s = useAppStore.getState();
-  return { light: s.themeLight, dark: s.themeDark, markdown: s.markdownTheme };
+  return { light: s.themeLight, dark: s.themeDark, markdown: s.markdownTheme, contentMode: s.contentMode, contentLight: s.contentLight, contentDark: s.contentDark };
 };
 
 const isZhNow = () => useAppStore.getState().language.startsWith("zh");
@@ -83,6 +84,7 @@ async function scanAndDiff(before: Map<string, { kind: ThemeEntry["kind"]; name:
 export const useThemeStore = create<ThemeState>((set, get) => ({
   ui: currentRegistry().ui,
   markdown: currentRegistry().markdown,
+  content: currentRegistry().content ?? [],
   loaded: registryScanned(),
   loading: false,
   dir: null,
@@ -132,7 +134,7 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
 // store method happened to trigger it.
 subscribeRegistry(() => {
   const r = currentRegistry();
-  useThemeStore.setState({ ui: r.ui, markdown: r.markdown });
+  useThemeStore.setState({ ui: r.ui, markdown: r.markdown, content: r.content ?? [] });
 });
 
 // The project's `.ai-writer/themes/` follows the open project. Also runs for

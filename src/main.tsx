@@ -52,6 +52,8 @@ async function boot() {
       light: readPref("app:themeLight")?.trim() || "paper",
       dark: readPref("app:themeDark")?.trim() || "night",
       markdown: readPref("app:markdownTheme")?.trim() || "manuscript",
+      contentLight: readPref("app:contentLight") || "morandi-content-light",
+      contentDark: readPref("app:contentDark") || "morandi-content-dark",
     });
   } catch (e) {
     console.warn("[boot] theme files unavailable; using the built-in themes:", e);

@@ -50,7 +50,7 @@
   --md-h4-size: 1.1em;
   --md-list-indent: 1.8em;
   --md-quote-style: normal;
-  --md-quote-border: 3px solid var(--md-color-accent);
+  --md-quote-border: 3px solid var(--md-color-quote-1, var(--md-color-accent));
   --md-quote-bg: color-mix(in srgb, var(--md-color-accent) 7%, var(--color-bg-base));
   --md-hr-line: none;
   --md-hr-mark: "";
@@ -58,7 +58,7 @@
   --md-color-border: var(--color-border);
   --morandi-purple: color-mix(in oklab, var(--color-type-image-fg) 65%, var(--md-color-dim));
   --morandi-blue: color-mix(in oklab, var(--color-type-video-fg) 60%, var(--md-color-dim));
-  --morandi-rose: var(--color-type-asr-fg);
+  --morandi-rose: var(--md-color-link, var(--color-type-asr-fg));
   --morandi-list-rule: color-mix(in srgb, var(--md-color-accent) 22%, var(--color-bg-base));
   --morandi-table-rule: color-mix(in srgb, var(--md-color-accent) 16%, var(--color-bg-base));
 }
@@ -75,24 +75,24 @@
 }
 .md-body h1 {
   letter-spacing: var(--md-h1-letter);
-  color: var(--color-amber);
+  color: var(--md-color-h1, var(--color-amber));
   border-bottom: 0.075em solid var(--md-color-border);
   padding-bottom: 0.3em;
 }
 .md-body h2 {
-  color: var(--md-color-accent);
+  color: var(--md-color-h2, var(--md-color-accent));
   border-left: 0.15em solid var(--md-color-accent);
   padding-left: 0.45em;
   font-weight: 700;
 }
-.md-body h3 { color: var(--morandi-purple); padding-left: 0.25em; }
-.md-body h4 { color: var(--md-color-text); }
+.md-body h3 { color: var(--md-color-h3, var(--morandi-purple)); padding-left: 0.25em; }
+.md-body h4 { color: var(--md-color-h4, var(--md-color-text)); }
 .md-body h5 {
-  color: color-mix(in oklab, var(--color-amber) 65%, var(--md-color-dim));
+  color: var(--md-color-h5, color-mix(in oklab, var(--color-amber) 65%, var(--md-color-dim)));
   font-size: 1.1em;
   font-style: normal;
 }
-.md-body h6 { color: var(--md-color-dim); font-size: 1em; font-weight: 400; }
+.md-body h6 { color: var(--md-color-h6, var(--md-color-dim)); font-size: 1em; font-weight: 400; }
 
 /* 链接与代码 / Links and code */
 .md-body a {

@@ -9,7 +9,7 @@ import { useScheme } from "../../lib/theme/scheme";
 import { themeMenuPosition } from "./themeMenuPosition";
 import styles from "./ThemeMenu.module.css";
 
-type Page = "ui" | "markdown";
+type Page = "ui" | "markdown" | "content";
 const modes: ThemeMode[] = ["light", "dark", "system"];
 const focusable = (el: HTMLElement | null) => Array.from(el?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? []);
 
@@ -21,6 +21,7 @@ export function ThemeMenu() {
   const dark = useAppStore((s) => s.themeDark);
   const markdown = useAppStore((s) => s.markdownTheme);
   const scheme = useScheme();
+  const contentMode = useAppStore((s) => s.contentMode);
   const ui = useThemeStore((s) => s.ui);
   const md = useThemeStore((s) => s.markdown);
   const loading = useThemeStore((s) => s.loading);
@@ -148,13 +149,13 @@ export function ThemeMenu() {
             className={styles.mode} onFocus={() => setPage(null)} onMouseEnter={(e) => leaveChild(e.currentTarget)}
             onClick={() => select(() => useAppStore.getState().setTheme(value))}>{t(`settings.${value}`)}</button>)}
         </div>
-        {(["ui", "markdown"] as Page[]).map((value) => <button key={value} ref={(el) => { branches.current[value] = el; }}
+        {(["ui", "content", "markdown"] as Page[]).map((value) => <button key={value} ref={(el) => { branches.current[value] = el; }}
           role="menuitem" aria-haspopup="menu" aria-expanded={page === value} className={styles.item}
           onMouseEnter={() => { if (!position.stacked) enter(value); }} onClick={() => enter(value, true)}
           onFocus={() => { if (page && page !== value) setPage(null); }}
           onKeyDown={(e) => { if (e.key === "ArrowRight") { e.preventDefault(); enter(value, true); } }}>
-          <span className={styles.label}>{t(value === "ui" ? "themeMenu.appearance" : "themeMenu.markdown")}
-            <small>{value === "ui" ? selectedName(ui, scheme === "dark" ? dark : light) : selectedName(md, markdown)}</small></span>
+          <span className={styles.label}>{value === "content" ? (isZh ? "Markdown 配色" : "Markdown colours") : t(value === "ui" ? "themeMenu.appearance" : "themeMenu.markdown")}
+            <small>{value === "ui" ? selectedName(ui, scheme === "dark" ? dark : light) : value === "content" ? (contentMode === "follow" ? (isZh ? "跟随界面" : "Follow interface") : (isZh ? "独立配色" : "Independent")) : selectedName(md, markdown)}</small></span>
           <ChevronRight size={14} />
         </button>)}
         {(loading || error) && <p className={styles.note} role="status">{t(error ? "themeMenu.loadFailed" : "themeMenu.loading")}</p>}
@@ -162,11 +163,18 @@ export function ThemeMenu() {
         <button role="menuitem" className={styles.item} onFocus={() => setPage(null)} onMouseEnter={(e) => leaveChild(e.currentTarget)}
           onClick={() => select(() => useAppStore.getState().openSettings("appearance"))}>{t("themeMenu.settings")}</button>
       </div>
-      {page && <div ref={child} role="menu" aria-label={t(page === "ui" ? "themeMenu.appearance" : "themeMenu.markdown")}
+      {page && <div ref={child} role="menu" aria-label={page === "content" ? (isZh ? "Markdown 配色" : "Markdown colours") : t(page === "ui" ? "themeMenu.appearance" : "themeMenu.markdown")}
         className={styles.menu} style={{ left: position.childLeft, top: position.childTop }}
         onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => keys(e, true)}>
         {position.stacked && <button role="menuitem" className={styles.item} onClick={back}><ArrowLeft size={14} />{t("themeMenu.back")}</button>}
-        {page === "ui" ? (mode === "system" ? ["light", "dark"] as const : [mode]).map((polarity) =>
+        {page === "content" ? <>
+          {(["follow", "auto", "light", "dark"] as const).map((value, i) => <button key={value} role="menuitemradio" aria-checked={contentMode === value} className={styles.item}
+            onClick={() => select(() => useAppStore.getState().setContentColors(value))}>
+            {isZh ? ["跟随界面配色", "独立配色 · 跟随明暗", "独立配色 · 固定浅色", "独立配色 · 固定深色"][i] : ["Follow interface colours", "Independent · follow light/dark", "Independent · always light", "Independent · always dark"][i]}
+            {contentMode === value && <Check size={14} aria-hidden="true" />}
+          </button>)}
+          <button role="menuitem" className={styles.item} onClick={() => select(() => useAppStore.getState().openSettings("appearance"))}>{isZh ? "选择内容色板…" : "Choose content palettes…"}</button>
+        </> : page === "ui" ? (mode === "system" ? ["light", "dark"] as const : [mode]).map((polarity) =>
           <div key={polarity} role="group" aria-label={t(`settings.${polarity}`)}>
             <p className={styles.note}>{t(`settings.${polarity}`)}</p>
             {ui.filter((entry) => entry.scheme === polarity).map(renderEntry)}

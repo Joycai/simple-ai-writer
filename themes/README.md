@@ -223,3 +223,9 @@ One `.css` (plus a folder of the same name if it has assets), a header saying wh
 
 `phycat-*` 的配色取自 [sumruler/typora-theme-phycat](https://github.com/sumruler/typora-theme-phycat)（MIT），`phycat.css` / `phycat-neon.css` 的排版语言同源。原主题用的是霞鹜文楷（LXGW WenKai）；字体不随主题分发，`phycat.css` 文件末尾有自带字体的写法。
 The `phycat-*` palettes, and the typography language of `phycat.css` / `phycat-neon.css`, come from [sumruler/typora-theme-phycat](https://github.com/sumruler/typora-theme-phycat) (MIT). The original sets LXGW WenKai; the font is not shipped with the theme, and the tail of `phycat.css` shows how to bring your own.
+
+## 独立 Markdown 配色
+
+应用内置 `morandi-content-light.css` 与 `morandi-content-dark.css` 两套内容色板，设置 → 外观 → Markdown 配色中启用。它们只改变正文，菜单与按钮仍使用界面主题。仓库文件是内置色板源码；自定义时复制并改名，保留 `--theme-kind: markdown-color` 与 `--theme-scheme: light` / `dark`。仅支持 `--md-color-*` 契约中的六位十六进制颜色，不接受选择器样式、外部资源或 UI 变量。可以安装到用户主题目录或项目 `.ai-writer/themes/`。
+
+默认“跟随界面配色”保持旧行为。独立配色可跟随应用明暗，也可固定浅色或深色。旧排版的 UI 变量引用会在正文样式中兼容映射；写死颜色的旧排版仍可能保留自己的颜色。HTML 导出携带独立内容配色，固定明暗时不会随接收方系统改变。

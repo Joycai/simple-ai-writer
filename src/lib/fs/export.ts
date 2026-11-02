@@ -1,3 +1,4 @@
+import { selectedContentCss } from "../theme/install";
 /**
  * Export helpers for V1:
  *   - Markdown: copy raw source to clipboard
@@ -153,7 +154,8 @@ body {
   padding: 0 24px 80px;
 }
 ${md}
-${user}`;
+${user}
+${selectedContentCss(true)}`;
 }
 
 /**

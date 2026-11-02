@@ -1,3 +1,4 @@
+import { contentCompatibleCss } from "./contentColors";
 /**
  * Markdown typography themes — one look shared by every rendered-markdown
  * surface: the editor preview pane, the lore previews, and exported HTML/PDF.
@@ -390,7 +391,7 @@ function themeBlock(theme: MarkdownTheme, scope: string): string {
  * export, where the container is `<body>` and no theme attribute exists.
  */
 export function markdownThemeCss(id: MarkdownThemeId, scope: string): string {
-  return `${baseCss(scope)}\n\n${themeBlock(findMarkdownTheme(id), scope)}`;
+  return contentCompatibleCss(`${baseCss(scope)}\n\n${themeBlock(findMarkdownTheme(id), scope)}`);
 }
 
 /**
@@ -406,7 +407,7 @@ export function markdownThemesCss(): string {
   const inherited = MARKDOWN_THEMES
     .map((t) => themeBlock(t, `[${MD_THEME_ATTR}="${t.id}"] .${MD_BODY_CLASS}`))
     .join("\n\n");
-  return `${base}\n\n${inherited}`;
+  return contentCompatibleCss(`${base}\n\n${inherited}`);
 }
 
 let installed: HTMLStyleElement | null = null;
