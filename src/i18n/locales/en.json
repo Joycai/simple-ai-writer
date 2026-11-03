@@ -1,4 +1,16 @@
 {
+  "pdf": {
+    "controls": "PDF reader",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page",
+    "pageNumber": "Page {{page}}",
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in",
+    "fit": "Fit width",
+    "loading": "Loading PDF…",
+    "error": "Unable to display this PDF. If it requires a password, open it in your default application."
+  },
   "themeMenu": {
     "appearance": "Appearance theme",
     "markdown": "Markdown typography",

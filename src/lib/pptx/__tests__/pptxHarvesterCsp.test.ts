@@ -48,7 +48,9 @@ describe("the harvester's CSP hash", () => {
   it("still refuses every other inline script", () => {
     // The hash is what keeps this from being a blanket 'unsafe-inline': the
     // page's own scripts are model-written and must stay blocked.
-    expect(scriptSrc).not.toContain("unsafe-inline");
-    expect(scriptSrc).not.toContain("unsafe-eval");
+    // Compare CSP tokens: wasm-unsafe-eval permits PDF decoding, not JS eval.
+    const sources = scriptSrc.split(/\s+/);
+    expect(sources).not.toContain("'unsafe-inline'");
+    expect(sources).not.toContain("'unsafe-eval'");
   });
 });
