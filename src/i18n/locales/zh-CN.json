@@ -1,4 +1,16 @@
 {
+  "pdf": {
+    "controls": "PDF 阅读器",
+    "previous": "上一页",
+    "next": "下一页",
+    "page": "页码",
+    "pageNumber": "第 {{page}} 页",
+    "zoomOut": "缩小",
+    "zoomIn": "放大",
+    "fit": "适应宽度",
+    "loading": "正在加载 PDF…",
+    "error": "无法显示此 PDF。如果文件需要密码，请用默认应用打开。"
+  },
   "themeMenu": {
     "appearance": "外观主题",
     "markdown": "Markdown 排版",

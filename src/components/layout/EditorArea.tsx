@@ -21,6 +21,8 @@ import { editorScrollMap, previewScrollMap } from "../../lib/editor/scrollAnchor
 import styles from "./EditorArea.module.css";
 import { dirName, isSamePath } from "../../lib/paths";
 
+const PdfPreview = lazy(() => import("../editor/PdfPreview"));
+
 const SlidesPreview = lazy(() => import("../editor/SlidesPreview"));
 
 export function EditorArea() {
@@ -146,6 +148,15 @@ export function EditorArea() {
         <EditorBottomStrip />
       </div>
     );
+  }
+
+  if (kind === "convertible" && /\.pdf$/i.test(activeFilePath)) {
+    return <div className={styles.area} ref={areaRef}>
+      <Suspense fallback={<div role="status">{t("pdf.loading")}</div>}>
+        <PdfPreview key={`${projectPath}:${activeFilePath}`} path={activeFilePath} />
+      </Suspense>
+      <EditorBottomStrip />
+    </div>;
   }
 
   if (isImage) {
