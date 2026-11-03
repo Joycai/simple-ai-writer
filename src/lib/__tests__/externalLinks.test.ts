@@ -10,7 +10,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function setup(inAssistant = false) {
+function setup(inAssistant = false, basePath?: string) {
   const openFile = vi.fn();
   const listeners = new Map<string, (event: MouseEvent) => void>();
   vi.stubGlobal("document", {
@@ -21,7 +21,7 @@ function setup(inAssistant = false) {
   const click = (href: string | null, options: Partial<MouseEvent> = {}) => {
     const event = {
       type: "click", button: 0, defaultPrevented: false,
-      target: { closest: (selector: string) => selector === "[data-ai-surface]" ? (inAssistant ? {} : null) : href === null ? null : { getAttribute: () => href, closest: () => inAssistant ? {} : null } },
+      target: { closest: (selector: string) => selector === "[data-ai-surface]" ? (inAssistant ? {} : null) : href === null ? null : { getAttribute: () => href, closest: (selector: string) => selector === "[data-document-base]" ? (basePath ? { getAttribute: () => basePath } : null) : inAssistant ? {} : null } },
       ...options, preventDefault: vi.fn(() => { event.defaultPrevented = true; }),
     };
     listeners.get(`${event.type}:true`)?.(event as unknown as MouseEvent);
@@ -101,5 +101,39 @@ describe("assistant file navigation", () => {
     expect(assistantLinkPath("C:/project", "file:///C:/project/report.html")).toBe("C:/project/report.html");
     expect(assistantLinkPath(null, "report.html")).toBeNull();
     expect(assistantLinkPath("/project", "file://remote/report.html")).toBeNull();
+  });
+});
+
+
+describe("Markdown document file navigation", () => {
+  it.each(["report.pdf", "image.png", "report.docx", "table.xlsx", "slides.pptx", "archive.zip", "notes.md", "page.html"])("opens %s through app navigation", (name) => {
+    const { click, openFile } = setup(false, "/project/chapters");
+    const event = click(`../assets/${name}?download=1#page=2`);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(openFile).toHaveBeenCalledExactlyOnceWith(`/project/assets/${name}`);
+    expect(event.preventDefault.mock.invocationCallOrder[0]).toBeLessThan(openFile.mock.invocationCallOrder[0]);
+    expect(openUrl).not.toHaveBeenCalled();
+  });
+
+  it("decodes paths, handles middle clicks, and preserves document anchors", () => {
+    const { click, openFile } = setup(false, "/project/chapters");
+    click("./附件%20一.pdf", { type: "auxclick", button: 1 });
+    expect(openFile).toHaveBeenCalledExactlyOnceWith("/project/chapters/附件 一.pdf");
+    expect(click("#heading").preventDefault).not.toHaveBeenCalled();
+  });
+
+  it.each(["../../outside.pdf", "file:///outside.pdf", "custom:payload"])("blocks unsafe navigation %s", (href) => {
+    const { click, openFile } = setup(false, "/project/chapters");
+    expect(click(href).preventDefault).toHaveBeenCalledOnce();
+    expect(openFile).not.toHaveBeenCalled();
+    expect(openUrl).not.toHaveBeenCalled();
+  });
+
+  it("keeps the webview in place when opening a local file fails", async () => {
+    const { click, openFile } = setup(false, "/project/chapters");
+    openFile.mockRejectedValueOnce(new Error("missing"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(click("missing.pdf").preventDefault).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledOnce());
   });
 });

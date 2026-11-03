@@ -263,7 +263,7 @@ export function Preview({ source, basePath, filePath = null }: Props) {
         // it out — see Preview.module.css.
         style={{ "--preview-zoom": zoom } as CSSProperties}
       >
-        <div ref={ref} className={`${styles.page} ${MD_BODY_CLASS}`} data-ai-selection />
+        <div ref={ref} data-document-base={basePath ?? undefined} className={`${styles.page} ${MD_BODY_CLASS}`} data-ai-selection />
       </div>
       <div className={styles.zoom} role="group" aria-label={t("editor.zoom.label")}>
         <button

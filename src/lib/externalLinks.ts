@@ -6,8 +6,8 @@ interface AssistantLinkNavigation {
   openFile: (path: string) => void | Promise<void>;
 }
 
-/** Chat links are relative to the project, never the webview's URL. */
-export function assistantLinkPath(projectPath: string | null, href: string): string | null {
+/** Resolve within the project: chat uses its root, document previews their source directory. */
+export function assistantLinkPath(projectPath: string | null, href: string, basePath = projectPath): string | null {
   if (!projectPath) return null;
   let raw = href.split(/[?#]/, 1)[0];
   if (/^file:/i.test(raw)) {
@@ -20,7 +20,7 @@ export function assistantLinkPath(projectPath: string | null, href: string): str
     return null;
   }
   if (!raw) return null;
-  const path = resolveLinkPath(projectPath, raw);
+  const path = resolveLinkPath(basePath ?? projectPath, raw);
   return isWorkspacePath(projectPath, path) ? path : null;
 }
 
@@ -32,14 +32,16 @@ export function installExternalLinkNavigation(assistant?: AssistantLinkNavigatio
     const href = anchor?.getAttribute("href")?.trim();
     if (!href || href.startsWith("#")) return;
     const external = /^(https?:|mailto:|\/\/)/i.test(href);
-    if (!external && !anchor?.closest("[data-ai-surface]")) return;
+    const preview = anchor?.closest("[data-document-base]");
+    if (!external && !preview && !anchor?.closest("[data-ai-surface]")) return;
     // Cancel synchronously: even a failed OS open must never navigate the webview.
     event.preventDefault();
     const open = async () => {
       if (external) {
         await openUrl(href.startsWith("//") ? `https:${href}` : href);
       } else if (assistant) {
-        const path = assistantLinkPath(assistant.projectPath(), href);
+        const projectPath = assistant.projectPath();
+        const path = assistantLinkPath(projectPath, href, preview?.getAttribute("data-document-base") ?? projectPath);
         if (path) await assistant.openFile(path);
       }
     };
