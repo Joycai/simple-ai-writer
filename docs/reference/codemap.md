@@ -144,6 +144,8 @@ CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, ico
 
 ### `src/components/ai/`
 
+`ContextRing` 是对话助手与扮演页片段右侧的上下文入口，分段色复用旧条；`ContextPresentation` 共用标签、格式化与预算解释，`contextRingGeometry` 只处理环形比例和视口定位。浮层与触发器分处 portal 两端，关闭判断必须同时检查两者，Esc 不向抽屉传播。归纳结果从所属会话读取，不存进组件。见 [context-ring-design.md](../feature/agent/context-ring-design.md)。
+
 `components/ai/useSlashCommands.tsx` owns the local command menu and revision-bound
 MCP catalogue browsing over the shared persistent directory; `lib/agent/slashCommands.ts` owns prefix parsing,
 namespace encoding and explicit request expansion. `AgentChat` handles picker keys
@@ -268,6 +270,8 @@ CommandPalette, onboarding flow, library view (文库: only what the author pick
 ### `src/components/roleplay/`
 
 扮演 Beta 的整套界面（设计稿 04a / 04b / 04c，功能设计在 `docs/feature/roleplay/`）。
+
+扮演上下文预估与实测共用 `ContextRing`：首轮前明确下界与未知检索纹样，Compact 仍走 roleplayStore.compactNow；详见 [context-ring-design.md](../feature/agent/context-ring-design.md)。
 
 #### 花名册与对话主界面
 
@@ -913,6 +917,7 @@ Zustand stores。一个 store 一个关注点，**存的是「现在是什么」
 - **`outputRecoveryStore`** — 项目级恢复列表、流式正文检查点和按大纲分节生成；恢复只续写文字，绝不复原审批授权。
 - **`aiTaskStore`** — 正在跑的 AI 任务：流式输出、token 用量、中断信号。任务按声明的 `tools` / `target` / `continuation` 分支，**从不按 id 分支**。
 - **`agentStore`** — 对话助手的家：L2 审批队列 **和** 会话状态。同时开几个会话（`chats: Record<key, LiveChat>` + `activeChatKey` 一根轴，`runningChats` / `chatQueue` 另一根，信号量在 `lib/agent/scheduler.ts`，与 roleplay 共用）；每张卡片带 `surface: chat:<key>`，「本次都批准」的 key 是 `chatAutoApproveKey(key)` 而不是一个共享字面量。
+  - **手动归纳结果**：`compactFeedback` 是 LiveChat 的可选内存字段，关联请求 id 与 contextVersion，不进入会话序列化。`compactChatNow` 同步预留 busy 槽，合并克隆 history/meta 保持引用身份，取消或会话失效时丢弃结果；只有当前请求能释放自己的槽。返回类型在 `stores/agent/compactResult.ts`，供 UI 区分成功、失败、跳过和取消。
   - **拆分（P5，docs/feature/code-structure-plan.md）。** `agentStore.ts` 只留 store 本体（状态、动作、审批队列）；类型在 `stores/agent/types.ts`，一次聊天运行与多会话管线在 `stores/agent/chatJob.ts`（用 store 的 `set` / `get` 调，不 import store），给组件的纯读取在 `stores/agent/selectors.ts`，批准后的写盘在 `lib/agent/proposalApply.ts`（app 以 `ProposalApplyDeps` 传入，所以每一种提案都能单测）。这些名字由 `agentStore` 重新导出，组件的 import 一行不用改。**`stores/` 的子目录只放一个 store 的私有拆分**，以 store 名命名（`stores/agent/`），不放跨 store 的东西——跨 store 的编排是 `stores/` 根下的平铺文件（`projectLifecycle.ts`、`openDocument.ts`、`configImportRefresh.ts`、`toolAppState.ts`）。
 - **`navStore`** — 前进 / 后退历史，靠**观察**其他 store 记录——没有任何调用点登记什么。位置是作者真正在其间移动的那个三元组（哪个主视图 / 哪个文件 / 哪个条目）。
 - **`batchStore`** — 批处理（`batch: true` 的任务）：对拆出来的子句顺序循环调 `runTask`（带 `{ fromBatch: true }`——`aiTaskStore` 据此不出任何中途卡片，而不是反过来读 `batchStore.running`，那会成环），结果逐条追加进一个输出文件。

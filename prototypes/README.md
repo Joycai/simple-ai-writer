@@ -78,3 +78,13 @@ historical references; starting this studio does not rewrite them.
 `pnpm build` builds both the app and this studio, so the existing frontend CI
 gate also type-checks and bundles prototypes. Its output stays separate in
 `prototypes/dist/`; Tauri still packages only the app's root `dist/`.
+
+## Context ring review
+
+Open `/#context-ring` for the composer context ring and Compact popover.
+The scenario selector covers normal/high usage, empty history, a running reply,
+unknown capacity and compaction failure. Compaction is a local timed simulation.
+
+`/#context-ring-live` reuses the production ring and portal with an isolated i18n
+instance and fixture state. It exercises the real presentation with simulated
+compaction; it does not load app stores or call a provider.

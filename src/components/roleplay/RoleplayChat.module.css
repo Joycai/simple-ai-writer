@@ -1067,9 +1067,6 @@
   margin-bottom: 9px;
 }
 
-/* 记忆条也出了框，落在输入区最上面——与对话助手同位置。 */
-.ctxBand { padding-bottom: 10px; }
-
 .attachSpacer { flex: 1; min-width: 0; }
 
 /* 换行时也得靠右（设计稿 02g 屏 1e）：零宽的弹性间隔可以留在上一行，光靠它

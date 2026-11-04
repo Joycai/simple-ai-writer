@@ -54,6 +54,7 @@
  * docs/reference/architecture.md → Circular Dependencies.
  */
 
+import type { CompactResult } from "./agent/compactResult";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import i18n from "../i18n";
@@ -82,7 +83,8 @@ import { subAgentModel } from "../lib/agent/subagentModel";
 import { isAsrEnabled } from "../lib/asr/flag";
 import { newChatStateMemory } from "../lib/agent/stateFlag";
 import { repairToolCallPairing, type RoundLimitDecision, type TruncationDecision } from "../lib/agent/runtime";
-import { messageCeilingFor } from "../lib/agent/toolCost";
+import { estimateMessagesTokens } from "../lib/ai/tokenEstimate";
+import { plannedToolTokens, messageCeilingFor } from "../lib/agent/toolCost";
 import { useAiStore } from "./aiStore";
 import type { PendingApproval, ChatTurn, LiveChat, AgentState } from "./agent/types";
 import { newChatKey, freshChat, chatFromSnapshot, patchChat, openSessionIds, refreshSessionList, sweepStashFor, noteCardFor, endGrantFor, pump, workspaceForSnapshot, buildResumeSeed } from "./agent/chatJob";
@@ -102,6 +104,7 @@ import { notify } from "../lib/notify";
 import { baseName, isSamePath, joinPath } from "../lib/paths";
 
 
+let compactRequestCounter = 0;
 let turnCounter = 0;
 let roundLimitCounter = 0;
 let truncationCounter = 0;
@@ -944,118 +947,102 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   compactChatNow: async (key) => {
     const k = key ?? get().activeChatKey;
     const s0 = get();
-    if (ownerBusy(k, s0.runningChats, s0.compactingChats, s0.chatQueue)) return;
+    if (ownerBusy(k, s0.runningChats, s0.compactingChats, s0.chatQueue)) {
+      return { status: "skipped", reason: "busy" };
+    }
     const chat = s0.chats[k];
-    if (!chat) return;
-    const history = chat.history;
-    const meta = chat.meta;
-    if (!history || !meta) return;
-
-    const { useAppStore } = await import("./appStore");
-    const { models, providers, activeModelId } = useAiStore.getState();
-    const resolved = resolveConn(models, providers, activeModelId);
-    if (!resolved.ok) { patchChat(set, k, { error: resolved.error }); return; }
-    const { model, provider } = resolved;
-
-    // The same ceiling the turn measures against — computed the same way, so a
-    // manual fold and the automatic one can never disagree about the budget.
-    const effectiveSubs = withSessionOverrides(
-      useAiStore.getState().subAgents, chat.disabledSubAgents,
-    );
-    const messageCeiling = messageCeilingFor(
-      plannedLimits({ model, provider }).contextSize,
-      useAppStore.getState().contextUtilization,
-      chatAgentPreset(),
-      effectiveSubs,
-      models,
-      // Same as the turn's: this is the chat, so a writer run carries the
-      // handoff schema on every round and the ceiling must know it.
-      // providers: whether the search subagent is live depends on what its
-      // model's platform sends (serverToolsSent) — the turn asks the same.
-      { handoff: true, packs: true, mcp: true, providers: useAiStore.getState().providers },
-    );
-
-    // Same repair a turn does before touching an inherited history: a turn
-    // that was stopped mid-tool-call leaves a pairing the fold must not build on.
-    repairToolCallPairing(history);
-    // 状态记忆 on: the button rewrites the execution state now, keeping the
-    // mode's own one turn — the same fold the next question would run, earlier.
-    const stateMode = meta.stateMode && isSkillStateEnabled();
-    // Foldability check up front, so a null from compactChatHistory below can
-    // only mean the summarize request failed — the author pressed a button and
-    // deserves an error over silence.
-    if (!planFold(history, meta, messageCeiling, {
-      force: true, keepTurns: stateMode ? STATE_KEEP_TURNS : undefined,
-    })) return;
-
-    // Reserve the conversation before the first await: send and pump both read
-    // this list, so no generation can enter the async setup window beside us.
+    if (!chat) return { status: "skipped", reason: "missing" };
+    const requestId = ++compactRequestCounter;
     const controller = new AbortController();
+    // Reserve BEFORE async module/key loading: duplicate clicks and queued sends
+    // must see the reservation during setup as well as during the model request.
     compactAborts[k] = controller;
     set((s) => ({ compactingChats: [...s.compactingChats, k] }));
-    patchChat(set, k, { error: null });
+    patchChat(set, k, { compactFeedback: { requestId, contextVersion: chat.contextVersion } });
+    const current = () => !controller.signal.aborted && compactAborts[k] === controller
+      && get().chats[k]?.compactFeedback?.requestId === requestId;
+    const finish = (result: CompactResult): CompactResult => {
+      if (!current()) return { status: "cancelled" };
+      patchChat(set, k, (c) => ({
+        compactFeedback: { requestId, contextVersion: c.contextVersion, result },
+        ...(result.status === "failed" ? { error: result.message } : {}),
+      }));
+      return result;
+    };
     try {
+      if (!chat.history || !chat.meta) return finish({ status: "skipped", reason: "nothing" });
+      const { useAppStore } = await import("./appStore");
+      if (!current()) return { status: "cancelled" };
+      const { models, providers, activeModelId } = useAiStore.getState();
+      const resolved = resolveConn(models, providers, activeModelId);
+      if (!resolved.ok) return finish({ status: "failed", message: resolved.error });
+      const { model, provider } = resolved;
+      const effectiveSubs = withSessionOverrides(useAiStore.getState().subAgents, chat.disabledSubAgents);
+      const routing = { handoff: true, packs: true, mcp: true, providers };
+      const messageCeiling = messageCeilingFor(
+        plannedLimits({ model, provider }).contextSize,
+        useAppStore.getState().contextUtilization, chatAgentPreset(), effectiveSubs, models, routing,
+      );
+      const toolTokens = plannedToolTokens(chatAgentPreset(), effectiveSubs, models, routing);
+      // The compaction helpers mutate meta. Work on a snapshot so a late model
+      // response after cancellation cannot change a live or newly opened chat.
+      const { history, meta } = structuredClone({ history: chat.history, meta: chat.meta });
+      repairToolCallPairing(history);
+      const stateMode = meta.stateMode && isSkillStateEnabled();
+      if (!planFold(history, meta, messageCeiling, {
+        force: true, keepTurns: stateMode ? STATE_KEEP_TURNS : undefined,
+      })) return finish({ status: "skipped", reason: "nothing" });
+      const fromTokens = estimateMessagesTokens(history) + toolTokens;
+      patchChat(set, k, { error: null });
       const apiKey = (await loadApiKey(provider.id)) ?? "";
+      if (!current()) return { status: "cancelled" };
       const compacted = stateMode
         ? await updateSkillState({
-            history,
-            meta,
-            ceilingTokens: messageCeiling,
-            update: (input) =>
-              requestStateUpdate(
-                connOptions({ provider, model, apiKey }),
-                input,
-                controller.signal,
-              ),
+            history, meta, ceilingTokens: messageCeiling,
+            update: (input) => requestStateUpdate(
+              connOptions({ provider, model, apiKey }), input, controller.signal,
+            ),
           })
         : await compactChatHistory({
-            history,
-            meta,
-            ceilingTokens: messageCeiling,
-            force: true,
-            summarize: (input) =>
-              summarizeForCompaction(
-                connOptions({ provider, model, apiKey }),
-                input,
-                controller.signal,
-              ),
+            history, meta, ceilingTokens: messageCeiling, force: true,
+            summarize: (input) => summarizeForCompaction(
+              connOptions({ provider, model, apiKey }), input, controller.signal,
+            ),
           });
-      if (!compacted) {
-        patchChat(set, k, {
-          error: i18n.t(stateMode ? "ai.chat.stateUpdateFailed" : "ai.chat.compactFailed"),
-        });
-        return;
-      }
+      if (!current()) return { status: "cancelled" };
+      if (!compacted) return finish({
+        status: "failed",
+        message: i18n.t(stateMode ? "ai.chat.stateUpdateFailed" : "ai.chat.compactFailed"),
+      });
       patchChat(set, k, (c) => {
-        // The event lands on the newest assistant turn's log — per the context
-        // bar's own rule (contextBreakdown §8), where a context-compacted row
-        // sits only records *when* the fold happened, and "right after that
-        // turn" is exactly when this one did.
         const lastAssistant = [...c.turns].reverse().find((tn) => tn.role === "assistant");
         return {
-          history: compacted.history,
-          contextVersion: c.contextVersion + 1,
-          turns: lastAssistant
-            ? c.turns.map((tn) =>
-                tn === lastAssistant
-                  ? { ...tn, log: appendAgentEventTo(tn.log, compacted.event) }
-                  : tn,
-              )
-            : c.turns,
+          history: compacted.history, meta, contextVersion: c.contextVersion + 1,
+          turns: lastAssistant ? c.turns.map((tn) => tn === lastAssistant
+            ? { ...tn, log: appendAgentEventTo(tn.log, compacted.event) } : tn) : c.turns,
         };
       });
-      // The history just changed shape — the crash that loses a session never
-      // announces itself first (see the run's finally).
       void get().persistChat(k);
+      return finish({ status: "success", fromTokens,
+        toTokens: estimateMessagesTokens(compacted.history) + toolTokens });
     } catch (e) {
-      if ((e as Error).name !== "AbortError") {
-        patchChat(set, k, { error: String(e) });
+      if (controller.signal.aborted || (e as Error).name === "AbortError") {
+        return { status: "cancelled" };
       }
+      return finish({ status: "failed", message: String(e) });
     } finally {
-      if (compactAborts[k] === controller) delete compactAborts[k];
-      set((s) => ({ compactingChats: s.compactingChats.filter((x) => x !== k) }));
-      // A job that queued while the fold held this conversation may run now.
-      pump(set, get);
+      // Only the operation that owns this reservation may clear it or wake jobs.
+      if (compactAborts[k] === controller) {
+        if (get().chats[k]?.compactFeedback?.requestId === requestId
+          && !get().chats[k]?.compactFeedback?.result) {
+          patchChat(set, k, (c) => ({ compactFeedback: {
+            requestId, contextVersion: c.contextVersion, result: { status: "cancelled" },
+          } }));
+        }
+        delete compactAborts[k];
+        set((s) => ({ compactingChats: s.compactingChats.filter((x) => x !== k) }));
+        pump(set, get);
+      }
     }
   },
 

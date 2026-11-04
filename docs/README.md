@@ -33,6 +33,12 @@ reaching for is one of the states above, plus a modifier if it needs one.
 
 ---
 
+## 当前设计与改造计划
+
+| Doc | Status | Scope |
+|---|---|---|
+| [context-ring-design.md](feature/agent/context-ring-design.md) | `shipped` | 分段上下文圆环、详情浮层与会话级 Compact 反馈 |
+
 ## reference/ — read before working
 
 | Doc | Status | Read when |

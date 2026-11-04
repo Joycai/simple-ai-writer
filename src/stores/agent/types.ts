@@ -1,3 +1,4 @@
+import type { CompactResult, CompactFeedback } from "./compactResult";
 import type { RetrievalProgress } from "../../lib/context/semanticLore";
 /**
  * agentStore's types — the state shape, the pending-card kinds, a conversation's
@@ -219,6 +220,8 @@ export interface LiveChat {
    * streamed text, which arrives per chunk and never touches the history.
    */
   contextVersion: number;
+  /** In-memory manual compaction feedback; never serialized into a session. */
+  compactFeedback?: CompactFeedback;
   /**
    * Disk workspace the scratchpad tools write into, for the *whole* conversation.
    * Per conversation rather than per turn: a note the assistant filed on turn 3
@@ -484,7 +487,7 @@ export interface AgentState {
    * machinery as the between-turns pass, forced (docs/feature/agent/chat-memory-plan.md §10).
    * No-op while the conversation is busy or nothing is foldable.
    */
-  compactChatNow: (key?: string) => Promise<void>;
+  compactChatNow: (key?: string) => Promise<CompactResult>;
 
   /** Save one open conversation to the project DB (best-effort, never throws). */
   persistChat: (key?: string) => Promise<void>;

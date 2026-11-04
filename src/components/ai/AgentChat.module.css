@@ -654,6 +654,7 @@
 /* Trailing edge per 1b/2d: 片段 (and the run note) lead, then the three mono
    readings of "how this gets sent" — 自动批准 · 思考 · the key — and the stamp
    closes the row (设计稿 02g 屏 1c). */
+.footerLeading { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
 .footerSpacer { flex: 1; }
 
 .inputHint {
