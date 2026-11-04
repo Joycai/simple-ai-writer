@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "status": "not-run",
+  "caseId": null,
+  "tester": null,
+  "testedAt": null,
+  "candidate": {"bundleId":"com.simple-ai-writer.app.appstore","version":null,"buildNumber":null,"binarySha256":null,"archiveManifestSha256":null},
+  "environment": {"macOSVersion":null,"chip":null,"cleanUser":null,"installationChannel":null,"signingIdentity":null,"appleBuildId":null},
+  "preconditions": null,
+  "steps": [],
+  "expected": null,
+  "actual": null,
+  "evidence": [],
+  "issueIds": [],
+  "reviewedBy": null,
+  "notes": "Copy this template per case/environment. Do not change an archived pending plan. No real credentials or private documents."
+}

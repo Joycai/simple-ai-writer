@@ -2,6 +2,8 @@
 
 > Status: `partial` — 2.0.14 已完成无正式签名的本地准备工具与文案草稿。尚未创建或修改开发者账户记录，未上传、未发布。P1–P3 原生验收、公开隐私政策和正式签名继续待完成。
 
+P5 的候选档案、测试批次和提审交接见 [P5 手册](p5-release-runbook.md)；本文保留 2.0.14 的 P4 实施记录，后续版本以主计划和实际候选档案为准。
+
 ## 版本与构建记录
 
 marketing version 继续由四份版本清单共同管理，使用项目 `bump-version` skill；这次为 2.0.14。商店专用 `bundle.macOS.bundleVersion` 对应 CFBundleVersion，默认 `1` 仅用于本地构建。站外版的版本策略不变。

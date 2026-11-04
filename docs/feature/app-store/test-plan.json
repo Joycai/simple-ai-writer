@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "status": "planned",
+  "cases": [
+    {"id":"N01","phase":"P1","title":"首次选择项目、取消授权、旧路径重新授权"},
+    {"id":"N02","phase":"P1","title":"完全退出及系统重启后恢复书签"},
+    {"id":"N03","phase":"P1","title":"目录移动、书签失效、外置盘与 iCloud"},
+    {"id":"N04","phase":"P1","title":"并存安装、多实例授权、跨渠道项目锁"},
+    {"id":"N05","phase":"P2","title":"首次告知、拒绝零发送、拒绝后重启"},
+    {"id":"N06","phase":"P2","title":"SSE / 上传取消、跨进程撤回、后台重试"},
+    {"id":"N07","phase":"P2","title":"主窗、HTML 预览与打印的联网隔离"},
+    {"id":"N08","phase":"P3","title":"编辑、数据库、知识库、搜索、异常退出"},
+    {"id":"N09","phase":"P3","title":"常规导入导出、源文件完整性、保存取消"},
+    {"id":"N10","phase":"P3","title":"Office 高级导出、字体与打印"},
+    {"id":"N11","phase":"P3","title":"通知、钥匙串、权限拒绝"},
+    {"id":"N12","phase":"P3","title":"离线、IPv6-only / DNS64、断流与重定向"},
+    {"id":"N13","phase":"P3","title":"保留的 MCP、ASR、编排与状态记忆"},
+    {"id":"N14","phase":"P3","title":"旧配置 / 恢复任务不能启用四项禁用能力"},
+    {"id":"N15","phase":"P3","title":"只读目录、测试卷满盘、失败不假报成功"},
+    {"id":"N16","phase":"P3","title":"站外版原有功能和发布渠道回归"},
+    {"id":"N17","phase":"P3","title":"Apple Silicon / macOS 14 干净用户环境"},
+    {"id":"N18","phase":"P3","title":"拟支持其他 macOS 版本逐一实机验收"},
+    {"id":"S01","phase":"P4","title":"正式签名、profile、上传处理、同身份升级"},
+    {"id":"S02","phase":"P4","title":"公开政策 / 支持页、隐私 / 出口 / 年龄 / 地区申报"},
+    {"id":"S03","phase":"P4","title":"真实截图、审核服务和全部保留功能的审核路径"},
+    {"id":"S04","phase":"P4","title":"许可证 / SDK 隐私复核、声明随包分发"},
+    {"id":"T01","phase":"P5","title":"TestFlight 实际安装、反馈与崩溃核对"},
+    {"id":"T02","phase":"P5","title":"问题修复复验、候选冻结与作者提审确认"},
+    {"id":"T03","phase":"P5","title":"正式审核结果、作者确认发布与后续维护交接"}
+  ]
+}

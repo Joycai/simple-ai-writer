@@ -956,7 +956,7 @@ Rust 侧。
 
 #### 装配与分工总则
 
-- 商店准备入口 `scripts/build-appstore.mjs` 固定架构与渠道，只接受独立构建号；`audit-appstore.mjs` 核对最终 CFBundleVersion。提交资料与依赖许可扫描是本地 / CI 准备工具，不改变应用运行或站外分发，见 [P4](../feature/app-store/README.md)。
+- 商店准备入口 `scripts/build-appstore.mjs` 固定架构与渠道，只接受独立构建号；`audit-appstore.mjs` 核对最终 CFBundleVersion。`prepare-appstore-review.mjs` 将当前包审计、资料与待验收用例归档并校验 hash，不授予提审许可，见 [P5 手册](../feature/app-store/p5-release-runbook.md)。提交资料与依赖许可扫描是本地 / CI 准备工具，不改变应用运行或站外分发，见 [P4](../feature/app-store/README.md)。
 - `lib.rs` 是装配（插件、命令注册、启动时登记的根）；`app-store` 特性不编译 `cmd` 或注册终端 IPC，`distribution.rs` 是前端渠道信息的唯一来源。商店配置和最小沙盒权限见 [Mac App Store 计划](../feature/mac-app-store-plan.md)。
 - `main.rs` 只有那句不许删的 Windows 控制台注解。
 - `[lib] crate-type` 只留 `rlib`：`main.rs` 按 rlib 链接它。脚手架默认的 `staticlib` / `cdylib` 是给 iOS / Android 的，本项目不出移动端，却要为它们每次 release 多写一个约 200 MB 的 `.lib`、多链一个 DLL（中文 MSVC 下还会冒出一条 `linker_messages` 警告）。真要上 `tauri ios` / `tauri android` 时再加回去。

@@ -65,7 +65,7 @@ jobs:
 
       - name: App Store preparation guards
         run: |
-          node --test scripts/__tests__/appstore-build.test.mjs
+          node --test scripts/__tests__/appstore-*.test.mjs
           node scripts/check-appstore-metadata.mjs
 
       - name: Type check (tsc --noEmit)

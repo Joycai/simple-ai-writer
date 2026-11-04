@@ -21,7 +21,9 @@ The [`CI`](../../.github/workflows/ci.yml) workflow runs on every pull request t
 
 The manual [`Prepare App Store candidate`](../../.github/workflows/appstore-prepare.yml) workflow accepts a build number and produces an arm64 ad-hoc `.app` archive plus bundle, metadata and unreviewed license reports. It uses read-only repository permissions, no Apple credentials, no upload and no GitHub Release. Existing direct distribution remains in `release.yml`. This workflow has not yet been exercised remotely; local equivalent steps passed. Submission readiness is deliberately false while native acceptance, policies and signing remain pending. See [P4 dossier](../feature/app-store/README.md).
 
-The frontend merge gate also runs `node --test scripts/__tests__/appstore-build.test.mjs` and `node scripts/check-appstore-metadata.mjs`. These verify frozen build parameters and draft text limits; the optional `--strict` metadata check currently fails on unresolved submission fields, so it is not a merge prerequisite.
+The frontend merge gate also runs `node --test scripts/__tests__/appstore-*.test.mjs` and `node scripts/check-appstore-metadata.mjs`. These verify frozen build parameters and draft text limits; the optional `--strict` metadata check currently fails on unresolved submission fields, so it is not a merge prerequisite.
+
+The candidate workflow also creates and verifies a [P5 local review archive](../feature/app-store/p5-release-runbook.md): fresh bundle/metadata reports, source observation and 25 pending acceptance cases, bound by hashes. Ordinary verification proves archive consistency only; strict verification intentionally fails because this preparation tool cannot approve submission. `/store-reports/` is ignored as temporary workflow output.
 
 ## What it checks
 
