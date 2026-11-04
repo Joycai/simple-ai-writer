@@ -94,7 +94,7 @@ import {
 } from "./WriterTurn";
 import { markWriterIntroSeen, WriterIntro, WriterStrip, writerIntroSeen } from "./WriterStrip";
 import writer from "./WriterTurn.module.css";
-import { ContextBar } from "./ContextBar";
+import { ContextRing } from "./ContextRing";
 import { isSkillStateEnabled } from "../../lib/agent/stateFlag";
 import { ScopeBand, ScopeMenu, type ScopeMenuAnchor } from "../lore/collections/ScopePicker";
 import { PlanModeChip } from "./PlanModeChip";
@@ -154,6 +154,7 @@ export function AgentChat() {
   const openSettings = useAppStore((s) => s.openSettings);
   const openModelPicker = useAppStore((s) => s.openModelPicker);
   const chatCompacting = useAgentStore((s) => s.compactingChats.includes(s.activeChatKey));
+  const compactFeedback = useActiveChat((c) => c.compactFeedback);
   const compactChatNow = useAgentStore((s) => s.compactChatNow);
   const rewindChat = useAgentStore((s) => s.rewindChat);
   const chatMeta = useActiveChat((c) => c.meta);
@@ -785,13 +786,11 @@ export function AgentChat() {
     [chatHistory, chatMeta, chatContextVersion, toolTokens, contextWindow, contextUtilization,
       autoCompact, compactTriggerTokens, compactTriggerRatio, stateMemory],
   );
-  // The 立即归纳 affordance appears only when a forced fold would actually fold
-  // something. Read off the breakdown rather than re-derived here: this used to
-  // test the turn count alone and miss planFold's *other* refusal (a
-  // non-positive message ceiling), so on a model whose tool schemas fill the
-  // window the button showed up and then silently did nothing. The bar needs
-  // the same answer for its own line — two copies of one rule is how they drift.
-  const canCompact = context.canFold;
+  // Foldability comes from the same breakdown as the meter; the store rechecks it.
+  const contextRing = <ContextRing key={activeKey} context={context} entryTerm={terms.entry}
+    compacting={chatCompacting} busy={chatRunning || chatQueued}
+    feedback={compactFeedback} contextVersion={chatContextVersion}
+    onCompact={() => void compactChatNow(activeKey)} />;
 
   return (
     <div className={styles.chat}>
@@ -1020,12 +1019,6 @@ export function AgentChat() {
       </div>
 
       <div className={styles.composer}>
-        <ContextBar
-          context={context}
-          onCompact={canCompact && !chatRunning ? () => void compactChatNow() : undefined}
-          compacting={chatCompacting}
-        />
-
         {/* 「接下来谁写」——常驻，在芯片行之上，因为它不是一项能力而是一道工序。
             设置里没开写手时整条不存在（角色扮演面板同理，它根本不渲染这个组件）。 */}
         {showWriterIntro && <WriterIntro onDismiss={dismissWriterIntro} />}
@@ -1174,9 +1167,12 @@ export function AgentChat() {
             <div className={styles.inputFooter}>
               {/* Inert, not gone: 片段 inserts into an input nobody can type in,
                   and 思考 would look like it changed *this* turn (屏 1z §6). */}
+              <div className={styles.footerLeading}>
               <span className={styles.footerInert} aria-hidden>
                 <SnippetPicker value={draft} onInsert={setDraft} />
               </span>
+              {contextRing}
+              </div>
               <span className={styles.footerSpacer} />
               <AutoApproveChip owner={chatAutoApproveKey(activeKey)} absent variant="footer" />
               <span className={styles.footerInert} aria-hidden>
@@ -1226,11 +1222,14 @@ export function AgentChat() {
           <div className={styles.inputFooter}>
             {/* Insert (not send): a snippet is a starting point the author
                 completes before sending. */}
+            <div className={styles.footerLeading}>
             <SnippetPicker
               value={draft}
               onInsert={setDraft}
               onAfterInsert={focusEndOfInput}
             />
+            {contextRing}
+            </div>
             {chatRunning && !retrievalProgress && (
               <span className={styles.runningNote}>
                 <span className={styles.runningDots} aria-hidden>
