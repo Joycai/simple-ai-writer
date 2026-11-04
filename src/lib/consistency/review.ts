@@ -25,9 +25,9 @@ import type { AgentEvent } from "../agent/events";
 import { CONSISTENCY_PRESET } from "../agent/presets";
 import type { ToolContext } from "../agent/registry";
 import { routeTools } from "../agent/routing";
-import { runAgent } from "../agent/runtime";
+import { runAgent, type AgentRuntimeOptions } from "../agent/runtime";
 import type { SubAgentConfig, SubAgentKind } from "../agent/subagentModel";
-import { createTaskWorkspace } from "../agent/taskWorkspace";
+import { createTaskWorkspace, loadTaskDoc, parseSteps } from "../agent/taskWorkspace";
 import { messageCeilingForTools } from "../agent/toolCost";
 import { contributingEntities, selectLore } from "../context/loreSelect";
 import type { DocMemory } from "../context/memory";
@@ -48,6 +48,9 @@ const SYSTEM_PROMPT = [
   "that established material, and record what you verified.",
   "",
   "How to work:",
+  "- FIRST call task_plan with a concise verification plan for this segment and focus. Then execute it step by step.",
+  "- Call task_progress start when beginning a step. Mark it checked only after submitting the evidence-backed results.",
+  "  If evidence is insufficient, skip the step with an explicit reason; never claim it passed. Plan progress is not proof of document coverage.",
   "- Verify before you record. If an entry in the material is only listed by title, read it with read_lore_entity.",
   "  If a claim depends on earlier text, search_text / read_file the earlier document. Guesses are not findings.",
   "- Record EVERY finding with report_issue, one call per finding, as soon as it is verified. Record each fact",
@@ -95,6 +98,7 @@ interface ReviewRunArgs {
   onIssue: (issue: ConsistencyIssue) => void;
   onPass: (pass: ConsistencyPass) => void;
   concurrency?: number;
+  onRoundLimit?: (window: DocWindow, roundsUsed: number) => ReturnType<NonNullable<AgentRuntimeOptions["onRoundLimit"]>>;
 }
 
 interface ReviewRunResult {
@@ -204,14 +208,30 @@ async function runWindow(
   nested: boolean,
 ): Promise<WindowResult> {
   const stepId = `${args.runId}-window-${window.index}`;
-  const outcome: WindowOutcome = { ...pending(window), status: "running" };
+  const outcome: WindowOutcome = { ...pending(window), status: "running", taskProjectPath: args.projectPath, logParent: nested ? stepId : undefined };
   args.onWindow(outcome);
+
+  const workspace = createTaskWorkspace(args.projectPath, args.conn.model.id);
 
   // Each window's events sit under its own step when there are several
   // windows; the single-window run *is* the run, and writes to the log directly.
-  const onEvent = nested
-    ? (e: AgentEvent) => args.onEvent({ ...e, parentStep: stepId })
-    : args.onEvent;
+  const onEvent = (event: AgentEvent) => {
+    if (!event.parentStep && event.kind === "round-start") {
+      outcome.rounds = event.round;
+      outcome.roundBudget = event.maxRounds;
+      args.onWindow({ ...outcome });
+    }
+    if (!event.parentStep && event.kind === "round-done" && event.runUsage) {
+      outcome.inputTokens = event.runUsage.inputTokens;
+      outcome.outputTokens = event.runUsage.outputTokens;
+      args.onWindow({ ...outcome });
+    }
+    if (workspace.taskId && outcome.taskId !== workspace.taskId) {
+      outcome.taskId = workspace.taskId;
+      args.onWindow({ ...outcome });
+    }
+    args.onEvent(nested ? { ...event, parentStep: stepId } : event);
+  };
   const stepArgs = JSON.stringify({
     window: window.index + 1,
     of: args.windows.length,
@@ -333,7 +353,6 @@ async function runWindow(
       { role: "user", content: userText },
     ];
 
-    const workspace = createTaskWorkspace(args.projectPath, args.conn.model.id);
     const routed = routeTools(CONSISTENCY_PRESET, args.subAgents, workspace, args.models, { providers: args.providers });
     const preset = { ...CONSISTENCY_PRESET, tools: routed.tools, serverTools: routed.serverTools };
 
@@ -359,6 +378,7 @@ async function runWindow(
       messages,
       toolContext,
       signal: args.signal,
+      onRoundLimit: args.onRoundLimit ? (roundsUsed) => args.onRoundLimit!(window, roundsUsed) : undefined,
       onEvent,
       onOutputText: (text) => { finalText = text; },
     });
@@ -371,8 +391,13 @@ async function runWindow(
     }
 
     const empty = sink.issues.length === 0 && sink.passed.length === 0;
+    // Plan checkboxes alone never prove coverage, but unfinished steps do
+    // prove that a normal text ending is not a completed review.
+    const planDoc = workspace.taskId ? await loadTaskDoc(args.projectPath, workspace.taskId) : null;
+    const steps = planDoc ? parseSteps(planDoc.body) : [];
+    const planSettled = steps.length > 0 && steps.every((step) => step.status === "done" || step.status === "skipped");
     return {
-      outcome: settle(empty || run.outcome !== "completed" ? "incomplete" : "done", {
+      outcome: settle(empty || !planSettled || run.outcome !== "completed" ? "incomplete" : "done", {
         recorded: sink.issues.length + sink.passed.length,
         rounds: run.rounds,
         inputTokens: run.inputTokens,

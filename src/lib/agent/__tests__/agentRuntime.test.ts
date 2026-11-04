@@ -1260,7 +1260,7 @@ it("preserves a plain Responses turn's opaque items and origin in persisted hist
 
 
 describe("collector finalization", () => {
-  const preset: TaskPreset = { ...CONSISTENCY_PRESET, maxRounds: 4 };
+  const preset: TaskPreset = { ...CONSISTENCY_PRESET, planFirst: false, maxRounds: 4 };
   const call = (name: string, args = "{}") => [
     { toolCalls: [{ index: 0, id: `c-${mockStream.mock.calls.length}`, name, arguments: args }] },
     { done: true, inputTokens: 10, outputTokens: 2 },
@@ -1272,7 +1272,7 @@ describe("collector finalization", () => {
     const opts = makeOptions({ preset });
     const result = await runAgent(opts);
     expect(result.rounds).toBe(2);
-    expect(mockStream.mock.calls[1][0].tools?.map((t) => t.function.name)).toEqual(["report_issue", "report_pass"]);
+    expect(mockStream.mock.calls[1][0].tools?.map((t) => t.function.name)).toEqual(["task_progress", "report_issue", "report_pass"]);
     expect(sent[1].some((m) => m.content === preset.finalization!.instruction)).toBe(true);
   });
 
@@ -1294,6 +1294,52 @@ describe("collector finalization", () => {
     expect(opts.events.some((e) => e.kind === "tool-step" && e.step.round === 2 && e.step.status === "error")).toBe(true);
   });
 
+  it("asks before submission, extends research, then honors finish without asking again", async () => {
+    for (let i = 0; i < 4; i++) queueRound(call("list_lore_entities"));
+    queueRound([{ text: "Submitted." }]);
+    const asks: number[] = [];
+    const opts = makeOptions({ preset, onRoundLimit: async (used) => {
+      asks.push(used);
+      return asks.length === 1 ? { action: "extend", rounds: 2 } : { action: "finish" };
+    } });
+    await runAgent(opts);
+    expect(asks).toEqual([1, 3]);
+    expect(mockStream.mock.calls[1][0].tools?.some((t) => t.function.name === "read_file")).toBe(true);
+    expect(mockStream.mock.calls[3][0].tools?.map((t) => t.function.name)).toEqual(["task_progress", "report_issue", "report_pass"]);
+  });
+
+  it("does not ask for more research when the model has already ended research", async () => {
+    queueRound([{ text: "Research done." }]);
+    queueRound([{ text: "Submitted." }]);
+    const ask = vi.fn();
+    await runAgent(makeOptions({ preset, onRoundLimit: ask }));
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it("aborts while waiting without sending a submission request", async () => {
+    queueRound(call("list_lore_entities"));
+    const controller = new AbortController();
+    const opts = makeOptions({ preset, signal: controller.signal, onRoundLimit: async () => {
+      controller.abort();
+      return { action: "finish" };
+    } });
+    await expect(runAgent(opts)).rejects.toMatchObject({ name: "AbortError" });
+    expect(mockStream).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not unlock research after a failed plan or an early prose answer", async () => {
+    queueRound(call("task_plan", '{}')); // fails validation; no workspace
+    queueRound([{ text: "Skip the plan." }]);
+    queueRound(call("read_file", '{"path":"file.md"}'));
+    queueRound([{ text: "No verified results." }]);
+    const opts = makeOptions({ preset: { ...preset, planFirst: true, maxRounds: 6 } });
+    await runAgent(opts);
+    for (const [request] of mockStream.mock.calls.slice(0, 3)) {
+      expect(request.tools?.map((t) => t.function.name)).toEqual(["task_plan"]);
+    }
+    expect(opts.events.some((e) => e.kind === "tool-step" && e.step.round === 3 && e.step.status === "error")).toBe(true);
+  });
+
   it("keeps collectors through the last round and rejects research during submission", async () => {
     queueRound(call("list_lore_entities"));
     queueRound(call("list_lore_entities")); // stale/hallucinated call: must not execute
@@ -1303,7 +1349,7 @@ describe("collector finalization", () => {
     const result = await runAgent(opts);
     expect(result.outcome).toBe("truncated"); // no completion acknowledgement
     for (const [request] of mockStream.mock.calls.slice(1)) {
-      expect(request.tools?.map((t) => t.function.name)).toEqual(["report_issue", "report_pass"]);
+      expect(request.tools?.map((t) => t.function.name)).toEqual(["task_progress", "report_issue", "report_pass"]);
     }
     expect(opts.events.some((e) => e.kind === "tool-step" && e.step.round === 2 && e.step.status === "error")).toBe(true);
     expect(sent[3].filter((m) => m.content === preset.finalization!.instruction)).toHaveLength(1);

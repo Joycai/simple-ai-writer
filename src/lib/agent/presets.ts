@@ -41,6 +41,8 @@ export interface TaskPreset {
   maxRounds: number;
   finishPolicy: FinishPolicy;
   /** Reserve the final rounds for collectors; research tools are no longer callable. */
+  /** Require a successful task_plan before research tools become callable. */
+  planFirst?: boolean;
   finalization?: { rounds: number; tools: readonly ToolId[]; instruction: string };
   /**
    * Whether this task uses the on-disk workspace (.ai-writer/tasks/).
@@ -309,9 +311,8 @@ export const WRITER_PRESET: TaskPreset = {
  * 的一条都不丢——`LORE_SPLIT_PRESET` 的论证原样适用。
  *
  * `serverTools: "off"`：联网走 search 子代理，主模型不直接搜——同助手。
- * `scratchpad: "offered"` 而不是 required：一段核对通常不需要存档，给它便签是为了
- * 派了子代理之后有地方落摘要（`delegate` 的契约就是「摘要 + note 路径」）。
- * 前 11 轮取证，最后 3 轮只保留收集器，允许校验失败后修正；不接轮数上限卡。
+ * `planFirst` 要求先保存任务计划；required scratchpad 持续提醒更新进度与保存证据。
+ * 前 11 轮取证到顶询问继续，收尾 3 轮保留收集器与 task_progress，允许校验失败后修正。
  * 达到收尾上限仍未结束时保留记录，并将核对标为未完成。
  *
  * 设计：docs/feature/consistency-review-plan.md §6。
@@ -337,15 +338,16 @@ export const CONSISTENCY_PRESET: TaskPreset = {
     "report_issue",
     "report_pass",
   ],
+  planFirst: true,
   maxRounds: 14,
   finishPolicy: "allow-tool-end",
   finalization: {
     rounds: 3,
-    tools: ["report_issue", "report_pass"],
-    instruction: "Research is finished. Only report_issue and report_pass remain available. Submit every verified finding and passed check now; batch independent calls in one response. Correct rejected records using the evidence already collected. Do not invent checks to fill an empty report. Once all results are accepted, finish with a brief summary; state any remaining uncertainty.",
+    tools: ["report_issue", "report_pass", "task_progress"],
+    instruction: "Research is finished. Only report_issue, report_pass and task_progress remain available. Update the plan to reflect submitted results and explicitly skip unverifiable steps with a reason. Submit every verified finding and passed check now; batch independent calls in one response. Correct rejected records using the evidence already collected. Do not invent checks to fill an empty report. Once all results are accepted, finish with a brief summary; state any remaining uncertainty.",
   },
   serverTools: "off",
-  scratchpad: "offered",
+  scratchpad: "required",
 };
 
 /**

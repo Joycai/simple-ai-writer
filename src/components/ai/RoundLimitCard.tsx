@@ -12,7 +12,12 @@ import { useTranslation } from "react-i18next";
 import { useAgentStore, type PendingRoundLimit } from "../../stores/agentStore";
 import styles from "./RoundLimitCard.module.css";
 
-export function RoundLimitCard({ item }: { item: PendingRoundLimit }) {
+export function RoundLimitCard({ item, description, finishLabel, onStop }: {
+  item: PendingRoundLimit;
+  description?: string;
+  finishLabel?: string;
+  onStop?: () => void;
+}) {
   const { t } = useTranslation();
   const resolveRoundLimit = useAgentStore((s) => s.resolveRoundLimit);
 
@@ -27,7 +32,7 @@ export function RoundLimitCard({ item }: { item: PendingRoundLimit }) {
         </span>
       </div>
       <div className={styles.body}>
-        {t("ai.roundLimit.body", {
+        {description ?? t("ai.roundLimit.body", {
           defaultValue:
             "Agent 已连续调用 {{n}} 轮工具，仍未完成。继续会再给它 {{extra}} 轮；就此收尾则让它用已有的信息直接给出结果。",
           n: item.roundsUsed,
@@ -39,8 +44,9 @@ export function RoundLimitCard({ item }: { item: PendingRoundLimit }) {
           className={styles.btnFinish}
           onClick={() => resolveRoundLimit(item.runId, { action: "finish" })}
         >
-          {t("ai.roundLimit.finish", { defaultValue: "就此收尾" })}
+          {finishLabel ?? t("ai.roundLimit.finish", { defaultValue: "就此收尾" })}
         </button>
+        {onStop && <button className={styles.btnPause} onClick={onStop}>{t("ai.panel.stop")}</button>}
         {item.canPause && (
           <button
             className={styles.btnPause}

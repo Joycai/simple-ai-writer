@@ -786,6 +786,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
   // Mutable: the author can extend it at the cap via onRoundLimit.
   let maxRounds = preset.maxRounds;
   let finalizationStarted = false;
+  let researchEnded = false;
+  let hasPlan = !preset.planFirst;
   /** Output-cap recoveries spent in this run — reset when the author grants more. */
   let truncationRecoveries = 0;
   /** Whether this run has already cut a round for its thinking budget — at most once. */
@@ -899,16 +901,6 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     const imageModel = searchable.image?.length
       || activeTools.some((id) => id === "generate_image" || id === "edit_image" || id === "redraw_lore_image")
       ? activeImageModel(runToolContext) : null;
-    const finalizing = !!preset.finalization &&
-      (finalizationStarted || round > maxRounds - preset.finalization.rounds);
-    if (finalizing && !finalizationStarted) {
-      finalizationStarted = true;
-      history.push({ role: "user", content: preset.finalization!.instruction });
-    }
-    const roundTools = finalizing
-      ? activeTools.filter((id) => preset.finalization!.tools.includes(id))
-      : activeTools;
-    const toolDefinitions = getToolDefinitions(roundTools, searchable, opts.toolContext.searchReadsPages, imageModel);
 
     // On the final round of a force-text task: inject a "write now" instruction
     // and omit tools so the model must produce text without further tool calls.
@@ -921,12 +913,14 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // withheld and the model writes, the run has ended. `round > 1` keeps
     // single-round presets out — their one round *is* the whole run.
     if (
-      isLastRound &&
+      (preset.finalization
+        ? !finalizationStarted && !researchEnded && round > maxRounds - preset.finalization.rounds
+        : isLastRound) &&
       round > 1 &&
       // A retry after a thinking cut is the runtime's doing: the author was not
       // asked when the cut round started, and is not asked twice for it.
       !retryingAfterCut &&
-      (preset.finishPolicy === "force-text" || preset.finishPolicy === "handoff") &&
+      (preset.finalization || preset.finishPolicy === "force-text" || preset.finishPolicy === "handoff") &&
       preset.tools.length > 0 &&
       opts.onRoundLimit
     ) {
@@ -952,6 +946,17 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         isLastRound = false;
       }
     }
+
+    const finalizing = !!preset.finalization &&
+      (finalizationStarted || round > maxRounds - preset.finalization.rounds);
+    if (finalizing && !finalizationStarted) {
+      finalizationStarted = true;
+      history.push({ role: "user", content: preset.finalization!.instruction });
+    }
+    const roundTools = finalizing
+      ? activeTools.filter((id) => preset.finalization!.tools.includes(id))
+      : hasPlan ? activeTools : activeTools.filter((id) => id === "task_plan");
+    const toolDefinitions = getToolDefinitions(roundTools, searchable, opts.toolContext.searchReadsPages, imageModel);
 
     /**
      * This run ends by handing a work order to the writer rather than by
@@ -1063,6 +1068,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     let checkpointNotice: StreamMessage | null = null;
     if (
       preset.scratchpad === "required" &&
+      roundTools.includes("write_note") &&
       // The live ceiling, not opts.inputCeilingTokens: this nudge exists to get
       // conclusions into notes *before* trimming starts, and trimming follows
       // the ceiling as group loads shrink it.
@@ -1284,6 +1290,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
               kind: "round-done",
               round,
               actualInputTokens: chunk.initialInputTokens ?? chunk.inputTokens,
+              runUsage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
               ...(chunk.wireRewrites?.length ? { wireRewrites: chunk.wireRewrites } : {}),
               incomparable:
                 (chunk.initialInputTokens ?? chunk.inputTokens) <= 0
@@ -1520,12 +1527,23 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
     // An early prose answer ends research, not the collector contract. Give
     // it the same bounded submission phase without reopening research.
+    if (!hasPlan && !finalizing && roundToolCalls.length === 0) {
+      if (roundText.trim() || roundResponseItems?.items.length) {
+        history.push({ role: "assistant", content: roundText,
+          ...(roundResponseItems ? { _responseItems: roundResponseItems, _carryScope: roundCarryScope } : {}),
+        });
+      }
+      history.push({ role: "user", content: "Create the task plan with task_plan before investigating or answering." });
+      opts.onOutputText(committedText);
+      continue;
+    }
     if (preset.finalization && !finalizing && roundToolCalls.length === 0) {
       if (roundText.trim() || roundResponseItems?.items.length) {
         history.push({ role: "assistant", content: roundText,
           ...(roundResponseItems ? { _responseItems: roundResponseItems, _carryScope: roundCarryScope } : {}),
         });
       }
+      researchEnded = true;
       maxRounds = round + preset.finalization.rounds;
       opts.onOutputText(committedText);
       continue;
@@ -1756,6 +1774,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         pendingTools,
       );
       const isError = result.content.startsWith("Error") || result.content.startsWith("Unknown tool");
+      if (!isError && tc.name === "task_plan") hasPlan = true;
       if (!isError && (tc.name === "task_plan" || tc.name === "task_progress")) {
         touchedChecklist = true;
       }

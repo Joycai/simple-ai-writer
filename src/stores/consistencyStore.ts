@@ -47,6 +47,22 @@ import { useLoreStore } from "./loreStore";
 import { useMemoryStore } from "./memoryStore";
 import { useProjectStore } from "./projectStore";
 
+/** A separate queue identity per window; abort must settle every waiting Promise. */
+export async function requestReviewRoundExtension(windowIndex: number, roundsUsed: number, signal: AbortSignal) {
+  if (signal.aborted) return { action: "finish" as const };
+  const ticket = {};
+  const release = () => useAgentStore.getState().rejectAll("Review stopped", ticket);
+  signal.addEventListener("abort", release, { once: true });
+  try {
+    return await useAgentStore.getState().requestRoundExtension(
+      roundsUsed, 8, ticket, false, `consistency:${windowIndex}`,
+    );
+  } finally {
+    signal.removeEventListener("abort", release);
+    release();
+  }
+}
+
 /** One applied suggestion — enough to put the quote back. */
 interface AppliedRecord {
   issue: ConsistencyIssue;
@@ -348,6 +364,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         },
         signal: controller.signal,
         runId,
+        onRoundLimit: (window, roundsUsed) => requestReviewRoundExtension(window.index, roundsUsed, controller.signal),
         onEvent,
         onWindow: (w) => {
           if (get().abortController !== controller) return;
