@@ -146,6 +146,8 @@ CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, ico
 
 `AiPanel` 的任务选择、固定引用和预算详情使用 `GenerateDialog`；任务要求在 composerStore 按任务 ID 保留，其他参数继续按任务能力声明显示。布局与取舍见 [generate-workspace-design.md](../feature/agent/generate-workspace-design.md)。
 
+`ConsistencyCheck` 与生成页对齐为配置/结果双栏，窄栏折叠配置；范围与预算复用 `GenerateDialog`，生成与核对共用 `ForecastRing`。环形只表示输入预估，累计用量另列；计划与预算继续沿用 Agent 卡片。选择应用仍经 `consistencyStore.applyAll(ids)` 的原子替换与撤销路径。
+
 `ContextRing` 是对话助手与扮演页片段右侧的上下文入口，分段色复用旧条；`ContextPresentation` 共用标签、格式化与预算解释，`contextRingGeometry` 只处理环形比例和视口定位。浮层与触发器分处 portal 两端，关闭判断必须同时检查两者，Esc 不向抽屉传播。归纳结果从所属会话读取，不存进组件。见 [context-ring-design.md](../feature/agent/context-ring-design.md)。
 
 `components/ai/useSlashCommands.tsx` owns the local command menu and revision-bound

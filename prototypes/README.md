@@ -100,3 +100,16 @@ no project data, model requests or writes. Design: `docs/feature/agent/generate-
 It seeds in-memory stores, has no project, and replaces task execution and model updates
 with fixture actions. It exercises task selection, per-task drafts, entry/facet pins,
 forecast details, narrow layout and themes without model calls or author data.
+
+### Consistency workspace redesign
+
+`/#consistency-workspace` — generation-aligned split workspace, reference scope
+picker, focus input, context ring details, plan/coverage/round budget, continue or
+submit flow, partial/empty outcomes, and selectable review findings. Scenario
+selector and narrow preview are review controls. All model progress, usage and
+apply actions are simulated in memory; no project files or providers are accessed.
+
+`/consistency-live.html` mounts the production review component with isolated
+fixture stores. Scope persistence, model updates and scan/resume are replaced
+with memory-only actions; selection/apply/undo exercise the real text pipeline
+against fictional text. No author files or provider requests are involved.

@@ -115,7 +115,7 @@ interface ConsistencyState {
   ignoreAll: () => void;
   apply: (id: string) => boolean;
   undoApply: (id: string) => boolean;
-  applyAll: () => number;
+  applyAll: (ids?: readonly string[]) => number;
   /** Drop a finding whose passage is gone — the card's 移除. */
   remove: (id: string) => void;
   locate: (id: string) => void;
@@ -500,10 +500,11 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
     return true;
   },
 
-  applyAll: () => {
+  applyAll: (ids) => {
+    if (get().isScanning) return 0;
     const { report, ignored, applied } = get();
     if (!reportMatchesOpenDocument(report)) return 0;
-    const pending = openIssues(report!.issues, ignored, applied).filter((i) => i.suggestion);
+    const pending = openIssues(report!.issues, ignored, applied).filter((i) => i.suggestion && (!ids || ids.includes(i.id)));
     if (pending.length === 0) return 0;
     const { content, setContent } = useEditorStore.getState();
     const { text, applied: landed } = applySuggestions(content, pending);

@@ -2607,7 +2607,24 @@
       "runningNote": "正在核对",
       "windowsDone": "{{k}}/{{n}} 段完成",
       "roundN": "第 {{n}} 轮",
-      "escHint": "Esc 停止 · 已记的发现保留"
+      "escHint": "Esc 停止 · 已记的发现保留",
+      "workspace": {
+        "results": "核对结果",
+        "emptyTitle": "让每个结论都有依据",
+        "emptyText": "根据所选参考内容核对文档，逐项呈现原文、依据与修改建议。",
+        "config": "核对配置",
+        "change": "更改",
+        "readOnly": "核对期间只读取资料。建议由你确认后应用。",
+        "changed": "配置已更改，重新核对后生效。右侧保留上次结果。",
+        "searchCollections": "搜索集合",
+        "select": "选择建议：{{title}}",
+        "forecastNote": "每段输入预估，包含参考资料预算，并非实际占用。累计用量单独统计。",
+        "usage": "本轮累计输入 {{input}} tk · 输出 {{output}} tk",
+        "updating": "核对进行中 · 完成后可应用建议",
+        "selected": "已选 {{n}} 项可应用建议",
+        "applySelected": "应用所选建议（{{n}}）",
+        "stop": "停止核对"
+      }
     },
     "taskPanel": {
       "untitled": "当前任务",

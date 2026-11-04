@@ -1,6 +1,4 @@
-/* 一致性检查 · 设计稿 02d。三种时刻：填表 → 看它查 → 读报告，每一种只有一样东西
-   是主角，其余退成一行。AI 面板的墨色方言：零圆角、背景深浅 + 发丝线分层、
-   衬线只给「给人读的话」、等宽给每一个数字。 */
+/* 核对工作区：配置与结果分栏，共用 AI 面板的令牌与密度。 */
 
 .root {
   display: flex;
@@ -781,3 +779,51 @@ button.settingsLine:hover { background: var(--color-bg-hover); }
 }
 .emptyTitle { font: 300 20px/1.3 var(--font-serif); color: var(--color-text-primary); }
 .emptyText { font: italic 400 13px/1.6 var(--font-serif); color: var(--color-text-muted); max-width: 360px; }
+
+/* Stable workspace, aligned with Generate. Each desktop column owns its scroll. */
+.root { container-type: inline-size; }
+.workspace { display:grid; grid-template-columns:minmax(290px,34%) minmax(0,1fr); flex:1; min-height:0; }
+.configuration,.results { display:flex; flex-direction:column; min-width:0; min-height:0; }
+.configuration { border-right:1px solid var(--color-border-panel); }
+.configScroll { flex:1; min-height:0; overflow:auto; padding:20px; }
+.configCard { margin:20px 0 0; padding:16px; border:1px solid var(--color-border-panel); background:var(--color-bg-inset); min-width:0; }
+.configCard legend { padding:0 6px; font:500 12px var(--font-sans); color:var(--color-text-primary); }
+.configCard:disabled { opacity:.7; }
+.configCard .sectionHead { justify-content:space-between; flex-wrap:wrap; }
+.configBody .hint { margin-top:12px; }
+.docLine { flex-direction:column; align-items:start; gap:8px; }
+.docName { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rangeTrigger { display:flex; justify-content:space-between; gap:12px; align-items:center; width:100%; padding:12px; margin:10px 0 20px; text-align:left; background:var(--color-bg-surface); border:1px solid var(--color-border-input); font:400 12px var(--font-sans); color:var(--color-text-primary); cursor:pointer; }
+.rangeTrigger span { min-width:0; overflow-wrap:anywhere; }
+.rangeTrigger span:last-child { display:flex; align-items:center; color:var(--color-sienna); flex-shrink:0; }
+.focusLabel { display:flex; flex-direction:column; gap:8px; font:400 12px var(--font-sans); color:var(--color-text-secondary); }
+.focusInput { resize:vertical; min-height:88px; box-sizing:border-box; }
+.configToggle { display:none; }
+.executionFooter { display:flex; flex-direction:column; gap:12px; padding:14px 20px; flex-shrink:0; background:var(--color-bg-inset); border-top:1px solid var(--color-border-panel); }
+.executionFooter>.btnPrimary { min-height:36px; display:flex; justify-content:space-between; align-items:center; }
+.modelControls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.runtimeControls { display:flex; flex-wrap:wrap; gap:8px; border:0; margin:0 0 0 auto; padding:0; min-width:0; }
+.resultHeader { padding:18px 24px 0; font:500 12px var(--font-sans); color:var(--color-text-secondary); }
+.results .wrap { padding-top:14px; }
+.results .footer { flex-wrap:wrap; }
+.collectionOptions { display:flex; flex-direction:column; max-height:240px; overflow:auto; }
+.collectionOptions label { display:flex; align-items:center; gap:8px; padding:8px; font:400 12px var(--font-sans); color:var(--color-text-primary); }
+.collectionOptions label span { margin-left:auto; color:var(--color-text-dim); }
+.issueHead,.reportDoc,.coverageLine,.failedLine { flex-wrap:wrap; }
+.rowText,.rowRef,.rowSuggest { min-width:0; overflow-wrap:anywhere; }
+.filterTabs { flex-wrap:wrap; gap:10px; }
+.passItems { grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); }
+@container (max-width:700px) {
+  .workspace { grid-template-columns:1fr; display:flex; flex-direction:column; overflow:auto; }
+  .configuration { display:contents; border:0; }
+  .configScroll { flex:none; overflow:visible; padding:16px; }
+  .configToggle { display:flex; width:100%; align-items:center; justify-content:space-between; padding:12px 0; border:0; background:transparent; color:var(--color-text-primary); font:400 12px var(--font-sans); cursor:pointer; }
+  .configCollapsed { display:none; }
+  .configCard { margin-top:0; }
+  .results { flex:none; overflow:visible; min-height:280px; border-top:1px solid var(--color-border-panel); }
+  .results .wrap { overflow:visible; flex:none; padding:16px; }
+  .executionFooter { order:3; position:sticky; bottom:0; z-index:5; padding:10px 16px; }
+  .modelControls { flex-wrap:wrap; }
+  .row { gap:8px; }.rowLabel { width:42px; }
+}
+.resolvedRow { flex-wrap:wrap; }.resolvedRow .linkBtn { white-space:nowrap; }

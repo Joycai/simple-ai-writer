@@ -2611,7 +2611,24 @@
       "runningNote": "Checking",
       "windowsDone": "{{k}}/{{n}} segments done",
       "roundN": "round {{n}}",
-      "escHint": "Esc stops · recorded findings are kept"
+      "escHint": "Esc stops · recorded findings are kept",
+      "workspace": {
+        "results": "Review results",
+        "emptyTitle": "Give every conclusion a source",
+        "emptyText": "Check the document against the selected references and review each quote, source and suggested change.",
+        "config": "Review configuration",
+        "change": "Change",
+        "readOnly": "Review only reads your material. Changes are applied when you approve them.",
+        "changed": "Configuration changed. Run again to use it; the previous results remain on the right.",
+        "searchCollections": "Search collections",
+        "select": "Select suggestion: {{title}}",
+        "forecastNote": "Estimated input per segment, including the reference budget, not actual occupancy. Cumulative usage is reported separately.",
+        "usage": "Cumulative input {{input}} tk · output {{output}} tk",
+        "updating": "Review in progress · apply suggestions after it ends",
+        "selected": "{{n}} applicable suggestions selected",
+        "applySelected": "Apply selected ({{n}})",
+        "stop": "Stop review"
+      }
     },
     "taskPanel": {
       "untitled": "Current task",
