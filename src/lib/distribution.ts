@@ -23,3 +23,8 @@ export function hydrateDistribution(): Promise<void> {
 export function terminalAvailable(): boolean {
   return distribution === "direct";
 }
+
+/** Unknown desktop builds must preserve recents on authorization failures too. */
+export function requiresFileAuthorization(): boolean {
+  return distribution !== "direct";
+}

@@ -888,7 +888,7 @@ document import into the workspace:
 
 #### 多开与基础模块
 - `externalLinks.ts` 在 App 挂载时注册 document 级点击代理：HTTP(S) 链接交给系统默认浏览器，mailto 交给默认邮件应用；先同步取消 WebView 导航，打开失败也不能替换应用页面。覆盖动态 Markdown、嵌套链接内容、修饰键和中键点击；已处理事件、文内锚点及知识库引用保留原行为。助手区域在捕获阶段接管，防止组件停止冒泡时漏掉导航；相对路径以当前项目根目录解析，项目内文件经 App 注入的文件树同款打开流程处理（HTML 仍走隔离预览），越界路径和未知协议取消导航。Markdown 预览通过 `data-document-base` 声明源文档目录，本地链接按该目录解析并复用同一打开流程，不按扩展名放行浏览器导航：PDF / 图片进入各自预览，Office 和其他二进制进入只读说明页，防止点击附件替换主 WebView。越界路径和未知协议同样取消导航。其他区域的相对路径保留原行为。原因是未接管的 HTML 链接会替换主 WebView，表现为 UI 崩溃。协议相对 URL 按 HTTPS 打开。HTML 沙箱 iframe 有独立文档，不在此代理范围内。
-- `project.ts`
+- `project.ts`（底层项目 IPC / 数据库）；`projectAuthorization.ts` 在其上编排商店重新授权对话框，避免底层 DB 模块反向依赖 i18n 造成 prefs 循环
 - `keyStore.ts`
 - `recentProjects.ts` (the recent-projects list and its pin set, pure: parsing, the cap that counts only unpinned entries, and the cross-instance merge `prefs.writePrefMerged` applies at persist time; the pinned section renders from the pin row, not the recents; both rows are machine-local)
 - `staleRefs.ts` (清理失效数据 — behind the button of that name in `GeneralPane`: removes only **dead** absolute-path references — pinned-lore rows, roleplay agent bindings, a chat session's injection ledger and turn images — each checked against disk first)
@@ -960,6 +960,7 @@ Rust 侧。
 #### 命令与路径安全
 
 - `commands.rs` 是自建的文件系统命令，全部 `async` 并把活交给 `blocking.rs`——一个不带 `async` 的 Tauri 命令跑在**主线程**上，而一次知识库扫描会连着调几百次 `fs_exists`，每次先 canonicalize，把窗口的事件循环一段段卡住；而光 `async` 也不够，那只是挪到 tokio 的 worker 上（有几个核就有几个），一块慢盘或一次钥匙串弹窗能占住其中一个任意久。`blocking.rs` 因此也被 `secrets.rs` / `transfer.rs` / `cmd.rs` / `scope.rs` 共用。命令有 `scaffold_project`、`read_dir_recursive` 和 `fs_*` 一族（读写文本、写二进制、追加、建 / 读 / 删目录、删文件、`fs_exists`、`fs_stat`、`fs_rename`……），每条在系统调用之前先过 `FsScope::check` 做 canonicalize；这次检查跟着其余的活一起进阻塞任务，所以 `FsScope` 是 `Clone`（一份根列表外面包一层 `Arc`，之后才允许的根照样算数）。
+- `bookmarks.rs` 在 macOS 商店版持有本机 security-scoped bookmarks 与进程会话 lease；`scope.rs` 在检查项目标记前恢复 OS 授权，返回解析后的路径，重新授权仅信任原生选取结果。身份分离、原子持久化及退出释放理由见 [P1 记录](../feature/mac-app-store-plan.md)。
 - `scope.rs` 是这些命令的运行期路径围栏：否则它们接受任意绝对路径，一个被攻陷的 webview 就能读写删任意文件；根只从可信来源登记（原生文件夹选择器、带 `.ai-writer` 标记的重开项目，而那个标记 webview 在已允许的根之外造不出来）。
 - `protocol.rs` 注册 `ai-writer-asset:` 自定义 scheme（扩展名白名单 + 同一个 `FsScope`）。**应用已经不再产生这种链接**——知识库和文档里的图都以 data URL 渲染（`imageToDataUrl` / `useImageDataUrl`），因为 Webview2 的 URL 解析让这个 scheme 在 Windows 上不可靠；它留着只是为了让旧版本存下的文档里的 `ai-writer-asset://` 链接还能显示。
 - `fontproto.rs` 注册 `ai-writer-font:`：只服务 `appDataDir/fonts/` 下的 `.woff2`（下载来的字体包），围栏比 `FsScope` 更窄，而且**先按字面判定再碰磁盘**——Windows 上把网页可控的 `//host/share` 交给 canonicalize 会发起 SMB 连接。异步协议，响应带 ACAO `*`（主窗口、沙箱样张、打印窗口都是跨源取字体）。

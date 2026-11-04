@@ -1,4 +1,6 @@
 mod blocking;
+#[cfg(all(target_os = "macos", feature = "app-store"))]
+mod bookmarks;
 #[cfg(not(feature = "app-store"))]
 mod cmd;
 mod commands;
@@ -52,6 +54,8 @@ pub fn run() {
                 fs_scope.allow(&dir);
             }
             app.manage(fs_scope);
+            #[cfg(all(target_os = "macos", feature = "app-store"))]
+            app.manage(bookmarks::Bookmarks::default());
 
             // Holds the document handed to the print window (see print.rs).
             app.manage(print::PendingPrint::default());
@@ -105,6 +109,7 @@ pub fn run() {
             commands::open_with_default_app,
             scope::project_open_dialog,
             scope::project_register_root,
+            scope::project_reauthorize,
             instance::project_lock_acquire,
             instance::project_lock_release,
             instance::project_focus_existing,
@@ -172,6 +177,11 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 instance::release_all_locks(app);
                 instance::retire_instance(app);
+                #[cfg(all(target_os = "macos", feature = "app-store"))]
+                {
+                    use tauri::Manager;
+                    app.state::<bookmarks::Bookmarks>().release_all();
+                }
             }
         });
 }

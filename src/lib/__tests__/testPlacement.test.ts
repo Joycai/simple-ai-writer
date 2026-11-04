@@ -60,6 +60,7 @@ const ROOT_MODULE_TESTS: Readonly<Record<string, string>> = {
   "pinnedProjects.test.ts": "recentProjects",
   "prefs.test.ts": "prefs",
   "projectDbCache.test.ts": "project",
+  "projectAuthorization.test.ts": "projectAuthorization",
   "recentProjects.test.ts": "recentProjects",
   "screenShortcuts.test.ts": "shortcuts",
   "staleRefs.test.ts": "staleRefs",

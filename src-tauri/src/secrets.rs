@@ -14,7 +14,10 @@ use keyring::Entry;
 use tauri::command;
 
 /// Service name under which all provider keys are registered.
+#[cfg(not(feature = "app-store"))]
 const SERVICE: &str = "com.simple-ai-writer.app";
+#[cfg(feature = "app-store")]
+const SERVICE: &str = "com.simple-ai-writer.app.appstore";
 
 /// Reject provider ids that can't name a credential, before any platform call.
 ///
@@ -346,6 +349,16 @@ mod store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn distribution_channels_use_distinct_keychain_services() {
+        let expected = if cfg!(feature = "app-store") {
+            "com.simple-ai-writer.app.appstore"
+        } else {
+            "com.simple-ai-writer.app"
+        };
+        assert_eq!(SERVICE, expected);
+    }
 
     #[test]
     fn rejects_empty_provider_id() {

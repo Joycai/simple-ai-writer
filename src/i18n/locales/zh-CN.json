@@ -1062,6 +1062,13 @@
     }
   },
   "project": {
+    "reauthorizeUnsafeMetadata": "项目元数据包含符号链接。商店版要求 .ai-writer 及其数据库直接保存在项目内，不使用符号链接。未打开项目。",
+    "reauthorizeTitle": "授权访问项目文件夹",
+    "reauthorizeBody": "需要重新授权才能访问此项目。请选择原文件夹：\n{{path}}\n取消不会删除文件或最近项目记录。如果文件夹已移动，请通过“打开文件夹”选择新位置。",
+    "reauthorizeChoose": "选择文件夹",
+    "reauthorizeWrongFolder": "请选择原项目文件夹：{{path}}。未打开任何项目。",
+    "reauthorizeMissingProject": "无法读取所选文件夹中的项目标记，请检查文件夹及其访问权限。未创建任何文件。",
+    "reauthorizeFailed": "无法保存文件夹授权。文件和最近项目记录已保留，请重试。",
     "openFolder": "打开文件夹",
     "noProjectDesc": "系统将自动初始化项目结构",
     "emptyTree": "这个文件夹里还没有文档。",

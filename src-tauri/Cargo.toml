@@ -1,6 +1,6 @@
 [package]
 name = "simple-ai-writer"
-version = "2.0.10"
+version = "2.0.11"
 description = "Simple AI Writer"
 authors = ["joycai"]
 edition = "2021"
@@ -129,7 +129,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_
 # depends on, so cargo unifies them into one crate.
 keyring-core = "1"
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject", "NSURL", "NSData", "NSString", "NSError", "NSArray"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "std",
     "objc2-core-foundation",

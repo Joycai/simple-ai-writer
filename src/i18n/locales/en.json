@@ -1065,6 +1065,13 @@
     }
   },
   "project": {
+    "reauthorizeUnsafeMetadata": "Project metadata contains symbolic links. The store edition requires .ai-writer and its database to be stored inside the project without symbolic links. No project was opened.",
+    "reauthorizeTitle": "Authorize project folder",
+    "reauthorizeBody": "Access to this project must be authorized again. Select the original folder:\n{{path}}\nYour files and recent project entry will be kept if you cancel. If the folder moved, use Open Folder to select its new location.",
+    "reauthorizeChoose": "Choose folder",
+    "reauthorizeWrongFolder": "Select the original project folder: {{path}}. No project was opened.",
+    "reauthorizeMissingProject": "The selected folder's project marker could not be read. Check the folder and its permissions. No files were created.",
+    "reauthorizeFailed": "Folder authorization could not be saved. Your files and recent project entry have been kept. Please try again.",
     "openFolder": "Open Folder",
     "noProjectDesc": "The project structure will be initialized automatically",
     "emptyTree": "No documents in this folder yet.",

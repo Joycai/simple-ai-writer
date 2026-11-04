@@ -29,8 +29,8 @@ export async function openProjectFolder(): Promise<string | null> {
  * Register an existing project (from the recents list) as an allowed fs root.
  * Rejects directories without an on-disk `.ai-writer` marker.
  */
-export async function registerProjectRoot(path: string): Promise<void> {
-  await invoke("project_register_root", { path });
+export async function registerProjectRoot(path: string): Promise<string> {
+  return toPosixPath(await invoke<string>("project_register_root", { path }));
 }
 
 /**
