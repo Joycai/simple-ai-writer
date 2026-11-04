@@ -1662,7 +1662,21 @@
       "effortLabel": "Effort",
       "thinkingHint": "How deeply a reasoning model should think. \"Endpoint default\" sends no field and lets the server decide — the only choice safe on every relay. Not every model supports every level, and some (Gemini among them) cannot turn thinking off at all, so \"off\" means the lowest level they allow.",
       "effortHint": "Adjusts effort across thinking, text, and tool calls. Available levels follow the selected model and route. Endpoint default leaves effort to the server.",
-      "allocOver": "This request is estimated at {{used}} tk, past the {{ceiling}} tk ceiling — shrink the selection, raise Window usage in settings, or pick a model with a larger context."
+      "allocOver": "This request is estimated at {{used}} tk, past the {{ceiling}} tk ceiling — shrink the selection, raise Window usage in settings, or pick a model with a larger context.",
+      "referenceMaterials": "Reference materials",
+      "managePins": "Manage pinned references",
+      "pinsSummary": "Automatic {{kb}} matching · {{count}} pinned",
+      "morePins": "{{count}} more",
+      "pinsExplanation": "Pinned references supply source material, not an output destination. Other relevant content is still matched automatically; inclusion is limited by the budget. Selections are saved per project.",
+      "generalTasks": "General tasks",
+      "changeTask": "Change task",
+      "searchTasks": "Search tasks or workspaces",
+      "noTasksFound": "No matching tasks",
+      "taskConfiguration": "Task configuration",
+      "runtimeSettings": "Run settings",
+      "advancedSettings": "More run settings",
+      "removePin": "Remove pinned reference: {{name}}",
+      "forecastOver": "Estimated allocation {{used}} tk exceeds the {{ceiling}} tk budget. This includes reservations that may not be used; the assembled request is checked when you run. Reduce input or adjust context settings."
     },
     "bubble": {
       "drawer": "Drawer",

@@ -63,6 +63,17 @@ describe("composerStore", () => {
     expect(chatComposerOf(s(), "c2").draft).toBe("另一段");
   });
 
+  it("retains separate task requirements across task switches and clears them with the project", () => {
+    s().setPanelRequirement("Rewrite clearly", "rewrite");
+    s().setPanelTask("summary");
+    s().setPanelRequirement("Brief", "summary");
+    s().setPanelTask("rewrite");
+    s().setPanelRequirement(previous => `${previous}!`, "rewrite");
+    expect(s().panelRequirements).toEqual({ rewrite: "Rewrite clearly!", summary: "Brief" });
+    s().resetAll();
+    expect(s().panelRequirements).toEqual({});
+  });
+
   it("keeps the Generate task when its panel subscriber unmounts", () => {
     const unsubscribe = useComposerStore.subscribe(() => {});
     s().setPanelTask("rewrite");
@@ -172,7 +183,7 @@ describe("composerStore", () => {
     s().setPanelDocument("/p/a.md", { pickedMode: "opening", bridgePath: "/p/previous.md" });
     s().setPanelOutline("大纲");
     s().setPanelKnowledge("补充设定");
-    s().setPanelRequirement("要求");
+    s().setPanelRequirement("要求", "rewrite");
     s().setPanelInstruction("指令");
 
     s().resetAll();
@@ -183,7 +194,7 @@ describe("composerStore", () => {
     expect(panelDocumentOf(s(), "/p/a.md").bridgePath).toBe("/p/previous.md");
     expect(s().panelOutline).toBe("");
     expect(s().panelKnowledge).toBe("");
-    expect(s().panelRequirement).toBe("");
+    expect(s().panelRequirements).toEqual({});
     expect(s().panelInstruction).toBe("");
     expect(s().roleplay).toEqual({});
   });
