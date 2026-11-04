@@ -1675,7 +1675,8 @@
       "taskConfiguration": "Task configuration",
       "runtimeSettings": "Run settings",
       "advancedSettings": "More run settings",
-      "removePin": "Remove pinned reference: {{name}}"
+      "removePin": "Remove pinned reference: {{name}}",
+      "forecastOver": "Estimated allocation {{used}} tk exceeds the {{ceiling}} tk budget. This includes reservations that may not be used; the assembled request is checked when you run. Reduce input or adjust context settings."
     },
     "bubble": {
       "drawer": "Drawer",

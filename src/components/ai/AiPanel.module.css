@@ -991,11 +991,12 @@
 .configFooter { flex-wrap: wrap; gap: var(--space-2); }
 @container (max-width: 700px) {
   .cols { flex-direction: column; overflow-y: auto; }
-  .configCol { flex: none; border-right: 0; }
-  .configScroll { flex: none; overflow: visible; padding: var(--space-3); }
-  .resultCol { flex: none; overflow: visible; min-height: 280px; }
+  .configCol { display: contents; }
+  .configScroll { order: 0; flex: none; overflow: visible; padding: var(--space-3); }
+  .focusNotice { order: 1; flex-shrink: 0; }
+  .resultCol { order: 2; flex: 1 0 auto; overflow: visible; min-height: 280px; }
   .resultScroll { overflow: visible; padding: var(--space-3); }
-  .configFooter { position: sticky; bottom: 0; z-index: 1; padding: var(--space-3); }
+  .configFooter { order: 3; position: sticky; bottom: 0; z-index: 1; padding: var(--space-3); }
 }
 .pinnedChip { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); border: 1px solid var(--color-border-panel); max-width: 100%; }
 .pinnedChip > button:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

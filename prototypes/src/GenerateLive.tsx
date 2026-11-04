@@ -24,7 +24,7 @@ useAiStore.setState({
   providers: [{ id: "fixture", name: "Review", baseUrl: "https://invalid.invalid", apiStandard: "openai", createdAt: 0 }],
   updateModel: async model => { useAiStore.setState({ models: [model] }); },
 });
-useAiTaskStore.setState({ runTask: async () => {} });
+useAiTaskStore.setState({ runTask: async () => {}, abort: () => useAiTaskStore.setState({ isRunning: false }) });
 useComposerStore.setState({
   panelTask: "continue",
   setPanelTask: panelTask => useComposerStore.setState({ panelTask }),
@@ -42,6 +42,7 @@ function Review() {
       <button onClick={() => setNarrow(!narrow)}>宽窄切换</button>
       <button onClick={() => applyThemeId("night", "dark")}>深色</button>
       <button onClick={() => applyThemeId("paper", "light")}>浅色</button>
+      <button onClick={() => useAiTaskStore.setState({ isRunning: true, activeDraftId: "review", drafts: [{ id: "review", index: 1, text: "正在生成实施步骤。\n\n".repeat(100), usage: null, error: null, done: false, truncated: false }] })}>长结果与停止栏</button>
       <button onClick={() => useAiStore.setState(s => ({ models: s.models.map(m => ({ ...m, contextSize: m.contextSize === 512 ? 1048576 : 512 })) }))}>切换超限示例</button>
     </nav>
     <div style={{ flex: 1, minHeight: 0, width: narrow ? 360 : "100%", maxWidth: "100%", margin: "auto" }}><AiPanel /></div>

@@ -1672,7 +1672,8 @@
       "taskConfiguration": "任务配置",
       "runtimeSettings": "运行设置",
       "advancedSettings": "更多运行设置",
-      "removePin": "移除固定引用：{{name}}"
+      "removePin": "移除固定引用：{{name}}",
+      "forecastOver": "预计分配 {{used}} tk，超过预算 {{ceiling}} tk。预估包含可能未使用的预留内容；执行时将按实际组装内容检查。可缩小输入或调整上下文设置。"
     },
     "bubble": {
       "drawer": "抽屉",

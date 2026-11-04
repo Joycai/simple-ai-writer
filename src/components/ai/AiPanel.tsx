@@ -1,3 +1,4 @@
+import { generateTaskExtras } from "./generateTaskExtras";
 import { GenerateDialog } from "./GenerateDialog";
 import { RetrievalProgressText } from "./RetrievalProgressText";
 import { documentWindowLimit } from "../../lib/context/documentRetrievalPolicy";
@@ -65,7 +66,6 @@ import {
   profileSystemPrompt,
   resolveEditRange,
   spliceContinuation,
-  type TaskExtras,
 } from "../../lib/context/rag";
 import { clearTarget } from "../../lib/editor/aiTarget";
 import { flashInserted } from "../../lib/editor/insertFlash";
@@ -268,9 +268,7 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
           选区），这里说的是能拿它怎么办。 */}
       {forecast?.over && (
         <div className={styles.allocOverNote}>
-          {t("ai.panel.allocOver", {
-            defaultValue:
-              "这次请求预计 {{used}} tk，超过上限 {{ceiling}} tk——可以缩小选区、在设置里调高「窗口占用」，或换一个上下文更大的模型。",
+          {t("ai.panel.forecastOver", {
             used: formatBudget(forecast.usedTokens),
             ceiling: formatBudget(forecast.ceilingTokens),
           })}
@@ -1249,11 +1247,10 @@ export function AiPanel() {
 
   const handleRun = () => {
     clearOutput();
-    const manualLorePaths = selectedLorePaths.length > 0 ? selectedLorePaths : undefined;
-    let extras: TaskExtras | undefined;
+    let extras = generateTaskExtras(runTaskDef, selectedLorePaths, requirement, contextChars);
     if (isContinue) {
       extras = {
-        manualLorePaths,
+        ...extras,
         outline: outline.trim() || undefined,
         additionalKnowledge: additionalKnowledge.trim() || undefined,
         // Always explicit now. The automatic rule ("bridge when the anchor sits
@@ -1267,12 +1264,6 @@ export function AiPanel() {
           ? (openingMode === "standalone" ? null : bridgePath)
           : null,
         appendAnchor: continueAnchor ?? undefined,
-      };
-    } else if (supportsExtras) {
-      extras = {
-        manualLorePaths,
-        requirement: requirement.trim() || undefined,
-        contextChars,
       };
     }
     runTask(
@@ -1382,8 +1373,10 @@ export function AiPanel() {
   // is one, so the panel never shows two different token counts for one block.
   const charsPerToken = forecast?.charsPerToken ?? 3;
 
+  // Forecast includes reserved (not necessarily present) book context. Only
+  // the runtime can reject the assembled request; keep this estimate advisory.
   const canRun =
-    hasConfig && !isRunning && !needsSelection && !needsAnchor && !needsAsk && focus.settled && !forecast?.over;
+    hasConfig && !isRunning && !needsSelection && !needsAnchor && !needsAsk && focus.settled;
 
   // ── 换模型重试 ──
   // A safety refusal or a context overflow is not fixed by pressing 重试 again;
@@ -1948,7 +1941,7 @@ export function AiPanel() {
             </div>
           )}
 
-          {forecast?.over && <div className={styles.focusNotice} role="alert">{t("ai.panel.allocOver", {
+          {forecast?.over && <div className={styles.focusNotice} role="alert">{t("ai.panel.forecastOver", {
             used: formatBudget(forecast.usedTokens), ceiling: formatBudget(forecast.ceilingTokens),
           })}</div>}
           {/* Sticky action footer — cost forecast + Run/Stop, always reachable */}
