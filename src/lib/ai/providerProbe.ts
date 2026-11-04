@@ -12,7 +12,8 @@
 
 import i18n from "../../i18n";
 import { anthropicHeaders } from "./anthropic";
-import { fetch } from "../http";
+import { fetch as privacyFetch } from "../http";
+const fetch: typeof globalThis.fetch = (input, init) => privacyFetch(input, init, "probe");
 import { geminiAuthHeaders } from "./gemini";
 import { familyOf, isCompatStandard, type ApiStandard, type AuthMode } from "./types";
 import { anthropicUrl, geminiUrl, modelsUrl, nativeUrl, openaiUrl } from "./urls";

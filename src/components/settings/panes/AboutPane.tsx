@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
+import { requiresPrivacyConsent } from "../../../lib/distribution";
+import { PrivacySection } from "./PrivacySection";
 import { Pane } from "./bits";
 import { ENGINE_FLOOR, missingCaps, parseEngine } from "../../../lib/webviewCaps";
 import { capList, hostEngineLabel } from "../../common/WebviewCapsNotice";
@@ -70,6 +72,8 @@ export function AboutPane() {
           </span>
         </div>
       </div>
+
+      {requiresPrivacyConsent() && <PrivacySection />}
 
       <div className={ui.aboutCopyright}>{t("systemSettings.about.copyright")}</div>
     </Pane>

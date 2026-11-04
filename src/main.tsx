@@ -73,6 +73,8 @@ async function boot() {
   }
 
   await import("./i18n");
+  const { initializePrivacyConsent } = await import("./lib/privacy/settings");
+  initializePrivacyConsent();
   const [{ default: App }, { AppErrorBoundary }] = await Promise.all([
     import("./App"),
     import("./components/common/ErrorBoundary"),

@@ -28,3 +28,6 @@ export function terminalAvailable(): boolean {
 export function requiresFileAuthorization(): boolean {
   return distribution !== "direct";
 }
+
+/** Unknown desktop channels cannot send before privacy initialization. */
+export function requiresPrivacyConsent(): boolean { return distribution !== "direct"; }

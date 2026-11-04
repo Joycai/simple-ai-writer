@@ -23,7 +23,8 @@
  * without a network. This file is the plumbing.
  */
 
-import { fetch, isLocalUrl } from "../http";
+import { fetch as privacyFetch, isLocalUrl } from "../http";
+const fetch: typeof globalThis.fetch = (input, init) => privacyFetch(input, init, "probe");
 import {
   calibrate, classifyProbeError, estimateProbeCost, expectedPromptTokens,
   generationFinding, isTransient, judgeTruncation, makePadding, outputRunCapped, parseOllamaParameters, readEntryLimits,

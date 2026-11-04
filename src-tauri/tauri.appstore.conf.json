@@ -3,13 +3,26 @@
   "identifier": "com.simple-ai-writer.app.appstore",
   "productName": "Simple AI Writer Store",
   "build": {
-    "features": ["app-store"]
+    "features": [
+      "app-store"
+    ]
   },
   "bundle": {
-    "targets": ["app"],
+    "targets": [
+      "app"
+    ],
     "category": "Productivity",
     "macOS": {
       "entitlements": "Entitlements.appstore.plist"
+    }
+  },
+  "app": {
+    "security": {
+      "csp": {
+        "connect-src": "'self' ipc: http://ipc.localhost",
+        "form-action": "'none'",
+        "base-uri": "'self'"
+      }
     }
   }
 }

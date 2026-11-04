@@ -15,7 +15,8 @@
  * would mean typing the same token twice for one server.
  */
 
-import { fetch } from "../http";
+import { fetch as privacyFetch } from "../http";
+const fetch: typeof globalThis.fetch = (input, init) => privacyFetch(input, init, "backup");
 import { getServerUrl, loadToken, normalizeServerUrl } from "../sync/config";
 import { deviceLabel } from "../sync/local";
 import { SyncConflictError, SyncHttpError, type Expect } from "../sync/client";

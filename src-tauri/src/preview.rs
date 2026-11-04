@@ -65,7 +65,7 @@ fn handle_preview_request<R: Runtime>(
     }
 
     match fs::read(&path) {
-        Ok(bytes) => Response::builder()
+        Ok(bytes) => crate::privacy::document_headers(Response::builder())
             .header("Content-Type", mime)
             .body(bytes)
             .unwrap(),
@@ -167,6 +167,7 @@ pub async fn preview_html_window<R: Runtime>(
     .map_err(|e| format!("bad preview url: {e}"))?;
 
     WebviewWindowBuilder::new(&app, PREVIEW_WINDOW, WebviewUrl::CustomProtocol(url))
+        .on_navigation(|url| crate::privacy::document_navigation(url, "ai-writer-preview"))
         .title(title)
         // A landing page's usual design viewport; resizable for everything else.
         .inner_size(1100.0, 800.0)

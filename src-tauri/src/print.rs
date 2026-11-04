@@ -139,7 +139,7 @@ fn handle_print_request<R: Runtime>(
     let html = state.and_then(|state| state.doc.lock().ok().and_then(|mut held| held.take()));
 
     match html {
-        Some(html) => Response::builder()
+        Some(html) => crate::privacy::document_headers(Response::builder())
             .header("Content-Type", "text/html; charset=utf-8")
             .body(html.into_bytes())
             .unwrap(),
@@ -175,6 +175,7 @@ pub async fn print_document<R: Runtime>(
         .map_err(|e| format!("bad print url: {e}"))?;
 
     WebviewWindowBuilder::new(&app, PRINT_WINDOW, WebviewUrl::CustomProtocol(url))
+        .on_navigation(|url| crate::privacy::document_navigation(url, "ai-writer-print"))
         .title(title)
         // Roughly a portrait page, so the preview matches what gets printed.
         .inner_size(820.0, 1060.0)

@@ -37,7 +37,8 @@ reaching for is one of the states above, plus a modifier if it needs one.
 
 | Doc | Status | Scope |
 |---|---|---|
-| [mac-app-store-plan.md](feature/mac-app-store-plan.md) | `partial` | Mac App Store 审查与 P0–P5 计划：P0 与 P1 项目书签 / 重新授权 / 独立身份已实现，沙盒原生验收待完成 |
+| [mac-app-store-plan.md](feature/mac-app-store-plan.md) | `partial` | Mac App Store 审查与 P0–P5 计划：P0 / P1 代码及 P2 隐私授权已实现；政策发布与原生验收待完成 |
+| [privacy-policy-draft.md](feature/privacy-policy-draft.md) | `proposal` | 商店版隐私政策草稿，联系邮箱已确认，运营者和公开网址待定 |
 | [context-ring-design.md](feature/agent/context-ring-design.md) | `shipped` | 分段上下文圆环、详情浮层与会话级 Compact 反馈 |
 
 ## reference/ — read before working

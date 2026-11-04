@@ -20,7 +20,8 @@
  * 模块，理由在 docs/feature/asr/01-execution-plan.md §0 修正。
  */
 
-import { fetch } from "../http";
+import { fetch as privacyFetch } from "../http";
+const fetch: typeof globalThis.fetch = (input, init) => privacyFetch(input, init, "audio");
 import { dashscopeNativeBase } from "../ai/image";
 import { logAsrEvent } from "../ai/apiLog";
 import type { AsrFormat } from "../ai/configDb";

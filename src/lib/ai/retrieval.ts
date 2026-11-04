@@ -1,5 +1,6 @@
 /** Dedicated retrieval protocols. No conversational prompts or tool loop. */
-import { fetch } from "../http";
+import { fetch as privacyFetch } from "../http";
+const fetch: typeof globalThis.fetch = (input, init) => privacyFetch(input, init, "retrieval");
 import type { ConnOptions } from "./conn";
 import { validRetrievalPath } from "./retrievalConfig";
 

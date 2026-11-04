@@ -29,6 +29,7 @@
  * call time, so tests can keep stubbing `globalThis.fetch`.
  */
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { privacyError, privacyLease, type PrivacyPurpose } from "./privacy/consent";
 
 const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -86,12 +87,39 @@ function urlOf(input: RequestInfo | URL): string {
   return input.url;
 }
 
-export const fetch: typeof globalThis.fetch = (input, init) => {
-  if (!inTauri) return globalThis.fetch(input, init);
-  if (isLocalUrl(urlOf(input))) {
-    const headers = new Headers(init?.headers);
+export async function fetch(input: RequestInfo | URL, init?: RequestInit, purpose: PrivacyPurpose = "ai"): Promise<Response> {
+  const lease = await privacyLease(urlOf(input), purpose, init?.signal ?? (input instanceof Request ? input.signal : undefined));
+  let options = init;
+  if (lease) options = { ...init, signal: lease.signal, redirect: "manual" };
+  if (inTauri && isLocalUrl(urlOf(input))) {
+    const headers = new Headers(options?.headers ?? (input instanceof Request ? input.headers : undefined));
     if (!headers.has("Origin")) headers.set("Origin", "http://localhost");
-    return tauriFetch(input, { ...init, headers });
+    options = { ...options, headers };
   }
-  return tauriFetch(input, init);
-};
+  try {
+    const response = inTauri
+      ? await tauriFetch(input, lease ? { ...options, maxRedirections: 0 } : options)
+      : await globalThis.fetch(input, options);
+    if (!lease) return response;
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel();
+      throw privacyError("PRIVACY_REDIRECT_BLOCKED");
+    }
+    if (!response.body) { lease.release(); return response; }
+    const reader = response.body.getReader();
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        try {
+          lease.signal.throwIfAborted();
+          const chunk = await reader.read();
+          if (chunk.done) { lease.release(); controller.close(); }
+          else controller.enqueue(chunk.value);
+        } catch (error) { lease.release(); controller.error(error); }
+      },
+      async cancel(reason) { lease.release(); await reader.cancel(reason); },
+    });
+    const wrapped = new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+    Object.defineProperty(wrapped, "url", { value: response.url });
+    return wrapped;
+  } catch (error) { lease?.release(); throw error; }
+}

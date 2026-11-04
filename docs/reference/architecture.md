@@ -103,6 +103,7 @@ should cost the author their preferences syncing, not their app starting.
   at a time, database-write first and `removeItem` second, because the reverse
   order turns a failed write into a lost preference. A key already in the
   database wins; a key the app does not own (`isPrefKey`) is never touched.
+- **Store privacy** — `privacy:consent:` entries and `app:privacyControl` are machine-local; configuration import cannot grant consent. `readPrefConfirmed` reads shared storage and propagates failure, while `writePrefConfirmed` persists before allowing transmission. The HTTP layer receives its privacy adapter at boot to avoid a dependency cycle. See [Mac App Store P2](../feature/mac-app-store-plan.md#9-p2-实施记录2026-11-04).
 - **Collection** — `ai:pinnedLore:<absolute path>` accrued one row per project
   ever opened and nothing removed one, so renaming a folder orphaned its row
   permanently. `appStore` now prunes on `removeRecentProject` /

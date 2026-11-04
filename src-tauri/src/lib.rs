@@ -14,6 +14,7 @@ mod lorehash;
 mod pptx;
 mod preview;
 mod print;
+mod privacy;
 mod protocol;
 mod scope;
 mod secrets;

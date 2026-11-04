@@ -593,3 +593,19 @@ describe("confirmed preference writes", () => {
     expect(prefs.applyPrefEntries([["app:mcpBeta", "1"], ["app:mcpServers", "[]"]])).toBe(0);
   });
 });
+
+it("privacy decisions and control cannot travel via configuration backups", () => {
+  const key = `${prefs.PRIVACY_CONSENT_PREFIX}receiver`;
+  prefs.writePref(key, '{"allowed":true}');
+  prefs.writePref("app:privacyControl", '{"paused":false}');
+  expect(prefs.portablePrefEntries().some(([k]) => k === key || k === "app:privacyControl")).toBe(false);
+  expect(prefs.applyPrefEntries([[key, "forged"], ["app:privacyControl", "forged"]])).toBe(0);
+});
+it("confirmed preference reads consult shared storage and propagate failure", async () => {
+  await expect(prefs.readPrefConfirmed("app:privacyControl")).rejects.toThrow();
+  await prefs.hydratePrefs();
+  h.select.mockResolvedValue([{ key: "app:privacyControl", value: "new-from-other-window" }]);
+  expect(await prefs.readPrefConfirmed("app:privacyControl")).toBe("new-from-other-window");
+  h.select.mockRejectedValue(new Error("storage failed"));
+  await expect(prefs.readPrefConfirmed("app:privacyControl")).rejects.toThrow("storage failed");
+});

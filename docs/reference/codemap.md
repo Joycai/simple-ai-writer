@@ -884,6 +884,10 @@ document import into the workspace:
 - Legacy .doc/.xls/.ppt stay out on purpose — no converter here reads them faithfully, and .ppt is an OLE compound binary the zip reader cannot open at all.
 - txt/md/html and images are **copied in as-is** (same name, same extension; only a non-UTF-8 text encoding is normalised) — the app already opens all of them, so rewriting them would only destroy information. The copy list is `lib/fs/images`'s own kinds, not a second list here
 
+### `src/lib/privacy/`
+
+`consent.ts` 是商店 HTTP 发送门禁：按接收范围 / 用途 / 告知版本检查共享存储，在响应流期间持有可撤回 lease。`settings.ts` 在启动时注入 prefs 与原生对话框，避免传输层依赖 UI / i18n；本机记录不随配置备份迁移。设置 → 关于的 `PrivacySection` 提供离线告知及撤回 / 再询问。范围模板、500ms 跨进程取消边界与未验收项见 [Mac App Store P2](../feature/mac-app-store-plan.md#9-p2-实施记录2026-11-04)。
+
 ### `src/lib/` 根模块
 
 #### 多开与基础模块
@@ -980,6 +984,7 @@ Rust 侧。
 - `instance.rs` 是多开协调（劝告式的 `.ai-writer/window.lock` + 回环 focus 通道）
 - `windowmenu.rs` 是 macOS 的「窗口」菜单——AppKit 只会列**本进程**的窗口，而这里每个窗口都是独立进程，所以那份列表从 `instance.rs` 的注册表渲染、切换走同一条 focus 通道。
 - `preview.rs` 是独立的 HTML 预览窗（`docs/feature/html-artifact-plan.md` 三期）：应用内预览是编辑器里的沙箱 iframe，适合迭代、不适合按真实视口判断一张宣传页，所以这一份给文档自己一个 webview，用自定义 scheme 直接从盘上喂项目文件，相对链接因此照常工作。
+- `privacy.rs` 为商店自定义协议文档添加无公网资源 CSP 与导航围栏，防止预览 / 打印绕过 HTTP 同意流程；站外返回原行为。
 - `print.rs` 是原生打印——`window.print()` 在 macOS 的 Tauri 里是**静默空操作**（WebKit 把打印请求转给宿主的 `WKUIDelegate`，而 wry 的 delegate 只实现了四个方法、不含打印，Tauri 也没加自己的），什么都不抛，所以导出菜单看起来是死的。
 
 #### Office 读写器
