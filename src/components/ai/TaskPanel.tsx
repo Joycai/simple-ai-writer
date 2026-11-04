@@ -81,24 +81,26 @@ function StepMark({ status }: { status: StepStatus }) {
 }
 
 export function TaskPanel({
-  projectPath, taskId, revision, tokens,
+  projectPath, taskId, revision, tokens, showCurrentStep = false,
 }: {
   projectPath: string | null;
   taskId: string | null | undefined;
   revision: number;
   tokens: TokenTotals;
+  showCurrentStep?: boolean;
 }) {
   const plan = useTaskPlan(projectPath, taskId, revision);
   // No steps, no plan — see the header comment.
   if (!plan || plan.steps.length === 0) return null;
-  return <TaskPlanCard plan={plan} tokens={tokens} />;
+  return <TaskPlanCard plan={plan} tokens={tokens} showCurrentStep={showCurrentStep} />;
 }
 
 /** The panel itself, given a plan. Split from the loading so it can be looked at. */
-function TaskPlanCard({ plan, tokens }: { plan: Plan; tokens: TokenTotals }) {
+function TaskPlanCard({ plan, tokens, showCurrentStep }: { plan: Plan; tokens: TokenTotals; showCurrentStep: boolean }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
+  const current = plan.steps.find((s) => s.status === "in_progress");
   const done = plan.steps.filter((s) => s.status === "done" || s.status === "skipped").length;
   const total = tokens.input + tokens.output + tokens.subInput + tokens.subOutput;
   const subTotal = tokens.subInput + tokens.subOutput;
@@ -145,6 +147,11 @@ function TaskPlanCard({ plan, tokens }: { plan: Plan; tokens: TokenTotals }) {
         )}
       </button>
 
+      {showCurrentStep && !open && current && (
+        <div className={styles.step}>
+          <StepMark status={current.status} /><span className={styles.stepTitle}>{current.title}</span>
+        </div>
+      )}
       {/* Collapsed: the steps as a strip of marks, so progress is legible
           without opening anything. Expanded: the same steps, named. */}
       {open ? (

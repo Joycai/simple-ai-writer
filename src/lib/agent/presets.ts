@@ -40,6 +40,10 @@ export interface TaskPreset {
   /** Cap on model↔tool rounds, preventing unbounded loops. */
   maxRounds: number;
   finishPolicy: FinishPolicy;
+  /** Reserve the final rounds for collectors; research tools are no longer callable. */
+  /** Require a successful task_plan before research tools become callable. */
+  planFirst?: boolean;
+  finalization?: { rounds: number; tools: readonly ToolId[]; instruction: string };
   /**
    * Whether this task uses the on-disk workspace (.ai-writer/tasks/).
    *  - "off" (default)  — no scratchpad tools; behavior identical to legacy
@@ -307,10 +311,9 @@ export const WRITER_PRESET: TaskPreset = {
  * 的一条都不丢——`LORE_SPLIT_PRESET` 的论证原样适用。
  *
  * `serverTools: "off"`：联网走 search 子代理，主模型不直接搜——同助手。
- * `scratchpad: "offered"` 而不是 required：一段核对通常不需要存档，给它便签是为了
- * 派了子代理之后有地方落摘要（`delegate` 的契约就是「摘要 + note 路径」）。
- * maxRounds 12：一段的形状是「翻几条条目 → 搜几次前文（可能派一次子代理）→ 逐条
- * 记录 → 总评」；到顶 force-text 收尾，不接轮数上限卡——核对是封闭任务。
+ * `planFirst` 要求先保存任务计划；required scratchpad 持续提醒更新进度与保存证据。
+ * 前 11 轮取证到顶询问继续，收尾 3 轮保留收集器与 task_progress，允许校验失败后修正。
+ * 达到收尾上限仍未结束时保留记录，并将核对标为未完成。
  *
  * 设计：docs/feature/consistency-review-plan.md §6。
  */
@@ -335,10 +338,16 @@ export const CONSISTENCY_PRESET: TaskPreset = {
     "report_issue",
     "report_pass",
   ],
-  maxRounds: 12,
-  finishPolicy: "force-text",
+  planFirst: true,
+  maxRounds: 14,
+  finishPolicy: "allow-tool-end",
+  finalization: {
+    rounds: 3,
+    tools: ["report_issue", "report_pass", "task_progress"],
+    instruction: "Research is finished. Only report_issue, report_pass and task_progress remain available. Update the plan to reflect submitted results and explicitly skip unverifiable steps with a reason. Submit every verified finding and passed check now; batch independent calls in one response. Correct rejected records using the evidence already collected. Do not invent checks to fill an empty report. Once all results are accepted, finish with a brief summary; state any remaining uncertainty.",
+  },
   serverTools: "off",
-  scratchpad: "offered",
+  scratchpad: "required",
 };
 
 /**

@@ -65,7 +65,7 @@ export interface ConsistencyPass {
   line?: number;
 }
 
-type WindowStatus = "pending" | "running" | "done" | "failed" | "aborted";
+type WindowStatus = "pending" | "running" | "done" | "incomplete" | "failed" | "aborted";
 
 /** One window of the document, and how its check went. */
 export interface WindowOutcome {
@@ -75,7 +75,12 @@ export interface WindowOutcome {
   status: WindowStatus;
   /** Findings + passes it recorded. */
   recorded: number;
+  /** Existing agent task workspace, used by the shared plan/progress panel. */
+  taskId?: string;
+  taskProjectPath?: string;
+  logParent?: string;
   rounds: number;
+  roundBudget?: number;
   inputTokens: number;
   outputTokens: number;
   /** The checker's closing line — the 总评 for this window. */

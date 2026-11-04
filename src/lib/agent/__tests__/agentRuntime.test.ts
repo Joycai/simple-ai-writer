@@ -4,10 +4,11 @@
  * protocol, per-preset round caps, and the force-text final round.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createReviewSink } from "../../consistency/reviewTools";
 import i18n from "../../../i18n";
 import type { StreamOptions } from "../../ai/types";
 import type { AgentEvent } from "../events";
-import type { TaskPreset } from "../presets";
+import { CONSISTENCY_PRESET, type TaskPreset } from "../presets";
 import { repairToolCallPairing, runAgent, trimHistory, type AgentRuntimeOptions } from "../runtime";
 import { ImagePayloadError } from "../../ai/types";
 import { imagePayload, MAX_REQUEST_IMAGE_CHARS } from "../../ai/imagePart";
@@ -1255,4 +1256,102 @@ it("preserves a plain Responses turn's opaque items and origin in persisted hist
   queueRound([{ text: "next" }, { done: true, inputTokens: 10, outputTokens: 5 }]);
   await runAgent(makeOptions({ messages: [...saved, { role: "user", content: "continue" }] }));
   expect(sent[1]).toContainEqual({ role: "assistant", content: "answer", _responseItems: carry, _carryScope: "scope" });
+});
+
+
+describe("collector finalization", () => {
+  const preset: TaskPreset = { ...CONSISTENCY_PRESET, planFirst: false, maxRounds: 4 };
+  const call = (name: string, args = "{}") => [
+    { toolCalls: [{ index: 0, id: `c-${mockStream.mock.calls.length}`, name, arguments: args }] },
+    { done: true, inputTokens: 10, outputTokens: 2 },
+  ];
+
+  it("ends research early on prose and still offers collectors", async () => {
+    queueRound([{ text: "I have checked the facts." }]);
+    queueRound([{ text: "Nothing verifiable." }]);
+    const opts = makeOptions({ preset });
+    const result = await runAgent(opts);
+    expect(result.rounds).toBe(2);
+    expect(mockStream.mock.calls[1][0].tools?.map((t) => t.function.name)).toEqual(["task_progress", "report_issue", "report_pass"]);
+    expect(sent[1].some((m) => m.content === preset.finalization!.instruction)).toBe(true);
+  });
+
+  it("accepts corrected collector records before a successful summary", async () => {
+    const sink = createReviewSink({
+      windowIndex: 0, windowFrom: 0, windowText: "fact", docText: "fact",
+      loreIndex: LORE_INDEX, categoryIds: [], allowedDirs: null, runId: "test",
+    });
+    queueRound(call("list_lore_entities"));
+    queueRound(call("report_pass", '{"label":""}')); // rejected, then corrected
+    queueRound(call("report_pass", '{"label":"verified"}'));
+    queueRound([{ text: "All verified checks submitted." }]);
+    const opts = makeOptions({ preset, toolContext: {
+      projectPath: "/p", loreIndex: LORE_INDEX, multimodal: false, reviewSink: sink,
+    } });
+    const result = await runAgent(opts);
+    expect(result.outcome).toBe("completed");
+    expect(sink.passed.map((p) => p.label)).toEqual(["verified"]);
+    expect(opts.events.some((e) => e.kind === "tool-step" && e.step.round === 2 && e.step.status === "error")).toBe(true);
+  });
+
+  it("asks before submission, extends research, then honors finish without asking again", async () => {
+    for (let i = 0; i < 4; i++) queueRound(call("list_lore_entities"));
+    queueRound([{ text: "Submitted." }]);
+    const asks: number[] = [];
+    const opts = makeOptions({ preset, onRoundLimit: async (used) => {
+      asks.push(used);
+      return asks.length === 1 ? { action: "extend", rounds: 2 } : { action: "finish" };
+    } });
+    await runAgent(opts);
+    expect(asks).toEqual([1, 3]);
+    expect(mockStream.mock.calls[1][0].tools?.some((t) => t.function.name === "read_file")).toBe(true);
+    expect(mockStream.mock.calls[3][0].tools?.map((t) => t.function.name)).toEqual(["task_progress", "report_issue", "report_pass"]);
+  });
+
+  it("does not ask for more research when the model has already ended research", async () => {
+    queueRound([{ text: "Research done." }]);
+    queueRound([{ text: "Submitted." }]);
+    const ask = vi.fn();
+    await runAgent(makeOptions({ preset, onRoundLimit: ask }));
+    expect(ask).not.toHaveBeenCalled();
+  });
+
+  it("aborts while waiting without sending a submission request", async () => {
+    queueRound(call("list_lore_entities"));
+    const controller = new AbortController();
+    const opts = makeOptions({ preset, signal: controller.signal, onRoundLimit: async () => {
+      controller.abort();
+      return { action: "finish" };
+    } });
+    await expect(runAgent(opts)).rejects.toMatchObject({ name: "AbortError" });
+    expect(mockStream).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not unlock research after a failed plan or an early prose answer", async () => {
+    queueRound(call("task_plan", '{}')); // fails validation; no workspace
+    queueRound([{ text: "Skip the plan." }]);
+    queueRound(call("read_file", '{"path":"file.md"}'));
+    queueRound([{ text: "No verified results." }]);
+    const opts = makeOptions({ preset: { ...preset, planFirst: true, maxRounds: 6 } });
+    await runAgent(opts);
+    for (const [request] of mockStream.mock.calls.slice(0, 3)) {
+      expect(request.tools?.map((t) => t.function.name)).toEqual(["task_plan"]);
+    }
+    expect(opts.events.some((e) => e.kind === "tool-step" && e.step.round === 3 && e.step.status === "error")).toBe(true);
+  });
+
+  it("keeps collectors through the last round and rejects research during submission", async () => {
+    queueRound(call("list_lore_entities"));
+    queueRound(call("list_lore_entities")); // stale/hallucinated call: must not execute
+    queueRound(call("report_pass", '{"label":"verified"}'));
+    queueRound(call("report_pass", '{"label":"another"}'));
+    const opts = makeOptions({ preset });
+    const result = await runAgent(opts);
+    expect(result.outcome).toBe("truncated"); // no completion acknowledgement
+    for (const [request] of mockStream.mock.calls.slice(1)) {
+      expect(request.tools?.map((t) => t.function.name)).toEqual(["task_progress", "report_issue", "report_pass"]);
+    }
+    expect(opts.events.some((e) => e.kind === "tool-step" && e.step.round === 2 && e.step.status === "error")).toBe(true);
+    expect(sent[3].filter((m) => m.content === preset.finalization!.instruction)).toHaveLength(1);
+  });
 });

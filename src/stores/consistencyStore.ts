@@ -47,6 +47,22 @@ import { useLoreStore } from "./loreStore";
 import { useMemoryStore } from "./memoryStore";
 import { useProjectStore } from "./projectStore";
 
+/** A separate queue identity per window; abort must settle every waiting Promise. */
+export async function requestReviewRoundExtension(windowIndex: number, roundsUsed: number, signal: AbortSignal) {
+  if (signal.aborted) return { action: "finish" as const };
+  const ticket = {};
+  const release = () => useAgentStore.getState().rejectAll("Review stopped", ticket);
+  signal.addEventListener("abort", release, { once: true });
+  try {
+    return await useAgentStore.getState().requestRoundExtension(
+      roundsUsed, 8, ticket, false, `consistency:${windowIndex}`,
+    );
+  } finally {
+    signal.removeEventListener("abort", release);
+    release();
+  }
+}
+
 /** One applied suggestion — enough to put the quote back. */
 interface AppliedRecord {
   issue: ConsistencyIssue;
@@ -348,6 +364,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         },
         signal: controller.signal,
         runId,
+        onRoundLimit: (window, roundsUsed) => requestReviewRoundExtension(window.index, roundsUsed, controller.signal),
         onEvent,
         onWindow: (w) => {
           if (get().abortController !== controller) return;
@@ -382,7 +399,6 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         : [];
       const merged = mergeWindowResults([...kept, ...results]);
       const aborted = controller.signal.aborted || merged.windows.some((w) => w.status === "aborted");
-      const done = merged.windows.filter((w) => w.status === "done");
       const report: ConsistencyReport = {
         issues: merged.issues,
         passed: merged.passed,
@@ -395,7 +411,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         windows: merged.windows,
         uncheckedFrom,
         aborted,
-        emptyRun: done.length > 0 && done.every((w) => w.empty) && merged.issues.length === 0 && merged.passed.length === 0,
+        emptyRun: merged.windows.some((w) => w.empty) && merged.issues.length === 0 && merged.passed.length === 0,
       };
       set({
         report,

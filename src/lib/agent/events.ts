@@ -311,6 +311,8 @@ export type AgentEvent = AgentEventScope & (
       kind: "round-done";
       round: number;
       actualInputTokens: number;
+      /** Main run usage so far, for live progress (not a context-size estimate). */
+      runUsage?: { inputTokens: number; outputTokens: number };
       /**
        * Set when this round's two numbers describe different things, so no
        * reader — the log today, the calibration sampler later — mistakes the
