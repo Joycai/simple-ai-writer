@@ -144,7 +144,7 @@ CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, ico
 
 ### `src/components/ai/`
 
-`ContextRing` 是对话助手片段右侧的上下文入口，分段色复用旧条；`ContextPresentation` 共用标签、格式化与预算解释，`contextRingGeometry` 只处理环形比例和视口定位。浮层与触发器分处 portal 两端，关闭判断必须同时检查两者，Esc 不向抽屉传播。归纳结果从所属会话读取，不存进组件。见 [context-ring-design.md](../feature/agent/context-ring-design.md)。
+`ContextRing` 是对话助手与扮演页片段右侧的上下文入口，分段色复用旧条；`ContextPresentation` 共用标签、格式化与预算解释，`contextRingGeometry` 只处理环形比例和视口定位。浮层与触发器分处 portal 两端，关闭判断必须同时检查两者，Esc 不向抽屉传播。归纳结果从所属会话读取，不存进组件。见 [context-ring-design.md](../feature/agent/context-ring-design.md)。
 
 `components/ai/useSlashCommands.tsx` owns the local command menu and revision-bound
 MCP catalogue browsing over the shared persistent directory; `lib/agent/slashCommands.ts` owns prefix parsing,
@@ -270,6 +270,8 @@ CommandPalette, onboarding flow, library view (文库: only what the author pick
 ### `src/components/roleplay/`
 
 扮演 Beta 的整套界面（设计稿 04a / 04b / 04c，功能设计在 `docs/feature/roleplay/`）。
+
+扮演上下文预估与实测共用 `ContextRing`：首轮前明确下界与未知检索纹样，Compact 仍走 roleplayStore.compactNow；详见 [context-ring-design.md](../feature/agent/context-ring-design.md)。
 
 #### 花名册与对话主界面
 

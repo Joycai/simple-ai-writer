@@ -11,7 +11,7 @@ import type { ContextBreakdown } from "../../src/lib/agent/contextBreakdown";
 const reviewI18n = createInstance();
 void reviewI18n.init({ lng: "zh-CN", resources: { "zh-CN": { translation: zh }, en: { translation: en } }, interpolation: { escapeValue: false } });
 
-type Scenario = "normal" | "high" | "empty" | "running" | "unknown" | "error";
+type Scenario = "normal" | "high" | "empty" | "running" | "unknown" | "error" | "preflight";
 export function ContextRing({ production = false }: { production?: boolean }) {
   const [scenario, setScenario] = useState<Scenario>("normal");
   const [open, setOpen] = useState(false);
@@ -61,13 +61,19 @@ export function ContextRing({ production = false }: { production?: boolean }) {
   return <div className="cr-page">
     <header className="cr-intro"><span className="eyebrow accent">05 / COMPOSER DETAIL</span><h1>把空间还给对话</h1><p>上下文收进「片段」旁的一枚圆环。需要时，再展开。</p></header>
     <div className="cr-controls"><label>演示状态 <select value={scenario} onChange={e => { setScenario(e.target.value as Scenario); setPhase("idle"); }}>
-      <option value="normal">正常 · 截图用量</option><option value="high">接近上限</option><option value="empty">新会话</option><option value="running">助手运行中</option><option value="unknown">窗口未知</option><option value="error">归纳失败</option>
+      <option value="normal">正常 · 截图用量</option><option value="high">接近上限</option><option value="empty">新会话</option><option value="running">助手运行中</option><option value="unknown">窗口未知</option><option value="error">归纳失败</option>{production && <option value="preflight">扮演 · 发送前预估</option>}
     </select></label><label><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} /> 自动归纳</label><span>本地交互演示 · 不调用模型</span></div>
     <section className="cr-chat" aria-label="助手面板原型">
       <header className="cr-chat-head"><div><h2>资料整理</h2><small>对话助手 <span> / </span> 示例模型 · 1.0M</small></div><span className="muted">未命名会话</span></header>
       <div className="cr-transcript"><div className="cr-user">整理这些参考文件，提炼一份可以继续写作的提纲。</div><div className="cr-answer"><small>✓ 已读取 3 份参考文件</small><p>已按主题整理资料，并保留了关键出处。</p><ul><li>背景与目标：交代问题和适用范围。</li><li>主要发现：归并重复内容，保留不同观点。</li><li>后续工作：补充案例，再展开正文。</li></ul><p>你可以继续补充材料，或从任一部分开始写。</p></div></div>
       <div className="cr-compose"><div className="cr-context-actions"><span>＋ 选区　　＋ 引用</span><span>□ 计划模式　 ·　 能力 3⌄</span></div><div className="cr-input"><textarea aria-label="消息草稿" placeholder="让 Agent 做什么…（输入 @ 引用知识库条目或文件）" /><div className="cr-input-footer"><span className="cr-snippet"><Zap size={13}/>片段<ChevronDown size={12}/></span>
       {production ? <I18nextProvider i18n={reviewI18n}><ProductionContextRing entryTerm="条目" context={liveContext}
+        preflight={scenario === "preflight" ? { pre: {
+          contextSize: 1049000, ceilingTokens: 839000, lowerBoundTokens: 6900,
+          lowerBoundPct: 6900 / 839000 * 100, over: false,
+          segments: [{ key: "system", tokens: 3000 }, { key: "bound", tokens: 2900 },
+            { key: "memory", tokens: 1000 }, { key: "unknown", tokens: 832100 }],
+        }, resident: ["Narrator"], unexpanded: 2, stale: 1 } : null}
         compacting={phase === "busy"} busy={scenario === "running"} contextVersion={phase === "done" ? 1 : 0}
         onCompact={() => setPhase("busy")} feedback={phase === "done" ? { requestId: 1, contextVersion: 1, result: { status: "success", fromTokens: scenario === "high" ? 746700 : 28700, toTokens: 18200 } }
           : phase === "failed" ? { requestId: 1, contextVersion: 0, result: { status: "failed", message: "演示：服务暂不可用。" } } : undefined} /></I18nextProvider> : (

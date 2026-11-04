@@ -1,4 +1,4 @@
-import type { ContextBreakdown } from "../../lib/agent/contextBreakdown";
+import type { ContextBreakdown, PreflightBreakdown } from "../../lib/agent/contextBreakdown";
 import { CONTEXT_SEGMENT_ORDER } from "../../lib/agent/contextSegments";
 
 /** Scale only the drawing on overflow; the displayed usage remains uncapped. */
@@ -13,6 +13,19 @@ export function contextRingArcs(context: ContextBreakdown) {
     offset += length;
     return arc;
   }).filter((arc) => arc.length > 0);
+}
+
+/** Unknown retrieval is a patterned remainder, never reported as free capacity. */
+export function preflightRingArcs(pre: PreflightBreakdown) {
+  const span = Math.max(pre.ceilingTokens, pre.lowerBoundTokens);
+  if (pre.contextSize <= 0 || !Number.isFinite(span) || span <= 0) return [];
+  let offset = 0;
+  return pre.segments.filter(seg => seg.key !== "unknown").map(seg => {
+    const length = Math.min(100 - offset, Math.max(0, Number.isFinite(seg.tokens) ? seg.tokens / span * 100 : 0));
+    const arc = { key: seg.key, length, offset };
+    offset += length;
+    return arc;
+  }).filter(arc => arc.length > 0);
 }
 
 export function contextPopoverPosition(rect: { left: number; top: number; bottom: number }, width: number, height: number) {

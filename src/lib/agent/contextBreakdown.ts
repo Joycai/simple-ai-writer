@@ -218,11 +218,7 @@ export interface PreflightBreakdown {
   over: boolean;
 }
 
-export type PreflightSegmentKey = "system" | "bound" | "memory" | "unknown";
-
-export const PREFLIGHT_SEGMENT_ORDER: readonly PreflightSegmentKey[] = [
-  "system", "bound", "memory", "unknown",
-];
+type PreflightSegmentKey = "system" | "bound" | "memory" | "unknown";
 
 export function computePreflightBreakdown(
   pre: { systemTokens: number; boundTokens: number; memoryTokens: number } | null,

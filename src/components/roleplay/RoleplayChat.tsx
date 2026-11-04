@@ -22,7 +22,7 @@ import { roleplayComposerOf, useComposerStore } from "../../stores/composerStore
 import { useLoreStore } from "../../stores/loreStore";
 import { listArchives, loadPersonaCard, type ArchivedScene } from "../../lib/roleplay/store";
 import { currentSceneNo } from "../../lib/roleplay/scene";
-import { useProjectStore } from "../../stores/projectStore";
+import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { ModelSelector } from "../ai/ModelSelector";
 import { usePlannedLimits } from "../ai/usePlannedLimits";
 import { AgentLog } from "../ai/AgentLog";
@@ -55,7 +55,7 @@ import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { ScriptText } from "./ScriptText";
 import { ArchiveViewer } from "./ArchiveViewer";
 import { CapabilityMenu } from "../ai/CapabilityMenu";
-import { ContextBar } from "../ai/ContextBar";
+import { ContextRing } from "../ai/ContextRing";
 import { SnippetPicker } from "../ai/SnippetPicker";
 import { useSnippetSave } from "../ai/SnippetSaveMenu";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
@@ -497,6 +497,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     () => plannedToolTokens(presetFor(agent.kind), effectiveSubs, models, { providers }),
     [agent.kind, effectiveSubs, models, providers],
   );
+  const terms = useTerms();
   const contextVersion = session?.contextVersion ?? 0;
   const context = useMemo(
     () => computeContextBreakdown(
@@ -1181,26 +1182,6 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
       {/* ── 输入区 ── */}
       <div className={styles.composer}>
-        {/* 记忆条和附件行都在输入框**外面**，和对话助手同一个次序
-            （ContextBar → 身份/语法条 → 材料行 → 输入框）。它们原来长在框里，
-            于是「这一场怎么工作」的开关和「这条消息怎么被送出去」挤在同一个
-            框内——正是设计稿 02g 屏 1c 要分开的两件事。 */}
-        <div className={styles.ctxBand}>
-        <ContextBar
-          context={context}
-          /* 还没发第一条时画预估态：这时 `history` 是 null，实测只量得出工具
-             schema，而首次请求真正会带的 system 层 / 绑定块 / 记忆块一样都还
-             没装配（见 12-context-trace-plan §4）。 */
-          preflight={session?.history ? null : preflightBar}
-          /* 「立即归纳」——和 AI 助手同款同位置。以前扮演页没有它，只因为扮演的
-             归纳走另一条代码路（不在 agentStore 上），不是设计上不要。 */
-          onCompact={context.canFold && !isRunning && !compacting && queuePos < 0
-            ? () => void compactNow(agent.id)
-            : undefined}
-          compacting={compacting}
-        />
-        </div>
-
         <div className={styles.composerHead}>
           {agent.kind === "narrator" ? (
             <span className={styles.personaHint}>
@@ -1413,6 +1394,10 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                 el.scrollTop = el.scrollHeight;
               })}
             />
+            <ContextRing key={agent.id} context={context} entryTerm={terms.entry}
+              preflight={session?.history ? null : preflightBar}
+              compacting={compacting} busy={isRunning || queuePos >= 0}
+              contextVersion={contextVersion} onCompact={() => void compactNow(agent.id)} />
             <span className={styles.kbd}>{t("roleplay.composer.newline", { defaultValue: "⇧↵ 换行" })}</span>
             <div className={styles.spacer} />
             {isRunning && (

@@ -41,3 +41,6 @@
 .action:disabled { opacity:0.5; cursor:default; }
 .status { margin:8px 0; overflow-wrap:anywhere; font-size:var(--font-size-xs); }
 .status pre { white-space:pre-wrap; max-height:120px; overflow:auto; font:inherit; }
+
+.preTrack { fill:none; stroke:var(--color-text-ghost); stroke-width:2.5; stroke-dasharray:2 3; }
+.preBar { background:repeating-linear-gradient(120deg, var(--color-bar-track) 0 2px, var(--color-text-ghost) 2px 3px); }

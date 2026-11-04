@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { computeContextBreakdown, type ContextBreakdown } from "../../../lib/agent/contextBreakdown";
-import { contextPopoverPosition, contextRingArcs } from "../contextRingGeometry";
+import { computeContextBreakdown, computePreflightBreakdown, type ContextBreakdown } from "../../../lib/agent/contextBreakdown";
+import { contextPopoverPosition, contextRingArcs, preflightRingArcs } from "../contextRingGeometry";
 
 const base = computeContextBreakdown(null, null, 0, 1000, 2000);
 function context(usedTokens: number, contextSize = 2000): ContextBreakdown {
@@ -33,5 +33,24 @@ describe("context popover placement", () => {
   it("uses the space below when the composer is near the top", () => {
     expect(contextPopoverPosition({ left: 2, top: 40, bottom: 72 }, 900, 600))
       .toMatchObject({ left: 8, top: 80, maxHeight: 512 });
+  });
+});
+
+describe("roleplay preflight ring", () => {
+  it("draws only the known lower bound; retrieval is not free capacity", () => {
+    const pre = computePreflightBreakdown({ systemTokens: 100, boundTokens: 200, memoryTokens: 50 }, 50, 1000, 2000);
+    const arcs = preflightRingArcs(pre);
+    expect(arcs.map(arc => arc.key)).toEqual(["system", "bound", "memory"]);
+    expect(arcs.reduce((sum, arc) => sum + arc.length, 0)).toBe(40);
+    expect(arcs[2].offset).toBe(35);
+  });
+  it("scales overflowing known blocks without hiding the actual lower bound", () => {
+    const pre = computePreflightBreakdown({ systemTokens: 1000, boundTokens: 500, memoryTokens: 500 }, 0, 1000, 2000);
+    expect(preflightRingArcs(pre).map(arc => arc.length)).toEqual([50, 25, 25]);
+    expect(pre.lowerBoundTokens).toBe(2000);
+  });
+  it("does not fabricate arcs for an unknown window or empty estimate", () => {
+    expect(preflightRingArcs(computePreflightBreakdown(null, 100, 1000, 0))).toEqual([]);
+    expect(preflightRingArcs(computePreflightBreakdown(null, 0, 1000, 2000))).toEqual([]);
   });
 });
