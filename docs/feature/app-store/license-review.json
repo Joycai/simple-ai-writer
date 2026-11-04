@@ -1,0 +1,230 @@
+{
+  "version": "2.0.14",
+  "scope": "npm production closure; cargo arm64 metadata including build/dev dependencies; not proof of final bundle contents",
+  "approvedForDistribution": false,
+  "lockHashes": {
+    "pnpm": "3cff0a527d75e131191fef433df1d86964ad09374df89b0135a9ece6564204ba",
+    "cargo": "9d1fb8fee600c53eee3e19531329d57e9760abf3c0fa76536a9af54d3cdd883c"
+  },
+  "packageCount": 704,
+  "missingLicenseOrText": 27,
+  "unresolved": [
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "alloc-stdlib",
+      "version": "0.2.4",
+      "license": "BSD-3-Clause",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "block2",
+      "version": "0.6.2",
+      "license": "MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "crc-catalog",
+      "version": "2.5.0",
+      "license": "MIT OR Apache-2.0",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "defmt-parser",
+      "version": "1.0.0",
+      "license": "MIT OR Apache-2.0",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "dispatch2",
+      "version": "0.3.1",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "mac-notification-sys",
+      "version": "0.6.15",
+      "license": "MIT/Apache-2.0",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "objc2-app-kit",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "objc2-core-foundation",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "objc2-core-graphics",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "objc2-encode",
+      "version": "4.1.0",
+      "license": "MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "objc2-exception-helper",
+      "version": "0.1.1",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "objc2-foundation",
+      "version": "0.3.2",
+      "license": "MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "objc2-io-surface",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "objc2-web-kit",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "objc2",
+      "version": "0.6.4",
+      "license": "MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "selectors",
+      "version": "0.36.1",
+      "license": "MPL-2.0",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "simple-ai-writer",
+      "version": "2.0.14",
+      "license": null,
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "tauri-plugin",
+      "version": "2.6.3",
+      "license": "Apache-2.0 OR MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "unic-char-property",
+      "version": "0.9.0",
+      "license": "MIT/Apache-2.0",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "unic-char-range",
+      "version": "0.9.0",
+      "license": "MIT/Apache-2.0",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "unic-common",
+      "version": "0.9.0",
+      "license": "MIT/Apache-2.0",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "unic-ucd-ident",
+      "version": "0.9.0",
+      "license": "MIT/Apache-2.0",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "cargo-metadata",
+      "name": "unic-ucd-version",
+      "version": "0.9.0",
+      "license": "MIT/Apache-2.0",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "npm-production",
+      "name": "@napi-rs/canvas-darwin-arm64",
+      "version": "1.0.13",
+      "license": "MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "npm-production",
+      "name": "hash.js",
+      "version": "1.1.7",
+      "license": "MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "npm-production",
+      "name": "https",
+      "version": "1.0.0",
+      "license": "ISC",
+      "files": [],
+      "review": "missing-license-or-text"
+    },
+    {
+      "ecosystem": "npm-production",
+      "name": "isarray",
+      "version": "1.0.0",
+      "license": "MIT",
+      "files": [],
+      "review": "missing-license-or-text"
+    }
+  ],
+  "note": "All packages remain unreviewed; missing text is a scanner finding, not a legal conclusion. Regenerate the full report with scripts/appstore-license-inventory.mjs."
+}

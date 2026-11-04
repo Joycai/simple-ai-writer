@@ -63,6 +63,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: App Store preparation guards
+        run: |
+          node --test scripts/__tests__/appstore-build.test.mjs
+          node scripts/check-appstore-metadata.mjs
+
       - name: Type check (tsc --noEmit)
         run: pnpm exec tsc --noEmit
 

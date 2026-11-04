@@ -17,6 +17,12 @@ The [`CI`](../../.github/workflows/ci.yml) workflow runs on every pull request t
 > [`Package server`](../../.github/workflows/package-server.yml) — artifacts by default, a
 > `server-v<version>` GitHub Release on request. Usage: [`server/DEPLOY.md`](../../server/DEPLOY.md) §1.
 
+## App Store candidate preparation
+
+The manual [`Prepare App Store candidate`](../../.github/workflows/appstore-prepare.yml) workflow accepts a build number and produces an arm64 ad-hoc `.app` archive plus bundle, metadata and unreviewed license reports. It uses read-only repository permissions, no Apple credentials, no upload and no GitHub Release. Existing direct distribution remains in `release.yml`. This workflow has not yet been exercised remotely; local equivalent steps passed. Submission readiness is deliberately false while native acceptance, policies and signing remain pending. See [P4 dossier](../feature/app-store/README.md).
+
+The frontend merge gate also runs `node --test scripts/__tests__/appstore-build.test.mjs` and `node scripts/check-appstore-metadata.mjs`. These verify frozen build parameters and draft text limits; the optional `--strict` metadata check currently fails on unresolved submission fields, so it is not a merge prerequisite.
+
 ## What it checks
 
 Server containers have a separate [`Container server`](../../.github/workflows/container-server.yml)

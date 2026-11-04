@@ -9,10 +9,12 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const args = process.argv.slice(2);
 let app = join(root, "src-tauri/target/app-store/aarch64-apple-darwin/release/bundle/macos/Simple AI Writer Store.app");
 let output;
+let expectedBuild;
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--app" && args[i + 1]) app = resolve(args[++i]);
+  else if (args[i] === "--build-number" && args[i + 1]) expectedBuild = args[++i];
   else if (args[i] === "--output" && args[i + 1]) output = resolve(args[++i]);
-  else throw new Error("Usage: node scripts/audit-appstore.mjs [--app path.app] [--output report.json]");
+  else throw new Error("Usage: node scripts/audit-appstore.mjs [--app path.app] [--output report.json] [--build-number N]");
 }
 if (process.platform !== "darwin") throw new Error("Run the bundle audit on macOS.");
 const run = (bin, argv, input) => execFileSync(bin, argv, { encoding: "utf8", input, stdio: ["pipe", "pipe", "pipe"], maxBuffer: 32 * 1024 * 1024 }).trim();
@@ -24,18 +26,21 @@ const check = (name, fn) => {
 };
 const requireValue = (condition, message) => { if (!condition) throw new Error(message); };
 const config = JSON.parse(readFileSync(join(root, "src-tauri/tauri.appstore.conf.json")));
+expectedBuild ??= config.bundle.macOS.bundleVersion;
+if (!/^[1-9]\d{0,3}$/.test(expectedBuild)) throw new Error("Invalid expected build number");
 const version = JSON.parse(readFileSync(join(root, "package.json"))).version;
 let info, binary;
 check("bundle-identity", () => {
   info = plist(join(app, "Contents/Info.plist"));
   requireValue(info.CFBundleIdentifier === config.identifier, "Bundle ID mismatch");
   requireValue(info.CFBundleShortVersionString === version, "Bundle version mismatch");
+  requireValue(info.CFBundleVersion === expectedBuild, "Build number mismatch");
   requireValue(info.LSMinimumSystemVersion === config.bundle.macOS.minimumSystemVersion, "Minimum macOS mismatch");
   requireValue(info.LSApplicationCategoryType === "public.app-category.productivity", "Category mismatch");
   requireValue(typeof info.NSLocalNetworkUsageDescription === "string" && info.NSLocalNetworkUsageDescription.trim(), "Local network disclosure missing");
   requireValue(info.CFBundleExecutable === "simple-ai-writer", "Unexpected executable name");
   binary = join(app, "Contents/MacOS", info.CFBundleExecutable);
-  return { id: info.CFBundleIdentifier, version, minimumMacOS: info.LSMinimumSystemVersion };
+  return { id: info.CFBundleIdentifier, version, buildNumber: info.CFBundleVersion, minimumMacOS: info.LSMinimumSystemVersion };
 });
 check("signature-integrity", () => run("codesign", ["--verify", "--deep", "--strict", app]) || "verified");
 check("sandbox-entitlements", () => {
@@ -87,7 +92,7 @@ const report = {
     provisioningProfilePresent: existsSync(join(app, "Contents/embedded.provisionprofile")) },
   submissionReady: false,
   pending: ["P1 native file/bookmark/restart acceptance", "P2 native consent/cancellation and public policy publication",
-    "P3 native feature/failure/OS matrix", "Privacy collection manifest and SDK review", "Distribution certificate/profile validation (P4)"],
+    "P3 native feature/failure/OS matrix", "Privacy collection manifest and SDK review", "P4 metadata, screenshots, review service and license notices", "Distribution certificate/profile validation (P4)"],
 };
 const json = JSON.stringify(report, null, 2) + "\n";
 if (output) writeFileSync(output, json); else process.stdout.write(json);
