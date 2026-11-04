@@ -799,10 +799,13 @@ button.settingsLine:hover { background: var(--color-bg-hover); }
 .focusLabel { display:flex; flex-direction:column; gap:8px; font:400 12px var(--font-sans); color:var(--color-text-secondary); }
 .focusInput { resize:vertical; min-height:88px; box-sizing:border-box; }
 .configToggle { display:none; }
-.executionFooter { display:flex; flex-direction:column; gap:12px; padding:14px 20px; flex-shrink:0; background:var(--color-bg-inset); border-top:1px solid var(--color-border-panel); }
+.executionFooter { container-type:inline-size; display:flex; flex-direction:column; gap:12px; padding:14px 20px; flex-shrink:0; background:var(--color-bg-inset); border-top:1px solid var(--color-border-panel); }
 .executionFooter>.btnPrimary { min-height:36px; display:flex; justify-content:space-between; align-items:center; }
-.modelControls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.runtimeControls { display:flex; flex-wrap:wrap; gap:8px; border:0; margin:0 0 0 auto; padding:0; min-width:0; }
+.modelControls { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; }
+.forecastControl { display:flex; align-items:center; gap:8px; min-width:0; }
+.runtimeControls,.capabilityControl { border:0; margin:0; padding:0; min-width:0; }
+.runtimeControls { display:flex; justify-content:flex-end; }
+.capabilityControl:empty { display:none; }
 .resultHeader { padding:18px 24px 0; font:500 12px var(--font-sans); color:var(--color-text-secondary); }
 .results .wrap { padding-top:14px; }
 .results .footer { flex-wrap:wrap; }

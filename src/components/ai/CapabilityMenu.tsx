@@ -37,10 +37,11 @@ import styles from "./CapabilityMenu.module.css";
  *                  roleplay panel does not run on that mode at all, and a row
  *                  that changes nothing there would be worse than its absence.
  */
-export function CapabilityMenu({ disabled, onToggle, stateMemory = false }: {
+export function CapabilityMenu({ disabled, onToggle, stateMemory = false, variant = "inline" }: {
   disabled?: readonly SubAgentKind[];
   onToggle?: (kind: SubAgentKind) => void;
   stateMemory?: boolean;
+  variant?: "inline" | "panel";
 } = {}) {
   const { t } = useTranslation();
   const chatDisabled = useActiveChat((c) => c.disabledSubAgents);
@@ -71,7 +72,7 @@ export function CapabilityMenu({ disabled, onToggle, stateMemory = false }: {
   const live = total - stopped.length;
 
   return (
-    <div className={styles.root} ref={root}>
+    <div className={`${styles.root} ${variant === "panel" ? styles.panel : ""}`} ref={root}>
       <button
         type="button"
         className={styles.trigger}

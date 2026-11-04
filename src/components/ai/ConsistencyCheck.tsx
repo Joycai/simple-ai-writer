@@ -1231,11 +1231,14 @@ function ExecutionFooter({ phase, elapsedMs, docText }: { phase: "before" | "run
   const totalOutput = windows.reduce((sum, w) => sum + w.outputTokens, 0);
   return <footer className={styles.executionFooter}>
     <div className={styles.modelControls}>
-      <ForecastRing segments={plan.assumed ? null : plan.segments} open={details} onClick={() => setDetails(true)}
-        label={`${t("ai.consistency.forecastInput")} · ${formatTokens(plan.perWindowTokens)} / ${formatTokens(plan.ceilingTokens)} tk`} />
-      <span className={styles.footerMeta}>{t("ai.consistency.forecastInput")}<br/>{formatTokens(plan.perWindowTokens)} tk</span>
-      <fieldset disabled={running} className={styles.runtimeControls}><ReasoningControls variant="compact" /><CapabilityMenu /></fieldset>
+      <div className={styles.forecastControl}>
+        <ForecastRing segments={plan.assumed ? null : plan.segments} open={details} onClick={() => setDetails(true)}
+          label={`${t("ai.consistency.forecastInput")} · ${formatTokens(plan.perWindowTokens)} / ${formatTokens(plan.ceilingTokens)} tk`} />
+        <span className={styles.footerMeta}>{t("ai.consistency.forecastInput")}<br/><b>{formatTokens(plan.perWindowTokens)} tk</b></span>
+      </div>
+      <fieldset disabled={running} className={styles.runtimeControls}><ReasoningControls variant="compact" /></fieldset>
     </div>
+    <fieldset disabled={running} className={styles.capabilityControl}><CapabilityMenu variant="panel" /></fieldset>
     {plan.uncheckedChars > 0 && <p className={styles.settingsWarn}>{t("ai.consistency.allocCapNote", { max: MAX_WINDOWS, n: formatChars(plan.uncheckedChars) })}</p>}
     {running && <span className={styles.runningNote}>{t("ai.consistency.runningNote")} · {formatClock(elapsedMs)}</span>}
     <button className={styles.btnPrimary} disabled={!running && (!activeModelId || !docText.trim())}
