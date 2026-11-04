@@ -162,6 +162,7 @@
 .compactPopover {
   position: absolute;
   bottom: calc(100% + 6px);
+  /* The thinking trigger sits at the right edge of the consistency footer. */
   right: 0;
   z-index: 20;
   min-width: 108px;
@@ -182,4 +183,4 @@
 .effortEnds { display: flex; justify-content: space-between; font: 400 10px/1.5 var(--font-mono); color: var(--color-text-muted); }
 .footerPopover:has(.effortSlider) { width: min(286px, calc(100vw - 32px)); }
 
-.compactPopover:has(.effortSlider) { width: min(286px, calc(100vw - 32px)); padding: 10px 12px; }
+.compactPopover:has(.effortSlider) { box-sizing:border-box; width:min(286px, 100cqw, calc(100vw - 32px)); padding:10px 12px; }

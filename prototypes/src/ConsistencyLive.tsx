@@ -13,6 +13,8 @@ import { useEditorStore } from "../../src/stores/editorStore";
 import { useLoreStore } from "../../src/stores/loreStore";
 import type { ConsistencyReport, WindowOutcome } from "../../src/lib/consistency/model";
 const text = "服务响应时间为 30 分钟。\n备份保留 180 天。";
+// Keep a configured capability visible when reviewing the execution footer.
+useAiStore.setState(s => ({ subAgents: { ...s.subAgents, longread: { kind: "longread", modelId: "fixture", enabled: true } } }));
 useProjectStore.setState({ projectPath: "/fixture", collections: ["服务资料", "产品资料"] });
 useEditorStore.setState({ filePath: "/fixture/数据安全说明.md", content: text, setContent: content => useEditorStore.setState({ content }) });
 useAiStore.setState({ activeModelId: "fixture", models: [{ id:"fixture",providerId:"fixture",modelId:"gpt-5",name:"示例模型",type:"text",enabled:true,priceIn:0,priceOut:0,priceCachedIn:0,contextSize:1048576,maxOutput:2000 }],providers:[{id:"fixture",name:"示例",baseUrl:"https://invalid.invalid",apiStandard:"openai",createdAt:0}],updateModel:async model=>{useAiStore.setState({models:[model]});} });

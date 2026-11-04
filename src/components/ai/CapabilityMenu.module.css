@@ -120,3 +120,17 @@
 .markOff { background: transparent; border: 1px solid var(--color-text-hint); }
 
 .rule { height: 1px; margin: 4px 0; background: var(--color-border-panel); }
+
+/* A full-width settings row in the consistency footer. Keep exceptions visible
+   without pushing the forecast and thinking control onto accidental rows. */
+.panel { display:flex; width:100%; min-width:0; }
+.panel .trigger {
+  width:100%; min-width:0; min-height:32px; padding:8px 10px;
+  border:1px solid var(--color-border-muted); line-height:1.5;
+}
+.panel .named { min-width:0; overflow-wrap:anywhere; }
+.panel .count { white-space:nowrap; }
+.panel .caret { margin-left:auto; }
+.panel .popover { left:0; right:0; min-width:0; }
+.panel .head { flex-wrap:wrap; }
+.panel .item { flex-wrap:wrap; line-height:1.5; }
