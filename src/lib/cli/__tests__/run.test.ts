@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const channel = vi.hoisted(() => ({ terminal: true }));
+vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal }));
+
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
 
@@ -113,4 +116,13 @@ it("sends automatic-read guards only for the built-in read path", async () => {
   const automaticRead = { projectPath: "/p", paths: ["linked/note.md"], programs: ["cat"] };
   await runCommand({ projectPath: "/p", command: "cat linked/note.md", cwd: "/p", timeoutMs: 1000, automaticRead });
   expect(invoke).toHaveBeenCalledWith("cmd_run", { req: expect.objectContaining({ automaticRead }) });
+});
+
+it("store blocks the shared runner before IPC or logs, including automatic reads", async () => {
+  channel.terminal = false;
+  try {
+    await expect(runCommand({ projectPath: "/p", command: "ls", cwd: "/p", timeoutMs: 1000 })).rejects.toThrow();
+    expect(invoke).not.toHaveBeenCalled();
+    expect(files.size).toBe(0);
+  } finally { channel.terminal = true; }
 });

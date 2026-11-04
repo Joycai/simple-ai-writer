@@ -18,6 +18,7 @@ import {
 } from "../../../lib/agent/stateFlag";
 import { useAgentStore } from "../../../stores/agentStore";
 import { isCliEnabled, setCliEnabled } from "../../../lib/cli/flag";
+import { terminalAvailable } from "../../../lib/distribution";
 import { cachedShellInfo, shellInfo, shellLabel, systemLabel, type ShellInfo } from "../../../lib/cli/shell";
 import { CliAllowlist } from "./CliAllowlist";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
@@ -155,6 +156,7 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
         <Row
           top
           title={t("systemSettings.lab.skillStateLabel")}
+          last={!terminalAvailable()}
           desc={t("systemSettings.lab.skillStateHint")}
           foot={skillStateOn ? (
             <div className={styles.sub}>
@@ -188,7 +190,7 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
             因为它改变的是助手能提议什么，不是多一种文件。开着时的脚注报这台电脑
             检测到的系统和 shell——和 run_command 描述里告诉模型的是同一句，作者据此知道助手会用哪种语法；关着时的补充句说的是
             入口**不存在**（不是禁用），句式同音频转写。 */}
-        <Row
+        {terminalAvailable() && <Row
           top
           title={t("systemSettings.lab.cliLabel")}
           desc={t("systemSettings.lab.cliHint")}
@@ -213,7 +215,7 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
             onChange={(next) => { setCliEnabled(next); setCliOn(next); }}
             label={t("systemSettings.lab.cliLabel")}
           />
-        </Row>
+        </Row>}
       </Section>
 
       <Section label={t("systemSettings.lab.groupLocal")}>

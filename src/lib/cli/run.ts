@@ -18,6 +18,8 @@
 
 import type { AutomaticRead } from "./command";
 import { invoke } from "@tauri-apps/api/core";
+import { terminalAvailable } from "../distribution";
+import i18n from "../../i18n";
 import { makeDir, readDir, removeFile, writeFile } from "../fs/fileio";
 import { joinPath } from "../paths";
 import { CLIP_HEAD, CLIP_TAIL, formatResult, type CmdResult } from "./output";
@@ -74,6 +76,7 @@ function stamp(now = new Date()): string {
 }
 
 export async function runCommand(req: RunCommandRequest): Promise<RunCommandOutcome> {
+  if (!terminalAvailable()) throw new Error(i18n.t("ai.approval.commandUnavailable"));
   if (req.signal?.aborted) throw new Error("Stopped by the author before the command started");
   const runId = newRunId();
   const started = Date.now();

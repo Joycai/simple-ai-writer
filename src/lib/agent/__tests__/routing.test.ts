@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
+const channel = vi.hoisted(() => ({ terminal: true }));
+vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal }));
+
 /**
  * The PPTX Beta switch, flipped by hand. It reads a preference, and in a node
  * test there is no localStorage behind one — mocking the accessor keeps the
@@ -67,18 +70,19 @@ import { AGENT_ASSIST_PRESET } from "../presets";
 import { ROLEPLAY_PRESET, subAgentsFor } from "../../roleplay/presets";
 import { withSessionOverrides, type SubAgentConfig, type SubAgentKind } from "../subagentModel";
 
+const allDisabled: Record<SubAgentKind, SubAgentConfig> = {
+  search: { kind: "search", modelId: null, enabled: false },
+  vision: { kind: "vision", modelId: null, enabled: false },
+  longread: { kind: "longread", modelId: null, enabled: false },
+  pdf: { kind: "pdf", modelId: null, enabled: false },
+  imagegen: { kind: "imagegen", modelId: null, enabled: false },
+  translate: { kind: "translate", modelId: null, enabled: false },
+  writer: { kind: "writer", modelId: null, enabled: false },
+  retrieval: { kind: "retrieval", modelId: null, enabled: false },
+  asr: { kind: "asr", modelId: null, enabled: false },
+};
+
 describe("routeTools", () => {
-  const allDisabled: Record<SubAgentKind, SubAgentConfig> = {
-    search: { kind: "search", modelId: null, enabled: false },
-    vision: { kind: "vision", modelId: null, enabled: false },
-    longread: { kind: "longread", modelId: null, enabled: false },
-    pdf: { kind: "pdf", modelId: null, enabled: false },
-    imagegen: { kind: "imagegen", modelId: null, enabled: false },
-    translate: { kind: "translate", modelId: null, enabled: false },
-    writer: { kind: "writer", modelId: null, enabled: false },
-    retrieval: { kind: "retrieval", modelId: null, enabled: false },
-    asr: { kind: "asr", modelId: null, enabled: false },
-  };
   /**
    * The preset as it routes with nothing enabled: no drawing arm, no image
    * tools, and neither Beta export (a Beta feature is off until the author
@@ -906,4 +910,17 @@ describe("MCP surface routing", () => {
       expect(tools()).not.toContain("call_mcp_tool");
     } finally { mcp.on = false; mcp.servers = []; platform.tauri = true; }
   });
+});
+
+it("store strips terminal even from an old preset and an enabled imported preference", () => {
+  channel.terminal = false;
+  cliBeta.on = true;
+  platform.tauri = true;
+  try {
+    const old = { ...AGENT_ASSIST_PRESET, tools: [...AGENT_ASSIST_PRESET.tools, "run_command" as const] };
+    const routed = routeTools(old, allDisabled, WS, MODELS, { commands: true });
+    expect(routed.tools).not.toContain("run_command");
+    expect(routed.tools).toContain("read_file");
+    expect(routePlannedTools(old, allDisabled, MODELS, { commands: true }).tools).not.toContain("run_command");
+  } finally { channel.terminal = true; cliBeta.on = false; }
 });

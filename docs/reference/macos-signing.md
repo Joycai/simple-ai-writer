@@ -1,5 +1,8 @@
 # macOS 代码签名（自签名证书）· 操作手册
 
+> **分发范围**：本文记录站外版 ad-hoc / 自签名方案，不适用于 Mac App Store 提交。
+> 商店版签名、沙盒、文件授权与隐私改造见 [Mac App Store 上架计划](../feature/mac-app-store-plan.md)（`partial`）；保留现有站外渠道，不用本手册的自签名步骤替代商店分发证书与描述文件。
+
 > Status: **`partial`** — **已做**：bundle 整体 ad-hoc 签名（`tauri.conf.json` 的 `bundle.macOS.signingIdentity: "-"`）
 > 和 `src-tauri/Info.plist` 里的 `NSLocalNetworkUsageDescription`，解决的是本地网络权限（下文「已经做了的一半」）。
 > **没做**：固定的自签名证书（§1 起的手册；`release.yml` 没有任何 `APPLE_*` 签名配置），所以钥匙串在每次更新后

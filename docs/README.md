@@ -37,6 +37,7 @@ reaching for is one of the states above, plus a modifier if it needs one.
 
 | Doc | Status | Scope |
 |---|---|---|
+| [mac-app-store-plan.md](feature/mac-app-store-plan.md) | `partial` | Mac App Store 审查与 P0–P5 上架计划：保留站外版，商店版禁用终端并降级到 tools，优先沙盒、持久文件授权与隐私流程 |
 | [context-ring-design.md](feature/agent/context-ring-design.md) | `shipped` | 分段上下文圆环、详情浮层与会话级 Compact 反馈 |
 
 ## reference/ — read before working

@@ -1,6 +1,6 @@
 [package]
 name = "simple-ai-writer"
-version = "2.0.9"
+version = "2.0.10"
 description = "Simple AI Writer"
 authors = ["joycai"]
 edition = "2021"
@@ -22,6 +22,9 @@ crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+
+[features]
+app-store = []
 
 [dependencies]
 tauri = { version = "2", features = ["image-png"] }

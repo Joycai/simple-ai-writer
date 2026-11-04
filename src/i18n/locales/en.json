@@ -2059,6 +2059,7 @@
       "commandCompound": "Compound line: separators, pipes, redirections or substitution — read the whole line",
       "commandShell": "With",
       "commandShellSub": "{{syntax}} syntax · stdin is closed, so anything interactive fails at once",
+      "commandUnavailable": "Terminal execution is unavailable in this build. The command was not run. Continue only with the available built-in tools and their normal approvals; leave steps that require a terminal blocked and explain why.",
       "commandRunning": "Running · {{s}} s",
       "commandAllow": "Always allow",
       "commandAllowHint": "From now on, commands made only of {{programs}} and read-only commands (including chains joined by && || ; |) run without asking; anything that looks dangerous, redirects or points outside the project still asks. Remove it under Settings → Lab → Command line",

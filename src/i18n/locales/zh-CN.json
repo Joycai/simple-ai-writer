@@ -2056,6 +2056,7 @@
       "commandCompound": "复合命令：含分隔、管道、重定向或替换，请整行读完",
       "commandShell": "用",
       "commandShellSub": "{{syntax}} 语法 · 标准输入已关闭，要交互的命令会立刻失败",
+      "commandUnavailable": "此版本不支持终端执行，命令未运行。请仅使用当前可用的内置工具，并遵守各工具的审批要求；需要终端的步骤应保持阻塞，并说明原因。",
       "commandRunning": "运行中 · {{s}} 秒",
       "commandAllow": "始终允许",
       "commandAllowHint": "之后只由 {{programs}} 和只读命令组成的命令（含 && || ; | 串起来的）不再询问；看起来危险、带重定向或指向项目外的仍会出卡。可在 设置 → 实验室 → 命令行 移除",

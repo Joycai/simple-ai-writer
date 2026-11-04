@@ -21,6 +21,7 @@ import { fileExists } from "../fs/fileio";
 import { projectRelative, resolveWorkspacePath } from "../paths";
 import { IS_MAC, IS_WINDOWS } from "../platform";
 import i18n from "../../i18n";
+import { terminalAvailable } from "../distribution";
 import type { CommandProposal, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
 import { allowlistCandidates, commandCover, isCompound, looksDangerous, prepareAutomaticRead, type AutomaticRead } from "../cli/command";
@@ -110,6 +111,7 @@ export async function runCommandTool(
   args: RunCommandArgs,
   ctx: ToolContext,
 ): Promise<ToolResult> {
+  if (!terminalAvailable()) return { toolCallId, content: i18n.t("ai.approval.commandUnavailable") };
   if (!ctx.requestApproval) {
     return {
       toolCallId,

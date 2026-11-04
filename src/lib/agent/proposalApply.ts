@@ -16,6 +16,7 @@
  */
 
 import i18n from "../../i18n";
+import { terminalAvailable } from "../distribution";
 import { backupFile } from "./backup";
 import { applyFindReplace, applyInsertions } from "./editApply";
 import type { ToolProgress } from "./events";
@@ -277,6 +278,7 @@ export async function applyProposal(
       return { report: null };
 
     case "command": {
+      if (!terminalAvailable()) throw new Error(i18n.t("ai.approval.commandUnavailable"));
       // Like `transcribe`: nothing has run yet, and approval is what starts
       // the process. The runner owns the abort → kill wiring and the log; the
       // tool row gets a once-a-second elapsed label so a long command reads as

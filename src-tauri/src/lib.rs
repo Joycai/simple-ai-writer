@@ -1,6 +1,8 @@
 mod blocking;
+#[cfg(not(feature = "app-store"))]
 mod cmd;
 mod commands;
+mod distribution;
 mod docx;
 mod fontproto;
 #[cfg(test)]
@@ -56,6 +58,7 @@ pub fn run() {
 
             // The agent's live shell commands, so `cmd_kill` can find one by
             // its id (see cmd.rs).
+            #[cfg(not(feature = "app-store"))]
             app.manage(cmd::Running::default());
 
             // Multi-instance support (see instance.rs): the workspace locks
@@ -82,6 +85,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            distribution::distribution_channel,
             commands::scaffold_project,
             commands::read_dir_recursive,
             commands::fs_write_binary_file,
@@ -129,8 +133,11 @@ pub fn run() {
             pptx::pptx_read_slides,
             print::print_document,
             preview::preview_html_window,
+            #[cfg(not(feature = "app-store"))]
             cmd::cmd_shell_info,
+            #[cfg(not(feature = "app-store"))]
             cmd::cmd_run,
+            #[cfg(not(feature = "app-store"))]
             cmd::cmd_kill,
         ]);
 

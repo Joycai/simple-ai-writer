@@ -712,7 +712,7 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 - **免审批清单** `allowlist.ts`（`app:cliAllowlist`，机器本地）：程序名规整成 `programNameOf` 的键；shell / 解释器 / 构建工具 / 提权与 `cd` `export` 这类改后续段环境的内建命令永远拒收，包管理器只放行查看类子命令。`command.ts` 的 `commandCover` 把一行按 `&&` `||` `;` `|` 切段，每段须是只读或被清单覆盖（与只读白名单共用 `plainInvocation` 形状检查，外加按程序的执行钩子表）；`allowlistCandidates` 给卡算「始终允许」该列哪些程序——只在加进去之后这一行本身能免审时给，删除 / 移动类程序从不给（只能在设置页加）。
 - **内置只读执行保护（2026-10-28）**：引号感知的 `shellCode` 与 `wordTokens` 区分字面文本和展开；sed/sort/uniq/cut 与 PowerShell 管道处理器走封闭参数子集。`prepareAutomaticRead` 给纯读取串联生成带路径 / 程序检查信息的请求；Rust `cmd_read.rs` 在 spawn 前验证真实路径与目录链接、限制扫描成本、过滤 PATH、清空环境并关闭 shell profile 与 Git helper。拒绝后回原始卡，`requiresIndividualApproval` 禁止计数连批；用户显式程序信任另走原路径。精确边界与原因见 [shell-command-plan §3.9](../feature/agent/shell-command-plan.md#39-跨平台只读免审收口2026-10-28)。
 - **审批**：`agent/cliTools.ts` 对 `commandCover` 通过的命令直接调用 runner（清单非空时 description 点名这些程序），其余组 `CommandProposal`。`ApprovalCard` 展示写命令原文；「始终允许 <程序>」写清单并批准本张（不要求 `autoApproveKey`——它是设置不是运行授权）；单条普通写命令可按 1–5 条连批，复合或危险命令永远逐条审批（危险表不完整，复合是它的兜底）。`agentStore` 用 `commandLeft` + `commandRun` 扣减并在 run 结束清零。`isAutoApprovable("command")` 为假，正文的布尔授权永不覆盖 shell。
-- **路由**要求 `RouteOptions.commands` + Beta + `IS_TAURI` 三者齐全，description 在交出定义时点名真实系统与 shell（只说 zsh 分不出 BSD 还是 GNU userland）。
+- **路由**要求渠道允许终端 + `RouteOptions.commands` + Beta + `IS_TAURI` 四者齐全，description 在交出定义时点名真实系统与 shell（只说 zsh 分不出 BSD 还是 GNU userland）。
 
 ### `src/lib/workflow/`
 
@@ -906,6 +906,7 @@ document import into the workspace:
 - `notify.ts` (系统通知 — the OS ping for "waiting for your approval" / "run finished" / "run failed", each its own switch, off by default, silent while the window has focus; the only thing it must never carry is the model's or the document's text, see `docs/reference/architecture.md` → 系统通知)
 
 #### 平台与能力探测
+- `distribution.ts` 在应用启动前从 Rust 编译渠道读取终端能力；未知 / 失败保持关闭，不从偏好推断渠道。商店构建、tools 降级与恢复边界见 [Mac App Store P0](../feature/mac-app-store-plan.md#7-p0-实施记录2026-11-04)。
 - `http.ts`
   - `networkDiagnostics.ts` 提取 Rust HTTP IPC 错误中的原因链；图片与聊天日志都写入 `network`。插件诊断补丁、脱敏契约与复现步骤见 [network-diagnostics.md](network-diagnostics.md)。
   - Rust HTTP 插件的共用 `client_builder()` 关闭三项 TCP 保活，避免当前网络路径把长等待误判成失活；各调用的 deadline、取消和 URL scope 保留。真实 socket 与取消回归也见同一文档。
@@ -951,7 +952,7 @@ Rust 侧。
 
 #### 装配与分工总则
 
-- `lib.rs` 是装配（插件、命令注册、启动时登记的根）
+- `lib.rs` 是装配（插件、命令注册、启动时登记的根）；`app-store` 特性不编译 `cmd` 或注册终端 IPC，`distribution.rs` 是前端渠道信息的唯一来源。商店配置和最小沙盒权限见 [Mac App Store 计划](../feature/mac-app-store-plan.md)。
 - `main.rs` 只有那句不许删的 Windows 控制台注解。
 - `[lib] crate-type` 只留 `rlib`：`main.rs` 按 rlib 链接它。脚手架默认的 `staticlib` / `cdylib` 是给 iOS / Android 的，本项目不出移动端，却要为它们每次 release 多写一个约 200 MB 的 `.lib`、多链一个 DLL（中文 MSVC 下还会冒出一条 `linker_messages` 警告）。真要上 `tauri ios` / `tauri android` 时再加回去。
 - **一条贯穿的分工**：凡是 zip + XML 的读写都在这边（`zip` 和 `quick-xml` 已经是直接依赖，前端再引一个是白加），凡是 markdown 方言都在 TS 那边。
