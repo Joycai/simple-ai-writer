@@ -35,10 +35,10 @@ export function GenerateDialog({ title, onClose, children }: {
     }}
     onCancel={event => { event.preventDefault(); onClose(); }}
     onKeyDown={event => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        if (ime.isComposing(event)) event.preventDefault();
-      }
+      // React portals still bubble into AiPanel: never let Cmd/Ctrl+Enter in
+      // a picker execute the request underneath the modal.
+      event.stopPropagation();
+      if (event.key === "Escape" && ime.isComposing(event)) event.preventDefault();
     }}>
     <header className={styles.generateHeader}><strong id={id}>{title}</strong>
       <button type="button" className={styles.linkBtn} onClick={onClose} aria-label={t("common.close")}><X size={16} /></button>
