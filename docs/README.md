@@ -244,3 +244,5 @@ One topic, one place; everywhere else carries a sentence and a link. Two copies 
 4. **Link it from `AGENTS.md`'s Detailed References only if it must be read before touching code.** `AGENTS.md` is the shared project instruction entry point; a `proposal` does not earn that seat.
 5. **Cite it from the code** where the reasoning matters — `see docs/feature/lore/lore-facet-plan.md`. Those citations are the reason paths here are treated as an interface, not as filing.
 6. **Cite source by name, never by line number.** `configDb.ts` 的 `defaultImageCaps`, never that path with a line number stuck on the end. Line numbers rot silently and keep looking valid: of the 346 `文件:行号` citations this tree carried in 2026-09, only 80 still landed on the right line. `src/lib/__tests__/docSourceRefs.test.ts` holds the line shut for `docs/` and for source comments; `design/` and `plans/` are outside it on purpose — they are dated records, and the coordinates in them were the scene at the time.
+
+- [生成页空间与层级重构](feature/agent/generate-workspace-design.md) — `shipped`；任务选择、任务配置、参考资料与运行设置的交互原型。

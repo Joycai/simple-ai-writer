@@ -110,11 +110,11 @@ interface ComposerState {
   setPanelTask: (task: string) => void;
   panelOutline: string;
   panelKnowledge: string;
-  panelRequirement: string;
+  panelRequirements: Record<string, string>;
   panelInstruction: string;
   setPanelOutline: (update: Update<string>) => void;
   setPanelKnowledge: (update: Update<string>) => void;
-  setPanelRequirement: (update: Update<string>) => void;
+  setPanelRequirement: (update: Update<string>, taskId: string) => void;
   setPanelInstruction: (update: Update<string>) => void;
 
   // ── 角色扮演 (RoleplayChat) ──
@@ -194,11 +194,13 @@ export const useComposerStore = create<ComposerState>((set) => ({
   }),
   panelOutline: "",
   panelKnowledge: "",
-  panelRequirement: "",
+  panelRequirements: {},
   panelInstruction: "",
   setPanelOutline: (update) => set((s) => ({ panelOutline: apply(update, s.panelOutline) })),
   setPanelKnowledge: (update) => set((s) => ({ panelKnowledge: apply(update, s.panelKnowledge) })),
-  setPanelRequirement: (update) => set((s) => ({ panelRequirement: apply(update, s.panelRequirement) })),
+  setPanelRequirement: (update, taskId) => set((s) => ({
+    panelRequirements: { ...s.panelRequirements, [taskId]: apply(update, s.panelRequirements[taskId] ?? "") },
+  })),
   setPanelInstruction: (update) => set((s) => ({ panelInstruction: apply(update, s.panelInstruction) })),
 
   roleplay: {},
@@ -223,7 +225,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
     clearMentionReadFailures();
     set({
       chat: {},
-      panelOutline: "", panelKnowledge: "", panelRequirement: "", panelInstruction: "",
+      panelOutline: "", panelKnowledge: "", panelRequirements: {}, panelInstruction: "",
       roleplay: {},
     });
   },

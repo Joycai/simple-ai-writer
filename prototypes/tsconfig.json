@@ -1,6 +1,6 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": { "types": ["vite/client"] },
-  "include": ["src"],
+  "include": ["src", "../src/lib/import/turndown-plugin-gfm.d.ts"],
   "references": []
 }

@@ -88,3 +88,15 @@ unknown capacity and compaction failure. Compaction is a local timed simulation.
 `/#context-ring-live` reuses the production ring and portal with an isolated i18n
 instance and fixture state. It exercises the real presentation with simulated
 compaction; it does not load app stores or call a provider.
+
+### Generate workspace redesign
+
+`/#generate-workspace` — compact task selector, task-specific configuration,
+reference manager, collapsed runtime settings and input-budget details. Supports
+narrow layout, overflow simulation and a static output preview. All state is local;
+no project data, model requests or writes. Design: `docs/feature/agent/generate-workspace-design.md`.
+
+`/generate-live.html` is a separate development-only production-component review entry.
+It seeds in-memory stores, has no project, and replaces task execution and model updates
+with fixture actions. It exercises task selection, per-task drafts, entry/facet pins,
+forecast details, narrow layout and themes without model calls or author data.

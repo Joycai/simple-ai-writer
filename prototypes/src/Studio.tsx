@@ -13,10 +13,12 @@ import { Select } from "../../src/components/common/Select";
 import { Foundations, Components } from "./System";
 import { McpManagement } from "./McpManagement";
 import { ContextRing } from "./ContextRing";
+import { GenerateWorkspace } from "./GenerateWorkspace";
 import { Workspace } from "./Workspace";
 import { themes } from "./fixtures";
 
 const pages = [
+  { id: "generate-workspace", label: "生成页重构", number: "07", icon: LayoutPanelLeft },
   { id: "context-ring-live", label: "正式圆环验收", number: "06", icon: Layers },
   { id: "context-ring", label: "上下文圆环", number: "05", icon: Layers },
   { id: "mcp", label: "MCP 服务", number: "04", icon: Layers },
@@ -126,11 +128,12 @@ export function Studio() {
           id="studio-content"
           tabIndex={-1}
           className={
-            (page === "workspace" || page === "mcp")
+            (page === "workspace" || page === "mcp" || page === "generate-workspace")
               ? "studio-content workspace-content"
               : "studio-content"
           }
         >
+          {page === "generate-workspace" && <GenerateWorkspace key={revision} />}
           {page === "context-ring-live" && <ContextRing key={revision} production />}
           {page === "context-ring" && <ContextRing key={revision} />}
           {page === "mcp" && <McpManagement key={revision} />}

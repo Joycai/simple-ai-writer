@@ -1,3 +1,4 @@
+import { GenerateDialog } from "./GenerateDialog";
 import { RetrievalProgressText } from "./RetrievalProgressText";
 import { documentWindowLimit } from "../../lib/context/documentRetrievalPolicy";
 import { semanticPrefs, subscribeSemanticPrefs } from "../../lib/context/semanticPrefs";
@@ -14,10 +15,8 @@ import { SemanticReport } from "./SemanticReport";
  *   right — what the run produced: which lore was actually injected, the
  *           execution log, and the streamed result.
  *
- * The context-allocation bar is the panel's centrepiece: it forecasts, live,
- * how the model's window will be divided *before* anything is sent, so the
- * author can trade recap for lore (or the reverse) with the chips right under
- * it instead of guessing.
+ * Task selection and reference management open bounded dialogs. Task options
+ * stay in their own section; the footer ring opens the live input forecast.
  */
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -87,7 +86,7 @@ import {
 } from "../../lib/context/memory";
 import {
   categoryLabel, defaultTask, findTask, profileLabel, taskDesc, taskLabel,
-  visibleTaskGroups, type ResolvedTask,
+  visibleTaskGroups,
 } from "../../lib/profile";
 import { BOOK_PREV_TAIL_NEAR_START_CHARS } from "../../lib/context/bookContext";
 import {
@@ -182,6 +181,7 @@ function SectionHead({
  * the ceiling every segment is competing for — but changing it is one hop away.
  */
 function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
+  const [open, setOpen] = useState(false);
   const { t } = useTranslation();
   const terms = useTerms();
   const contextUtilization = useAppStore((s) => s.contextUtilization);
@@ -202,6 +202,23 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
   const total = forecast ? forecast.segments.reduce((n, s) => n + s.chars, 0) : 0;
 
   return (
+    <>
+    <button type="button" className={styles.forecastRing} onClick={() => setOpen(true)}
+      aria-haspopup="dialog" aria-expanded={open} aria-label={forecast ? `${t("ai.panel.contextAllocation")} · ${formatBudget(forecast.usedTokens)} / ${formatBudget(forecast.ceilingTokens)} tk` : t("ai.panel.contextAllocation")}
+      title={forecast ? `${formatBudget(forecast.usedTokens)} / ${formatBudget(forecast.ceilingTokens)} tk` : t("ai.panel.contextUtilizationUnset")}>
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" className={styles.ringTrack} />
+        {forecast && total > 0 && forecast.segments.map((seg, index) => (
+          <circle key={seg.key} cx="12" cy="12" r="9" pathLength="100"
+            className={`${styles.ringArc} ${styles[`allocSeg_${seg.key}`]}`}
+            strokeDasharray={`${seg.chars / total * 100} 100`}
+            strokeDashoffset={-forecast.segments.slice(0, index).reduce((n, item) => n + item.chars, 0) / total * 100}
+            transform="rotate(-90 12 12)" />
+        ))}
+        {!forecast && <text x="12" y="16" textAnchor="middle">?</text>}
+      </svg>
+    </button>
+    {open && <GenerateDialog title={t("ai.panel.contextAllocation")} onClose={() => setOpen(false)}>
     <div className={styles.section}>
       <SectionHead
         label={t("ai.panel.contextAllocation", { defaultValue: "上下文分配" })}
@@ -266,7 +283,7 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
         </span>
         <button
           className={styles.linkBtn}
-          onClick={() => openSettings("context-memory")}
+          onClick={() => { setOpen(false); openSettings("context-memory"); }}
           title={t("ai.panel.contextUtilizationGoHint", {
             defaultValue: "在「设置 · 上下文与记忆」里调",
           })}
@@ -280,10 +297,9 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
         </span>
       </div>
 
-      {/* Directly below 窗口占用: both answer "how much does this run cost me",
-          one in prompt tokens and one in thinking tokens. */}
-      <ReasoningControls variant="row" />
     </div>
+    </GenerateDialog>}
+    </>
   );
 }
 
@@ -427,6 +443,7 @@ function LoreSection({
   charsPerToken: number;
 }) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
   const terms = useTerms();
   const knowledgeLabel = useSectionLabel("knowledge");
   const loreBudgetTokens = useAppStore((s) => s.loreBudgetTokens);
@@ -470,8 +487,30 @@ function LoreSection({
 
   return (
     <div className={styles.section}>
+      <SectionHead label={t("ai.panel.referenceMaterials")} action={
+        <button type="button" className={styles.linkBtn} aria-haspopup="dialog" onClick={() => setOpen(true)}>{t("ai.panel.managePins")}</button>
+      } />
+      <div className={styles.hintLine}>{t("ai.panel.pinsSummary", { count: selectedEntities.length, kb: terms.kb })}</div>
+      <div className={styles.chipGroup}>
+        {selectedEntities.slice(0, 2).map(entity => <span key={entity.dirPath} className={styles.pinnedChip}>
+          <button type="button" className={styles.linkBtn} onClick={() => setOpen(true)}>{entity.name}</button>
+          <button type="button" className={styles.linkBtn} aria-label={t("ai.panel.removePin", { name: entity.name })}
+            onClick={() => {
+              if (selectedPaths.includes(entity.dirPath)) toggle(entity.dirPath);
+              entity.facets.forEach(facet => {
+                const path = `${entity.dirPath}#${facet.file}`;
+                if (selectedPaths.includes(path)) toggle(path);
+              });
+            }}><X size={12} /></button>
+        </span>)}
+        {selectedEntities.length > 2 && <button type="button" className={styles.linkBtn} onClick={() => setOpen(true)}>
+          {t("ai.panel.morePins", { count: selectedEntities.length - 2 })}</button>}
+      </div>
+      {open && <GenerateDialog title={t("ai.panel.managePins")} onClose={() => setOpen(false)}>
+      <p className={styles.hintLine}>{t("ai.panel.pinsExplanation", { kb: terms.kb })}</p>
+      <details><summary>{t("ai.panel.loreBudget", { entry: terms.entry })} · {formatBudget(loreBudgetTokens)} tk</summary>
       <SectionHead
-        label={t("ai.panel.continueLorePicker", { entry: terms.entry })}
+        label={t("ai.panel.loreBudget", { entry: terms.entry })}
         action={
           <div className={styles.chipGroup}>
             {LORE_BUDGET_OPTIONS.map((n) => (
@@ -509,6 +548,7 @@ function LoreSection({
         }
       />
 
+      </details>
       <div className={styles.chipGroup}>
         <button
           type="button"
@@ -530,6 +570,7 @@ function LoreSection({
 
       <input
         className={styles.searchInput}
+        aria-label={t("ai.panel.continueLoreSearch", { entry: terms.entry })}
         placeholder={t("ai.panel.continueLoreSearch", { entry: terms.entry })}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
@@ -613,6 +654,7 @@ function LoreSection({
           })}
         </div>
       )}
+      </GenerateDialog>}
     </div>
   );
 }
@@ -835,6 +877,9 @@ function ErrorBlock({
 
 export function AiPanel() {
   const { t, i18n } = useTranslation();
+  const isZh = i18n.language.startsWith("zh");
+  const [taskPickerOpen, setTaskPickerOpen] = useState(false);
+  const [taskSearch, setTaskSearch] = useState("");
   const {
     isRunning, retrievalProgress, drafts, activeDraftId, error, agentLog, taskWorkspace,
     loreReport, sourceFilePath, outputEditTarget, lastMessages,
@@ -1033,8 +1078,8 @@ export function AiPanel() {
   const setAdditionalKnowledge = useComposerStore((s) => s.setPanelKnowledge);
 
   // Extra requirement for polish / rewrite / summary
-  const requirement = useComposerStore((s) => s.panelRequirement);
-  const setRequirement = useComposerStore((s) => s.setPanelRequirement);
+  const requirement = useComposerStore((s) => s.panelRequirements[task.id] ?? "");
+  const setRequirement = (value: string) => useComposerStore.getState().setPanelRequirement(value, task.id);
 
   const customInstr = useComposerStore((s) => s.panelInstruction);
   const setCustomInstr = useComposerStore((s) => s.setPanelInstruction);
@@ -1259,74 +1304,6 @@ export function AiPanel() {
   // the "custom" id: every freeform task has this problem, and 遭遇/随机表 would
   // otherwise run on their briefing alone, with no situation to work from.
   const needsAsk = !!runTaskDef.freeform && !customInstr.trim();
-  const canRun =
-    hasConfig && !isRunning && !needsSelection && !needsAnchor && !needsAsk && focus.settled;
-
-  // ── 换模型重试 ──
-  // A safety refusal or a context overflow is not fixed by pressing 重试 again;
-  // it is fixed by a different model. One click therefore has to mean both
-  // "let me pick one" and "then run it": asking the author to re-find the run
-  // button afterwards is the part that makes the recovery feel like work.
-  //
-  // Armed only for as long as this failure is on screen. An author who changes
-  // model for their own reasons a minute later gets no phantom run, because
-  // clearing the error disarms it — and while the card *is* up, a model change
-  // is what the button just asked for.
-  const [retryArmed, setRetryArmed] = useState(false);
-  const failed = !!error || !!activeDraft?.error;
-  useEffect(() => { if (!failed) setRetryArmed(false); }, [failed]);
-  useEffect(() => {
-    if (!retryArmed) return;
-    setRetryArmed(false);
-    if (canRun) handleRun();
-    // Fires on the model change only — arming it must not run anything.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeModelId]);
-  const switchModelAndRetry = () => {
-    setRetryArmed(true);
-    openModelPicker();
-  };
-
-  // ⌘/Ctrl+Enter runs from anywhere in the panel, including the textareas.
-  const handlePanelKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canRun) {
-      e.preventDefault();
-      handleRun();
-    }
-  };
-
-  // Flatten lore index to searchable list
-  const isZh = i18n.language.startsWith("zh");
-  const allLoreEntities = indexCategories(loreIndex).flatMap((cat) =>
-    (loreIndex[cat.id] ?? []).map((entity) => ({
-      ...entity,
-      categoryLabel: categoryLabel(cat, isZh),
-    }))
-  );
-  const toggleLorePath = (dirPath: string) => {
-    setSelectedLorePaths((prev) => {
-      const next = prev.includes(dirPath)
-        ? prev.filter((p) => p !== dirPath)
-        : [...prev, dirPath];
-      savePinnedLore(projectPath, next);
-      return next;
-    });
-  };
-
-  // Only count/label pins that still resolve to an existing entity or facet —
-  // a deleted lore entry can leave a stale path in storage, harmless but
-  // shouldn't inflate the badge (it is also ignored downstream when assembling
-  // context). Facet pins use the "dirPath#file" form (see loreSelect).
-  const pinnedCount = selectedLorePaths.filter((p) => {
-    // Whole string matching an entity dirPath = entity pin, even if the path
-    // itself contains '#' — mirror loreSelect's index-aware resolution.
-    if (allLoreEntities.some((e) => e.dirPath === p)) return true;
-    const [pin] = parsePins([p]);
-    if (!pin.facetFile) return false;
-    const entity = allLoreEntities.find((e) => e.dirPath === pin.dirPath);
-    return !!entity && (entity.facets ?? []).some((f) => f.file === pin.facetFile);
-  }).length;
-
   // ── Context forecast ────────────────────────────────────────────────────────
   // Must resolve the same way runTask does, or the forecast sizes a prompt the
   // author is not actually going to send.
@@ -1405,6 +1382,73 @@ export function AiPanel() {
   // is one, so the panel never shows two different token counts for one block.
   const charsPerToken = forecast?.charsPerToken ?? 3;
 
+  const canRun =
+    hasConfig && !isRunning && !needsSelection && !needsAnchor && !needsAsk && focus.settled && !forecast?.over;
+
+  // ── 换模型重试 ──
+  // A safety refusal or a context overflow is not fixed by pressing 重试 again;
+  // it is fixed by a different model. One click therefore has to mean both
+  // "let me pick one" and "then run it": asking the author to re-find the run
+  // button afterwards is the part that makes the recovery feel like work.
+  //
+  // Armed only for as long as this failure is on screen. An author who changes
+  // model for their own reasons a minute later gets no phantom run, because
+  // clearing the error disarms it — and while the card *is* up, a model change
+  // is what the button just asked for.
+  const [retryArmed, setRetryArmed] = useState(false);
+  const failed = !!error || !!activeDraft?.error;
+  useEffect(() => { if (!failed) setRetryArmed(false); }, [failed]);
+  useEffect(() => {
+    if (!retryArmed) return;
+    setRetryArmed(false);
+    if (canRun) handleRun();
+    // Fires on the model change only — arming it must not run anything.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeModelId]);
+  const switchModelAndRetry = () => {
+    setRetryArmed(true);
+    openModelPicker();
+  };
+
+  // ⌘/Ctrl+Enter runs from anywhere in the panel, including the textareas.
+  const handlePanelKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canRun) {
+      e.preventDefault();
+      handleRun();
+    }
+  };
+
+  // Flatten lore index to searchable list
+  const allLoreEntities = indexCategories(loreIndex).flatMap((cat) =>
+    (loreIndex[cat.id] ?? []).map((entity) => ({
+      ...entity,
+      categoryLabel: categoryLabel(cat, isZh),
+    }))
+  );
+  const toggleLorePath = (dirPath: string) => {
+    setSelectedLorePaths((prev) => {
+      const next = prev.includes(dirPath)
+        ? prev.filter((p) => p !== dirPath)
+        : [...prev, dirPath];
+      savePinnedLore(projectPath, next);
+      return next;
+    });
+  };
+
+  // Only count/label pins that still resolve to an existing entity or facet —
+  // a deleted lore entry can leave a stale path in storage, harmless but
+  // shouldn't inflate the badge (it is also ignored downstream when assembling
+  // context). Facet pins use the "dirPath#file" form (see loreSelect).
+  const pinnedCount = selectedLorePaths.filter((p) => {
+    // Whole string matching an entity dirPath = entity pin, even if the path
+    // itself contains '#' — mirror loreSelect's index-aware resolution.
+    if (allLoreEntities.some((e) => e.dirPath === p)) return true;
+    const [pin] = parsePins([p]);
+    if (!pin.facetFile) return false;
+    const entity = allLoreEntities.find((e) => e.dirPath === pin.dirPath);
+    return !!entity && (entity.facets ?? []).some((f) => f.file === pin.facetFile);
+  }).length;
+
   /** 提高预算 → step the lore budget up to the next preset tier. */
   const raiseLoreBudget = () => {
     const next = LORE_BUDGET_OPTIONS.find((n) => n > loreBudgetTokens);
@@ -1456,41 +1500,35 @@ export function AiPanel() {
               <div className={styles.emptyHint}>{t("ai.panel.noProvider")}</div>
             ) : (
               <>
-                {/* ── Task ── */}
-                <div className={styles.section}>
-                  <SectionHead label={t("ai.panel.taskLabel", { defaultValue: "任务" })} />
-                  {/* Whatever the enabled packs offer, however many — 自定义 is
-                      an ordinary entry in that list, not a hardcoded extra
-                      button. The base menu (`pack: null`) renders flat — it is
-                      the row every project has; each pack's own tasks follow as
-                      their own labelled row, so a bid task is findable without
-                      diluting the everyday writing row. */}
-                  {taskGroups.map((group) => {
-                    const renderSegment = (opt: ResolvedTask) => (
-                      <button
-                        key={opt.id}
-                        className={`${styles.taskSegment} ${task.id === opt.id ? styles.taskSegmentActive : ""}`}
-                        onClick={() => setSelectedTask(opt.id)}
-                        disabled={isRunning}
-                        title={taskDesc(opt, isZh, t) || undefined}
-                      >
-                        {taskLabel(opt, isZh, t)}
-                      </button>
-                    );
-                    return group.pack === null ? (
-                      <div key="base" className={styles.taskSegmented}>
-                        {group.tasks.map(renderSegment)}
-                      </div>
-                    ) : (
-                      <div key={group.pack.id} className={styles.packTaskGroup}>
-                        <span className={styles.packTaskEyebrow}>{profileLabel(group.pack, isZh)}</span>
-                        <div className={styles.taskSegmented}>
-                          {group.tasks.map(renderSegment)}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className={styles.generateHeader}>
+                  <div><span className={styles.sectionLabel}>{t("ai.panel.taskLabel")}</span>
+                    <strong className={styles.activeTask}>{currentTaskLabel}</strong>
+                    <span className={styles.hintLine}>{(() => {
+                      const group = taskGroups.find(g => g.tasks.some(item => item.id === task.id));
+                      return group?.pack ? profileLabel(group.pack, isZh) : t("ai.panel.generalTasks");
+                    })()}</span>
+                  </div>
+                  <button type="button" className={styles.chip} disabled={isRunning} aria-haspopup="dialog"
+                    onClick={() => { setTaskSearch(""); setTaskPickerOpen(true); }}>{t("ai.panel.changeTask")}</button>
                 </div>
+                {taskPickerOpen && <GenerateDialog title={t("ai.panel.changeTask")} onClose={() => setTaskPickerOpen(false)}>
+                  <input className={styles.searchInput} aria-label={t("ai.panel.searchTasks")} placeholder={t("ai.panel.searchTasks")}
+                    value={taskSearch} onChange={event => setTaskSearch(event.target.value)} />
+                  {taskGroups.map(group => {
+                    const name = group.pack ? profileLabel(group.pack, isZh) : t("ai.panel.generalTasks");
+                    const options = group.tasks.filter(opt => `${name} ${taskLabel(opt, isZh, t)} ${taskDesc(opt, isZh, t)}`.toLowerCase().includes(taskSearch.trim().toLowerCase()));
+                    return options.length > 0 && <section key={group.pack?.id ?? "base"} className={styles.section}>
+                      <SectionHead label={name} />
+                      {options.map(opt => <button type="button" key={opt.id}
+                        className={`${styles.taskChoice} ${task.id === opt.id ? styles.chipActive : ""}`}
+                        aria-pressed={task.id === opt.id} disabled={isRunning}
+                        onClick={() => { setSelectedTask(opt.id); setTaskPickerOpen(false); }}>
+                        <strong>{taskLabel(opt, isZh, t)}</strong><span>{taskDesc(opt, isZh, t)}</span>
+                      </button>)}
+                    </section>;
+                  })}
+                  {!taskGroups.some(group => group.tasks.some(opt => `${group.pack ? profileLabel(group.pack, isZh) : t("ai.panel.generalTasks")} ${taskLabel(opt, isZh, t)} ${taskDesc(opt, isZh, t)}`.toLowerCase().includes(taskSearch.trim().toLowerCase()))) && <p>{t("ai.panel.noTasksFound")}</p>}
+                </GenerateDialog>}
 
                 {/* ── Target + instruction ──
                     Enter-only animation, deliberately: an AnimatePresence
@@ -1503,12 +1541,13 @@ export function AiPanel() {
                     task switch. */}
                 <motion.div
                   key={selectedTask}
-                  className={styles.section}
+                  className={`${styles.section} ${styles.taskConfiguration}`}
                   variants={sectionVariants}
                   initial="initial"
                   animate="animate"
                   transition={springPanel}
                 >
+                    <SectionHead label={t("ai.panel.taskConfiguration")} />
                     {/* Continue has a target too — it just isn't a selection. Name
                         the file and the spot the passage will be written from and
                         inserted at, so "where does this land?" is never a guess. */}
@@ -1764,37 +1803,18 @@ export function AiPanel() {
                             onChange={(e) => setOutline(e.target.value)}
                           />
                         </ExtraSection>
-                        <ExtraSection
-                          label={t("ai.panel.continueExtraKnowledge")}
-                          badge={additionalKnowledge.trim() ? "✓" : undefined}
-                        >
-                          <textarea
-                            className={styles.extraTextarea}
-                            rows={4}
-                            placeholder={t("ai.panel.continueExtraKnowledgePlaceholder", { kb: terms.kb })}
-                            value={additionalKnowledge}
-                            onChange={(e) => setAdditionalKnowledge(e.target.value)}
-                          />
-                        </ExtraSection>
+
                       </>
                     ) : (
                       <textarea
                         className={styles.textarea}
                         rows={3}
+                        aria-label={t("ai.panel.taskRequirement")}
                         placeholder={t("ai.panel.taskRequirementPlaceholder")}
                         value={requirement}
                         onChange={(e) => setRequirement(e.target.value)}
                       />
                     )}
-                </motion.div>
-
-                <hr className={styles.divider} />
-
-                {/* ── Context allocation ── */}
-                <ContextAllocation forecast={forecast} />
-
-                <hr className={styles.divider} />
-
                 {/* ── Draft count ──
                     Hidden for the tasks that can't fan out (agent writes to disk;
                     continue shares one execution log) rather than shown disabled —
@@ -1846,6 +1866,8 @@ export function AiPanel() {
                   </div>
                 )}
 
+                </motion.div>
+
                 {/* ── Story memory (only where the profile's documents use it) ── */}
                 {usesMemory && (
                   <>
@@ -1867,6 +1889,23 @@ export function AiPanel() {
                   charsPerToken={charsPerToken}
                 />
 
+                {isContinue && (
+                        <ExtraSection
+                          label={t("ai.panel.continueExtraKnowledge")}
+                          badge={additionalKnowledge.trim() ? "✓" : undefined}
+                        >
+                          <textarea
+                            className={styles.extraTextarea}
+                            rows={4}
+                            placeholder={t("ai.panel.continueExtraKnowledgePlaceholder", { kb: terms.kb })}
+                            value={additionalKnowledge}
+                            onChange={(e) => setAdditionalKnowledge(e.target.value)}
+                          />
+                        </ExtraSection>
+                )}
+
+                <div className={styles.generateHeader}><span className={styles.sectionLabel}>{t("ai.panel.runtimeSettings")}</span><ReasoningControls variant="footer" /></div>
+                {prompts.some(p => p.scene === "system") && <details className={styles.runtimeDetails}><summary>{t("ai.panel.advancedSettings")}</summary>
                 {/* System-prompt override lives at the bottom: set once, rarely touched. */}
                 {prompts.some((p) => p.scene === "system") && (
                   <div className={styles.controlRow}>
@@ -1887,6 +1926,7 @@ export function AiPanel() {
                     />
                   </div>
                 )}
+                </details>}
               </>
             )}
           </div>
@@ -1908,9 +1948,13 @@ export function AiPanel() {
             </div>
           )}
 
+          {forecast?.over && <div className={styles.focusNotice} role="alert">{t("ai.panel.allocOver", {
+            used: formatBudget(forecast.usedTokens), ceiling: formatBudget(forecast.ceilingTokens),
+          })}</div>}
           {/* Sticky action footer — cost forecast + Run/Stop, always reachable */}
           {hasConfig && (
             <div className={styles.configFooter}>
+              <ContextAllocation forecast={forecast} />
               <div className={styles.estimate}>
                 <span>
                   {t("ai.panel.estInput", { defaultValue: "预计输入" })}{" "}
