@@ -11,13 +11,15 @@
  */
 
 import { readPref, writePref } from "../prefs";
+import { distributionAllows } from "../distribution";
 
 const KEY = "app:comfyuiBeta";
 
 export function isComfyUiEnabled(): boolean {
-  return readPref(KEY) === "1";
+  return distributionAllows("comfyui") && readPref(KEY) === "1";
 }
 
 export function setComfyUiEnabled(enabled: boolean): void {
+  if (!distributionAllows("comfyui")) return;
   writePref(KEY, enabled ? "1" : "0");
 }

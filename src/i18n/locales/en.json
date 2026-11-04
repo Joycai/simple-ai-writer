@@ -5395,5 +5395,10 @@
     "blocked": "Sharing was not authorized or has been paused. Local editing is available; manage permission in Settings → About → Privacy and sharing.",
     "redirectBlocked": "The service requested a redirect. No request was forwarded. Check the final address in your service configuration and authorize it before retrying.",
     "ready": "Online requests require permission for their recipient and purpose."
+  },
+  "distribution": {
+    "featureUnavailable": "This feature is unavailable in the App Store edition. Your saved data is preserved.",
+    "storeScope": "The App Store edition excludes terminal commands, roleplay, Sakura translation and ComfyUI. The other experimental features remain available with their existing switches.",
+    "savedModelUnavailable": "This model configuration is preserved, but its dedicated feature cannot run in the App Store edition."
   }
 }

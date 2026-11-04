@@ -1,6 +1,6 @@
 # Mac App Store 上架审查与分阶段改造计划
 
-> Status: `partial` — P0 已实现；P1 的项目书签、重新授权与渠道身份隔离已实现，见 §8。P2 告知 / 同意 / 撤回与联网边界已实现，见 §9；P1 原生验收、P2 政策发布 / 原生验收及 P3–P5 待完成。
+> Status: `partial` — P0 已实现；P1 的项目书签、重新授权与渠道身份隔离已实现，见 §8。P2 告知 / 同意 / 撤回与联网边界已实现，见 §9；P3 功能边界、固定架构构建与静态审计已实现，见 §10；P1 / P2 / P3 原生验收、政策发布及 P4–P5 待完成。
 > 范围：macOS 的 Mac App Store；不包含 iOS 移植。保留现有站外分发渠道。
 
 ## 1. 已确认的产品决策
@@ -336,3 +336,33 @@ P0 本地验证结果（Apple Silicon，2.0.10）：
 - 商店 WebKit 下主窗 / HTML 预览 / 打印的网络隔离和本地资源渲染，PDF / 字体下载与重定向兼容性。
 - 服务实际保留 / 删除条款、转发链及审核演示账户的人工核对；不把本地撤回说成远端删除。
 - P1 §8 所有未完成的原生验收继续保持待验收。
+
+
+## 10. P3 实施记录（2026-11-04）
+
+状态：`partial`。版本 **2.0.13** 完成可在仓库验证的功能冻结、构建边界与验收工具；完整沙盒回归尚未完成。详见 [原生验收手册](mac-app-store-acceptance.md)。P1 原生文件授权 / 重启验收、P2 原生隐私流程和政策发布继续 **待完成**。
+
+### 已确认范围与实现理由
+
+作者确认只关闭角色扮演、Sakura 翻译和 ComfyUI，其余 Beta 保留原有默认值、开关及审批；终端继续按 P0 排除。不能将“保留”写成“已通过沙盒验收”。`distributionAllows` 只信任启动时的编译渠道，未知渠道拒绝这三项；站外版保持既有行为。设置隐藏关闭项，保存过的专用模型显示不可用说明，不删除旧配置。
+
+限制同时落在 flag、模型选择 / 子代理绑定、翻译工具路由和注册执行、翻译请求、Comfy 图片生成与探测、角色任务调度及 runtime 的两个角色 preset 上。因此历史偏好、导入配置、已排队任务或恢复任务不能仅凭旧开关重新启用这些入口。保留其他模型路径和全部原始数据，未来可单独评估开放。
+
+商店首发候选为 **Apple Silicon / macOS 14+**，实机通过后才正式承诺；Intel 暂列后续。构建入口固定 `aarch64-apple-darwin` 和最低系统 14.0，拒绝覆盖 target / config / features 的参数，避免无意生成范围外包；站外配置不变。新路径为 `src-tauri/target/app-store/aarch64-apple-darwin/release/bundle/macos/Simple AI Writer Store.app`。
+
+### 包与隐私清单审查
+
+`pnpm audit:appstore` 对最终包做只读审计，支持 `--app` 和 `--output`，逐项报告而不把静态通过等同上架就绪。2.0.13 包为 arm64、最低系统 14.0、独立 Bundle ID，六项权限与配置一致；ad-hoc 签名完整性通过。外部文件仅 Info.plist、主程序、图标和签名资源，前端资源嵌入程序；动态链接仅 Apple 系统库。没有正式签名团队、描述文件或 PrivacyInfo.xcprivacy，`submissionReady` 明确为 false。
+
+依赖盘点使用锁文件及 `cargo tree --locked --offline --target aarch64-apple-darwin -e normal`：Tauri 2.11.5、wry 0.55.1、dialog 2.7.3、fs 2.5.2、HTTP 2.6.0（本地 vendor）、notification 2.4.0、opener 2.5.5、SQL 2.4.1、reqwest 0.12.28、keyring 4.2.0、security-framework 3.7.0；未升级依赖。动态库审计不能证明静态依赖不涉及隐私，SDK 收集行为与清单仍需逐项复核。
+
+2026-11-04 核对 Apple [Privacy manifest files](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files) 与 [Required reason API](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api)：数据收集声明面向全部平台，而后者列出的 required-reason 平台为 iOS、iPadOS、tvOS、visionOS、watchOS。不能机械地将 iOS reason code 套入本 macOS 项目，也不能因 macOS 未列入就跳过收集 / SDK 审查。本次不伪造空收集清单；最终声明和商店隐私标签仍待真实服务处理方式确认，与 P2 政策发布一起阻止提交。
+
+### 本地验证与证据边界
+
+- TypeScript 通过；离线 Vitest **467 文件 / 7073 项通过**，覆盖关闭项的旧偏好、工具恢复、模型绑定及联网前拒绝；未调用付费 live 模型。
+- Rust 站外 **176 通过 / 2 ignored**，商店 **159 通过 / 2 ignored**，HTTP 插件 **12 通过**；双渠道 clippy、fmt、站外 locked build 通过。独立 server 的 fmt / clippy / locked build 通过，测试 **56 通过**。
+- 商店完整前端 / 原型 / Rust 构建通过，包 **33.34 MiB**；六项静态审计通过。当前构建主机 arm64 / macOS 27.0.1，不构成 macOS 14 或任何系统的原生交互验收。
+- 新增仅开发使用的合成导入样例生成器和回环 HTTP 服务。样例生成及源文件哈希校验通过；服务的 IPv4 / IPv6 正常流、慢流取消、断流、307 和日志清空已用本机 Node 客户端实测。它们不随应用分发，也不代表打包后的 WebKit 已通过同样测试。
+
+原生包的编辑 / DB / 导入导出 / 打印 / 字体 / 通知 / 钥匙串 / 网络，以及离线、权限拒绝、满盘、异常退出、升级和 OS 矩阵统一保留在验收手册中待完成。正式签名证书和描述文件仍未配置，遵照作者决定先完成本地代码与沙盒构建。

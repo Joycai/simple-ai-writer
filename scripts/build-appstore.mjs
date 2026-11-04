@@ -8,10 +8,17 @@ if (process.platform !== "darwin") {
   process.exit(1);
 }
 const root = fileURLToPath(new URL("../", import.meta.url));
-const result = spawnSync("pnpm", ["tauri", "build", "--config", "src-tauri/tauri.appstore.conf.json", ...process.argv.slice(2)], {
+const extra = process.argv.slice(2);
+if (extra.some(arg => !["--verbose", "-v", "--ci"].includes(arg))) {
+  console.error("Store target/config/features are frozen by this build entry point.");
+  process.exit(1);
+}
+const env = { ...process.env, MACOSX_DEPLOYMENT_TARGET: "14.0", CARGO_TARGET_DIR: fileURLToPath(new URL("../src-tauri/target/app-store", import.meta.url)) };
+delete env.TAURI_CONFIG;
+const result = spawnSync("pnpm", ["tauri", "build", "--config", "src-tauri/tauri.appstore.conf.json", "--target", "aarch64-apple-darwin", ...extra], {
   cwd: root,
   stdio: "inherit",
-  env: { ...process.env, CARGO_TARGET_DIR: fileURLToPath(new URL("../src-tauri/target/app-store", import.meta.url)) },
+  env,
 });
 if (result.error) console.error(result.error.message);
 process.exit(result.status ?? 1);

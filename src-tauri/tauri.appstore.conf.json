@@ -13,7 +13,8 @@
     ],
     "category": "Productivity",
     "macOS": {
-      "entitlements": "Entitlements.appstore.plist"
+      "entitlements": "Entitlements.appstore.plist",
+      "minimumSystemVersion": "14.0"
     }
   },
   "app": {

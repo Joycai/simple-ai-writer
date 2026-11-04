@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const channel = vi.hoisted(() => ({ terminal: true }));
-vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal }));
+vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal, distributionAllows: () => true }));
 
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invoke(...args) }));

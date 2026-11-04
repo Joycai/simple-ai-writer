@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const channel = vi.hoisted(() => ({ terminal: true }));
-vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal }));
+vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal, distributionAllows: () => true }));
 
 const prefs = new Map<string, string>();
 vi.mock("../../prefs", () => ({

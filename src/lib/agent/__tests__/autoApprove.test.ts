@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
 const channel = vi.hoisted(() => ({ terminal: true }));
-vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal }));
+vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal, distributionAllows: () => true }));
 
 import { canGrantCommand, chatAutoApproveKey, grants, grantsAppend, grantsCommand, isAutoApprovable } from "../autoApprove";
 

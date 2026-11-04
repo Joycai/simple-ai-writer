@@ -14,15 +14,17 @@
  */
 
 import { readPref, writePref } from "../prefs";
+import { distributionAllows } from "../distribution";
 import { DEFAULT_LINES_PER_CHUNK } from "./chunk";
 
 const KEY = "app:translateBeta";
 
 export function isTranslateEnabled(): boolean {
-  return readPref(KEY) === "1";
+  return distributionAllows("sakura") && readPref(KEY) === "1";
 }
 
 export function setTranslateEnabled(enabled: boolean): void {
+  if (!distributionAllows("sakura")) return;
   writePref(KEY, enabled ? "1" : "0");
 }
 

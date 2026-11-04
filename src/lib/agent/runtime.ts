@@ -12,6 +12,7 @@
  * message to the same history and call runAgent again.
  */
 
+import { distributionAllows } from "../distribution";
 import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
@@ -707,6 +708,9 @@ export interface AgentRuntimeOptions extends ConnOptions {
 
 export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResult> {
   const { preset } = opts;
+  if (!distributionAllows("roleplay") && ["roleplay-character", "roleplay-narrator"].includes(preset.id)) {
+    throw new Error(i18n.t("distribution.featureUnavailable"));
+  }
   const history = opts.messages;
   /**
    * The toolset as it stands, growing as the run earns groups (see

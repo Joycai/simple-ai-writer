@@ -1,3 +1,5 @@
+import { distributionAllows } from "../distribution";
+import i18n from "../../i18n";
 import { costReportHeaders, costReportingPlatform } from "./reportedCost";
 import { imageEvents } from "./imageEvents";
 import type { ImageOptions } from "./imageOptions";
@@ -326,6 +328,9 @@ async function readImageJson(res: Response, label: string, conn: ImageConn, req:
 }
 
 export async function generateImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
+  if (!distributionAllows("comfyui") && effectiveImageRoute(conn.standard, conn) === "comfyui") {
+    throw new Error(i18n.t("distribution.featureUnavailable"));
+  }
   conn = { ...conn, dialect: resolvedImageCaps(conn.modelId, { dialect: conn.dialect })?.dialect };
   let requestId: string = crypto.randomUUID();
   const evidence: ImageEvidence = { outcome: "failed", spec: { size: req.imageSize ?? req.size ?? (typeof req.extraBody?.resolution === "string" ? req.extraBody.resolution : undefined), quality: req.quality } };

@@ -31,3 +31,9 @@ export function requiresFileAuthorization(): boolean {
 
 /** Unknown desktop channels cannot send before privacy initialization. */
 export function requiresPrivacyConsent(): boolean { return distribution !== "direct"; }
+
+/** First-release product scope; independent of user Beta preferences. */
+const STORE_FEATURES = { roleplay: false, sakura: false, comfyui: false };
+export function distributionAllows(feature: keyof typeof STORE_FEATURES): boolean {
+  return distribution === "direct" || (distribution === "app-store" && STORE_FEATURES[feature]);
+}

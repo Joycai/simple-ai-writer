@@ -910,7 +910,7 @@ document import into the workspace:
 - `notify.ts` (系统通知 — the OS ping for "waiting for your approval" / "run finished" / "run failed", each its own switch, off by default, silent while the window has focus; the only thing it must never carry is the model's or the document's text, see `docs/reference/architecture.md` → 系统通知)
 
 #### 平台与能力探测
-- `distribution.ts` 在应用启动前从 Rust 编译渠道读取终端能力；未知 / 失败保持关闭，不从偏好推断渠道。商店构建、tools 降级与恢复边界见 [Mac App Store P0](../feature/mac-app-store-plan.md#7-p0-实施记录2026-11-04)。
+- `distribution.ts` 的 `distributionAllows` 同时约束商店角色扮演、Sakura 与 ComfyUI：flag、模型绑定、请求及恢复执行均检查，旧数据保留；P3 构建审计与原生待验收清单见 [验收手册](../feature/mac-app-store-acceptance.md)。它在应用启动前从 Rust 编译渠道读取终端能力；未知 / 失败保持关闭，不从偏好推断渠道。商店构建、tools 降级与恢复边界见 [Mac App Store P0](../feature/mac-app-store-plan.md#7-p0-实施记录2026-11-04)。
 - `http.ts`
   - `networkDiagnostics.ts` 提取 Rust HTTP IPC 错误中的原因链；图片与聊天日志都写入 `network`。插件诊断补丁、脱敏契约与复现步骤见 [network-diagnostics.md](network-diagnostics.md)。
   - Rust HTTP 插件的共用 `client_builder()` 关闭三项 TCP 保活，避免当前网络路径把长等待误判成失活；各调用的 deadline、取消和 URL scope 保留。真实 socket 与取消回归也见同一文档。

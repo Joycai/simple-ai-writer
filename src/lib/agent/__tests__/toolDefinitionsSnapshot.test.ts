@@ -13,7 +13,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const channel = vi.hoisted(() => ({ terminal: true }));
-vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal }));
+vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal, distributionAllows: () => true }));
 
 // The registry reaches the Tauri fs at import time through the write tools;
 // nothing here executes one. Same mock set as agentToolSchema.test.ts, minus

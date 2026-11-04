@@ -12,6 +12,8 @@
  * Nothing in this file may import `./runtime`.
  */
 
+import { distributionAllows } from "../distribution";
+import { effectiveImageRoute } from "../ai/imageRoute";
 import i18n from "../../i18n";
 import { serverToolsSent } from "../ai/serverTools";
 import { canSeeImages, chatModels, isAsrOnly, isTranslateOnly, readsPdf, type Model, type Provider } from "../ai/configDb";
@@ -166,10 +168,12 @@ export function subAgentModel(
    */
   providers?: readonly Provider[],
 ): Model | null {
+  if (kind === "translate" && !distributionAllows("sakura")) return null;
   const cfg = subs[kind];
   if (!cfg?.enabled || !cfg.modelId) return null;
   const model = models.find((m) => m.id === cfg.modelId);
   if (!model) return null;
+  if (kind === "imagegen" && !distributionAllows("comfyui") && effectiveImageRoute("openai", model.caps) === "comfyui") return null;
   if (kind === "vision" && !canSeeImages(model)) return null;
   if (kind === "search" && !serverToolsSent(model, providers)?.includes("web_search")) return null;
   if (kind === "pdf" && !readsPdf(model, providers ? providerFor(model, providers) : undefined)) return null;

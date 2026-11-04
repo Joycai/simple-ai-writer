@@ -35,3 +35,11 @@ it("IPC failure cannot enable terminal", async () => {
   expect(channel.terminalAvailable()).toBe(false);
   expect(channel.requiresFileAuthorization()).toBe(true);
 });
+
+it.each(["app-store", "direct", "invalid"])("freezes the selected features for %s", async (value) => {
+  invoke.mockResolvedValue(value);
+  const channel = await import("../distribution");
+  for (const feature of ["roleplay", "sakura", "comfyui"] as const) expect(channel.distributionAllows(feature)).toBe(false);
+  await channel.hydrateDistribution();
+  for (const feature of ["roleplay", "sakura", "comfyui"] as const) expect(channel.distributionAllows(feature)).toBe(value === "direct");
+});

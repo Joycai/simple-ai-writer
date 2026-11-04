@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const channel = vi.hoisted(() => ({ terminal: true }));
-vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal }));
+vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal, distributionAllows: () => true }));
 
 const exists = vi.fn(async (_path: string) => true);
 vi.mock("../../fs/fileio", () => ({ fileExists: (p: string) => exists(p) }));

@@ -21,7 +21,7 @@
 import type { ToolDefinition } from "../ai/types";
 import type { Model } from "../ai/configDb";
 import i18n from "../../i18n";
-import { terminalAvailable } from "../distribution";
+import { distributionAllows, terminalAvailable } from "../distribution";
 import { loreCategories, loreCategoryIds } from "../profile/active";
 import { categoryRef } from "../profile/model";
 import { type ToolCall, type ToolResult } from "./tools";
@@ -232,7 +232,7 @@ export function getToolDefinitions(
   const imageIds = ["generate_image", "edit_image", "redraw_lore_image"] as const;
   const imageTarget = ids.includes("search_tools") && searchable?.image?.length
     ? "search_tools" : ids.find((id) => imageIds.some((imageId) => id === imageId));
-  return ids.filter((id) => id !== "run_command" || terminalAvailable()).map((id) => {
+  return ids.filter((id) => (id !== "run_command" || terminalAvailable()) && (id !== "translate" || distributionAllows("sakura"))).map((id) => {
     const tool = REGISTRY[id];
     if (tool.describe) describeCtx ??= { searchable: searchable ?? allSearchable(), searchReadsPages };
     const definition = tool.describe && describeCtx
@@ -292,6 +292,9 @@ export async function executeRegisteredTool(
    */
   pending: readonly ToolId[] = [],
 ): Promise<ToolResult> {
+  if (call.name === "translate" && !distributionAllows("sakura")) {
+    return { toolCallId: call.id, content: "Error: Sakura translation is unavailable in this distribution." };
+  }
   if (call.name === "run_command" && !terminalAvailable()) {
     return { toolCallId: call.id, content: i18n.t("ai.approval.commandUnavailable") };
   }
