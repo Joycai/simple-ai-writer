@@ -1,3 +1,4 @@
+import { ForecastRing } from "./ForecastRing";
 import { generateTaskExtras } from "./generateTaskExtras";
 import { GenerateDialog } from "./GenerateDialog";
 import { RetrievalProgressText } from "./RetrievalProgressText";
@@ -203,21 +204,8 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
 
   return (
     <>
-    <button type="button" className={styles.forecastRing} onClick={() => setOpen(true)}
-      aria-haspopup="dialog" aria-expanded={open} aria-label={forecast ? `${t("ai.panel.contextAllocation")} · ${formatBudget(forecast.usedTokens)} / ${formatBudget(forecast.ceilingTokens)} tk` : t("ai.panel.contextAllocation")}
-      title={forecast ? `${formatBudget(forecast.usedTokens)} / ${formatBudget(forecast.ceilingTokens)} tk` : t("ai.panel.contextUtilizationUnset")}>
-      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="9" className={styles.ringTrack} />
-        {forecast && total > 0 && forecast.segments.map((seg, index) => (
-          <circle key={seg.key} cx="12" cy="12" r="9" pathLength="100"
-            className={`${styles.ringArc} ${styles[`allocSeg_${seg.key}`]}`}
-            strokeDasharray={`${seg.chars / total * 100} 100`}
-            strokeDashoffset={-forecast.segments.slice(0, index).reduce((n, item) => n + item.chars, 0) / total * 100}
-            transform="rotate(-90 12 12)" />
-        ))}
-        {!forecast && <text x="12" y="16" textAnchor="middle">?</text>}
-      </svg>
-    </button>
+    <ForecastRing segments={forecast?.segments ?? null} open={open} onClick={() => setOpen(true)}
+      label={forecast ? `${t("ai.panel.contextAllocation")} · ${formatBudget(forecast.usedTokens)} / ${formatBudget(forecast.ceilingTokens)} tk` : t("ai.panel.contextAllocation")} />
     {open && <GenerateDialog title={t("ai.panel.contextAllocation")} onClose={() => setOpen(false)}>
     <div className={styles.section}>
       <SectionHead

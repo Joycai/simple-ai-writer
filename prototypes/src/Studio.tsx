@@ -13,11 +13,13 @@ import { Select } from "../../src/components/common/Select";
 import { Foundations, Components } from "./System";
 import { McpManagement } from "./McpManagement";
 import { ContextRing } from "./ContextRing";
+import { ConsistencyWorkspace } from "./ConsistencyWorkspace";
 import { GenerateWorkspace } from "./GenerateWorkspace";
 import { Workspace } from "./Workspace";
 import { themes } from "./fixtures";
 
 const pages = [
+  { id: "consistency-workspace", label: "一致性核对工作区", number: "08", icon: LayoutPanelLeft },
   { id: "generate-workspace", label: "生成页重构", number: "07", icon: LayoutPanelLeft },
   { id: "context-ring-live", label: "正式圆环验收", number: "06", icon: Layers },
   { id: "context-ring", label: "上下文圆环", number: "05", icon: Layers },
@@ -128,11 +130,12 @@ export function Studio() {
           id="studio-content"
           tabIndex={-1}
           className={
-            (page === "workspace" || page === "mcp" || page === "generate-workspace")
+            (page === "consistency-workspace" || page === "workspace" || page === "mcp" || page === "generate-workspace")
               ? "studio-content workspace-content"
               : "studio-content"
           }
         >
+          {page === "consistency-workspace" && <ConsistencyWorkspace key={revision} />}
           {page === "generate-workspace" && <GenerateWorkspace key={revision} />}
           {page === "context-ring-live" && <ContextRing key={revision} production />}
           {page === "context-ring" && <ContextRing key={revision} />}

@@ -1,29 +1,4 @@
-/**
- * 一致性检查 — the document read back against the knowledge base. 设计稿 02d.
- *
- * Three moments, one protagonist each: fill the form → watch it check → read
- * the report. Everything else retreats to a line.
- *
- *   · The settings block is the whole panel before the first run and **folds to
- *     one line the moment 开始 is pressed** (locked while running, 「改范围重跑」
- *     after). Folding happens once, at the start, so the end of the run brings
- *     no layout jump; clicking the line re-opens the form *above* the report,
- *     which moves down rather than disappearing.
- *   · No segment strip. With several windows the execution log's header says
- *     「2/4 段核对中 · 1 完成 · 1 等待」 and each window is a card in the log; after
- *     the run the same facts become the report head's coverage band (solid =
- *     checked, hatched = not, square = failed) — which is the face that keeps
- *     「没查」 and 「没问题」 apart.
- *   · Findings appear the moment the checker records them; the log sits above
- *     them as one line, the evidence of "what is it doing now".
- *   · The stats line counts only what was actually checked, and the shortfall
- *     is said in the same line. An empty run is a sentence, not a green tick.
- *
- * Every finding is anchored to a verbatim quote (checked by the tool at record
- * time), so each card carries real buttons. 更新条目 navigates; the manuscript
- * is the author's to fix from here, and the knowledge base is the yardstick.
- */
-
+/** Consistency workspace: stable configuration, live progress and review results. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Crosshair, X } from "lucide-react";
@@ -47,7 +22,7 @@ import { resolveReviewScope, samePin, type ReviewScope } from "../../lib/consist
 import type { LorePin } from "../../lib/context/loreSelect";
 import {
   UNGROUPED, collectionViews, concreteScopeCollections, loreEntityCount, scopeHas, scopeLoreIndex,
-  type LoreEntity, type LoreIndex, type LoreScope,
+  type LoreEntity, type LoreIndex,
 } from "../../lib/lore";
 import { categoryLabel, findCategory } from "../../lib/profile";
 import { baseName, isSamePath } from "../../lib/paths";
@@ -56,9 +31,11 @@ import { TaskPanel } from "./TaskPanel";
 import { RoundLimitCard } from "./RoundLimitCard";
 import { taskDocRevision } from "../../lib/agent/logModel";
 import { AgentLog } from "./AgentLog";
-import { SubAgentChips } from "./SubAgentChips";
+import { CapabilityMenu } from "./CapabilityMenu";
+import { ForecastRing } from "./ForecastRing";
+import { GenerateDialog } from "./GenerateDialog";
 import { ReasoningControls } from "./ReasoningControls";
-import { ScopeMenu, type ScopeMenuAnchor } from "../lore/collections/ScopePicker";
+
 import styles from "./ConsistencyCheck.module.css";
 
 const ALL = "__all__";
@@ -117,31 +94,34 @@ export function ConsistencyCheck() {
   const report = useConsistencyStore((s) => s.report);
   const isScanning = useConsistencyStore((s) => s.isScanning);
   const error = useConsistencyStore((s) => s.error);
-  const settingsOpen = useConsistencyStore((s) => s.settingsOpen);
+  const [selected, setSelected] = useState<string[]>([]);
   const startedAt = useConsistencyStore((s) => s.startedAt);
   const scan = useConsistencyStore((s) => s.scan);
   const abort = useConsistencyStore((s) => s.abort);
   const loadScopeFor = useConsistencyStore((s) => s.loadScopeFor);
-  const setSettingsOpen = useConsistencyStore((s) => s.setSettingsOpen);
+
 
   useEffect(() => { loadScopeFor(projectPath); }, [projectPath, loadScopeFor]);
 
   const phase: "before" | "running" | "done" = isScanning ? "running" : report ? "done" : "before";
   const elapsed = useElapsed(startedAt, isScanning);
 
+  useEffect(() => { setSelected([]); }, [report, openFilePath, isScanning]);
+
   // ⌘↵ starts, Esc stops — the same keys the composer uses, on the surface
   // that has no composer.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || document.querySelector("dialog[open]")) return;
       if (e.key === "Escape" && isScanning) { e.preventDefault(); abort(); return; }
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !isScanning && (phase === "before" || settingsOpen)) {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !isScanning) {
         e.preventDefault();
         void scan();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [isScanning, phase, settingsOpen, scan, abort]);
+  }, [isScanning, scan, abort]);
 
   if (!openFilePath || !projectPath) {
     return (
@@ -153,7 +133,7 @@ export function ConsistencyCheck() {
           </div>
           {isScanning && <>
             <ReviewAgentProgress />
-            <button className={styles.stopBtn} onClick={abort}>{t("ai.panel.stop")}</button>
+            <button className={styles.stopBtn} onClick={abort}>{t("ai.consistency.workspace.stop")}</button>
           </>}
           {report && (
             <div className={styles.emptyText}>
@@ -170,118 +150,86 @@ export function ConsistencyCheck() {
     );
   }
 
-  return (
-    <div className={styles.root}>
-      <div className={styles.wrap}>
-        {phase === "before" ? (
-          <SettingsForm docText={content} filePath={openFilePath} />
-        ) : settingsOpen && phase === "done" ? (
-          <div className={styles.settingsPanel}>
-            <div className={styles.settingsPanelHead}>
-              <span className={styles.sectionLabel}>
-                {t("ai.consistency.settingsHead", { defaultValue: "范围 · 重点 · 段" })}
-              </span>
-              <span className={styles.sectionRule} />
-              <button className={styles.linkBtn} onClick={() => setSettingsOpen(false)}>
-                {t("ai.consistency.collapse", { defaultValue: "收起" })} <ChevronUp size={11} />
-              </button>
-            </div>
-            <SettingsForm docText={content} filePath={openFilePath} compact />
-            <div className={styles.settingsWarn}>
-              {t("ai.consistency.rerunWarn", {
-                defaultValue: "重新核对会丢掉这份报告里未处理的卡；已应用的替换留在{{doc}}里。",
-                doc: terms.doc,
-              })}
-            </div>
-            <div>
-              <button className={styles.btnPrimary} onClick={() => void scan()}>
-                {t("ai.consistency.rerun", { defaultValue: "重新核对" })}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <SettingsLine locked={phase === "running"} />
-        )}
-
-        {error && <div className={styles.error}>{error}</div>}
-
-        {phase !== "before" && <ReviewAgentProgress />}
-        {phase === "running" && <RunningBody elapsedMs={elapsed} />}
-        {phase === "done" && report && <ReportBody report={report} docText={content} openFilePath={openFilePath} />}
-      </div>
-
-      <Footer phase={phase} elapsedMs={elapsed} docText={content} />
+  return <div className={styles.root}>
+    <div className={styles.workspace}>
+      <aside className={styles.configuration}>
+        <div className={styles.configScroll}>
+          <SettingsForm docText={content} filePath={openFilePath} locked={isScanning} />
+        </div>
+        <ExecutionFooter phase={phase} elapsedMs={elapsed} docText={content} />
+      </aside>
+      <section className={styles.results}>
+        <header className={styles.resultHeader}>{t("ai.consistency.workspace.results")}</header>
+        <div className={styles.wrap}>
+          {error && <div className={styles.error}>{error}</div>}
+          {phase === "before" ? <div className={styles.emptyState}>
+            <CheckCircle2 size={36} strokeWidth={1.2} />
+            <div className={styles.emptyTitle}>{t("ai.consistency.workspace.emptyTitle")}</div>
+            <p className={styles.emptyText}>{t("ai.consistency.workspace.emptyText")}</p>
+          </div> : <ReviewAgentProgress />}
+          {phase === "running" && <RunningBody elapsedMs={elapsed} />}
+          {phase === "done" && report && <ReportBody report={report} docText={content} openFilePath={openFilePath}
+            selected={selected} onSelect={(id, checked) => setSelected(ids => checked ? [...ids, id] : ids.filter(value => value !== id))} />}
+        </div>
+        <ResultFooter selected={selected} onApplied={() => setSelected([])} />
+      </section>
     </div>
-  );
+  </div>;
 }
 
 // ─── Settings: the form ───────────────────────────────────────────────────────
 
-function SettingsForm({ docText, filePath, compact = false }: { docText: string; filePath: string; compact?: boolean }) {
+function SettingsForm({ docText, filePath, locked }: { docText: string; filePath: string; locked: boolean }) {
   const { t } = useTranslation();
   const terms = useTerms();
-  const scope = useConsistencyStore((s) => s.scope);
-  const focus = useConsistencyStore((s) => s.focus);
-  const setScope = useConsistencyStore((s) => s.setScope);
-  const setFocus = useConsistencyStore((s) => s.setFocus);
-  const report = useConsistencyStore((s) => s.report);
-  const index = useLoreStore((s) => s.index);
-  const declared = useProjectStore((s) => s.collections);
-
+  const scope = useConsistencyStore(s => s.scope);
+  const focus = useConsistencyStore(s => s.focus);
+  const setScope = useConsistencyStore(s => s.setScope);
+  const setFocus = useConsistencyStore(s => s.setFocus);
+  const report = useConsistencyStore(s => s.report);
+  const settingsOpen = useConsistencyStore(s => s.settingsOpen);
+  const setSettingsOpen = useConsistencyStore(s => s.setSettingsOpen);
+  const index = useLoreStore(s => s.index);
+  const declared = useProjectStore(s => s.collections);
+  const [draft, setDraft] = useState<ReviewScope | null>(null);
   const resolved = useMemo(() => resolveReviewScope(scope, index, declared), [scope, index, declared]);
-  const plan = useReviewForecast(docText, resolved.effective);
-
-  const lastChecked = report && isSamePath(report.filePath, filePath) ? report : null;
-
-  return (
-    <>
-      {!compact && (
-        <div className={styles.docLine}>
-          <span>{t("ai.consistency.docLead", { defaultValue: "核对{{doc}} ·", doc: terms.doc })}</span>
-          <span className={styles.docName}>{baseName(filePath)}</span>
-          <span className={styles.docMeta}>
-            {t("ai.consistency.docChars", { defaultValue: "{{n}} 字", n: formatChars(docText.length) })}
-            {lastChecked ? ` · ${t("ai.consistency.lastCheckedAgo", { defaultValue: "上次核对 {{ago}}", ago: formatDuration(Date.now() - (Date.now() - lastChecked.durationMs)) })}` : ""}
-          </span>
-        </div>
-      )}
-
-      <div className={styles.section}>
-        <div className={styles.sectionHead}>
-          <span className={styles.sectionLabel}>{t("ai.consistency.range", { defaultValue: "范围" })}</span>
-          <span className={styles.sectionRule} />
-          <span className={styles.sectionMeta}><ScopeMeta scope={resolved.effective} index={index} declared={declared} /></span>
-        </div>
-        <RangeControl scope={scope} resolved={resolved} index={index} declared={declared} onChange={setScope} />
-      </div>
-
-      <div className={styles.section}>
-        <div className={styles.sectionHead}>
-          <span className={styles.sectionLabel}>{t("ai.consistency.focus", { defaultValue: "重点" })}</span>
-          <span className={styles.sectionRule} />
-          <span className={styles.sectionMeta}>{t("ai.consistency.focusMeta", { defaultValue: "可空 · 空着＝全面核对" })}</span>
-        </div>
-        <input
-          className={styles.focusInput}
-          value={focus}
-          onChange={(e) => setFocus(e.target.value)}
-          placeholder={t("ai.consistency.focusPlaceholder", { defaultValue: "例如：只核对角色外貌 · 文中的数字与日期" })}
-        />
-      </div>
-
-      <div className={styles.section}>
-        <div className={styles.sectionHead}>
-          <span className={styles.sectionLabel}>{t("ai.chat.subagentChipsLabel", { defaultValue: "子代理" })}</span>
-          <span className={styles.sectionRule} />
-          <span className={styles.sectionMeta}>{t("ai.consistency.subagentsMeta", { defaultValue: "只能关" })}</span>
-          <ReasoningControls variant="compact" />
-        </div>
-        <SubAgentChips />
-      </div>
-
-      <Allocation plan={plan} docChars={docText.length} />
-    </>
-  );
+  const draftResolved = draft ? resolveReviewScope(draft, index, declared) : null;
+  const { first, more } = useScopeLabel(scope);
+  const changed = report && (JSON.stringify(report.scope) !== JSON.stringify(scope) || report.focus !== focus);
+  return <>
+    <div className={styles.docLine}>
+      <span>{t("ai.consistency.docLead", { doc: terms.doc })}</span>
+      <strong className={styles.docName} title={filePath}>{baseName(filePath)}</strong>
+      <span className={styles.docMeta}>{t("ai.consistency.docChars", { n: formatChars(docText.length) })}</span>
+    </div>
+    <button className={styles.configToggle} onClick={() => setSettingsOpen(!settingsOpen)} aria-expanded={settingsOpen}>
+      {t("ai.consistency.workspace.config")} · {first}{more > 0 ? ` +${more}` : ""} <ChevronDown size={12} />
+    </button>
+    <div className={`${styles.configBody} ${settingsOpen ? "" : styles.configCollapsed}`}>
+      <fieldset disabled={locked} className={styles.configCard}>
+        <legend>{t("ai.consistency.workspace.config")}</legend>
+        <div className={styles.sectionHead}><span className={styles.sectionLabel}>{t("ai.consistency.range")}</span>
+          <span className={styles.sectionMeta}><ScopeMeta scope={resolved.effective} index={index} declared={declared} /></span></div>
+        <button className={styles.rangeTrigger} onClick={() => setDraft(scope)}>
+          <span>{first}{more > 0 ? ` +${more}` : ""}</span><span>{t("ai.consistency.workspace.change")} <ChevronDown size={12} /></span>
+        </button>
+        <label className={styles.focusLabel}>{t("ai.consistency.focus")}
+          <textarea className={styles.focusInput} value={focus} onChange={e => setFocus(e.target.value)}
+            placeholder={t("ai.consistency.focusPlaceholder")} rows={4} />
+        </label>
+        <p className={styles.hint}>{t("ai.consistency.focusMeta")}</p>
+        {locked && <p className={styles.hint}>{t("ai.consistency.lockedNote")}</p>}
+      </fieldset>
+      <p className={styles.hint}>{t("ai.consistency.workspace.readOnly")}</p>
+      {changed && <p className={styles.settingsWarn}>{t("ai.consistency.workspace.changed")}</p>}
+    </div>
+    {draft && draftResolved && !locked && <GenerateDialog title={t("ai.consistency.range")} onClose={() => setDraft(null)}>
+      <RangeControl scope={draft} resolved={draftResolved} index={index} declared={declared} onChange={setDraft} onNavigate={() => setDraft(null)} />
+      <div className={styles.actions}><button className={styles.btnGhost} onClick={() => setDraft(null)}>{t("common.cancel")}</button>
+        <button className={styles.btnPrimary} disabled={draft.kind !== "all" && draftResolved.effective.kind === "all"}
+          onClick={() => { setScope(draft); setDraft(null); }}>{t("common.save")}</button></div>
+    </GenerateDialog>}
+  </>;
 }
 
 function useReviewForecast(docText: string, scope: ReviewScope): ReviewPlan {
@@ -322,19 +270,20 @@ function ScopeMeta({ scope, index, declared }: { scope: ReviewScope; index: Lore
   return <>{t("ai.consistency.pinnedCount", { defaultValue: "{{n}} 条{{entry}}", n: scope.pins.length, entry: terms.entry })}</>;
 }
 
-function RangeControl({ scope, resolved, index, declared, onChange }: {
+function RangeControl({ scope, resolved, index, declared, onChange, onNavigate }: {
   scope: ReviewScope;
   resolved: ReturnType<typeof resolveReviewScope>;
   index: LoreIndex;
   declared: string[];
   onChange: (scope: ReviewScope) => void;
+  onNavigate: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const terms = useTerms();
   const fence = useLoreStore((s) => s.scope);
   const setMainView = useAppStore((s) => s.setMainView);
-  const [menu, setMenu] = useState<ScopeMenuAnchor | null>(null);
+  const [collectionSearch, setCollectionSearch] = useState("");
 
   const views = useMemo(() => collectionViews(index, declared), [index, declared]);
   const countOf = (name: string) =>
@@ -381,7 +330,7 @@ function RangeControl({ scope, resolved, index, declared, onChange }: {
             ? ` ${t("ai.consistency.notAllOf", { defaultValue: "条 —— 不是{{kb}}的全部 {{total}} 条", kb: terms.kb, total })}`
             : ` ${t("ai.consistency.entriesUnit", { defaultValue: "条" })}`}
           {"  "}
-          <button className={styles.hintLink} onClick={() => setMainView("lore-wall")}>
+          <button className={styles.hintLink} onClick={() => { onNavigate(); setMainView("lore-wall"); }}>
             {t("ai.consistency.changeInKb", { defaultValue: "在{{kb}}里改 →", kb: terms.kb })}
           </button>
         </div>
@@ -406,15 +355,6 @@ function RangeControl({ scope, resolved, index, declared, onChange }: {
                 </span>
               );
             })}
-            <button
-              className={styles.chipAdd}
-              onClick={(ev) => {
-                const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-                setMenu({ x: r.left, y: r.bottom + 4 });
-              }}
-            >
-              {t("ai.consistency.addCollection", { defaultValue: "＋ 集合" })}
-            </button>
           </div>
           {resolved.staleCollections.length > 0 && (
             <StaleLine
@@ -423,17 +363,16 @@ function RangeControl({ scope, resolved, index, declared, onChange }: {
               onPurge={() => onChange(resolved.effective.kind === "collections" ? resolved.effective : { kind: "collections", names: [] })}
             />
           )}
-          {menu && (
-            <ScopeMenu
-              index={index}
-              declared={declared}
-              scope={scope.names.length ? scope.names : null}
-              anchor={menu}
-              variant="narrow"
-              onPick={(next: LoreScope) => onChange({ kind: "collections", names: next ?? [] })}
-              onClose={() => setMenu(null)}
-            />
-          )}
+          <input type="search" className={styles.pickerInput} value={collectionSearch}
+            aria-label={t("ai.consistency.workspace.searchCollections")} placeholder={t("ai.consistency.workspace.searchCollections")}
+            onChange={e => setCollectionSearch(e.target.value)} />
+          <div className={styles.collectionOptions}>
+            {[...views.map(view => view.name), UNGROUPED].filter((name, i, all) => all.indexOf(name) === i)
+              .filter(name => (name === UNGROUPED ? t("lore.collections.ungrouped") : name).toLowerCase().includes(collectionSearch.toLowerCase()))
+              .map(name => <label key={name}><input type="checkbox" checked={scope.names.includes(name)}
+                onChange={e => onChange({ kind: "collections", names: e.target.checked ? [...scope.names, name] : scope.names.filter(n => n !== name) })} />
+                {name === UNGROUPED ? t("lore.collections.ungrouped") : name} <span>{countOf(name)}</span></label>)}
+          </div>
         </>
       )}
 
@@ -682,46 +621,6 @@ function useScopeLabel(scope: ReviewScope): { first: string; more: number } {
   return { first: `@${name}`, more: Math.max(0, scope.pins.length - 1) };
 }
 
-function SettingsLine({ locked }: { locked: boolean }) {
-  const { t } = useTranslation();
-  const report = useConsistencyStore((s) => s.report);
-  const scope = useConsistencyStore((s) => (locked ? s.scope : s.report?.scope ?? s.scope));
-  const focus = useConsistencyStore((s) => (locked ? s.focus : s.report?.focus ?? s.focus));
-  const windows = useConsistencyStore((s) => s.windows);
-  const setSettingsOpen = useConsistencyStore((s) => s.setSettingsOpen);
-  const { first, more } = useScopeLabel(scope);
-  const n = locked ? windows.length : report?.windows.length ?? windows.length;
-
-  const body = (
-    <>
-      <span className={styles.settingsItem}>
-        <span className={styles.settingsKey}>{t("ai.consistency.range", { defaultValue: "范围" })}</span>
-        {first}
-        {more > 0 && <span className={styles.settingsPlus}>＋{more}</span>}
-      </span>
-      <span className={styles.settingsItem}>
-        <span className={styles.settingsKey}>{t("ai.consistency.focus", { defaultValue: "重点" })}</span>
-        {focus.trim() || t("ai.consistency.focusNone", { defaultValue: "无 · 全面核对" })}
-      </span>
-      <span className={styles.settingsItem}>
-        <span className={styles.settingsKey}>{t("ai.consistency.segments", { defaultValue: "段" })}</span>
-        {n > 1
-          ? t("ai.consistency.segmentsParallel", { defaultValue: "{{n}} 段 · 并行 {{p}}", n, p: Math.min(REVIEW_CONCURRENCY, n) })
-          : t("ai.consistency.segmentsOne", { defaultValue: "1 段" })}
-      </span>
-      <span className={`${styles.settingsRight} ${locked ? "" : styles.settingsRightAction}`}>
-        {locked
-          ? t("ai.consistency.lockedNote", { defaultValue: "运行中 · 不可改" })
-          : <>{t("ai.consistency.changeAndRerun", { defaultValue: "改范围重跑" })} <ChevronDown size={11} /></>}
-      </span>
-    </>
-  );
-
-  return locked
-    ? <div className={styles.settingsLine}>{body}</div>
-    : <button className={styles.settingsLine} onClick={() => setSettingsOpen(true)}>{body}</button>;
-}
-
 // ─── Running ──────────────────────────────────────────────────────────────────
 
 function windowsHeadline(windows: WindowOutcome[], t: (k: string, o: Record<string, unknown>) => string): string | undefined {
@@ -746,6 +645,7 @@ function ReviewAgentProgress() {
   const log = useConsistencyStore((s) => s.log);
   const pending = useAgentStore((s) => s.pendingRoundLimits);
   return <>
+    {windows.length > 0 && <div className={styles.coverageLine}>{t("ai.consistency.windowsDone", { k: windows.filter(w => w.status === "done").length, n: windows.length })}</div>}
     {windows.map((window) => {
       const events = log.filter((e) => e.parentStep === window.logParent);
       const cards = pending.filter((p) => p.surface === `consistency:${window.index}`);
@@ -832,7 +732,10 @@ function PassRow({ pass }: { pass: ConsistencyPass }) {
 
 // ─── Report ───────────────────────────────────────────────────────────────────
 
-function ReportBody({ report, docText, openFilePath }: { report: ConsistencyReport; docText: string; openFilePath: string }) {
+function ReportBody({ report, docText, openFilePath, selected, onSelect }: {
+  report: ConsistencyReport; docText: string; openFilePath: string;
+  selected: string[]; onSelect: (id: string, checked: boolean) => void;
+}) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const terms = useTerms();
@@ -1096,6 +999,7 @@ function ReportBody({ report, docText, openFilePath }: { report: ConsistencyRepo
               issue={issue}
               docText={docText}
               actionable={onTarget}
+              selected={selected.includes(issue.id)} onSelect={checked => onSelect(issue.id, checked)}
               showWindow={report.windows.length > 1}
               onLocate={() => locate(issue.id)}
               onLocateNear={() => locateNear(issue.id)}
@@ -1183,10 +1087,12 @@ function ReportBody({ report, docText, openFilePath }: { report: ConsistencyRepo
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
 function IssueCard({
-  issue, docText, actionable, live = false, showWindow = false,
+  issue, docText, actionable, live = false, showWindow = false, selected, onSelect,
   onLocate, onLocateNear, onApply, onIgnore, onRemove, onOpenEntity,
 }: {
   issue: ConsistencyIssue;
+  selected?: boolean;
+  onSelect?: (checked: boolean) => void;
   docText: string;
   /** False once the author has moved to another document — read-only then. */
   actionable: boolean;
@@ -1218,6 +1124,8 @@ function IssueCard({
   return (
     <div className={`${styles.issue} ${gone ? styles.issueGone : conflict ? styles.issueConflict : styles.issueWarning} ${!actionable && !live ? styles.issueReadonly : ""}`}>
       <div className={styles.issueHead}>
+        {onSelect && issue.suggestion && <input type="checkbox" aria-label={t("ai.consistency.workspace.select", { title: issue.title })}
+          disabled={!actionable || gone} checked={!!selected} onChange={e => onSelect(e.target.checked)} />}
         <span className={`${styles.sev} ${gone ? styles.sevGone : conflict ? styles.sevConflict : styles.sevWarning}`}>
           {conflict ? t("ai.consistency.sevConflict", { defaultValue: "冲突" }) : t("ai.consistency.sevWarning", { defaultValue: "提醒" })}
         </span>
@@ -1306,94 +1214,60 @@ function IssueCard({
 
 // ─── Footer ───────────────────────────────────────────────────────────────────
 
-function Footer({ phase, elapsedMs, docText }: { phase: "before" | "running" | "done"; elapsedMs: number; docText: string }) {
+function ExecutionFooter({ phase, elapsedMs, docText }: { phase: "before" | "running" | "done"; elapsedMs: number; docText: string }) {
   const { t } = useTranslation();
-  const report = useConsistencyStore((s) => s.report);
-  const ignored = useConsistencyStore((s) => s.ignored);
-  const applied = useConsistencyStore((s) => s.applied);
-  const windows = useConsistencyStore((s) => s.windows);
-  const log = useConsistencyStore((s) => s.log);
-  const scan = useConsistencyStore((s) => s.scan);
-  const abort = useConsistencyStore((s) => s.abort);
-  const ignoreAll = useConsistencyStore((s) => s.ignoreAll);
-  const applyAll = useConsistencyStore((s) => s.applyAll);
-  const scope = useConsistencyStore((s) => s.scope);
-  const index = useLoreStore((s) => s.index);
-  const declared = useProjectStore((s) => s.collections);
-  const activeModelId = useAiStore((s) => s.activeModelId);
-  const resolvedScope = useMemo(() => resolveReviewScope(scope, index, declared).effective, [scope, index, declared]);
-  const plan = useReviewForecast(docText, resolvedScope);
-
-  if (phase === "before") {
-    return (
-      <div className={styles.footer}>
-        <span className={styles.footerMeta}>
-          {t("ai.consistency.forecastInput", { defaultValue: "预计输入" })}{" "}
-          <b>{plan.windowCount > 1 ? `${plan.windowCount} × ` : ""}{formatTokens(plan.perWindowTokens)} tk</b>
-        </span>
-        <span className={styles.footerHint}>
-          {t("ai.consistency.footerBefore", { defaultValue: "上限 {{max}} 段 · 只读不写", max: MAX_WINDOWS })}
-        </span>
-        <button className={styles.btnPrimary} disabled={!activeModelId || !docText.trim()} onClick={() => void scan()}>
-          {t("ai.consistency.run", { defaultValue: "开始核对" })}
-          <span className={styles.kbd}>{MOD_KEY === "⌘" ? "⌘↵" : "Ctrl ↵"}</span>
-        </button>
-      </div>
-    );
-  }
-
-  if (phase === "running") {
-    const done = windows.filter((w) => w.status === "done").length;
-    const round = (() => {
-      for (let i = log.length - 1; i >= 0; i--) {
-        const e = log[i];
-        if (e.kind === "round-start" && !e.parentStep) return e.round;
-        if (e.kind === "round-start" && windows.length <= 1) return e.round;
-      }
-      return null;
-    })();
-    return (
-      <div className={styles.footer}>
-        <span className={styles.runningNote}>
-          <span className={styles.runningPips}><span /><span /><span /></span>
-          {t("ai.consistency.runningNote", { defaultValue: "正在核对" })} · {formatClock(elapsedMs)}
-          {windows.length > 1
-            ? ` · ${t("ai.consistency.windowsDone", { defaultValue: "{{k}}/{{n}} 段完成", k: done, n: windows.length })}`
-            : round ? ` · ${t("ai.consistency.roundN", { defaultValue: "第 {{n}} 轮", n: round })}` : ""}
-        </span>
-        <span className={styles.footerHint}>
-          {t("ai.consistency.escHint", { defaultValue: "Esc 停止 · 已记的发现保留" })}
-        </span>
-        <button className={styles.stopBtn} onClick={abort} aria-label={t("ai.panel.stop")} title={t("ai.panel.stop")}>
-          <span />
-        </button>
-      </div>
-    );
-  }
-
-  const onTarget = reportMatchesOpenDocument(report);
-  const open = report ? openIssues(report.issues, ignored, applied) : [];
-  const appliable = onTarget ? open.filter((i) => i.suggestion).length : 0;
-  return (
-    <div className={styles.footer}>
-      <span className={styles.footerHint}>
-        {!onTarget
-          ? t("ai.consistency.readonlyHint", { defaultValue: "只读 · 切回那份文档才能应用或跳转" })
-          : open.length > 0
-            ? t("ai.consistency.footerHint", { defaultValue: "只读 · 应用建议是你在卡上点的一次替换" })
-            : t("ai.consistency.footerDone", { defaultValue: "本轮的卡都已处理" })}
-      </span>
-      <button className={styles.btnGhost} disabled={open.length === 0} onClick={ignoreAll}>
-        {t("ai.consistency.ignoreAll", { defaultValue: "全部忽略" })}
-      </button>
-      <button
-        className={styles.btnPrimary}
-        disabled={appliable === 0}
-        onClick={() => applyAll()}
-        title={t("ai.consistency.applyAllHint", { defaultValue: "把所有带建议的卡一次写回正文；找不到原文的会跳过" })}
-      >
-        {t("ai.consistency.applyAll", { defaultValue: "应用 {{n}} 项建议", n: appliable })}
-      </button>
+  const scope = useConsistencyStore(s => s.scope);
+  const index = useLoreStore(s => s.index);
+  const declared = useProjectStore(s => s.collections);
+  const scan = useConsistencyStore(s => s.scan);
+  const abort = useConsistencyStore(s => s.abort);
+  const activeModelId = useAiStore(s => s.activeModelId);
+  const windows = useConsistencyStore(s => s.windows);
+  const resolved = useMemo(() => resolveReviewScope(scope, index, declared).effective, [scope, index, declared]);
+  const plan = useReviewForecast(docText, resolved);
+  const [details, setDetails] = useState(false);
+  const running = phase === "running";
+  const totalInput = windows.reduce((sum, w) => sum + w.inputTokens, 0);
+  const totalOutput = windows.reduce((sum, w) => sum + w.outputTokens, 0);
+  return <footer className={styles.executionFooter}>
+    <div className={styles.modelControls}>
+      <ForecastRing segments={plan.assumed ? null : plan.segments} open={details} onClick={() => setDetails(true)}
+        label={`${t("ai.consistency.forecastInput")} · ${formatTokens(plan.perWindowTokens)} / ${formatTokens(plan.ceilingTokens)} tk`} />
+      <span className={styles.footerMeta}>{t("ai.consistency.forecastInput")}<br/>{formatTokens(plan.perWindowTokens)} tk</span>
+      <fieldset disabled={running} className={styles.runtimeControls}><ReasoningControls variant="compact" /><CapabilityMenu /></fieldset>
     </div>
-  );
+    {plan.uncheckedChars > 0 && <p className={styles.settingsWarn}>{t("ai.consistency.allocCapNote", { max: MAX_WINDOWS, n: formatChars(plan.uncheckedChars) })}</p>}
+    {running && <span className={styles.runningNote}>{t("ai.consistency.runningNote")} · {formatClock(elapsedMs)}</span>}
+    <button className={styles.btnPrimary} disabled={!running && (!activeModelId || !docText.trim())}
+      onClick={() => running ? abort() : void scan()}>
+      {running ? t("ai.consistency.workspace.stop") : t(phase === "before" ? "ai.consistency.run" : "ai.consistency.rerun")}
+      <span className={styles.kbd}>{running ? "Esc" : `${MOD_KEY}↵`}</span>
+    </button>
+    {details && <GenerateDialog title={t("ai.panel.contextAllocation")} onClose={() => setDetails(false)}>
+      <p className={styles.hint}>{t("ai.consistency.workspace.forecastNote")}</p>
+      <Allocation plan={plan} docChars={docText.length} />
+      {windows.length > 0 && <p className={styles.hint}>{t("ai.consistency.workspace.usage", { input: formatTokens(totalInput), output: formatTokens(totalOutput) })}</p>}
+    </GenerateDialog>}
+  </footer>;
+}
+
+function ResultFooter({ selected, onApplied }: { selected: string[]; onApplied: () => void }) {
+  const { t } = useTranslation();
+  const report = useConsistencyStore(s => s.report);
+  const scanning = useConsistencyStore(s => s.isScanning);
+  const ignored = useConsistencyStore(s => s.ignored);
+  const applied = useConsistencyStore(s => s.applied);
+  const content = useEditorStore(s => s.content);
+  // Subscribe to navigation as well as edits; the helper reads both stores.
+  useEditorStore(s => s.filePath);
+  useProjectStore(s => s.projectPath);
+  const onTarget = reportMatchesOpenDocument(report);
+  const eligible = report && !scanning && onTarget ? openIssues(report.issues, ignored, applied)
+    .filter(issue => selected.includes(issue.id) && issue.suggestion && locateIssue(content, issue) !== null) : [];
+  return <footer className={styles.footer}>
+    <span className={styles.footerHint}>{t(scanning ? "ai.consistency.workspace.updating" : "ai.consistency.workspace.selected", { n: eligible.length })}</span>
+    <button className={styles.btnPrimary} disabled={!eligible.length} onClick={() => {
+      useConsistencyStore.getState().applyAll(eligible.map(issue => issue.id)); onApplied();
+    }}>{t("ai.consistency.workspace.applySelected", { n: eligible.length })}</button>
+  </footer>;
 }
