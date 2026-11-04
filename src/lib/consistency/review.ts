@@ -16,6 +16,7 @@
  * it — the same seam `delegate` / `run_pack` use, so the log needs no new band.
  */
 
+import i18n from "../../i18n";
 import { connOptions, plannedLimits, type AiConn } from "../ai/conn";
 import { extractJsonObject } from "../ai/json";
 import { canSeeImages, type Model, type Provider } from "../ai/configDb";
@@ -173,7 +174,11 @@ export async function runConsistencyReview(args: ReviewRunArgs): Promise<ReviewR
   if (nested) {
     const inputTokens = results.reduce((n, r) => n + r.outcome.inputTokens, 0);
     const outputTokens = results.reduce((n, r) => n + r.outcome.outputTokens, 0);
-    args.onEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
+    if (results.some((r) => r.outcome.status !== "done")) {
+      args.onEvent({ kind: "run-error", message: i18n.t("ai.consistency.incomplete"), at: Date.now() });
+    } else {
+      args.onEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
+    }
   }
 
   return { results, focusTerms };
@@ -223,6 +228,9 @@ async function runWindow(
   const settle = (status: WindowOutcome["status"], patch: Partial<WindowOutcome> = {}): WindowOutcome => {
     Object.assign(outcome, patch, { status });
     args.onWindow({ ...outcome });
+    if (status === "incomplete") {
+      onEvent({ kind: "run-error", message: i18n.t("ai.consistency.incomplete"), at: Date.now() });
+    }
     if (nested) {
       args.onEvent({
         kind: "tool-step",
@@ -364,7 +372,7 @@ async function runWindow(
 
     const empty = sink.issues.length === 0 && sink.passed.length === 0;
     return {
-      outcome: settle("done", {
+      outcome: settle(empty || run.outcome !== "completed" ? "incomplete" : "done", {
         recorded: sink.issues.length + sink.passed.length,
         rounds: run.rounds,
         inputTokens: run.inputTokens,

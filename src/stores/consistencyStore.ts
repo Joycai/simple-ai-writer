@@ -382,7 +382,6 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         : [];
       const merged = mergeWindowResults([...kept, ...results]);
       const aborted = controller.signal.aborted || merged.windows.some((w) => w.status === "aborted");
-      const done = merged.windows.filter((w) => w.status === "done");
       const report: ConsistencyReport = {
         issues: merged.issues,
         passed: merged.passed,
@@ -395,7 +394,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         windows: merged.windows,
         uncheckedFrom,
         aborted,
-        emptyRun: done.length > 0 && done.every((w) => w.empty) && merged.issues.length === 0 && merged.passed.length === 0,
+        emptyRun: merged.windows.some((w) => w.empty) && merged.issues.length === 0 && merged.passed.length === 0,
       };
       set({
         report,

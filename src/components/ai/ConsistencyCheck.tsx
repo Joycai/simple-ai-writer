@@ -836,7 +836,7 @@ function ReportBody({ report, docText, openFilePath }: { report: ConsistencyRepo
   const conflicts = report.issues.filter((i) => i.severity === "conflict").length;
   const warnings = report.issues.length - conflicts;
   const doneWindows = report.windows.filter((w) => w.status === "done");
-  const failedWindows = report.windows.filter((w) => w.status === "failed");
+  const failedWindows = report.windows.filter((w) => w.status === "failed" || w.status === "incomplete");
   const notDone = report.windows.filter((w) => w.status !== "done");
   const coverage = coverageOf(report.windows, report.docChars, report.uncheckedFrom);
   const rounds = report.windows.reduce((n, w) => n + w.rounds, 0);
@@ -935,7 +935,7 @@ function ReportBody({ report, docText, openFilePath }: { report: ConsistencyRepo
           <div className={styles.emptyRun}>
             <div className={styles.emptyRunText}>
               {t("ai.consistency.emptyRunText", {
-                defaultValue: "这次没查成，不是没问题。模型读了{{doc}}和{{entry}}，但全程没有调用「记录发现」——换一个会调工具的模型再试。",
+                defaultValue: "本次没有有效的核对记录，不能判定{{doc}}与{{entry}}一致。可能尚未提交结果，或提交未通过校验；请查看日志后重试。",
                 doc: terms.doc, entry: terms.entry,
               })}
             </div>
@@ -954,8 +954,10 @@ function ReportBody({ report, docText, openFilePath }: { report: ConsistencyRepo
           <div key={w.index} className={styles.failedLine}>
             <b>{t("ai.consistency.windowN", { defaultValue: "第 {{k}} 段", k: w.index + 1 })}</b>
             <span>
-              {w.error ?? t("ai.consistency.failedWord", { defaultValue: "失败" })} · {t("ai.consistency.windowRange", {
-                defaultValue: "第 {{from}}–{{to}} 字这一截没查", from: formatChars(w.from + 1), to: formatChars(w.to),
+              {w.error ?? (w.status === "incomplete"
+                ? t("ai.consistency.incomplete", { defaultValue: "结果提交未完成，已记录的结果已保留" })
+                : t("ai.consistency.failedWord", { defaultValue: "失败" }))} · {t("ai.consistency.windowRange", {
+                defaultValue: "第 {{from}}–{{to}} 字未完成核对", from: formatChars(w.from + 1), to: formatChars(w.to),
               })}
             </span>
             <span className={styles.spacer} />

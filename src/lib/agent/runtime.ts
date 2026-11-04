@@ -785,6 +785,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
   // Mutable: the author can extend it at the cap via onRoundLimit.
   let maxRounds = preset.maxRounds;
+  let finalizationStarted = false;
   /** Output-cap recoveries spent in this run — reset when the author grants more. */
   let truncationRecoveries = 0;
   /** Whether this run has already cut a round for its thinking budget — at most once. */
@@ -898,7 +899,16 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     const imageModel = searchable.image?.length
       || activeTools.some((id) => id === "generate_image" || id === "edit_image" || id === "redraw_lore_image")
       ? activeImageModel(runToolContext) : null;
-    const toolDefinitions = getToolDefinitions(activeTools, searchable, opts.toolContext.searchReadsPages, imageModel);
+    const finalizing = !!preset.finalization &&
+      (finalizationStarted || round > maxRounds - preset.finalization.rounds);
+    if (finalizing && !finalizationStarted) {
+      finalizationStarted = true;
+      history.push({ role: "user", content: preset.finalization!.instruction });
+    }
+    const roundTools = finalizing
+      ? activeTools.filter((id) => preset.finalization!.tools.includes(id))
+      : activeTools;
+    const toolDefinitions = getToolDefinitions(roundTools, searchable, opts.toolContext.searchReadsPages, imageModel);
 
     // On the final round of a force-text task: inject a "write now" instruction
     // and omit tools so the model must produce text without further tool calls.
@@ -968,7 +978,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       (preset.tools.length === 0 || (isLastRound && preset.finishPolicy === "force-text"));
     const serverToolPolicy = preset.serverTools ?? "final-round-off";
     const withholdServerTools =
-      forceHandoff ||
+      finalizing || forceHandoff ||
       serverToolPolicy === "off" ||
       ((serverToolPolicy === "final-round-off" || serverToolPolicy === "no-web") &&
         isLastRound && preset.finishPolicy === "force-text");
@@ -1136,7 +1146,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       ? handoffToolTokens()
       : withholdTools
         ? 0
-        : toolTokensOf(activeTools, searchable, opts.toolContext.searchReadsPages, imageModel) + (handoffPreset ? handoffToolTokens() : 0);
+        : toolTokensOf(roundTools, searchable, opts.toolContext.searchReadsPages, imageModel) + (handoffPreset ? handoffToolTokens() : 0);
     opts.onEvent({
       kind: "round-start",
       round,
@@ -1508,6 +1518,19 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // Anything else this round called is an ordinary tool round; fall through.
     }
 
+    // An early prose answer ends research, not the collector contract. Give
+    // it the same bounded submission phase without reopening research.
+    if (preset.finalization && !finalizing && roundToolCalls.length === 0) {
+      if (roundText.trim() || roundResponseItems?.items.length) {
+        history.push({ role: "assistant", content: roundText,
+          ...(roundResponseItems ? { _responseItems: roundResponseItems, _carryScope: roundCarryScope } : {}),
+        });
+      }
+      maxRounds = round + preset.finalization.rounds;
+      opts.onOutputText(committedText);
+      continue;
+    }
+
     // No tool calls → the model produced prose → that prose is the answer.
     if (roundToolCalls.length === 0) {
       committedText += roundText;
@@ -1717,7 +1740,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         onProgress: (progress) =>
           opts.onEvent({ kind: "tool-step", step: { ...runningStep, progress }, at: Date.now() }),
       };
-      // `activeTools`, NOT `preset.tools`: this list is the security boundary,
+      // `roundTools`, NOT `preset.tools`: this list is the security boundary,
       // not an optimisation. Leave it as the preset's full set and a deferred
       // tool stays callable while its schema is being withheld — which is the
       // gate doing nothing at all, dressed up as a saving.
@@ -1728,7 +1751,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         .flatMap((g) => deferred[g]);
       const result: ToolResult = await executeRegisteredTool(
         toolCall,
-        activeTools,
+        roundTools,
         callContext,
         pendingTools,
       );
@@ -1865,6 +1888,6 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     outputTokens: totalOutputTokens,
     cachedTokens: totalCachedTokens,
     reportedCost: totalReportedCost ?? null,
-    outcome: "completed",
+    outcome: preset.finalization ? "truncated" : "completed",
   };
 }

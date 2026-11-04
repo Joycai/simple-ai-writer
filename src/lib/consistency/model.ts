@@ -65,7 +65,7 @@ export interface ConsistencyPass {
   line?: number;
 }
 
-type WindowStatus = "pending" | "running" | "done" | "failed" | "aborted";
+type WindowStatus = "pending" | "running" | "done" | "incomplete" | "failed" | "aborted";
 
 /** One window of the document, and how its check went. */
 export interface WindowOutcome {

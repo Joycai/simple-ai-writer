@@ -71,3 +71,16 @@ describe("revertSuggestion / textNearAnchor", () => {
     expect(textNearAnchor("短", i)).toBeNull();
   });
 });
+
+
+it("retains partial records without counting an incomplete window as checked", () => {
+  const partial = outcome(1, 100, 200, "incomplete");
+  const merged = mergeWindowResults([
+    { outcome: outcome(0, 0, 100), issues: [], passed: [{ label: "verified", window: 0 }] },
+    { outcome: partial, issues: [issue("partial", "quote", 1, 120)], passed: [] },
+  ]);
+  expect(merged.issues).toHaveLength(1);
+  const coverage = coverageOf(merged.windows, 200, null);
+  expect(coverage.checkedChars).toBe(100);
+  expect(coverage.spans[1].status).toBe("incomplete");
+});

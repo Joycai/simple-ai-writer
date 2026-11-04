@@ -544,6 +544,7 @@ clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
 - `model.ts` the anchoring (`locateIssue` — scan-time anchor as tie-breaker in widening rings, then whole document; `applySuggestions` / `revertSuggestion`).
 
 #### 状态与展示
+- 核对保留 11 轮取证 + 3 轮收集器提交；提前文字收尾也切到提交阶段。空结果或提交耗尽为 `incomplete`，保留已有记录、支持重跑，但不计入已核对覆盖率。
 - Never a green tick for an empty run: `emptyRun`, failed and aborted windows and the cap's tail are all on the report head.
 - State in `stores/consistencyStore.ts` (range persisted per project, findings stream in live), UI in `components/ai/ConsistencyCheck.tsx` (设计稿 02d).
 - Design: `docs/feature/consistency-review-plan.md`

@@ -481,6 +481,7 @@ button.settingsLine:hover { background: var(--color-bg-hover); }
 .coverage_running { background: var(--color-accent-mid); }
 .coverage_pending { background: var(--color-border-muted); }
 .coverage_failed { background: var(--color-error-node); }
+.coverage_incomplete,
 .coverage_aborted,
 .coverage_unchecked {
   background: repeating-linear-gradient(
