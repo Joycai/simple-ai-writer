@@ -391,7 +391,7 @@ PR #849 已合并，基准 main `316024c3` / 2.0.19。重新离线运行库存�
 ### 已定位的覆盖缺口
 
 1. **直接前端依赖**：`@joplin/turndown-plugin-gfm`、`@lezer/highlight`、`@vscode/markdown-it-katex`、`codemirror`、`gray-matter`、`mermaid`、`motion`、`nanoid`、`turndown`、`pdfjs-dist` 尚未进入离线声明。前九项安装包含根目录 MIT 许可文件，PDF.js 为 Apache-2.0；这里只确认文件存在与元数据，仍须逐份核对原文与来源后纳入。六个 Tauri JS 插件仍仅发现 `LICENSE.spdx`，不能凭 Rust 同名插件证据结清其 JS 版本。
-2. **PDF.js 嵌套资源**：`src/components/editor/PdfPreview.tsx:12` 通过 glob 打包 `cmaps`、`standard_fonts`、`wasm` 全部文件。安装依赖中存在 `cmaps/LICENSE`、`standard_fonts/LICENSE_FOXIT` / `LICENSE_LIBERATION`，以及 WASM 的 QCMS / OPENJPEG / JBIG2 与 PDFJS 对应许可文件。当前本地 dist 可见 Foxit 字体、Liberation 及 WASM 相关许可证资产；这说明不能只补 PDF.js 根目录 LICENSE。部分原文已被 glob 带入资产，但尚无离线入口的整理、映射与完整覆盖校验，不能描述成所有原文完全未随包。最终签名包需重新核对。
+2. **PDF.js 嵌套资源**：`src/components/editor/PdfPreview.tsx` 的 `assets` 通过 glob 打包 `cmaps`、`standard_fonts`、`wasm` 全部文件。安装依赖中存在 `cmaps/LICENSE`、`standard_fonts/LICENSE_FOXIT` / `LICENSE_LIBERATION`，以及 WASM 的 QCMS / OPENJPEG / JBIG2 与 PDFJS 对应许可文件。当前本地 dist 可见 Foxit 字体、Liberation 及 WASM 相关许可证资产；这说明不能只补 PDF.js 根目录 LICENSE。部分原文已被 glob 带入资产，但尚无离线入口的整理、映射与完整覆盖校验，不能描述成所有原文完全未随包。最终签名包需重新核对。
 3. **其他字体范围**：dist 中还有 `KaTeX_*.woff/woff2/ttf`。现有字体测试仅检查 `src/styles/fonts.ts` 的 Fontsource 导入，不能据其通过宣称所有字体均核验完成。KaTeX 根目录 MIT 原文已收录；仍需核对其字体的来源及是否有额外原文要求，不预先断言需要额外许可。
 4. **扫描与测试盲区**：库存和声明收集器主要读取根目录 LICENSE / NOTICE；有文件不等于完整原文，根目录无文件也不等于无许可。现有测试验证已选清单一致性、hash 和 Fontsource 导入，未对最终构建所有组件/嵌套资源建立覆盖断言。白名单外新增依赖仍可能在 CI 通过时缺少声明。
 
