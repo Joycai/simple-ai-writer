@@ -56,3 +56,21 @@ test('PDF preview resource glob has complete byte-preserving notice and resource
   assert.ok(entry.files.find(f => f.name === 'standard_fonts/LICENSE_LIBERATION').text.includes('GNU GENERAL PUBLIC LICENSE'));
   assert.ok(entry.files.find(f => f.name === 'wasm/LICENSE_JBIG2').text.includes('Apache License'));
 });
+
+test('PDF source supplements remain bound to the reviewed binary resources and immutable sources', () => {
+  const supplement = JSON.parse(readFileSync(new URL('../legal/pdfjs-resource-notices.json', import.meta.url)));
+  const data = JSON.parse(readFileSync(new URL('../../src/assets/legal/third-party-notices.json', import.meta.url)));
+  const entry = data.entries.find(e => e.name === 'pdfjs-dist');
+  assert.equal(entry.version, supplement.packageVersion);
+  assert.equal(supplement.resources.length, 10);
+  for (const resource of supplement.resources) {
+    assert.deepEqual(entry.resources.find(r => r.name === resource.name), resource);
+  }
+  for (const file of supplement.files) {
+    assert.match(file.source, /^https:\/\/github\.com\/[^/]+\/[^/]+\/blob\/[a-f0-9]{40}\//);
+    assert.deepEqual(entry.files.find(f => f.name === file.name), file);
+  }
+  assert.match(entry.files.find(f => f.name === 'QuickJS/LICENSE').text, /Fabrice Bellard[\s\S]*Charlie Gordon/);
+  assert.match(entry.files.find(f => f.name === 'pdf.js.qcms/src/lib.rs (original license header)').text, /Copyright \(c\) 2005 Mozilla Foundation/);
+  assert.match(entry.files.find(f => f.name === 'PDF.js/external/standard_fonts/README.md').text, /1\.07\.4/);
+});

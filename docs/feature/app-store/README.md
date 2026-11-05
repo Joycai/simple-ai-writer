@@ -451,3 +451,29 @@ PR #849 已合并，基准 main `316024c3` / 2.0.19。重新离线运行库存�
 本轮不生成新签名包、不上传，不将文本已收录等同于全部许可义务完成。版本通过 bump-version 技能同步至 2.0.20。
 
 验证：13 项 App Store Node 检查通过；`pnpm build` 类型检查、应用及原型生产构建通过，dist 已生成离线声明 chunk，仅保留既有大 chunk 提示；`git diff --check` 通过。首次构建触发依赖恢复时受沙盒 DNS 限制，随后使用 `pnpm install --frozen-lockfile` 恢复锁定依赖并重新检查/构建通过，未改动 pnpm-lock.yaml。未执行外部模型 live 测试、原生验收或最终签名包覆盖验证。
+
+## 第六批：PDF.js 字体与 WASM 来源补充（2026-11-05）
+
+状态：部分完成。PR #850 已合并，本批从 main `f40fdd86` 开始，版本同步为 2.0.21。离线声明仍为 101 个包；在 PDF.js 条目下新增 12 份上游原文/许可头/来源说明，不把嵌套文件计为新增 npm 包。PDF 渲染、字体文件、下载、网络权限及站外版入口行为保持不变。
+
+### 固定版本与字节证据
+
+核对 [PDF.js v6.4.299 源码](https://github.com/mozilla/pdf.js/tree/d0991a0d53f3bb3a7307e3b83f279c1d117aafb3)；该提交对应本地锁定的 pdfjs-dist 6.4.299。四个 LiberationSans TTF、LICENSE_LIBERATION、QuickJS JS/WASM、QCMS WASM 及两份 QCMS LICENSE 均与上游 external 目录逐字节一致。10 项 SHA-256、固定提交链接及原文快照保存在 `scripts/legal/pdfjs-resource-notices.json`，收集器在生成/检查时验证 npm 版本与资源字节，再把补充文本加入现有离线声明。CI 不依赖网络重新下载来源；依赖或绑定资源变更必须重新核对。
+
+### 已确认并补齐
+
+- **LiberationSans**：[固定版本字体说明](https://github.com/mozilla/pdf.js/blob/d0991a0d53f3bb3a7307e3b83f279c1d117aafb3/external/standard_fonts/README.md) 明确说明是未修改的 **1.07.4**，使用 GPLv2 加 Liberation font exception，原 LICENSE_LIBERATION 已完整保留。本批补入该说明；“版本未知”更新为“上游声明版本已确认、与 PDF.js 字节一致”。上游同时说明字形顺序与宽度/缩放表绑定，不能直接换成新版 OFL 字体而不重建对应表和回归渲染。
+- **QuickJS 核心**：[PDF.js 更新提交](https://github.com/mozilla/pdf.js/commit/7a7e4fd382481a76f55c6d735873f635c9178db1) 明确指向 bellard/quickjs `3d5e064e9dd67c70f7962836505a7fa067bf0a4e`，其 VERSION 为 2026-06-04。补入该提交的完整 MIT LICENSE，以及 quickjs.c、cutils.c、libregexp.c、libunicode.c、dtoa.c 的原始许可头，保留 Fabrice Bellard、Charlie Gordon 各文件原有年份。
+- **QuickJS 包装层**：PDF.js 同版本 README 明确指向 Mozilla 的 pdf.js.quickjs 并说明 MIT。按资源更新日期查询的历史候选 `1b37671f1b529f887673f33ba4c5f00981a8065b`，Dockerfile 指向上述 QuickJS 核心提交；补入该候选 src/exports.c 与 src/myjs.js 的完整原始 MIT 头。这一历史候选没有根 LICENSE，也没有版权主体行；后续 main 的 LICENSE 已增加 2026 Mozilla Foundation，但本批没有将后补文件冒充当时随源文件。候选选择基于时间和核心版本，不等于已复现构建或证实当时实际使用的包装层提交。
+- **QCMS 包装层**：[PDF.js 更新提交](https://github.com/mozilla/pdf.js/commit/e7acffcef36eec7e77ade4f77e5e8ca0639c44d2) 明确引用 [pdf.js.qcms 固定提交](https://github.com/mozilla/pdf.js.qcms/tree/2ae4ee72334782928210ba4050e3e77d9b2d35be)。其根 LICENSE 与现有 LICENSE_PDFJS_QCMS 一致，src/lib.rs 的完整 MIT 头含 `Copyright (c) 2005 Mozilla Foundation`，本批原样补入，不擅自修改年份。此前“包装层版权行无来源”已取得证据；QCMS 核心既有 Mozilla / Marti Maria 声明仍原样保留。
+
+### 仍未结清
+
+1. LiberationSans 的独立上游 1.07.4 发布档案、可对应的字体源码交付及商店分发义务仍待核对；上游 README 与字节匹配不能替代履约。没有将文档嵌入例外扩大解释成应用捆绑豁免，没有宣称整体 App Store 兼容已确认。
+2. QuickJS 包装层实际构建提交仍未精确证明；Dockerfile 使用 emscripten/emsdk:latest，Emscripten 生成胶水、运行库及其他传递部分的精确工具链/许可范围仍待核对。本批补充核心与包装层原文，不宣称 WASM 全依赖声明完成。
+3. QCMS 包装层 Cargo.toml 使用 qcms 0.3 / wasm-bindgen 0.2 范围约束；精确解析版本、传递组件和工具链尚未闭环。已补版权头不等于全部 WASM 依赖已结清。
+4. 其余 JS 插件、KaTeX、复杂许可、下载字体、图标/音频来源，以及最终签名包的离线可读性与升级验收仍按前述清单待完成。
+
+本批未构建正式签名包、未上传或提审。来源快照保留审计证据；原文节选仅取完整文件头的许可块，并在名称标明 original license header，不将整个源文件作为许可证展示。
+
+验证：14 项 App Store Node 检查通过；文档源码引用守卫 1 项通过；TypeScript、应用及原型生产构建通过，保留既有大 chunk 提示；`git diff --check` 通过。首次沙盒内 pnpm 自动恢复依赖遇到 DNS 限制，停止后在正常缓存环境按 `--frozen-lockfile` 恢复并重新验证，未改动 pnpm-lock.yaml。未运行外部模型测试或原生 UI 验收。

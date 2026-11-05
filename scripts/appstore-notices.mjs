@@ -51,6 +51,20 @@ for (const group of Object.values(groups)) for (const item of group) for (const 
     if (!header?.includes('Copyright 2024 Mozilla Foundation')) throw new Error('Review PDF.js attribution header');
     files.push({ name: 'build/pdf.mjs (original license header)', sha256: digest(header), text: header });
     resources = resourceNames.map(name => ({ name, sha256: digest(readFileSync(join(path, name))) }));
+    // Source notices absent from npm's resource directories, pinned to reviewed bytes.
+    const supplement = JSON.parse(readFileSync(join(root, 'scripts/legal/pdfjs-resource-notices.json'), 'utf8'));
+    if (supplement.packageVersion !== pkg.version) throw new Error('Review PDF.js source notices for new version');
+    for (const resource of supplement.resources) {
+      if (!resources.some(r => r.name === resource.name && r.sha256 === resource.sha256)) {
+        throw new Error(`Review PDF.js source binding: ${resource.name}`);
+      }
+    }
+    for (const file of supplement.files) {
+      if (!file.source.startsWith('https://github.com/') || digest(file.text) !== file.sha256) {
+        throw new Error(`Invalid PDF.js source notice: ${file.name}`);
+      }
+      files.push(file);
+    }
   }
   entries.push({ name: pkg.name, version: pkg.version, license: resources ? 'Apache-2.0 + bundled resource licenses (see files)' : license, declaredLicense: pkg.license, ...(resources ? { resources } : {}), source: `https://www.npmjs.com/package/${pkg.name}/v/${pkg.version}`, files });
 }
