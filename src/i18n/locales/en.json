@@ -5404,5 +5404,15 @@
     "featureUnavailable": "This feature is unavailable in the App Store edition. Your saved data is preserved.",
     "storeScope": "The App Store edition excludes terminal commands, roleplay, Sakura translation and ComfyUI. The other experimental features remain available with their existing switches.",
     "savedModelUnavailable": "This model configuration is preserved, but its dedicated feature cannot run in the App Store edition."
+  },
+  "thirdParty": {
+    "title": "Third-party licenses and notices",
+    "description": "Read collected component and font licenses offline, with original copyright and license text. This collection is still being expanded.",
+    "show": "View notices",
+    "hide": "Hide notices",
+    "loading": "Loading…",
+    "failed": "Could not read local notices. Please retry.",
+    "search": "Search components or licenses",
+    "count": "{{count}} notices"
   }
 }

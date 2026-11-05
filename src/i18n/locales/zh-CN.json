@@ -5395,5 +5395,15 @@
     "featureUnavailable": "商店版不提供此功能，已有数据仍然保留。",
     "storeScope": "商店版不提供终端、角色扮演、Sakura 翻译和 ComfyUI；其余实验功能保留原有开关。",
     "savedModelUnavailable": "此模型配置仍然保留，但其专用功能无法在商店版中运行。"
+  },
+  "thirdParty": {
+    "title": "第三方许可证与声明",
+    "description": "离线查看已整理的组件与字体许可，保留原作者版权及许可原文。此列表仍在补充中。",
+    "show": "查看声明",
+    "hide": "收起声明",
+    "loading": "正在读取…",
+    "failed": "无法读取本地声明，请重试。",
+    "search": "搜索组件或许可证",
+    "count": "{{count}} 项声明"
   }
 }
