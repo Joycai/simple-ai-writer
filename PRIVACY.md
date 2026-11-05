@@ -2,7 +2,7 @@
 
 适用于 Mac App Store 版 Simple AI Writer（Simple AI Writer Store）。
 
-运营者：蔡正旭（Cai Zhengxu）  
+运营者：Joycai（Cai Zhengxu）  
 隐私联系邮箱：[joycai@joycai.cn](mailto:joycai@joycai.cn)  
 版本日期：2026 年 11 月 5 日。本政策自发布至本仓库 main 分支之日起生效。
 
@@ -71,7 +71,7 @@ GitHub Issues 是公开反馈渠道，提交的内容可能被任何人查看。
 
 Applies to the Mac App Store edition of Simple AI Writer (Simple AI Writer Store).
 
-Operator: 蔡正旭（Cai Zhengxu）  
+Operator: Joycai（Cai Zhengxu）  
 Privacy contact: [joycai@joycai.cn](mailto:joycai@joycai.cn)  
 Version date: November 5, 2026. This policy takes effect when published to this repository's main branch.
 
