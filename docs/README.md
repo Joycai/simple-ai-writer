@@ -41,6 +41,7 @@ reaching for is one of the states above, plus a modifier if it needs one.
 | [app-store/native-acceptance-2026-11-04.md](feature/app-store/native-acceptance-2026-11-04.md) | `partial` | 2.0.15 build 3 ad-hoc 原生验收逐步记录；静态检查、启动及取消选择通过，其余交互继续验收 |
 | [app-store/p5-release-runbook.md](feature/app-store/p5-release-runbook.md) | `partial` | P5 本地候选档案、测试用例与反馈 / 提审 / 维护交接；TestFlight 和正式提交待完成 |
 | [app-store/README.md](feature/app-store/README.md) | `partial` | P4 双语商店资料、审核路径、构建号、独立准备流水线与授权 / 申报工作表；正式提交待完成 |
+| [app-store/license-sources/README.md](feature/app-store/license-sources/README.md) | `partial` | 当前许可范围：直接依赖与实际使用字体；组件内声明归属、来源证据与待确认项 |
 | [mac-app-store-plan.md](feature/mac-app-store-plan.md) | `partial` | Mac App Store 审查与 P0–P5 计划：P0–P3 代码及 P4 / P5 本地上架准备已实现；政策发布与原生验收待完成 |
 | [privacy-policy-draft.md](feature/privacy-policy-draft.md) | `living` | 商店版正式中英文隐私政策入口与发布记录，隐私标签另行核对 |
 | [context-ring-design.md](feature/agent/context-ring-design.md) | `shipped` | 分段上下文圆环、详情浮层与会话级 Compact 反馈 |

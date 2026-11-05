@@ -183,6 +183,8 @@ Load the relevant doc **before** working in that area — don't reconstruct it f
 
 ## 协作约定
 
+- **许可证整理已收口（2026-11-05）。** 除非新增依赖，否则不再主动核查、扩展许可证清单或重启既有待确认项调查。新增依赖只处理新增项；既有来源与历史待确认事项保留在 `docs/feature/app-store/license-sources/README.md`，不作为继续调查的任务。
+
 - **分支从 `main` 切**，前缀 `feat/` · `fix/` · `chore/` · `docs/` · `refactor/`。**不叠 PR**：CI 的触发条件是 `pull_request: branches: [main]`，指向别的分支的 PR 一道门禁都拿不到。
 - **commit message 是英文类型前缀 + 中文正文**（`fix: 收紧 shell 只读免审白名单并禁止复合命令连批`）。写改了什么、为什么这么改，不写文件清单。
 - **版本号跟着功能 PR 一起走**，不单开 chore 分支。用 `bump-version` skill，别手改任何一处版本字符串——四份 Tauri 清单必须同步移动。

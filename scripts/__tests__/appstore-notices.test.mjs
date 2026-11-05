@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+const inventory = JSON.parse(readFileSync(new URL('../../docs/feature/app-store/license-sources/resource-inventory.json', import.meta.url))).inventories;
+const resourcesOf = name => inventory.find(e => e.name === name).resources;
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
 test('bundled notice texts retain their recorded source hashes', () => {
@@ -38,7 +40,7 @@ test('all direct frontend dependencies have notices without unresolved exception
 });
 
 test('six JS plugins retain full version-pinned source licenses and package evidence', () => {
-  const snapshot = JSON.parse(readFileSync(new URL('../legal/tauri-js-notices.json', import.meta.url)));
+  const snapshot = JSON.parse(readFileSync(new URL('../../docs/feature/app-store/license-sources/tauri-js-notices.json', import.meta.url)));
   const data = JSON.parse(readFileSync(new URL('../../src/assets/legal/third-party-notices.json', import.meta.url)));
   assert.equal(snapshot.entries.length, 6);
   for (const plugin of snapshot.entries) {
@@ -63,12 +65,11 @@ test('KaTeX fonts preserve their embedded OFL copyright and reserved names', () 
   const data = JSON.parse(readFileSync(new URL('../../src/assets/legal/third-party-notices.json', import.meta.url)));
   const entry = data.entries.find(e => e.name === 'katex' && e.version === '0.18.10');
   const indirect = data.entries.find(e => e.name === 'katex' && e.version === '0.16.47');
-  assert.deepEqual(indirect.resources, entry.resources);
-  assert.deepEqual(indirect.files.slice(1), entry.files.slice(1));
+  assert.equal(indirect, undefined);
   assert.equal(entry.license, 'MIT (code) + OFL-1.1 (fonts)');
-  assert.equal(entry.resources.length, 60);
+  assert.equal(resourcesOf(entry.name).length, 60);
   let ttfCount = 0;
-  for (const resource of entry.resources) {
+  for (const resource of resourcesOf(entry.name)) {
     const bytes = readFileSync(new URL(`../../node_modules/katex/${resource.name}`, import.meta.url));
     assert.equal(createHash('sha256').update(bytes).digest('hex'), resource.sha256);
     if (!resource.name.endsWith('.ttf')) continue;
@@ -104,7 +105,7 @@ test('PDF preview resource glob has complete byte-preserving notice and resource
   const entry = data.entries.find(e => e.name === 'pdfjs-dist');
   const preview = readFileSync(new URL('../../src/components/editor/PdfPreview.tsx', import.meta.url), 'utf8');
   assert.ok(preview.includes('/node_modules/pdfjs-dist/{cmaps,standard_fonts,wasm}/*'), 'Review changed PDF asset scope');
-  for (const resource of entry.resources) {
+  for (const resource of resourcesOf(entry.name)) {
     const bytes = readFileSync(new URL(`../../node_modules/pdfjs-dist/${resource.name}`, import.meta.url));
     assert.equal(createHash('sha256').update(bytes).digest('hex'), resource.sha256, resource.name);
     if (/\/(LICENSE|NOTICE|COPYING)/i.test(resource.name)) {
@@ -117,19 +118,64 @@ test('PDF preview resource glob has complete byte-preserving notice and resource
 });
 
 test('PDF source supplements remain bound to the reviewed binary resources and immutable sources', () => {
-  const supplement = JSON.parse(readFileSync(new URL('../legal/pdfjs-resource-notices.json', import.meta.url)));
+  const supplement = JSON.parse(readFileSync(new URL('../../docs/feature/app-store/license-sources/pdfjs-resource-notices.json', import.meta.url)));
   const data = JSON.parse(readFileSync(new URL('../../src/assets/legal/third-party-notices.json', import.meta.url)));
   const entry = data.entries.find(e => e.name === 'pdfjs-dist');
   assert.equal(entry.version, supplement.packageVersion);
   assert.equal(supplement.resources.length, 10);
   for (const resource of supplement.resources) {
-    assert.deepEqual(entry.resources.find(r => r.name === resource.name), resource);
+    assert.deepEqual(resourcesOf(entry.name).find(r => r.name === resource.name), resource);
   }
   for (const file of supplement.files) {
     assert.match(file.source, /^https:\/\/github\.com\/[^/]+\/[^/]+\/blob\/[a-f0-9]{40}\//);
-    assert.deepEqual(entry.files.find(f => f.name === file.name), file);
+    if (file.name.endsWith('/README.md')) assert.equal(entry.files.find(f => f.name === file.name), undefined);
+    else assert.deepEqual(entry.files.find(f => f.name === file.name), file);
   }
   assert.match(entry.files.find(f => f.name === 'QuickJS/LICENSE').text, /Fabrice Bellard[\s\S]*Charlie Gordon/);
   assert.match(entry.files.find(f => f.name === 'pdf.js.qcms/src/lib.rs (original license header)').text, /Copyright \(c\) 2005 Mozilla Foundation/);
-  assert.match(entry.files.find(f => f.name === 'PDF.js/external/standard_fonts/README.md').text, /1\.07\.4/);
+  assert.match(supplement.files.find(f => f.name === 'PDF.js/external/standard_fonts/README.md').text, /1\.07\.4/);
+});
+
+
+test('independent entries contain only direct runtime dependencies and offered fonts', () => {
+  const data = JSON.parse(readFileSync(new URL('../../src/assets/legal/third-party-notices.json', import.meta.url)));
+  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url)));
+  const npm = data.entries.filter(e => e.source.startsWith('https://www.npmjs.com/'));
+  assert.deepEqual(npm.map(e => e.name).sort(), [...Object.keys(pkg.dependencies), 'jszip'].sort());
+  for (const entry of npm) {
+    const installed = JSON.parse(readFileSync(new URL(`../../node_modules/${entry.name}/package.json`, import.meta.url)));
+    assert.equal(entry.version, installed.version);
+  }
+  const manifest = readFileSync(new URL('../../src-tauri/Cargo.toml', import.meta.url), 'utf8');
+  const names = [];
+  let include = false;
+  for (const line of manifest.split('\n')) {
+    if (line.startsWith('[')) include = line === '[dependencies]' || (line.startsWith('[target.') && line.endsWith('.dependencies]') && !line.includes('windows'));
+    else if (include && /^[a-z][a-z0-9_-]* =/.test(line)) names.push(line.split(' =')[0]);
+  }
+  const rust = data.entries.filter(e => e.source.startsWith('https://crates.io/'));
+  assert.deepEqual(rust.map(e => e.name).sort(), names.sort());
+  assert.equal(data.entries.length, npm.length + rust.length + 2);
+  for (const entry of data.entries) {
+    assert.equal(entry.resources, undefined);
+    assert.equal(entry.localFiles, undefined);
+    assert.ok(!entry.files.some(f => f.name.endsWith('/README.md') || f.name === 'PATCH.md'));
+  }
+});
+
+test('downloaded font agreements are present and match the configured pack versions', () => {
+  const data = JSON.parse(readFileSync(new URL('../../src/assets/legal/third-party-notices.json', import.meta.url)));
+  const packs = readFileSync(new URL('../../src/lib/theme/fontPackData.ts', import.meta.url), 'utf8');
+  for (const [name, pkg, version, marker] of [
+    ['MiSans', 'misans', '5.0.0', '7. General Provisions'],
+    ['HarmonyOS Sans SC', 'harmonyos-sans-sc-webfont-splitted', '1.1.0', '5.NO LIABILITY'],
+  ]) {
+    assert.ok(packs.includes(`"pkg":"${pkg}","version":"${version}"`));
+    const entry = data.entries.find(e => e.name === name);
+    assert.equal(entry.version, `${pkg}@${version}`);
+    assert.ok(entry.files.some(f => f.text.includes(marker)));
+  }
+  const encoding = data.entries.find(e => e.name === 'encoding_rs');
+  assert.equal(encoding.license, 'MIT AND BSD-3-Clause');
+  assert.ok(encoding.files.some(f => f.name === 'LICENSE-WHATWG' && f.text.includes('WHATWG')));
 });
