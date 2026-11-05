@@ -383,3 +383,71 @@ Rust 原文收集器现在单独处理 vendor：固定上游归档 checksum、�
 既有复杂许可、JS 插件全文、下载字体许可及镜像链路、图标/音频来源、最终签名包原生离线验收均保持待完成。本轮没有重做在线发布者身份验证，也没有新建签名包或上传。
 
 整合后验证：42 条 Rust 原文归档复核通过；离线资产共 91 条（49 条 npm、42 条 Rust），与 main 的 74 条既有记录逐项比较完全保留，新增 17 条。11 项 App Store Node 检查通过；`pnpm build` 类型检查、应用及原型生产构建通过；`git diff --check` 通过。四份版本清单已同步为 2.0.19。未运行外部模型 live 测试，未生成新签名包，未执行原生离线验收。整合前保存的临时工作副本不是发布资产，当前生成资产已包含 #848 全部记录。
+
+## 2026-11-05 第四批合并后遗漏复查
+
+PR #849 已合并，基准 main `316024c3` / 2.0.19。重新离线运行库存扫描得到 704 条记录（npm production 256、Cargo metadata 448）；已收录 91 条（49 npm、42 Rust），按名称与版本匹配仍有 613 条未收录（207 npm、406 Cargo）。库存包含构建/开发/平台间接依赖与应用自身，因此 **613 不是确认随包遗漏数**，不能要求全部照搬入声明。扫描中的 27 条缺许可字段/根目录原文也不是完整待办数，其中包含应用自身。
+
+### 已定位的覆盖缺口
+
+1. **直接前端依赖**：`@joplin/turndown-plugin-gfm`、`@lezer/highlight`、`@vscode/markdown-it-katex`、`codemirror`、`gray-matter`、`mermaid`、`motion`、`nanoid`、`turndown`、`pdfjs-dist` 尚未进入离线声明。前九项安装包含根目录 MIT 许可文件，PDF.js 为 Apache-2.0；这里只确认文件存在与元数据，仍须逐份核对原文与来源后纳入。六个 Tauri JS 插件仍仅发现 `LICENSE.spdx`，不能凭 Rust 同名插件证据结清其 JS 版本。
+2. **PDF.js 嵌套资源**：`src/components/editor/PdfPreview.tsx:12` 通过 glob 打包 `cmaps`、`standard_fonts`、`wasm` 全部文件。安装依赖中存在 `cmaps/LICENSE`、`standard_fonts/LICENSE_FOXIT` / `LICENSE_LIBERATION`，以及 WASM 的 QCMS / OPENJPEG / JBIG2 与 PDFJS 对应许可文件。当前本地 dist 可见 Foxit 字体、Liberation 及 WASM 相关许可证资产；这说明不能只补 PDF.js 根目录 LICENSE。部分原文已被 glob 带入资产，但尚无离线入口的整理、映射与完整覆盖校验，不能描述成所有原文完全未随包。最终签名包需重新核对。
+3. **其他字体范围**：dist 中还有 `KaTeX_*.woff/woff2/ttf`。现有字体测试仅检查 `src/styles/fonts.ts` 的 Fontsource 导入，不能据其通过宣称所有字体均核验完成。KaTeX 根目录 MIT 原文已收录；仍需核对其字体的来源及是否有额外原文要求，不预先断言需要额外许可。
+4. **扫描与测试盲区**：库存和声明收集器主要读取根目录 LICENSE / NOTICE；有文件不等于完整原文，根目录无文件也不等于无许可。现有测试验证已选清单一致性、hash 和 Fontsource 导入，未对最终构建所有组件/嵌套资源建立覆盖断言。白名单外新增依赖仍可能在 CI 通过时缺少声明。
+
+### 后续顺序
+
+优先补齐可确认的直接前端依赖；随后处理 PDF.js 实际打包的嵌套资源和 KaTeX 字体来源，再对 Mermaid/Office/网络组件的传递依赖与 MPL/EPL 等许可逐项核对。下载字体、图标/音频权利证据和最终签名包离线可读性等既有待办继续保留。本轮只做盘点与文档记录，未修改运行行为、许可选择、版本或声明资产，也没有生成新签名包。
+
+## 2026-11-05 离线声明第五批（2.0.20，前端直接依赖与 PDF.js 资源）
+
+状态：原文整理部分完成，未完成整体分发许可验收。基于第四批合并后的 main，本轮新增 10 个 npm 包，离线声明共 **101 条（59 npm、42 Rust）**；原有 91 条记录逐项保持不变。站外版入口、PDF 加载/渲染、沙盒及网络行为均未修改。
+
+### 已纳入原文
+
+| 包 | 版本 | 包级许可 |
+| --- | --- | --- |
+| @joplin/turndown-plugin-gfm | 1.0.68 | MIT |
+| @lezer/highlight | 1.2.5 | MIT |
+| @vscode/markdown-it-katex | 1.1.2 | MIT |
+| codemirror | 6.0.2 | MIT |
+| gray-matter | 4.0.3 | MIT |
+| mermaid | 12.2.0 | MIT |
+| motion | 13.5.1 | MIT |
+| nanoid | 6.0.2 | MIT |
+| turndown | 7.2.4 | MIT |
+| pdfjs-dist | 6.4.299 | Apache-2.0；嵌套资源另有条款 |
+
+依据当前 pnpm 锁定版本的安装包，保留根目录全文、原版权行及 SHA-256。markdown-it-katex 文件中的 Microsoft、Takahiro Ethan Ikeuchi、Waylon Flinn 三段均完整保留；不从作者元数据补写版权。本轮是安装包原文核对，没有另行完成 npm 发布归档签名/发布者身份验证，也不将包级许可覆盖到所有传递依赖。
+
+### PDF.js 嵌套资源
+
+现有预览 glob 打包 `cmaps`、`standard_fonts`、`wasm` 三个目录。本轮将以下 9 份文件完整加入 `pdfjs-dist` 的离线条目，保持原路径以便查阅；条目标题明确是包级 Apache-2.0 加资源各自条款，不统一归类为 Apache：
+
+| 原文路径 | 原文内容与当前边界 |
+| --- | --- |
+| cmaps/LICENSE | Adobe 版权及三项再分发条件 |
+| standard_fonts/LICENSE_FOXIT | PDFium Authors 版权及三项再分发条件 |
+| standard_fonts/LICENSE_LIBERATION | Red Hat 字体协议、GPLv2 全文及例外；仅完成原文收录，来源/分发义务待核对 |
+| wasm/LICENSE_OPENJPEG | OpenJPEG 多位作者版权及两项再分发条件 |
+| wasm/LICENSE_PDFJS_OPENJPEG | Mozilla Foundation 版权及两项再分发条件 |
+| wasm/LICENSE_QCMS | Mozilla / Marti Maria 版权及 MIT 原文 |
+| wasm/LICENSE_PDFJS_QCMS | MIT 正文，未见明确版权主体行；归属证据仍待补充 |
+| wasm/LICENSE_JBIG2 | PDFium 三项再分发条件及 Apache 全文，均保留 |
+| wasm/LICENSE_PDFJS_JBIG2 | Mozilla Foundation 版权及 Apache 声明 |
+
+另外保留 `build/pdf.mjs` 的原始许可头（明确标注为节选的 license header），补充根目录通用 Apache 模板未包含的 Mozilla Foundation 版权。PDF 条目合计 11 份文本：根目录 LICENSE、9 份资源许可、1 份许可头。
+
+为使升级可复核，记录三个目录全部 **198 个文件**的相对路径与字节 SHA-256（包含许可文件，并非 198 个独立组件）；`--check` 比较完整生成结果，检测新增/删除/改变。固定资源许可文件集，新增许可或子目录要求复核。新增测试约束预览 glob 范围、资源 hash 和原文收录；直接前端依赖覆盖检查只为上述 6 个 Tauri JS 插件保留显式未决例外，不允许新直接依赖静默漏掉。该检查仍不替代最终安装包清单审计。
+
+### 本轮保留的未决项
+
+- **LiberationSans 字体**：现有 PDF.js 包内实际含 4 个 TTF；所附许可不是 OFL，而是 GPLv2 加例外的旧文本。须进一步核对对应字体源版本、源码提供及商店分发要求。不能借用 Fontsource 的 OFL 结论，也不能仅凭文档嵌入例外就将应用内附带字体认定已结清。本轮完整展示原文，不删字体或改变 PDF 显示。
+- **QuickJS**：`wasm/quickjs-eval.js`、`wasm/quickjs-eval.wasm` 同在当前 glob 范围，却未见同目录专属 LICENSE。已记入资源 hash 清单，尚需上游构建来源及对应完整版权/许可证据；不能因 PDF.js 根目录为 Apache 而一并认定完成。
+- **PDFJS_QCMS**：许可正文已保留，缺明确版权行的来源问题仍未结清。嵌套组件的精确上游版本、构建链路与其他潜在归属还需核对。
+- `iccs/LICENSE` 不在上述 glob 范围，本轮不声称其已进入最终包；后续实际产物审计若发现使用，应补充对应证据。
+- 六个 Tauri JS 插件全文、KaTeX 字体来源、Mermaid/Office 等传递依赖、MPL/EPL 项、下载字体版本与镜像链路、图标和音频权利证据，以及最终签名包离线可读性/升级验收继续待完成。
+
+本轮不生成新签名包、不上传，不将文本已收录等同于全部许可义务完成。版本通过 bump-version 技能同步至 2.0.20。
+
+验证：13 项 App Store Node 检查通过；`pnpm build` 类型检查、应用及原型生产构建通过，dist 已生成离线声明 chunk，仅保留既有大 chunk 提示；`git diff --check` 通过。首次构建触发依赖恢复时受沙盒 DNS 限制，随后使用 `pnpm install --frozen-lockfile` 恢复锁定依赖并重新检查/构建通过，未改动 pnpm-lock.yaml。未执行外部模型 live 测试、原生验收或最终签名包覆盖验证。
