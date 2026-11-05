@@ -253,3 +253,56 @@ P1–P3 的原生验收、隐私政策发布、正式证书 / 描述文件 / 上
 本次未改变沙盒权限、文件授权、隐私许可、网络请求或站外版入口行为。声明资产由共用前端构建携带，但站外版不显示新增界面。正式签名包中离线读取、键盘展开/搜索、长文本选择复制、两种语言与主题以及站外界面仍待原生验收。
 
 验证结果：生成一致性与原文哈希 2 项 Node 测试通过（已接入现有 CI 的 `appstore-*.test.mjs` 匹配范围）；TypeScript / 前端及原型构建通过，构建产物包含本地 `third-party-notices` chunk。离线 Vitest 467 文件 / 7073 项通过。默认全量测试另触发外部模型实测，7 个 live 测试文件因 DNS/网络失败未通过，不能写为全量绿；随后明确排除 `**/live.*` 复跑得到上述离线结果。原生安装包与最终随包检查仍待进行。
+
+## 2026-11-05 离线声明第二批（2.0.17）
+
+状态：部分整理完成，未完成整体分发许可验收。PR #846 已合并，本批从 main 新建分支，按版本技能同步至 2.0.17。不改变商店版功能范围、字体下载、隐私许可或站外版界面；沿用商店版已有离线入口展示新增原文。
+
+### Rust 原文与可追溯证据
+
+新增 **12 条 Rust 包版本记录**，离线列表合计 **61 条**：
+
+| 包 | 版本 | 本批选择 |
+| --- | --- | --- |
+| tauri | 2.11.5 | MIT |
+| tauri-runtime | 2.11.3 | MIT |
+| tauri-runtime-wry | 2.11.4 | MIT |
+| tauri-utils | 2.9.3 | MIT |
+| tokio | 1.53.1 | MIT |
+| reqwest | 0.12.28 | MIT |
+| keyring | 4.2.0 | MIT |
+| tauri-plugin-dialog | 2.7.3 | MIT |
+| tauri-plugin-fs | 2.5.2 | MIT |
+| tauri-plugin-notification | 2.4.0 | MIT |
+| tauri-plugin-opener | 2.5.5 | MIT |
+| tauri-plugin-sql | 2.4.1 | MIT |
+
+除 Tokio 原声明为 MIT，其余均为 MIT / Apache-2.0 二选一，选择 MIT，保留包内所有根目录 LICENSE / NOTICE 文件（含另一许可全文和 SPDX 元数据）。不删除原作者版权信息，不把 SPDX 文件单独当作完整许可。本批完成的是这些包的原文取得与保留；包内嵌套第三方代码、最终链接范围与修改情况仍需产物核对，不能推广成整个传递依赖树均已批准。
+
+`node scripts/appstore-rust-notices.mjs [--check]` 使用本机离线 Cargo metadata 的 macOS arm64 / app-store 图，仅选择表中包。逐个核对缓存 `.crate` 归档 SHA-256 与 Cargo.lock 的 checksum，从归档读取许可，与已解包文件逐字比较；必须包含完整 MIT 条款及原有 Copyright。快照写入 `scripts/legal/rust-notices.json`，含 crates.io 版本链接、registry source、归档 checksum、每份原文 SHA-256；不保存机器绝对路径。更新依赖时先复核再重建。
+
+`appstore-notices.mjs` 将快照合入应用内资产，并校验每项锁定版本、registry source、归档 checksum 及文本 hash；默认前端 CI 不需要 Cargo 下载缓存。快照不能替代上游原文核验，需要在已备齐锁定依赖的开发机运行 Rust 收集器 `--check`。应用内读取仍完全离线。
+
+### 字体核对
+
+内置字体保持原文件与名称，已有原文继续随包：
+
+| 字体 | 原文版权主体 | 本项目使用范围 |
+| --- | --- | --- |
+| Spectral | 2017 The Spectral Project Authors | latin 200/300/400/500/600、400 italic |
+| Inter Tight | 2022 The Inter Project Authors | latin 400/500/600/700 |
+| JetBrains Mono | 2020 The JetBrains Mono Project Authors | latin 400/500 |
+
+三者均取自锁定 `@fontsource` 包的 LICENSE，保留完整 OFL-1.1 与版权行，不以通用模板替换字体原文。新增检查把 `src/styles/fonts.ts` 的 Fontsource 导入与离线声明关联，防止以后新增内置字体而漏记原文。依据 [OFL 官方文本](https://openfontlicense.org/open-font-license-official-text/) 第 2 条，随软件分发时保留版权与许可，并使用户可阅读；名称、修改版与单独销售限制仍保留在原文中。字体最终构建文件与上游子集处理来源未因此标记为全部核验通过。
+
+### 仍待确认（不以缺少证据推断许可）
+
+- **tauri-plugin-http 2.6.0 是本仓库 vendor 路径依赖**，不能套用 registry checksum 验证或宣称与 crates.io 归档一致。本批排除；需核对 vendor 原文、上游版本及本项目补丁后单独记录。
+- anyhow、serde、serde_json、thiserror 包内 MIT 文本未含明确版权主体行：没有补写作者，也未纳入本批；需要进一步核对上游版权声明。其许可表达式本身不是禁止使用的证据。
+- 第一批记录中的 objc2 / block2 / unic 等缺原文条目、复杂 MPL / EPL、其他 Rust / npm 传递依赖，以及 JS 插件对应版本全文仍待处理。Rust 插件与同名 JS 包是不同包，本次不据 Rust 证据自动结清 JS 项。
+- HarmonyOS Sans SC 使用 `harmonyos-sans-sc-webfont-splitted@1.1.0`，MiSans 使用 `misans@5.0.0`，为按需下载而非安装包内置字体。2026-11-05 读取[华为官方许可页面](https://developer.huawei.com/consumer/cn/doc/design-guides/font-0000001828772001)超时，[小米官方页面](https://hyperos.mi.com/font/)未取得可读完整条款。官方对应版本原文、第三方切片/转换与镜像分发许可、原文随下载保留方式仍待确认；不以“免费商用”或 npm 的 Unlicense 标记结清字体授权。
+- 应用图标与示例音频来源、最终签名包声明可读性、旧版本升级与原生离线验收仍待完成。
+
+本节更新第一批“所有 Rust 尚未整理”的状态，不改写历史 2.0.14 扫描快照，也不将 61 条等同于最终随包组件数。
+
+本批验证：12 条 Rust 原文归档复核 `--check` 通过；App Store Node 检查 11 项通过（含原文 hash、锁文件一致性、内置字体导入覆盖）；`pnpm build` 类型检查与构建通过，仅有现存 chunk 大小提示；`git diff --check` 通过。首次构建遇到 pnpm 缓存/依赖恢复失败，恢复锁定依赖后重跑通过，没有修改依赖锁定版本。未运行外部模型 live 测试，未新建签名包或执行原生验收。

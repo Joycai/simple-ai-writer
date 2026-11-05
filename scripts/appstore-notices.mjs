@@ -33,8 +33,18 @@ for (const group of Object.values(groups)) for (const item of group) for (const 
 for (const name of [...selected, '@fontsource/spectral', '@fontsource/inter-tight', '@fontsource/jetbrains-mono']) {
   if (!entries.some(e => e.name === name)) throw new Error(`Required notice missing: ${name}`);
 }
+// A checked-in source snapshot keeps frontend CI independent of a local Cargo cache.
+// Re-capture / verify original archives with appstore-rust-notices.mjs on a prepared host.
+const rust = JSON.parse(readFileSync(join(root, 'scripts/legal/rust-notices.json'), 'utf8'));
+const cargoLock = readFileSync(join(root, 'src-tauri/Cargo.lock'), 'utf8');
+for (const entry of rust.entries) {
+  const block = cargoLock.split('[[package]]').find(b => b.includes(`name = "${entry.name}"\nversion = "${entry.version}"`));
+  if (!block?.includes(`checksum = "${entry.crateChecksum}"`) || !block.includes(`source = "${entry.registrySource}"`)) throw new Error(`Rust notice no longer matches lock: ${entry.name}`);
+  for (const file of entry.files) if (digest(file.text) !== file.sha256) throw new Error(`Rust text hash mismatch: ${entry.name}/${file.name}`);
+  entries.push(entry);
+}
 entries.sort((a, b) => `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`, 'en'));
-const output = JSON.stringify({ scope: 'Partial npm notice collection; includes indirect dependencies. Not a complete distribution clearance.', pnpmLockSha256: digest(readFileSync(resolve(root, 'pnpm-lock.yaml'))), entries }, null, 2) + '\n';
+const output = JSON.stringify({ scope: 'Partial npm and Rust notice collection; includes indirect dependencies. Not a complete distribution clearance.', pnpmLockSha256: digest(readFileSync(resolve(root, 'pnpm-lock.yaml'))), cargoLockSha256: digest(cargoLock), entries }, null, 2) + '\n';
 const target = resolve(root, 'src/assets/legal/third-party-notices.json');
 if (check) {
   if (readFileSync(target, 'utf8') !== output) throw new Error('Notices are stale or altered. Regenerate and review the diff.');
