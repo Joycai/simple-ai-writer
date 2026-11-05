@@ -323,6 +323,8 @@ When contributing, branch from `main` with a `feat/`, `fix/`, `chore/`, `docs/`,
 
 ## Security and privacy model
 
+Mac App Store edition: [Privacy Policy / 隐私政策](PRIVACY.md).
+
 - Project documents and knowledge-base files remain in the selected local folder.
 - Filesystem commands are fenced to explicitly scoped paths by the Tauri backend.
 - API credentials are stored in the OS credential manager.
