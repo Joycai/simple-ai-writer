@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { message } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { privacyControl, setPrivacyPaused } from "../../../lib/privacy/settings";
 import { Section, Row } from "./bits";
 import ui from "../settingsUi.module.css";
 
-/** Store-only. The complete notice is bundled and readable without network access. */
+const PRIVACY_POLICY_URL = "https://github.com/Joycai/simple-ai-writer/blob/main/PRIVACY.md";
+
+/** Store-only. The local summary remains readable without network access. */
 export function PrivacySection() {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
@@ -28,6 +31,14 @@ export function PrivacySection() {
     finally { setBusy(false); }
   }
   return <Section label={t("privacy.title")}>
+    <Row title={t("privacy.publicPolicyTitle")} desc={t("privacy.publicPolicyBody")}>
+      <a className={ui.aboutLink} href={PRIVACY_POLICY_URL} onClick={(event) => {
+        event.preventDefault();
+        void openUrl(PRIVACY_POLICY_URL).catch(() => {
+          setStatus(t("privacy.openPolicyFailed", { url: PRIVACY_POLICY_URL }));
+        });
+      }}>{t("privacy.openPolicy")} ↗</a>
+    </Row>
     <Row title={t("privacy.policyTitle")} desc={t("privacy.summary")}>
       <button className={ui.rowBtn} onClick={() => void message(t("privacy.policyBody"), { title: t("privacy.policyTitle") })}>
         {t("privacy.readPolicy")}

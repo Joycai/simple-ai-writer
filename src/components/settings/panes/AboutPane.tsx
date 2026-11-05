@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
 import { requiresPrivacyConsent } from "../../../lib/distribution";
+import { ThirdPartyNotices } from "./ThirdPartyNotices";
 import { PrivacySection } from "./PrivacySection";
 import { Pane } from "./bits";
 import { ENGINE_FLOOR, missingCaps, parseEngine } from "../../../lib/webviewCaps";
@@ -73,7 +74,7 @@ export function AboutPane() {
         </div>
       </div>
 
-      {requiresPrivacyConsent() && <PrivacySection />}
+      {requiresPrivacyConsent() && <><PrivacySection /><ThirdPartyNotices /></>}
 
       <div className={ui.aboutCopyright}>{t("systemSettings.about.copyright")}</div>
     </Pane>
