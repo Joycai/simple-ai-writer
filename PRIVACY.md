@@ -2,7 +2,8 @@
 
 适用于 Mac App Store 版 Simple AI Writer（Simple AI Writer Store）。
 
-运营者：Joycai（Cai Zhengxu）  
+运营者：Joycai
+
 隐私联系邮箱：[joycai@joycai.cn](mailto:joycai@joycai.cn)  
 版本日期：2026 年 11 月 5 日。本政策自发布至本仓库 main 分支之日起生效。
 
@@ -63,7 +64,7 @@ GitHub Issues 是公开反馈渠道，提交的内容可能被任何人查看。
 
 本政策更新时会在此页面公布，并更新版本日期；历史版本可通过 GitHub 文件历史查看。若相关功能的数据分享告知发生变化，应用会按告知版本重新请求所需许可。
 
-隐私问题、数据请求或对本政策的疑问，请联系蔡正旭（Cai Zhengxu）：[joycai@joycai.cn](mailto:joycai@joycai.cn)。
+隐私问题、数据请求或对本政策的疑问，请联系Joycai：[joycai@joycai.cn](mailto:joycai@joycai.cn)。
 
 ---
 
@@ -71,7 +72,8 @@ GitHub Issues 是公开反馈渠道，提交的内容可能被任何人查看。
 
 Applies to the Mac App Store edition of Simple AI Writer (Simple AI Writer Store).
 
-Operator: Joycai（Cai Zhengxu）  
+Operator: Joycai
+
 Privacy contact: [joycai@joycai.cn](mailto:joycai@joycai.cn)  
 Version date: November 5, 2026. This policy takes effect when published to this repository's main branch.
 
@@ -132,4 +134,4 @@ The app uses OS sandboxing, file-access authorization and system credential stor
 
 Updates are published on this page with a revised version date. Earlier versions remain available through GitHub file history. When a feature's data-sharing notice changes, the app requests the required permission according to the notice version.
 
-For privacy questions or data requests, contact 蔡正旭（Cai Zhengxu） at [joycai@joycai.cn](mailto:joycai@joycai.cn).
+For privacy questions or data requests, contact Joycai at [joycai@joycai.cn](mailto:joycai@joycai.cn).
