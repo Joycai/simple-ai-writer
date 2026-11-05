@@ -12,13 +12,15 @@
  */
 
 import { readPref, writePref } from "../prefs";
+import { distributionAllows } from "../distribution";
 
 const KEY = "app:roleplayBeta";
 
 export function isRoleplayEnabled(): boolean {
-  return readPref(KEY) === "1";
+  return distributionAllows("roleplay") && readPref(KEY) === "1";
 }
 
 export function setRoleplayEnabled(enabled: boolean): void {
+  if (!distributionAllows("roleplay")) return;
   writePref(KEY, enabled ? "1" : "0");
 }

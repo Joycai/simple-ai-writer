@@ -1,3 +1,4 @@
+import { terminalAvailable } from "../../lib/distribution";
 import type { RetrievalProgress } from "../../lib/context/semanticLore";
 /**
  * One chat turn's run, and the multi-conversation plumbing around it: opening
@@ -1036,7 +1037,7 @@ export async function buildResumeSeed(
   });
 
   return {
-    userContent,
+    userContent: terminalAvailable() ? userContent : `${userContent}\n\n${i18n.t("ai.approval.commandUnavailable")}`,
     title: doc.body.match(/^#\s+(.+)$/m)?.[1].trim() || taskId,
     taskWorkspace: existingWorkspace(projectPath, taskId),
   };

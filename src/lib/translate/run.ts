@@ -17,6 +17,8 @@
  */
 
 import type { StreamAccounting } from "../ai/streamUsage";
+import { distributionAllows } from "../distribution";
+import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
 import type { ConnOptions } from "../ai/conn";
 import {
@@ -83,6 +85,7 @@ async function requestOnce(
   freq: number,
   o: RunChunkOptions,
 ): Promise<{ text: string; truncated: boolean; usage: TranslateUsage }> {
+  if (!distributionAllows("sakura")) throw new Error(i18n.t("distribution.featureUnavailable"));
   let text = "";
   let truncated = false;
   const usage: TranslateUsage = { inputTokens: 0, outputTokens: 0 };
@@ -129,6 +132,7 @@ async function requestOnce(
  * 深度计数器去重复它。
  */
 export async function runChunk(chunk: TranslateChunk, o: RunChunkOptions): Promise<ChunkOutcome> {
+  if (!distributionAllows("sakura")) throw new Error(i18n.t("distribution.featureUnavailable"));
   const source = chunkSource(chunk);
   const entries: GlossaryEntry[] =
     o.loreIndex || o.dict?.length
@@ -262,6 +266,7 @@ function failureMarker(index: number, total: number, f: FailedChunk): string {
  *    但已经花掉的时间和 token 不该跟着一起丢。
  */
 export async function runDocument(text: string, o: RunDocumentOptions): Promise<DocOutcome> {
+  if (!distributionAllows("sakura")) throw new Error(i18n.t("distribution.featureUnavailable"));
   const { allLines, chunks } = splitDocument(text, { linesPerChunk: o.linesPerChunk });
   const out = [...allLines];
   const usage: TranslateUsage = { inputTokens: 0, outputTokens: 0 };

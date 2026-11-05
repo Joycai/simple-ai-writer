@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "./styles/fonts";
 import { hydratePrefs, readPref } from "./lib/prefs";
+import { hydrateDistribution } from "./lib/distribution";
 import { applyFontFaces, preloadSelectedThemes } from "./lib/theme/install";
 import { isFontPackId, packFacesCss, readInstalled } from "./lib/theme/fontPacks";
 import { installMarkdownThemeStyles } from "./lib/theme/markdownThemes";
@@ -35,6 +36,7 @@ window.addEventListener("contextmenu", (e) => {
  * but it is guarded anyway, because nothing here is worth a blank window.
  */
 async function boot() {
+  await hydrateDistribution();
   try {
     await hydratePrefs();
   } catch (e) {
@@ -71,6 +73,8 @@ async function boot() {
   }
 
   await import("./i18n");
+  const { initializePrivacyConsent } = await import("./lib/privacy/settings");
+  initializePrivacyConsent();
   const [{ default: App }, { AppErrorBoundary }] = await Promise.all([
     import("./App"),
     import("./components/common/ErrorBoundary"),

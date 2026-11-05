@@ -11,13 +11,15 @@
  */
 
 import { readPref, writePref } from "../prefs";
+import { terminalAvailable } from "../distribution";
 
 const KEY = "app:cliBeta";
 
 export function isCliEnabled(): boolean {
-  return readPref(KEY) === "1";
+  return terminalAvailable() && readPref(KEY) === "1";
 }
 
 export function setCliEnabled(enabled: boolean): void {
+  if (!terminalAvailable()) return;
   writePref(KEY, enabled ? "1" : "0");
 }

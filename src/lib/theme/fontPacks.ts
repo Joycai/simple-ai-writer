@@ -22,7 +22,8 @@
  *
  * Lib layer: no store imports. appStore drives this and holds the state.
  */
-import { fetch } from "../http";
+import { fetch as privacyFetch } from "../http";
+const fetch: typeof globalThis.fetch = (input, init) => privacyFetch(input, init, "fonts");
 import {
   fileExists, readDir, readFile, removeDir, removeFile, renamePath, statPath, writeBinaryFile, writeFile,
 } from "../fs/fileio";

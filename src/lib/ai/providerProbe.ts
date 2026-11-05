@@ -10,9 +10,11 @@
  * than being reported as a failure. See docs/api/provider-standards.md §5.
  */
 
+import { distributionAllows } from "../distribution";
 import i18n from "../../i18n";
 import { anthropicHeaders } from "./anthropic";
-import { fetch } from "../http";
+import { fetch as privacyFetch } from "../http";
+const fetch: typeof globalThis.fetch = (input, init) => privacyFetch(input, init, "probe");
 import { geminiAuthHeaders } from "./gemini";
 import { familyOf, isCompatStandard, type ApiStandard, type AuthMode } from "./types";
 import { anthropicUrl, geminiUrl, modelsUrl, nativeUrl, openaiUrl } from "./urls";
@@ -161,6 +163,7 @@ function modelsFetchError(status: number, standard: ApiStandard, label: string):
 export async function testComfyUiConnection(
   baseUrl: string,
 ): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  if (!distributionAllows("comfyui")) return { ok: false, error: i18n.t("distribution.featureUnavailable") };
   const base = baseUrl.trim().replace(/\/+$/, "");
   if (!base) return { ok: false, error: i18n.t("aiConfig.providers.testMissingFields") };
   try {

@@ -58,6 +58,7 @@ import type { CompactResult } from "./agent/compactResult";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import i18n from "../i18n";
+import { terminalAvailable } from "../lib/distribution";
 import { planFold } from "../lib/agent/compact";
 import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
 import { requestStateUpdate, updateSkillState } from "../lib/agent/skillStateRun";
@@ -353,6 +354,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   requestApproval: (proposal, runId, binding) =>
     new Promise<ApprovalDecision>((resolve) => {
+      if (proposal.kind === "command" && !terminalAvailable()) {
+        resolve({ approved: false, reason: i18n.t("ai.approval.commandUnavailable") });
+        return;
+      }
       const item: PendingApproval = { proposal, resolve, runId, at: Date.now(), ...binding };
       // Covered by a standing grant: apply now and never queue. Queuing first
       // and approving synchronously would flash the card for a frame.

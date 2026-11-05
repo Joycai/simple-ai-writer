@@ -12,6 +12,9 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
+const channel = vi.hoisted(() => ({ terminal: true }));
+vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal, distributionAllows: () => true }));
+
 // The registry reaches the Tauri fs at import time through the write tools;
 // nothing here executes one. Same mock set as agentToolSchema.test.ts, minus
 // the i18n stub: the real strings are what this pins.
@@ -31,7 +34,7 @@ vi.mock("../../fs/fileio", () => ({
 }));
 vi.mock("../../project", () => ({ readDirRecursive: vi.fn(async () => []) }));
 
-import { ALL_TOOL_IDS, getToolDefinitions, partitionByGroup } from "../registry";
+import { ALL_TOOL_IDS, getToolDefinitions, partitionByGroup, executeRegisteredTool } from "../registry";
 
 describe("tool definitions on the wire", () => {
   it("declaration order", () => {
@@ -49,4 +52,16 @@ describe("tool definitions on the wire", () => {
   it("resident / deferred split of the whole registry", () => {
     expect(partitionByGroup(ALL_TOOL_IDS)).toMatchSnapshot();
   });
+});
+
+it("store never exposes or executes terminal from a stale runtime tool list", async () => {
+  channel.terminal = false;
+  try {
+    expect(getToolDefinitions(["read_file", "run_command"]).map((d) => d.function.name)).toEqual(["read_file"]);
+    const result = await executeRegisteredTool(
+      { id: "old-call", name: "run_command", arguments: '{"command":"ls"}' },
+      ["run_command"], {} as never, ["run_command"],
+    );
+    expect(result.content).toContain("终端");
+  } finally { channel.terminal = true; }
 });

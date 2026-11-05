@@ -3,7 +3,8 @@
  * a lost response can already have incurred a charge at the server.
  */
 import { McpError } from "./errors";
-import { fetch } from "../http";
+import { fetch as privacyFetch } from "../http";
+const fetch: typeof globalThis.fetch = (input, init) => privacyFetch(input, init, "mcp");
 import { IS_TAURI } from "../platform";
 import { isObject, mcpHeaders, type McpServer } from "./config";
 

@@ -6,6 +6,9 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const channel = vi.hoisted(() => ({ terminal: true }));
+vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal, distributionAllows: () => true }));
+
 const disk = new Map<string, string>();
 vi.mock("../../fs/fileio", () => ({
   readFile: vi.fn(async (p: string) => {
@@ -257,4 +260,14 @@ describe("native PPTX apply integration", () => {
     await expect(apply(proposal, deps)).rejects.toThrow("save failed");
     expect(nativeApply).not.toHaveBeenCalled();
   });
+});
+
+it("store refuses a previously approved command before calling its runner", async () => {
+  channel.terminal = false;
+  runCommand.mockClear();
+  try {
+    const { deps } = makeDeps();
+    await expect(apply({ kind: "command", command: "ls", path: "/p", timeoutMs: 1000 }, deps)).rejects.toThrow();
+    expect(runCommand).not.toHaveBeenCalled();
+  } finally { channel.terminal = true; }
 });

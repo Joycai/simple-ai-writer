@@ -1,0 +1,94 @@
+{
+  "generatedAt": "2026-11-05T02:14:28.015Z",
+  "app": "/Users/caizhengxu/.codex/worktrees/760b/simple-ai-writer/store-reports/signed-4-vn0w7_cd/Simple AI Writer Store.app",
+  "localStaticChecksPassed": true,
+  "checks": [
+    {
+      "name": "bundle-identity",
+      "passed": true,
+      "detail": {
+        "id": "com.simple-ai-writer.app.appstore",
+        "version": "2.0.15",
+        "buildNumber": "4",
+        "minimumMacOS": "14.0"
+      }
+    },
+    {
+      "name": "signature-integrity",
+      "passed": true,
+      "detail": "verified"
+    },
+    {
+      "name": "sandbox-entitlements",
+      "passed": true,
+      "detail": {
+        "com.apple.security.network.client": true,
+        "com.apple.developer.team-identifier": "H9WK585493",
+        "com.apple.security.files.bookmarks.app-scope": true,
+        "com.apple.security.files.user-selected.read-write": true,
+        "com.apple.security.app-sandbox": true,
+        "com.apple.security.print": true,
+        "com.apple.security.network.server": true,
+        "com.apple.application-identifier": "H9WK585493.com.simple-ai-writer.app.appstore"
+      }
+    },
+    {
+      "name": "architecture-and-deployment-target",
+      "passed": true,
+      "detail": {
+        "arch": "arm64",
+        "minimum": "14.0",
+        "sha256": "6a7f491ebf305591d893f169b9e54ee3bdeb3ca4f1af2d1207678e03782fb696"
+      }
+    },
+    {
+      "name": "linked-libraries",
+      "passed": true,
+      "detail": [
+        "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+        "/System/Library/Frameworks/SystemConfiguration.framework/Versions/A/SystemConfiguration",
+        "/System/Library/Frameworks/Security.framework/Versions/A/Security",
+        "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+        "/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices",
+        "/System/Library/Frameworks/WebKit.framework/Versions/A/WebKit",
+        "/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices",
+        "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+        "/System/Library/Frameworks/Carbon.framework/Versions/A/Carbon",
+        "/System/Library/Frameworks/CoreVideo.framework/Versions/A/CoreVideo",
+        "/usr/lib/libSystem.B.dylib",
+        "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+        "/usr/lib/libiconv.2.dylib",
+        "/usr/lib/libobjc.A.dylib",
+        "/System/Library/Frameworks/ColorSync.framework/Versions/A/ColorSync"
+      ]
+    },
+    {
+      "name": "bundle-resources",
+      "passed": true,
+      "detail": {
+        "files": [
+          "Contents/Info.plist",
+          "Contents/MacOS/simple-ai-writer",
+          "Contents/Resources/icon.icns",
+          "Contents/_CodeSignature/CodeResources",
+          "Contents/embedded.provisionprofile"
+        ],
+        "privacyManifests": []
+      }
+    }
+  ],
+  "signing": {
+    "adHoc": false,
+    "teamPresent": true,
+    "provisioningProfilePresent": true
+  },
+  "submissionReady": false,
+  "pending": [
+    "P1 native file/bookmark/restart acceptance",
+    "P2 native consent/cancellation and public policy publication",
+    "P3 native feature/failure/OS matrix",
+    "Privacy collection manifest and SDK review",
+    "P4 metadata, screenshots, review service and license notices",
+    "Distribution certificate/profile validation (P4)"
+  ]
+}

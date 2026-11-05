@@ -48,6 +48,7 @@ const FLAT = `${LIB}/__tests__`;
 /** 根模块的测试：被测对象是 `src/lib/*.ts` 自己。值是那个模块名。 */
 const ROOT_MODULE_TESTS: Readonly<Record<string, string>> = {
   "appReset.test.ts": "appReset",
+  "distribution.test.ts": "distribution",
   "closeDocShortcut.test.ts": "shortcuts",
   "externalLinks.test.ts": "externalLinks",
   "httpLocalUrl.test.ts": "http",
@@ -59,6 +60,7 @@ const ROOT_MODULE_TESTS: Readonly<Record<string, string>> = {
   "pinnedProjects.test.ts": "recentProjects",
   "prefs.test.ts": "prefs",
   "projectDbCache.test.ts": "project",
+  "projectAuthorization.test.ts": "projectAuthorization",
   "recentProjects.test.ts": "recentProjects",
   "screenShortcuts.test.ts": "shortcuts",
   "staleRefs.test.ts": "staleRefs",

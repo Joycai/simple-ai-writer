@@ -1,3 +1,4 @@
+import { distributionAllows } from "../lib/distribution";
 /**
  * 互动式角色扮演的状态：花名册 + 每个 agent 的活会话 + 并发闸。
  *
@@ -508,6 +509,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
    * 一次重试。
    */
   const runJob = async (job: Job) => {
+    if (!distributionAllows("roleplay")) return;
     const { projectPath } = get();
     const agent = get().agents[job.agentId];
     if (!projectPath || !agent) return;
@@ -902,6 +904,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
 
   /** 信号量：有名额就拉起队首里第一个自己没在跑的作业。 */
   const pump = async () => {
+    if (!distributionAllows("roleplay")) return;
     for (;;) {
       const { running, compacting, queue } = get();
       if (running.length >= MAX_CONCURRENT_RUNS) return;
@@ -1065,6 +1068,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     },
 
     previewRecap: async (id, brief) => {
+      if (!distributionAllows("roleplay")) return null;
       const { projectPath } = get();
       const agent = get().agents[id];
       if (!projectPath || !agent) return null;
@@ -1109,6 +1113,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     },
 
     newSession: async (id, opts) => {
+      if (!distributionAllows("roleplay")) return;
       const { projectPath } = get();
       const agent = get().agents[id];
       if (!projectPath || !agent) return;
@@ -1350,6 +1355,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     },
 
     send: async (agentId, text, refs = [], quote) => {
+      if (!distributionAllows("roleplay")) return;
       const { projectPath } = get();
       const agent = get().agents[agentId];
       const body = text.trim();
@@ -1421,6 +1427,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     },
 
     compactNow: async (agentId) => {
+      if (!distributionAllows("roleplay")) return;
       const { projectPath } = get();
       const agent = get().agents[agentId];
       const session = get().sessions[agentId];
@@ -1533,6 +1540,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
      * 不是再说一遍话。committed 的作业连组装都跳过，直接用现有 history。
      */
     retry: (agentId) => {
+      if (!distributionAllows("roleplay")) return;
       const job = get().sessions[agentId]?.lastJob;
       if (!job) return;
       const { running, compacting, queue } = get();

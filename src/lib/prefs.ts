@@ -29,6 +29,7 @@
 import { isSamePath } from "./paths";
 
 export const PREF_KEYS = [
+  "app:privacyControl",
   "ai:semanticDefaults",
   "app:mcpBeta",
   "app:mcpServers",
@@ -163,7 +164,8 @@ export const PINNED_LORE_PREFIX = "ai:pinnedLore:";
  */
 export const LORE_SCOPE_PREFIX = "lore:scope:";
 export const SEMANTIC_LORE_PREFIX = "lore:semantic:";
-export const PREF_KEY_PREFIXES = [PINNED_LORE_PREFIX, LORE_SCOPE_PREFIX, SEMANTIC_LORE_PREFIX] as const;
+export const PRIVACY_CONSENT_PREFIX = "privacy:consent:";
+export const PREF_KEY_PREFIXES = [PRIVACY_CONSENT_PREFIX, PINNED_LORE_PREFIX, LORE_SCOPE_PREFIX, SEMANTIC_LORE_PREFIX] as const;
 
 /**
  * Preferences that describe *this machine* rather than the author's taste, and
@@ -171,6 +173,7 @@ export const PREF_KEY_PREFIXES = [PINNED_LORE_PREFIX, LORE_SCOPE_PREFIX, SEMANTI
  * not another, and a first-run flag whose whole job is to be false once.
  */
 export const MACHINE_LOCAL_PREF_KEYS: readonly string[] = [
+  "app:privacyControl",
   "app:mcpBeta",
   "app:mcpServers",
   // Absolute document paths and their continuation choices stay on this machine.
@@ -648,4 +651,14 @@ export function resetPrefsForTest(): void {
   cache.clear();
   hydrated = false;
   writeChain = Promise.resolve();
+}
+
+/** Security decisions must read the shared DB and fail closed, never a stale/fallback cache. */
+export async function readPrefConfirmed(key: string): Promise<string | null> {
+  if (!hydrated) throw new Error("Preferences database is unavailable.");
+  await flushPrefs();
+  const rows = await (await openDb()).select<{ value: string }[]>(
+    `SELECT value FROM ${TABLE} WHERE key = ?`, [key],
+  );
+  return typeof rows[0]?.value === "string" ? rows[0].value : null;
 }

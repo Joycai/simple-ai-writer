@@ -1,0 +1,51 @@
+name: Prepare App Store candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'Local candidate build number (1–9999); reserve in release ledger before any upload'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: macos-latest
+    env:
+      STORE_BUILD_NUMBER: ${{ inputs.build_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - run: pnpm install --frozen-lockfile
+      - name: Validate build policy and metadata draft
+        run: |
+          node --test scripts/__tests__/appstore-*.test.mjs
+          node scripts/check-appstore-metadata.mjs
+      - name: Build ad-hoc candidate (no upload)
+        run: pnpm tauri:appstore --build-number "$STORE_BUILD_NUMBER" --ci
+      - name: Audit and inventory
+        run: |
+          mkdir -p store-reports
+          node scripts/audit-appstore.mjs --build-number "$STORE_BUILD_NUMBER" --output store-reports/bundle.json
+          node scripts/check-appstore-metadata.mjs > store-reports/metadata.json
+          cargo fetch --locked --manifest-path src-tauri/Cargo.toml
+          node scripts/appstore-license-inventory.mjs --output-dir store-reports/licenses
+          node scripts/prepare-appstore-review.mjs create --output-dir store-reports/review --build-number "$STORE_BUILD_NUMBER"
+          node scripts/prepare-appstore-review.mjs verify --dir store-reports/review
+          tar -czf store-reports/candidate.app.tar.gz -C src-tauri/target/app-store/aarch64-apple-darwin/release/bundle/macos 'Simple AI Writer Store.app'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-store-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: store-reports/
+          retention-days: 14

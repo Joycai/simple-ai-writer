@@ -138,16 +138,32 @@ pub fn start_focus_server(app: &tauri::AppHandle) -> Option<u16> {
 pub struct LaunchProject(Mutex<Option<PathBuf>>);
 
 impl LaunchProject {
-    /// Parse `argv[1]` as a workspace to open. Only a directory that already
-    /// carries the `.ai-writer` marker qualifies — the same trust rule as
-    /// `project_register_root`, so the argument cannot become a way to point
-    /// the app (and its fs scope) at an arbitrary directory.
+    /// Parse `argv[1]` as a workspace to open. Direct builds check the marker
+    /// here; sandbox builds defer disk access to project_register_root, which
+    /// must first restore the process's security-scoped authorization.
     pub fn from_args() -> Self {
         let path = std::env::args_os()
             .nth(1)
             .map(PathBuf::from)
-            .filter(|p| p.is_absolute() && p.join(".ai-writer").is_dir());
+            .filter(|p| launch_path_allowed(p));
         Self(Mutex::new(path))
+    }
+}
+
+// A store child must restore its own bookmark before probing the marker.
+// Passing an absolute argument grants no scope; project_register_root remains
+// the authority. Direct builds retain their existing eager marker check.
+fn launch_path_allowed(path: &Path) -> bool {
+    if !path.is_absolute() {
+        return false;
+    }
+    #[cfg(all(target_os = "macos", feature = "app-store"))]
+    {
+        true
+    }
+    #[cfg(not(all(target_os = "macos", feature = "app-store")))]
+    {
+        path.join(".ai-writer").is_dir()
     }
 }
 
@@ -344,7 +360,7 @@ pub fn spawn_new_instance(project_path: Option<String>) -> Result<(), String> {
     let mut cmd = std::process::Command::new(exe);
     if let Some(path) = project_path {
         let root = PathBuf::from(&path);
-        if !root.is_absolute() || !root.join(".ai-writer").is_dir() {
+        if !launch_path_allowed(&root) {
             return Err("Not an existing project folder (missing .ai-writer)".into());
         }
         cmd.arg(root);
@@ -535,6 +551,19 @@ mod tests {
     }
 
     // ── The decision table (pure) ────────────────────────────────────────────
+
+    #[test]
+    fn launch_paths_never_accept_relative_arguments() {
+        assert!(!launch_path_allowed(Path::new("relative/project")));
+    }
+
+    #[cfg(all(target_os = "macos", feature = "app-store"))]
+    #[test]
+    fn sandbox_launch_defers_disk_probes_until_bookmark_restore() {
+        assert!(launch_path_allowed(Path::new(
+            "/not-yet-authorized/project"
+        )));
+    }
 
     #[test]
     fn no_lock_is_free() {

@@ -712,7 +712,7 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 - **免审批清单** `allowlist.ts`（`app:cliAllowlist`，机器本地）：程序名规整成 `programNameOf` 的键；shell / 解释器 / 构建工具 / 提权与 `cd` `export` 这类改后续段环境的内建命令永远拒收，包管理器只放行查看类子命令。`command.ts` 的 `commandCover` 把一行按 `&&` `||` `;` `|` 切段，每段须是只读或被清单覆盖（与只读白名单共用 `plainInvocation` 形状检查，外加按程序的执行钩子表）；`allowlistCandidates` 给卡算「始终允许」该列哪些程序——只在加进去之后这一行本身能免审时给，删除 / 移动类程序从不给（只能在设置页加）。
 - **内置只读执行保护（2026-10-28）**：引号感知的 `shellCode` 与 `wordTokens` 区分字面文本和展开；sed/sort/uniq/cut 与 PowerShell 管道处理器走封闭参数子集。`prepareAutomaticRead` 给纯读取串联生成带路径 / 程序检查信息的请求；Rust `cmd_read.rs` 在 spawn 前验证真实路径与目录链接、限制扫描成本、过滤 PATH、清空环境并关闭 shell profile 与 Git helper。拒绝后回原始卡，`requiresIndividualApproval` 禁止计数连批；用户显式程序信任另走原路径。精确边界与原因见 [shell-command-plan §3.9](../feature/agent/shell-command-plan.md#39-跨平台只读免审收口2026-10-28)。
 - **审批**：`agent/cliTools.ts` 对 `commandCover` 通过的命令直接调用 runner（清单非空时 description 点名这些程序），其余组 `CommandProposal`。`ApprovalCard` 展示写命令原文；「始终允许 <程序>」写清单并批准本张（不要求 `autoApproveKey`——它是设置不是运行授权）；单条普通写命令可按 1–5 条连批，复合或危险命令永远逐条审批（危险表不完整，复合是它的兜底）。`agentStore` 用 `commandLeft` + `commandRun` 扣减并在 run 结束清零。`isAutoApprovable("command")` 为假，正文的布尔授权永不覆盖 shell。
-- **路由**要求 `RouteOptions.commands` + Beta + `IS_TAURI` 三者齐全，description 在交出定义时点名真实系统与 shell（只说 zsh 分不出 BSD 还是 GNU userland）。
+- **路由**要求渠道允许终端 + `RouteOptions.commands` + Beta + `IS_TAURI` 四者齐全，description 在交出定义时点名真实系统与 shell（只说 zsh 分不出 BSD 还是 GNU userland）。
 
 ### `src/lib/workflow/`
 
@@ -884,11 +884,15 @@ document import into the workspace:
 - Legacy .doc/.xls/.ppt stay out on purpose — no converter here reads them faithfully, and .ppt is an OLE compound binary the zip reader cannot open at all.
 - txt/md/html and images are **copied in as-is** (same name, same extension; only a non-UTF-8 text encoding is normalised) — the app already opens all of them, so rewriting them would only destroy information. The copy list is `lib/fs/images`'s own kinds, not a second list here
 
+### `src/lib/privacy/`
+
+`consent.ts` 是商店 HTTP 发送门禁：按接收范围 / 用途 / 告知版本检查共享存储，在响应流期间持有可撤回 lease。`settings.ts` 在启动时注入 prefs 与原生对话框，避免传输层依赖 UI / i18n；本机记录不随配置备份迁移。设置 → 关于的 `PrivacySection` 提供离线告知及撤回 / 再询问。范围模板、500ms 跨进程取消边界与未验收项见 [Mac App Store P2](../feature/mac-app-store-plan.md#9-p2-实施记录2026-11-04)。
+
 ### `src/lib/` 根模块
 
 #### 多开与基础模块
 - `externalLinks.ts` 在 App 挂载时注册 document 级点击代理：HTTP(S) 链接交给系统默认浏览器，mailto 交给默认邮件应用；先同步取消 WebView 导航，打开失败也不能替换应用页面。覆盖动态 Markdown、嵌套链接内容、修饰键和中键点击；已处理事件、文内锚点及知识库引用保留原行为。助手区域在捕获阶段接管，防止组件停止冒泡时漏掉导航；相对路径以当前项目根目录解析，项目内文件经 App 注入的文件树同款打开流程处理（HTML 仍走隔离预览），越界路径和未知协议取消导航。Markdown 预览通过 `data-document-base` 声明源文档目录，本地链接按该目录解析并复用同一打开流程，不按扩展名放行浏览器导航：PDF / 图片进入各自预览，Office 和其他二进制进入只读说明页，防止点击附件替换主 WebView。越界路径和未知协议同样取消导航。其他区域的相对路径保留原行为。原因是未接管的 HTML 链接会替换主 WebView，表现为 UI 崩溃。协议相对 URL 按 HTTPS 打开。HTML 沙箱 iframe 有独立文档，不在此代理范围内。
-- `project.ts`
+- `project.ts`（底层项目 IPC / 数据库）；`projectAuthorization.ts` 在其上编排商店重新授权对话框，避免底层 DB 模块反向依赖 i18n 造成 prefs 循环
 - `keyStore.ts`
 - `recentProjects.ts` (the recent-projects list and its pin set, pure: parsing, the cap that counts only unpinned entries, and the cross-instance merge `prefs.writePrefMerged` applies at persist time; the pinned section renders from the pin row, not the recents; both rows are machine-local)
 - `staleRefs.ts` (清理失效数据 — behind the button of that name in `GeneralPane`: removes only **dead** absolute-path references — pinned-lore rows, roleplay agent bindings, a chat session's injection ledger and turn images — each checked against disk first)
@@ -906,6 +910,7 @@ document import into the workspace:
 - `notify.ts` (系统通知 — the OS ping for "waiting for your approval" / "run finished" / "run failed", each its own switch, off by default, silent while the window has focus; the only thing it must never carry is the model's or the document's text, see `docs/reference/architecture.md` → 系统通知)
 
 #### 平台与能力探测
+- `distribution.ts` 的 `distributionAllows` 同时约束商店角色扮演、Sakura 与 ComfyUI：flag、模型绑定、请求及恢复执行均检查，旧数据保留；P3 构建审计与原生待验收清单见 [验收手册](../feature/mac-app-store-acceptance.md)。它在应用启动前从 Rust 编译渠道读取终端能力；未知 / 失败保持关闭，不从偏好推断渠道。商店构建、tools 降级与恢复边界见 [Mac App Store P0](../feature/mac-app-store-plan.md#7-p0-实施记录2026-11-04)。
 - `http.ts`
   - `networkDiagnostics.ts` 提取 Rust HTTP IPC 错误中的原因链；图片与聊天日志都写入 `network`。插件诊断补丁、脱敏契约与复现步骤见 [network-diagnostics.md](network-diagnostics.md)。
   - Rust HTTP 插件的共用 `client_builder()` 关闭三项 TCP 保活，避免当前网络路径把长等待误判成失活；各调用的 deadline、取消和 URL scope 保留。真实 socket 与取消回归也见同一文档。
@@ -951,7 +956,9 @@ Rust 侧。
 
 #### 装配与分工总则
 
-- `lib.rs` 是装配（插件、命令注册、启动时登记的根）
+- `scripts/sign-appstore.py` 是独立的本地正式签名入口：校验 profile 和证书、隔离编译、校验 app/pkg，材料只进入忽略的 `store-reports/`，不上传；步骤与边界见 [P4](../feature/app-store/README.md)。
+- 商店准备入口 `scripts/build-appstore.mjs` 固定架构与渠道，只接受独立构建号；`audit-appstore.mjs` 核对最终 CFBundleVersion。`prepare-appstore-review.mjs` 将当前包审计、资料与待验收用例归档并校验 hash，不授予提审许可，见 [P5 手册](../feature/app-store/p5-release-runbook.md)。提交资料与依赖许可扫描是本地 / CI 准备工具，不改变应用运行或站外分发，见 [P4](../feature/app-store/README.md)。
+- `lib.rs` 是装配（插件、命令注册、启动时登记的根）；`app-store` 特性不编译 `cmd` 或注册终端 IPC，`distribution.rs` 是前端渠道信息的唯一来源。商店配置和最小沙盒权限见 [Mac App Store 计划](../feature/mac-app-store-plan.md)。
 - `main.rs` 只有那句不许删的 Windows 控制台注解。
 - `[lib] crate-type` 只留 `rlib`：`main.rs` 按 rlib 链接它。脚手架默认的 `staticlib` / `cdylib` 是给 iOS / Android 的，本项目不出移动端，却要为它们每次 release 多写一个约 200 MB 的 `.lib`、多链一个 DLL（中文 MSVC 下还会冒出一条 `linker_messages` 警告）。真要上 `tauri ios` / `tauri android` 时再加回去。
 - **一条贯穿的分工**：凡是 zip + XML 的读写都在这边（`zip` 和 `quick-xml` 已经是直接依赖，前端再引一个是白加），凡是 markdown 方言都在 TS 那边。
@@ -959,6 +966,7 @@ Rust 侧。
 #### 命令与路径安全
 
 - `commands.rs` 是自建的文件系统命令，全部 `async` 并把活交给 `blocking.rs`——一个不带 `async` 的 Tauri 命令跑在**主线程**上，而一次知识库扫描会连着调几百次 `fs_exists`，每次先 canonicalize，把窗口的事件循环一段段卡住；而光 `async` 也不够，那只是挪到 tokio 的 worker 上（有几个核就有几个），一块慢盘或一次钥匙串弹窗能占住其中一个任意久。`blocking.rs` 因此也被 `secrets.rs` / `transfer.rs` / `cmd.rs` / `scope.rs` 共用。命令有 `scaffold_project`、`read_dir_recursive` 和 `fs_*` 一族（读写文本、写二进制、追加、建 / 读 / 删目录、删文件、`fs_exists`、`fs_stat`、`fs_rename`……），每条在系统调用之前先过 `FsScope::check` 做 canonicalize；这次检查跟着其余的活一起进阻塞任务，所以 `FsScope` 是 `Clone`（一份根列表外面包一层 `Arc`，之后才允许的根照样算数）。
+- `bookmarks.rs` 在 macOS 商店版持有本机 security-scoped bookmarks 与进程会话 lease；`scope.rs` 在检查项目标记前恢复 OS 授权，返回解析后的路径，重新授权仅信任原生选取结果。身份分离、原子持久化及退出释放理由见 [P1 记录](../feature/mac-app-store-plan.md)。
 - `scope.rs` 是这些命令的运行期路径围栏：否则它们接受任意绝对路径，一个被攻陷的 webview 就能读写删任意文件；根只从可信来源登记（原生文件夹选择器、带 `.ai-writer` 标记的重开项目，而那个标记 webview 在已允许的根之外造不出来）。
 - `protocol.rs` 注册 `ai-writer-asset:` 自定义 scheme（扩展名白名单 + 同一个 `FsScope`）。**应用已经不再产生这种链接**——知识库和文档里的图都以 data URL 渲染（`imageToDataUrl` / `useImageDataUrl`），因为 Webview2 的 URL 解析让这个 scheme 在 Windows 上不可靠；它留着只是为了让旧版本存下的文档里的 `ai-writer-asset://` 链接还能显示。
 - `fontproto.rs` 注册 `ai-writer-font:`：只服务 `appDataDir/fonts/` 下的 `.woff2`（下载来的字体包），围栏比 `FsScope` 更窄，而且**先按字面判定再碰磁盘**——Windows 上把网页可控的 `//host/share` 交给 canonicalize 会发起 SMB 连接。异步协议，响应带 ACAO `*`（主窗口、沙箱样张、打印窗口都是跨源取字体）。
@@ -978,6 +986,7 @@ Rust 侧。
 - `instance.rs` 是多开协调（劝告式的 `.ai-writer/window.lock` + 回环 focus 通道）
 - `windowmenu.rs` 是 macOS 的「窗口」菜单——AppKit 只会列**本进程**的窗口，而这里每个窗口都是独立进程，所以那份列表从 `instance.rs` 的注册表渲染、切换走同一条 focus 通道。
 - `preview.rs` 是独立的 HTML 预览窗（`docs/feature/html-artifact-plan.md` 三期）：应用内预览是编辑器里的沙箱 iframe，适合迭代、不适合按真实视口判断一张宣传页，所以这一份给文档自己一个 webview，用自定义 scheme 直接从盘上喂项目文件，相对链接因此照常工作。
+- `privacy.rs` 为商店自定义协议文档添加无公网资源 CSP 与导航围栏，防止预览 / 打印绕过 HTTP 同意流程；站外返回原行为。
 - `print.rs` 是原生打印——`window.print()` 在 macOS 的 Tauri 里是**静默空操作**（WebKit 把打印请求转给宿主的 `WKUIDelegate`，而 wry 的 delegate 只实现了四个方法、不含打印，Tauri 也没加自己的），什么都不抛，所以导出菜单看起来是死的。
 
 #### Office 读写器

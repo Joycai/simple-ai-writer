@@ -148,3 +148,7 @@ flush 的口径同时收齐到 `flushIfOpen` 那一条：**只有缓冲区是这
 - `.html` 不进任何写作上下文管线（spine / RAG / memory / bookContext）。
 - capability 零变更（实施后修正）：「浏览器打开」走 Rust 命令 + `FsScope`（见 D5）；预览窗口 `html-preview` **故意不加** capability entry——静默无权限正是这个纯展示窗口该有的姿态，页面脚本摸不到任何 Tauri 命令。
 - autosave 与预览 debounce 互不阻塞（与 markdown 分屏同构，无新增状态）。
+
+## 商店渠道补充（2026-11-04）
+
+商店版独立预览与打印的自定义协议响应额外附加 CSP，只允许指定本地资源，并拒绝 HTTP(S) 导航。主窗口商店配置同样收紧网络连接，以免生成页面绕过数据分享许可。站外版的既有预览行为不变。依赖远程 CDN 的页面须改用本地资源；原生 WebKit 渲染 / 打印仍待验收。原因、验证状态见 [Mac App Store P2](mac-app-store-plan.md#9-p2-实施记录2026-11-04)。

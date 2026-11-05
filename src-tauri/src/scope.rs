@@ -6,7 +6,8 @@
 //!   - the native folder picker (`project_open_dialog`),
 //!   - an existing project re-opened from the recents list
 //!     (`project_register_root`, which requires an `.ai-writer` marker on disk
-//!     that the webview cannot create outside an already-allowed root),
+//!     that the webview cannot create outside an already-allowed root; the
+//!     store build additionally restores an OS bookmark before that check),
 //!   - the app's own data/log directories, seeded at startup in `lib.rs`.
 //!
 //! `capabilities/default.json` grants no static `fs:scope` — `tauri-plugin-fs`
@@ -158,50 +159,142 @@ fn resolve_symlinks(path: &Path) -> PathBuf {
     }
 }
 
-/// Open the native folder picker and register the selection as an allowed
-/// root. Doing the pick on the Rust side is what makes the scope trustworthy:
-/// the webview can only ever get a root the user explicitly chose.
+/// Check a project-internal target against this project, not the union of all
+/// previously opened roots (which also includes the app's config directory).
+#[cfg(any(test, all(target_os = "macos", feature = "app-store")))]
+pub(crate) fn check_project_target(root: &Path, target: &Path) -> Result<(), String> {
+    let relative = target.strip_prefix(root).map_err(|e| e.to_string())?;
+    let mut cursor = root.to_path_buf();
+    for part in relative.components() {
+        if matches!(part, Component::ParentDir) {
+            return Err("Project metadata escapes the authorized folder".into());
+        }
+        cursor.push(part);
+        match std::fs::symlink_metadata(&cursor) {
+            // Metadata must be local. Reject dangling links as well: canonicalize
+            // cannot resolve them, but a later write would follow their target.
+            Ok(meta) if meta.file_type().is_symlink() => {
+                return Err("PROJECT_ACCESS_UNSAFE_METADATA".into());
+            }
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("PROJECT_ACCESS_REQUIRED: {e}")),
+        }
+    }
+    Ok(())
+}
+
+#[cfg(all(target_os = "macos", feature = "app-store"))]
+fn check_project_metadata(root: &Path) -> Result<(), String> {
+    for name in [
+        ".ai-writer",
+        ".ai-writer/project.db",
+        ".ai-writer/project.db-wal",
+        ".ai-writer/project.db-shm",
+        ".ai-writer/project.db-journal",
+        ".ai-writer/window.lock",
+    ] {
+        check_project_target(root, &root.join(name))?;
+    }
+    Ok(())
+}
+
+/// Pick on the native side: only this trusted result may mint a bookmark.
+async fn pick_root(
+    app: tauri::AppHandle,
+    scope: FsScope,
+    expected: Option<String>,
+    title: Option<String>,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut dialog = app.dialog().file();
+    if let Some(title) = title {
+        dialog = dialog.set_title(title);
+    }
+    if let Some(path) = &expected {
+        dialog = dialog.set_directory(path);
+    }
+    dialog.pick_folder(move |folder| {
+        let _ = tx.send(folder);
+    });
+    crate::blocking::blocking(move || {
+        let Some(file_path) = rx.recv().map_err(|e| e.to_string())? else {
+            return Ok(None);
+        };
+        let path = file_path.into_path().map_err(|e| e.to_string())?;
+        if let Some(expected) = expected {
+            // Reauthorization never silently switches to or scaffolds another
+            // folder. Canonicalize only after Powerbox has granted access.
+            if resolve_symlinks(&path) != resolve_symlinks(Path::new(&expected)) {
+                return Err("PROJECT_ACCESS_WRONG_FOLDER".into());
+            }
+            if !path.join(".ai-writer").is_dir() {
+                return Err("PROJECT_ACCESS_MISSING_PROJECT".into());
+            }
+        }
+        #[cfg(all(target_os = "macos", feature = "app-store"))]
+        {
+            use tauri::Manager;
+            check_project_metadata(&path)?;
+            app.state::<crate::bookmarks::Bookmarks>()
+                .selected(&app, &path)
+                .map_err(|e| format!("PROJECT_ACCESS_REQUIRED: {e}"))?;
+        }
+        scope.allow_for_plugin_fs(&app, &path);
+        Ok(Some(path.to_string_lossy().into_owned()))
+    })
+    .await
+}
+
 #[command]
 pub async fn project_open_dialog(
     app: tauri::AppHandle,
     scope: tauri::State<'_, FsScope>,
 ) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
-
-    let (tx, rx) = std::sync::mpsc::channel();
-    app.dialog().file().pick_folder(move |folder| {
-        let _ = tx.send(folder);
-    });
-    let picked = tauri::async_runtime::spawn_blocking(move || rx.recv())
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())?;
-
-    match picked {
-        Some(file_path) => {
-            let path = file_path.into_path().map_err(|e| e.to_string())?;
-            scope.allow_for_plugin_fs(&app, &path);
-            Ok(Some(path.to_string_lossy().into_owned()))
-        }
-        None => Ok(None),
-    }
+    pick_root(app, scope.inner().clone(), None, None).await
 }
 
-/// Register a previously-created project (re-opened from the recents list).
-/// Requires the on-disk `.ai-writer` marker: the webview cannot fabricate it
-/// outside an already-allowed root, so arbitrary directories stay off-limits.
 #[command]
-pub fn project_register_root(
+pub async fn project_reauthorize(
+    path: String,
+    title: String,
+    app: tauri::AppHandle,
+    scope: tauri::State<'_, FsScope>,
+) -> Result<Option<String>, String> {
+    pick_root(app, scope.inner().clone(), Some(path), Some(title)).await
+}
+
+/// Restore the OS grant BEFORE probing the project marker or allowing any I/O.
+/// Direct distribution retains its existing marker-based registration.
+#[command]
+pub async fn project_register_root(
     path: String,
     app: tauri::AppHandle,
     scope: tauri::State<'_, FsScope>,
-) -> Result<(), String> {
-    let root = Path::new(&path);
-    if !root.is_absolute() || !root.join(".ai-writer").is_dir() {
-        return Err("Not an existing project folder (missing .ai-writer)".into());
-    }
-    scope.allow_for_plugin_fs(&app, root);
-    Ok(())
+) -> Result<String, String> {
+    let scope = scope.inner().clone();
+    crate::blocking::blocking(move || {
+        let root = PathBuf::from(&path);
+        #[cfg(all(target_os = "macos", feature = "app-store"))]
+        let root = {
+            use tauri::Manager;
+            app.state::<crate::bookmarks::Bookmarks>()
+                .restore(&app, &root)
+                .map_err(|e| format!("PROJECT_ACCESS_REQUIRED: {e}"))?
+        };
+        if !root.is_absolute() || !root.join(".ai-writer").is_dir() {
+            #[cfg(all(target_os = "macos", feature = "app-store"))]
+            return Err("PROJECT_ACCESS_REQUIRED: Project is missing or inaccessible".into());
+            #[cfg(not(all(target_os = "macos", feature = "app-store")))]
+            return Err("Not an existing project folder (missing .ai-writer)".into());
+        }
+        #[cfg(all(target_os = "macos", feature = "app-store"))]
+        check_project_metadata(&root)?;
+        scope.allow_for_plugin_fs(&app, &root);
+        Ok(root.to_string_lossy().into_owned())
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -237,6 +330,25 @@ mod tests {
     /// A path next to `ROOT` under the same parent, e.g. `other`.
     fn sibling(name: &str) -> PathBuf {
         Path::new(ROOT).parent().unwrap().join(name)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn project_metadata_cannot_escape_into_another_allowed_root() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        symlink(other.path(), root.path().join(".ai-writer")).unwrap();
+        assert!(
+            check_project_target(root.path(), &root.path().join(".ai-writer/project.db")).is_err()
+        );
+        assert!(check_project_target(root.path(), &root.path().join("new/file.md")).is_ok());
+        symlink(
+            other.path().join("not-created"),
+            root.path().join("dangling"),
+        )
+        .unwrap();
+        assert!(check_project_target(root.path(), &root.path().join("dangling")).is_err());
     }
 
     #[test]

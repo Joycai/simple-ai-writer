@@ -16,7 +16,8 @@
  * 只有 qwen3-asr-flash 一代在这条线上；别的 id 答「format is empty」。
  */
 
-import { fetch } from "../http";
+import { fetch as privacyFetch } from "../http";
+const fetch: typeof globalThis.fetch = (input, init) => privacyFetch(input, init, "audio");
 import { openaiUrl } from "../ai/urls";
 import { logAsrEvent } from "../ai/apiLog";
 import type { AsrRequestOptions } from "./cache";

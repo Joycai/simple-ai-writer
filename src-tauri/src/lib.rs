@@ -1,6 +1,10 @@
 mod blocking;
+#[cfg(all(target_os = "macos", feature = "app-store"))]
+mod bookmarks;
+#[cfg(not(feature = "app-store"))]
 mod cmd;
 mod commands;
+mod distribution;
 mod docx;
 mod fontproto;
 #[cfg(test)]
@@ -10,6 +14,7 @@ mod lorehash;
 mod pptx;
 mod preview;
 mod print;
+mod privacy;
 mod protocol;
 mod scope;
 mod secrets;
@@ -50,12 +55,15 @@ pub fn run() {
                 fs_scope.allow(&dir);
             }
             app.manage(fs_scope);
+            #[cfg(all(target_os = "macos", feature = "app-store"))]
+            app.manage(bookmarks::Bookmarks::default());
 
             // Holds the document handed to the print window (see print.rs).
             app.manage(print::PendingPrint::default());
 
             // The agent's live shell commands, so `cmd_kill` can find one by
             // its id (see cmd.rs).
+            #[cfg(not(feature = "app-store"))]
             app.manage(cmd::Running::default());
 
             // Multi-instance support (see instance.rs): the workspace locks
@@ -82,6 +90,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            distribution::distribution_channel,
             commands::scaffold_project,
             commands::read_dir_recursive,
             commands::fs_write_binary_file,
@@ -101,6 +110,7 @@ pub fn run() {
             commands::open_with_default_app,
             scope::project_open_dialog,
             scope::project_register_root,
+            scope::project_reauthorize,
             instance::project_lock_acquire,
             instance::project_lock_release,
             instance::project_focus_existing,
@@ -129,8 +139,11 @@ pub fn run() {
             pptx::pptx_read_slides,
             print::print_document,
             preview::preview_html_window,
+            #[cfg(not(feature = "app-store"))]
             cmd::cmd_shell_info,
+            #[cfg(not(feature = "app-store"))]
             cmd::cmd_run,
+            #[cfg(not(feature = "app-store"))]
             cmd::cmd_kill,
         ]);
 
@@ -165,6 +178,11 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 instance::release_all_locks(app);
                 instance::retire_instance(app);
+                #[cfg(all(target_os = "macos", feature = "app-store"))]
+                {
+                    use tauri::Manager;
+                    app.state::<bookmarks::Bookmarks>().release_all();
+                }
             }
         });
 }

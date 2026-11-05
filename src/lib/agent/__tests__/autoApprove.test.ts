@@ -1,5 +1,8 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
+const channel = vi.hoisted(() => ({ terminal: true }));
+vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal, distributionAllows: () => true }));
+
 import { canGrantCommand, chatAutoApproveKey, grants, grantsAppend, grantsCommand, isAutoApprovable } from "../autoApprove";
 
 /** The active conversation's key in these tests — the store starts with one tab, `c0`. */
@@ -323,4 +326,16 @@ describe("本次都批准 grants", () => {
 
 it("a read rejected by runtime checks cannot consume a counted command grant", () => {
   expect(canGrantCommand({ compound: false, danger: null, requiresIndividualApproval: true })).toBe(false);
+});
+
+it("store refuses old command approvals even with a standing batch grant", async () => {
+  channel.terminal = false;
+  try {
+    useAgentStore.setState({ pending: [] });
+    useAgentStore.getState().grantCommands(CHAT_AUTO_APPROVE_KEY, RUN, 5);
+    const result = await useAgentStore.getState().requestApproval(commandProposal("old", "git add ."), RUN, { autoApproveKey: CHAT_AUTO_APPROVE_KEY });
+    expect(result.approved).toBe(false);
+    if (!result.approved) expect(result.reason).toBeTruthy();
+    expect(useAgentStore.getState().pending).toEqual([]);
+  } finally { channel.terminal = true; }
 });

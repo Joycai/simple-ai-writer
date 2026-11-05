@@ -18,6 +18,7 @@ import {
 } from "../../../lib/agent/stateFlag";
 import { useAgentStore } from "../../../stores/agentStore";
 import { isCliEnabled, setCliEnabled } from "../../../lib/cli/flag";
+import { distributionAllows, terminalAvailable } from "../../../lib/distribution";
 import { cachedShellInfo, shellInfo, shellLabel, systemLabel, type ShellInfo } from "../../../lib/cli/shell";
 import { CliAllowlist } from "./CliAllowlist";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
@@ -98,6 +99,8 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
     <Pane>
       <PaneHeader title={t("systemSettings.tabs.lab")} sub={t("systemSettings.lab.paneSub")} />
 
+      {!distributionAllows("roleplay") && <p className={ui.rowDesc}>{t("distribution.storeScope")}</p>}
+
       <Section label={t("mcp.title")}><Row title={t("mcp.enable")} desc={t("mcp.description")}
         foot={<button className={styles.goLink} onClick={() => onNavigate("mcp")}>{t("mcp.manage.manage")} →</button>}>
         <Toggle on={mcpOn} onChange={next => { setMcpEnabled(next); setMcpOn(next); }} label={t("mcp.title")} />
@@ -134,13 +137,13 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
       </Section>
 
       <Section label={t("systemSettings.lab.groupWays")}>
-        <Row top title={t("systemSettings.lab.roleplayLabel")} desc={t("systemSettings.lab.roleplayHint")}>
+        {distributionAllows("roleplay") && <Row top title={t("systemSettings.lab.roleplayLabel")} desc={t("systemSettings.lab.roleplayHint")}>
           <Toggle
             on={roleplayOn}
             onChange={(next) => { setRoleplayEnabled(next); setRoleplayOn(next); }}
             label={t("systemSettings.lab.roleplayLabel")}
           />
-        </Row>
+        </Row>}
         <Row top title={t("systemSettings.lab.toolPackLabel")} desc={t("systemSettings.lab.toolPackHint")}>
           <Toggle
             on={orchestratorOn}
@@ -155,6 +158,7 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
         <Row
           top
           title={t("systemSettings.lab.skillStateLabel")}
+          last={!terminalAvailable()}
           desc={t("systemSettings.lab.skillStateHint")}
           foot={skillStateOn ? (
             <div className={styles.sub}>
@@ -188,7 +192,7 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
             因为它改变的是助手能提议什么，不是多一种文件。开着时的脚注报这台电脑
             检测到的系统和 shell——和 run_command 描述里告诉模型的是同一句，作者据此知道助手会用哪种语法；关着时的补充句说的是
             入口**不存在**（不是禁用），句式同音频转写。 */}
-        <Row
+        {terminalAvailable() && <Row
           top
           title={t("systemSettings.lab.cliLabel")}
           desc={t("systemSettings.lab.cliHint")}
@@ -213,11 +217,11 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
             onChange={(next) => { setCliEnabled(next); setCliOn(next); }}
             label={t("systemSettings.lab.cliLabel")}
           />
-        </Row>
+        </Row>}
       </Section>
 
       <Section label={t("systemSettings.lab.groupLocal")}>
-        <Row
+        {distributionAllows("sakura") && <Row
           top
           title={t("systemSettings.lab.translateLabel")}
           desc={t("systemSettings.lab.translateHint")}
@@ -230,8 +234,8 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
             onChange={(next) => { setTranslateEnabled(next); setTranslateOn(next); }}
             label={t("systemSettings.lab.translateLabel")}
           />
-        </Row>
-        <Row
+        </Row>}
+        {distributionAllows("comfyui") && <Row
           top
           title={t("systemSettings.lab.comfyuiLabel")}
           desc={t("systemSettings.lab.comfyuiHint")}
@@ -244,7 +248,7 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
             onChange={(next) => { setComfyUiEnabled(next); setComfyOn(next); }}
             label={t("systemSettings.lab.comfyuiLabel")}
           />
-        </Row>
+        </Row>}
         {/* 音频转写（设计稿 02f 屏 1a）：住在日中翻译旁边——同样是一个 Beta 开关
             + 一个只会干一件事的专用模型 + 子代理里的绑定。区别是它不在本机跑、
             不免费，所以说明里把「上传到阿里云临时存储 · 按秒计费」写成陈述句。

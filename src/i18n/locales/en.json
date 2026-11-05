@@ -1065,6 +1065,13 @@
     }
   },
   "project": {
+    "reauthorizeUnsafeMetadata": "Project metadata contains symbolic links. The store edition requires .ai-writer and its database to be stored inside the project without symbolic links. No project was opened.",
+    "reauthorizeTitle": "Authorize project folder",
+    "reauthorizeBody": "Access to this project must be authorized again. Select the original folder:\n{{path}}\nYour files and recent project entry will be kept if you cancel. If the folder moved, use Open Folder to select its new location.",
+    "reauthorizeChoose": "Choose folder",
+    "reauthorizeWrongFolder": "Select the original project folder: {{path}}. No project was opened.",
+    "reauthorizeMissingProject": "The selected folder's project marker could not be read. Check the folder and its permissions. No files were created.",
+    "reauthorizeFailed": "Folder authorization could not be saved. Your files and recent project entry have been kept. Please try again.",
     "openFolder": "Open Folder",
     "noProjectDesc": "The project structure will be initialized automatically",
     "emptyTree": "No documents in this folder yet.",
@@ -2059,6 +2066,7 @@
       "commandCompound": "Compound line: separators, pipes, redirections or substitution — read the whole line",
       "commandShell": "With",
       "commandShellSub": "{{syntax}} syntax · stdin is closed, so anything interactive fails at once",
+      "commandUnavailable": "Terminal execution is unavailable in this build. The command was not run. Continue only with the available built-in tools and their normal approvals; leave steps that require a terminal blocked and explain why.",
       "commandRunning": "Running · {{s}} s",
       "commandAllow": "Always allow",
       "commandAllowHint": "From now on, commands made only of {{programs}} and read-only commands (including chains joined by && || ; |) run without asking; anything that looks dangerous, redirects or points outside the project still asks. Remove it under Settings → Lab → Command line",
@@ -5346,5 +5354,51 @@
     "localHelp": "This window runs locally and does not send a message to the assistant.",
     "usage": "Choose an execution command, add your request, then send. Tool calls follow the normal approval flow.",
     "loadHint": "Load tools from an enabled server below, then choose a tool to add its command."
+  },
+  "privacy": {
+    "title": "Privacy and sharing",
+    "policyTitle": "Privacy notice",
+    "readPolicy": "Read notice",
+    "summary": "Local editing works without sharing data. Online features send data only after your permission for each recipient and purpose.",
+    "allow": "Allow sharing",
+    "deny": "Do not allow",
+    "consentBody": "Recipient / endpoint:\n{{endpoint}}\n\nPurpose: {{purpose}}\nData: {{data}}\n\nPermission scope: {{scope}}\nApplies to subsequent requests for this purpose, including retries and background work. Query parameters and credentials are hidden here but may be transmitted. Local and LAN services may forward data elsewhere. The service operator controls retention, training and deletion; consult their policy before allowing.\n\nThis permission is separate from tool approval and fees. You can withdraw it in Settings → About → Privacy and sharing. Refusal keeps local editing available. Previously sent data cannot be recalled by this app.",
+    "revokeTitle": "Withdraw sharing permission",
+    "revokeBody": "Blocks future online requests across app windows and restarts, and attempts to cancel active requests. Data already received by a service must be deleted through that service.",
+    "revoke": "Withdraw and pause",
+    "resume": "Allow asking again",
+    "resumeBody": "Clears previous choices. The next request will ask again; this button does not grant permission or start a request.",
+    "paused": "Sharing is paused. Local editing remains available.",
+    "resumed": "Previous choices cleared. Each recipient and purpose will require a new decision.",
+    "failed": "Could not save the change. Please retry; do not assume other windows have received it.",
+    "purposes": {
+      "ai": "AI writing, translation and media processing",
+      "probe": "Connection and model capability checks",
+      "retrieval": "Semantic retrieval and ranking",
+      "audio": "Audio transcription",
+      "mcp": "External MCP tools",
+      "sync": "Knowledge-base sync",
+      "backup": "App configuration backup",
+      "fonts": "Font download"
+    },
+    "data": {
+      "ai": "Your instructions, conversation history, selected text, automatically assembled document and knowledge-base excerpts, summaries, tool results and selected attachments/images/audio/video as supported by the model. Server tools may send search terms or URLs to further services. API credentials and model/request options are sent to the configured service.",
+      "probe": "API credentials, model identifiers, service details and synthetic test prompts (including calibration text). Checks may incur provider charges.",
+      "retrieval": "Search queries and document or knowledge-base excerpts for embeddings and reranking, model settings and API credentials. Indexing can run as part of a task.",
+      "audio": "Selected audio, filenames, transcription options, model identifiers, temporary upload credentials and API credentials. Upload storage and result hosts require their own permission.",
+      "mcp": "Client identification, server authentication headers, tool discovery requests, tool names and arguments, which may contain project text or file paths. Server tools may perform actions or forward data. Tool-action approval remains separate.",
+      "sync": "Knowledge-base text, images, schema, paths, hashes and version metadata, plus the configured server token. Status checks and transfers use the same recipient.",
+      "backup": "Provider/model/prompt settings, portable preferences and backup metadata. API keys are included only when explicitly selected and the payload is encrypted with a password. Server authentication and visible envelope metadata are also transmitted.",
+      "fonts": "Requested font package/version/file and normal connection metadata such as your IP address. No manuscript or AI API keys are included. Permission covers this font host; fallback hosts ask separately."
+    },
+    "policyBody": "Privacy notice — version 1\n\nDocuments, project databases, histories, caches and local usage records are stored on your device in the project or app data directory. API credentials use the OS credential manager. Optional diagnostic logs may contain request and response content; avoid sharing logs without reviewing them.\n\nOnline AI, transcription, semantic retrieval, MCP, sync, configuration backup and font downloads contact the endpoints you configure or approve. Each permission dialog describes the data categories, recipient, purpose and scope. AI context may automatically include document excerpts, knowledge-base material, history, summaries and tool results. Local/LAN servers and relays may forward data; local addressing does not guarantee local processing. Third-party retention, training and deletion depend on their terms.\n\nConsent is stored only on this installation and is excluded from configuration backups. Changes in recipient, purpose or notice require a new decision. Tool approval, file access and fees are separate permissions. Refusal does not prevent local editing. Withdraw permission here to block future sends and attempt cancellation across windows; already sent data cannot be recalled. Allow asking again clears earlier choices without authorizing a request.\n\nDelete project files, local caches and backups separately when no longer needed. Removing an item from Recent Projects does not delete its files. Resetting app configuration removes configuration and this app’s credentials, not project files or external backups. Ask the relevant service operator to delete remotely retained data. The app cannot promise their deletion.\n\nNo advertising or tracking SDK is used by these features.\n\nPrivacy contact: joycai@joycai.cn",
+    "blocked": "Sharing was not authorized or has been paused. Local editing is available; manage permission in Settings → About → Privacy and sharing.",
+    "redirectBlocked": "The service requested a redirect. No request was forwarded. Check the final address in your service configuration and authorize it before retrying.",
+    "ready": "Online requests require permission for their recipient and purpose."
+  },
+  "distribution": {
+    "featureUnavailable": "This feature is unavailable in the App Store edition. Your saved data is preserved.",
+    "storeScope": "The App Store edition excludes terminal commands, roleplay, Sakura translation and ComfyUI. The other experimental features remain available with their existing switches.",
+    "savedModelUnavailable": "This model configuration is preserved, but its dedicated feature cannot run in the App Store edition."
   }
 }

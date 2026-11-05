@@ -1,0 +1,32 @@
+{
+  "status": "proposal",
+  "bundleId": "com.simple-ai-writer.app.appstore",
+  "category": "public.app-category.productivity",
+  "privacyContactEmail": "joycai@joycai.cn",
+  "supportUrl": null,
+  "privacyPolicyUrl": null,
+  "operator": null,
+  "copyright": null,
+  "price": null,
+  "regions": null,
+  "ageRating": null,
+  "reviewContactName": null,
+  "reviewContactPhone": null,
+  "reviewServiceReady": false,
+  "localizations": {
+    "zh-Hans": {
+      "name": "Simple AI Writer",
+      "subtitle": "Markdown 编辑与 AI 写作助手",
+      "keywords": "Markdown,文档编辑,知识管理,材料整理,笔记管理",
+      "promotionalText": "在本地项目中组织文档与知识库，按需连接自己的 AI 服务。编辑、预览和整理材料，在确认后应用助手提出的修改。",
+      "description": "Simple AI Writer 是面向本地项目的 Markdown 编辑器与 AI 写作助手。\n\n• 编辑和预览 Markdown，自由组织文档与分组。\n• 用知识库整理材料，为写作提供上下文。\n• 配置自己的 AI 服务进行对话、写作和修改；通过结构化工具与审批卡控制文档修改。\n• 使用常规导入导出，在自己的文件夹中管理作品。\n\n基础本地编辑不需要 AI 服务。AI 功能需要自行配置兼容服务、模型及凭据，并可能产生第三方费用；应用不包含 AI 服务额度。发送前会说明接收方与数据范围，请仅发送有权处理的内容。AI 输出可能有误，应在采用前核对。\n\n商店版不提供终端、角色扮演、Sakura 翻译或 ComfyUI。其他实验室功能按应用内开关提供。"
+    },
+    "en-US": {
+      "name": "Simple AI Writer",
+      "subtitle": "Markdown and AI writing",
+      "keywords": "markdown,editor,knowledge,documents,notes,reference",
+      "promotionalText": "Organize documents and reference material in local projects. Connect your own AI service when needed, review proposed changes, and keep control of your writing.",
+      "description": "Simple AI Writer combines a local Markdown editor with an AI writing assistant.\n\n• Edit and preview Markdown, with documents organized in your own folders.\n• Organize reference material in a knowledge base for writing context.\n• Connect your own AI service for chat, writing and revision, with structured tools and approval cards for document changes.\n• Use standard import and export workflows to manage your work.\n\nBasic local editing does not require an AI service. AI features require a compatible service, model and credentials that you configure yourself. Third-party charges may apply; AI service credits are not included. Before sending, the app explains the recipient and data scope. Only send content you are authorized to process. AI output can be inaccurate and should be reviewed.\n\nThe App Store edition does not include terminal access, roleplay, Sakura translation or ComfyUI. Other experimental features remain available through their in-app switches."
+    }
+  }
+}

@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { authorizeProjectRoot, chooseAuthorizedProjectFolder } from "../lib/projectAuthorization";
+import { requiresFileAuthorization } from "../lib/distribution";
 import {
   openProjectFolder,
   registerProjectRoot,
@@ -441,7 +443,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   openProject: async (path, hooks) => {
     // `path` is passed when reopening from the recent-projects list; otherwise prompt.
-    const target = typeof path === "string" ? path : await openProjectFolder();
+    const target = typeof path === "string"
+      ? (requiresFileAuthorization() ? await authorizeProjectRoot(path) : path)
+      : await (requiresFileAuthorization() ? chooseAuthorizedProjectFolder() : openProjectFolder());
     if (!target) return "cancelled";
 
     // Conversations generating, queued or waiting in the project being left
@@ -463,10 +467,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const previous = get().projectPath;
     const freshClaim = !previous || !isSamePath(previous, target);
     try {
-      // Paths from the recents list weren't registered by the dialog — the
-      // scoped fs commands reject them until the Rust side verifies the
-      // on-disk .ai-writer marker and allows the root.
-      if (typeof path === "string") await registerProjectRoot(target);
+      // Store paths were authorized/resolved before the switch. Direct builds
+      // retain marker registration here and their existing error behavior.
+      if (typeof path === "string" && !requiresFileAuthorization()) await registerProjectRoot(target);
       // The multi-instance guard, after registration (the lock commands are
       // scope-checked) and before anything is torn down: a handed-off or
       // declined open leaves the previous project exactly as it was.
@@ -495,7 +498,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       useEditorStore.getState().setDocCounts(0, 0);
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(target);
-      useAppStore.getState().addRecentProject(target);
+      const app = useAppStore.getState();
+      app.addRecentProject(target);
+      if (requiresFileAuthorization() && typeof path === "string" && !isSamePath(path, target)) {
+        // Transfer the pin only after a successful open; a cancelled/failed
+        // authorization keeps the original history and all user files intact.
+        if (app.pinnedProjects.some((p) => isSamePath(p, path))) app.pinProject(target);
+        app.removeRecentProject(path);
+      }
       // Only now that the switch cannot fail: hand the previous workspace's
       // lock back, so a sibling instance opening it warns no longer.
       if (previous && freshClaim) void releaseProjectLock(previous);
@@ -512,7 +522,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // by then the project *is* open here, and its claim must stand.
       if (freshClaim && !isSamePath(get().projectPath, target)) void releaseProjectLock(target);
       // A recent path that no longer opens (moved/deleted) should drop out of the list.
-      if (typeof path === "string") useAppStore.getState().removeRecentProject(path);
+      if (typeof path === "string" && !requiresFileAuthorization()) useAppStore.getState().removeRecentProject(path);
       throw err;
     } finally {
       set({ isLoading: false });

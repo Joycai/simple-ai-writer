@@ -42,6 +42,7 @@ import { feeGroupOptions } from "../../../lib/ai/feeGroupList";
 import { costReportingPlatform, reportsCostFor } from "../../../lib/ai/reportedCost";
 import { useFeeLabelWords } from "./feeWords";
 import { familyOf, TEXT_VERBOSITIES, type ImageRoute, type ProtocolFamily, type TextVerbosity } from "../../../lib/ai/types";
+import { distributionAllows } from "../../../lib/distribution";
 import { isComfyUiEnabled } from "../../../lib/comfy/flag";
 import {
   analyzeComfyWorkflow, parseComfyWorkflow, type ComfyParseError,
@@ -1343,6 +1344,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
       </div>
 
       <div className={s.body}>
+        {((isComfy && !distributionAllows("comfyui")) || (form.translateFormat && !distributionAllows("sakura"))) &&
+          <p role="status">{t("distribution.savedModelUnavailable")}</p>}
         {error && <div className={`${styles.errorNote} ${s.error}`}>{error}</div>}
 
         {/* ── 身份 — never folds ─────────────────────────────────────────────── */}
@@ -1818,7 +1821,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                 model or as any other subagent's model. The warning has to say
                 so — an author who ticks it and then cannot find their model in
                 the chat picker would otherwise read that as a bug. */}
-            <Fold open={translateWire}>
+            <Fold open={translateWire && (distributionAllows("sakura") || !!form.translateFormat)}>
               <Subhead label={t("aiConfig.models.capsGroupDedicated")} hint={t("aiConfig.models.capsGroupDedicatedHint")} />
               <Field label={t("aiConfig.models.translateLabel")} hint={t("aiConfig.models.briefTranslate")}
                 warn={form.translateFormat ? t("aiConfig.models.translateFormatHintOn") : undefined}>

@@ -95,6 +95,8 @@ pub async fn scaffold_project(
         let dirs: Vec<_> = categories.iter().map(|c| lore_root.join(c)).collect();
 
         for dir in &dirs {
+            #[cfg(all(target_os = "macos", feature = "app-store"))]
+            crate::scope::check_project_target(root, dir)?;
             fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
 

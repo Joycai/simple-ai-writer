@@ -41,3 +41,6 @@ __pycache__/
 # Preserve useful scratch material outside the repository before cleaning it.
 /.pnpm-store/
 /.kb-input-tmp.md
+
+# Ephemeral App Store candidate reports / archives from the manual workflow.
+/store-reports/

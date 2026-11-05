@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const channel = vi.hoisted(() => ({ terminal: true }));
+vi.mock("../../lib/distribution", () => ({ terminalAvailable: () => channel.terminal, distributionAllows: () => true }));
+
 const fs = new Map<string, string>();
 
 vi.mock("../../lib/fs/fileio", () => ({
@@ -169,4 +172,16 @@ describe("buildResumeSeed and task listing", () => {
     expect(summaries[1].stepsDone).toBe(1);
     expect(summaries[1].stepsTotal).toBe(2);
   });
+});
+
+it("store resumes terminal steps as blocked instructions without rewriting progress", async () => {
+  channel.terminal = false;
+  try {
+    const body = "# Resume terminal task\n\n- [ ] run_command: git status";
+    await saveTaskDoc("/p", "old", { meta: { taskId: "old", status: "paused", modelId: "m", createdAt: "now", updatedAt: "now" }, body });
+    const seed = await buildResumeSeed("/p", "old");
+    expect(seed.userContent).toContain(body);
+    expect(seed.userContent).toContain("终端");
+    expect(seed.userContent).toContain("阻塞");
+  } finally { channel.terminal = true; }
 });

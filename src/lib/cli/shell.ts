@@ -11,6 +11,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { IS_TAURI } from "../platform";
+import { terminalAvailable } from "../distribution";
 
 type ShellKind = "pwsh" | "powershell" | "zsh" | "bash" | "sh" | "fish" | "dash" | "ksh";
 
@@ -36,6 +37,7 @@ let inflight: Promise<ShellInfo | null> | null = null;
  * shell and, by routing, no tool) and on a failed probe.
  */
 export async function shellInfo(): Promise<ShellInfo | null> {
+  if (!terminalAvailable()) return null;
   if (cached) return cached;
   if (!IS_TAURI) return null;
   if (!inflight) {
@@ -54,7 +56,7 @@ export async function shellInfo(): Promise<ShellInfo | null> {
 
 /** What {@link shellInfo} last answered, without asking. */
 export function cachedShellInfo(): ShellInfo | null {
-  return cached;
+  return terminalAvailable() ? cached : null;
 }
 
 /** Whether commands for this shell are written in PowerShell or POSIX syntax. */

@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const channel = vi.hoisted(() => ({ terminal: true }));
+vi.mock("../../distribution", () => ({ terminalAvailable: () => channel.terminal, distributionAllows: () => true }));
+
 const exists = vi.fn(async (_path: string) => true);
 vi.mock("../../fs/fileio", () => ({ fileExists: (p: string) => exists(p) }));
 
@@ -243,4 +246,16 @@ describe("automatic execution denial", () => {
     await expect(runCommandTool("c", { command: "ls" }, ctx)).rejects.toThrow("AUTO_READ_DENIED");
     expect(ctx.seen).toHaveLength(0);
   });
+});
+
+it("store rejects stale terminal tool calls before automatic reads or approval", async () => {
+  channel.terminal = false;
+  try {
+    const ctx = ctxWith(() => ({ approved: true }));
+    const result = await runCommandTool("old", { command: "ls" }, ctx);
+    expect(result.content).toBeTruthy();
+    expect(ctx.seen).toEqual([]);
+    expect(run).not.toHaveBeenCalled();
+    expect(exists).not.toHaveBeenCalled();
+  } finally { channel.terminal = true; }
 });

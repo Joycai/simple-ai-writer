@@ -23,6 +23,7 @@ import { isXlsxExportEnabled } from "../xlsx/flag";
 import { isTranslateEnabled } from "../translate/flag";
 import { isAsrEnabled } from "../asr/flag";
 import { isCliEnabled } from "../cli/flag";
+import { distributionAllows, terminalAvailable } from "../distribution";
 import { isMcpEnabled, readMcpServers } from "../mcp/config";
 import { IS_TAURI } from "../platform";
 import { isOrchestratorEnabled } from "./packFlag";
@@ -177,7 +178,7 @@ function route(
   models: Model[],
   options?: RouteOptions,
 ): RoutedTools {
-  let tools = [...preset.tools];
+  let tools = preset.tools.filter((id) => (id !== "run_command" || terminalAvailable()) && (id !== "translate" || distributionAllows("sakura")));
   // Usable, not merely enabled. A search subagent bound to a model without
   // web_search would otherwise take the main model's own browsing away
   // (serverTools: "off") and give nothing back — strictly worse than leaving
@@ -259,7 +260,7 @@ function route(
   // none of the three is knowable where presets are declared — and so the raw
   // preset ratchet cannot see it; agentToolBudget.test.ts prices it in the
   // routed-tools assertion. docs/feature/agent/shell-command-plan.md §3.5.
-  if (options?.commands && isCliEnabled() && IS_TAURI && !tools.includes("run_command")) {
+  if (terminalAvailable() && options?.commands && isCliEnabled() && IS_TAURI && !tools.includes("run_command")) {
     tools.push("run_command");
   }
 

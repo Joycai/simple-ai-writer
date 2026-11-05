@@ -1,3 +1,4 @@
+import { distributionAllows } from "../distribution";
 import { parseImageOptions, type ImageOptions } from "./imageOptions";
 /**
  * SQLite-backed AI configuration storage: providers, models, and prompt
@@ -612,7 +613,8 @@ export function isRetrievalOnly(m: Pick<Model, "type" | "retrieval">): boolean {
 export function conversationalModels(models: readonly Model[]): Model[] {
   // 转写模型同样无条件排除：它的端点收的是一个音频 URL，不是 messages，作为
   // 主模型会让对话在第一轮就死掉（asr 执行方案 §1 不变量 1）。
-  return models.filter((m) => !isTranslateOnly(m) && !isAsrOnly(m) && !isRetrievalOnly(m));
+  return models.filter((m) => !isTranslateOnly(m) && !isAsrOnly(m) && !isRetrievalOnly(m)
+    && (distributionAllows("comfyui") || effectiveImageRoute("openai", m.caps) !== "comfyui"));
 }
 
 /**

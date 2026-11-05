@@ -14,7 +14,8 @@
  * it carries the hash that is actually stored so a caller can re-plan.
  */
 
-import { fetch } from "../http";
+import { fetch as privacyFetch } from "../http";
+const fetch: typeof globalThis.fetch = (input, init) => privacyFetch(input, init, "sync");
 import { normalizeServerUrl } from "./config";
 import type { HashMap, SyncDirection } from "./model";
 

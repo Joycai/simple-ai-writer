@@ -12,8 +12,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   /** Ordered log of the side effects whose *sequence* is the thing under test. */
   calls: [] as string[],
+  sandbox: false,
+  pinnedProjects: [] as string[],
+  pinProject: vi.fn(),
   openProjectFolder: vi.fn(async () => "D:/projects/book"),
-  registerProjectRoot: vi.fn(async () => {}),
+  registerProjectRoot: vi.fn(async (path: string): Promise<string | null> => path),
   scaffoldProject: vi.fn(async (_p: string, _c: string[]) => {}),
   readDirRecursive: vi.fn(async () => []),
   getDb: vi.fn(async () => ({})),
@@ -25,6 +28,8 @@ const h = vi.hoisted(() => ({
   removeRecentProject: vi.fn(() => {}),
 }));
 
+vi.mock("../../lib/projectAuthorization", () => ({ authorizeProjectRoot: h.registerProjectRoot, chooseAuthorizedProjectFolder: h.openProjectFolder }));
+vi.mock("../../lib/distribution", () => ({ requiresFileAuthorization: () => h.sandbox }));
 vi.mock("../../lib/project", () => ({
   openProjectFolder: h.openProjectFolder,
   registerProjectRoot: h.registerProjectRoot,
@@ -87,6 +92,8 @@ vi.mock("../editorStore", () => ({
 vi.mock("../appStore", () => ({
   useAppStore: {
     getState: () => ({
+      pinnedProjects: h.pinnedProjects,
+      pinProject: h.pinProject,
       addRecentProject: h.addRecentProject,
       removeRecentProject: h.removeRecentProject,
     }),
@@ -115,6 +122,9 @@ function selectionOf(...packs: (typeof NOVEL_PROFILE)[]): ProfileSelection {
 
 beforeEach(() => {
   h.calls.length = 0;
+  h.sandbox = false;
+  h.pinnedProjects = [];
+  h.registerProjectRoot.mockImplementation(async (path) => path);
   vi.clearAllMocks();
   h.loadProfileFileMock.mockResolvedValue(null);
   h.getDb.mockResolvedValue({});
@@ -411,5 +421,41 @@ describe("category facet slots", () => {
     await expect(store.setCategorySlots("characters", [{ ...slot, id: base.id.toUpperCase() }])).rejects.toThrow(/built-in/);
     await expect(store.setCategorySlots("characters", [slot, slot])).rejects.toThrow(/duplicate/);
     expect(h.saveProfileFileMock).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("sandbox project authorization", () => {
+  beforeEach(() => { h.sandbox = true; });
+  it("cancel leaves the current project, files and recents untouched", async () => {
+    useProjectStore.setState({ projectPath: "/current" });
+    h.registerProjectRoot.mockResolvedValueOnce(null);
+    expect(await openProject("/old")).toBe("cancelled");
+    expect(useProjectStore.getState().projectPath).toBe("/current");
+    expect(h.scaffoldProject).not.toHaveBeenCalled();
+    expect(h.getDb).not.toHaveBeenCalled();
+    expect(h.removeRecentProject).not.toHaveBeenCalled();
+  });
+  it("opens only the path resolved by the bookmark", async () => {
+    h.pinnedProjects = ["/old"];
+    h.registerProjectRoot.mockResolvedValueOnce("/moved/中文 project");
+    await openProject("/old");
+    expect(h.scaffoldProject.mock.calls[0][0]).toBe("/moved/中文 project");
+    expect(h.getDb).toHaveBeenCalledWith("/moved/中文 project");
+    expect(h.pinProject).toHaveBeenCalledWith("/moved/中文 project");
+    expect(h.removeRecentProject).toHaveBeenCalledWith("/old");
+    expect(useProjectStore.getState().projectPath).toBe("/moved/中文 project");
+  });
+  it("an authorization failure never probes or scaffolds the old path", async () => {
+    h.registerProjectRoot.mockRejectedValueOnce(new Error("access denied"));
+    await expect(openProject("/old")).rejects.toThrow("access denied");
+    expect(h.loadProfileFileMock).not.toHaveBeenCalled();
+    expect(h.scaffoldProject).not.toHaveBeenCalled();
+    expect(h.removeRecentProject).not.toHaveBeenCalled();
+  });
+  it("keeps history even when authorized project I/O fails", async () => {
+    h.getDb.mockRejectedValueOnce(new Error("disk unavailable"));
+    await expect(openProject("/old")).rejects.toThrow("disk unavailable");
+    expect(h.removeRecentProject).not.toHaveBeenCalled();
   });
 });

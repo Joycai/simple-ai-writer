@@ -63,6 +63,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: App Store preparation guards
+        run: |
+          node --test scripts/__tests__/appstore-*.test.mjs
+          python3 -m unittest discover -s scripts/__tests__ -p 'test_appstore_sign.py'
+          node scripts/check-appstore-metadata.mjs
+
       - name: Type check (tsc --noEmit)
         run: pnpm exec tsc --noEmit
 
@@ -118,11 +124,15 @@ jobs:
 
       - name: Lint (cargo clippy)
         working-directory: src-tauri
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: |
+          cargo clippy --all-targets -- -D warnings
+          cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Test (cargo test)
         working-directory: src-tauri
-        run: cargo test --all-features
+        run: |
+          cargo test
+          cargo test --all-features
 
       - name: Test shared HTTP transport
         working-directory: src-tauri
