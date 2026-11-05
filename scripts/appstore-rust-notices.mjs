@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 if (process.argv.slice(2).some(x => x !== '--check')) throw new Error('Use --check or no arguments');
-const names = ['bytes', 'log', 'url', 'percent-encoding', 'base64', 'futures-core', 'futures-util', 'http', 'http-body', 'mime', 'tauri', 'tauri-runtime', 'tauri-runtime-wry', 'tauri-utils', 'tokio', 'reqwest', 'keyring', 'tauri-plugin-dialog', 'tauri-plugin-fs', 'tauri-plugin-notification', 'tauri-plugin-opener', 'tauri-plugin-sql'];
+const names = ['futures-channel', 'futures-executor', 'futures-io', 'futures-sink', 'futures-task', 'http-body-util', 'httparse', 'mio', 'slab', 'smallvec', 'socket2', 'tower', 'tower-layer', 'tower-service', 'tracing', 'tracing-attributes', 'tracing-core', 'bytes', 'log', 'url', 'percent-encoding', 'base64', 'futures-core', 'futures-util', 'http', 'http-body', 'mime', 'tauri', 'tauri-runtime', 'tauri-runtime-wry', 'tauri-utils', 'tokio', 'reqwest', 'keyring', 'tauri-plugin-dialog', 'tauri-plugin-fs', 'tauri-plugin-notification', 'tauri-plugin-opener', 'tauri-plugin-sql'];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const metadata = JSON.parse(execFileSync('cargo', ['metadata', '--locked', '--offline', '--filter-platform', 'aarch64-apple-darwin', '--features', 'app-store', '--format-version', '1'], { cwd: join(root, 'src-tauri'), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
 const entries = metadata.packages.filter(p => names.includes(p.name)).map(p => {

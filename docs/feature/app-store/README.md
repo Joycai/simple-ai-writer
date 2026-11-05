@@ -350,3 +350,36 @@ Rust 原文收集器现在单独处理 vendor：固定上游归档 checksum、�
 最终签名包的离线声明可读性、升级验证仍待原生验收；暂不宣称完整第三方分发义务已完成。
 
 本批验证：`appstore-rust-notices.mjs --check` 通过（25 条，含 vendor 归档及本地文件树复核）；App Store Node 检查 11 项通过；`pnpm build` 类型检查和生产/原型构建通过，仅保留既有 chunk 大小提示；`git diff --check` 通过。本次没有修改 Rust 执行代码，未运行外部模型 live 测试，未生成或上传新签名包。
+
+## 2026-11-05 离线声明第四批（2.0.19，17 条）
+
+状态：部分整理完成，未完成整体分发许可验收。PR #848 已合并，本轮基于 main `23ad57a2` 整合，保留第三批 vendor HTTP 与依赖声明，并同步至 2.0.19。
+
+| 包 | 版本 | 原声明 / 本轮选择 |
+| --- | --- | --- |
+| futures-channel / futures-executor / futures-io / futures-sink / futures-task | 各 0.3.34 | MIT OR Apache-2.0 / MIT |
+| http-body-util | 0.1.5 | MIT |
+| httparse | 1.10.1 | MIT OR Apache-2.0 / MIT |
+| mio | 1.2.3 | MIT |
+| slab | 0.4.12 | MIT |
+| smallvec | 1.16.1 | MIT OR Apache-2.0 / MIT |
+| socket2 | 0.6.5 | MIT OR Apache-2.0 / MIT |
+| tower | 0.5.3 | MIT |
+| tower-layer / tower-service | 各 0.3.3 | MIT |
+| tracing | 0.1.44 | MIT |
+| tracing-attributes | 0.1.31 | MIT |
+| tracing-core | 0.1.36 | MIT |
+
+这些包均来自锁定的 macOS arm64 / app-store Cargo metadata 图。逐个复核本机缓存 `.crate` SHA-256 与 Cargo.lock，归档中的根目录 LICENSE / NOTICE 原文与解包文件逐字一致；保留 MIT 版权行与完整条款，双许可包同时保留 Apache 原文。版权行分别来自 Alex Crichton / Tokio Authors、Sean McArthur / Hyper Contributors、Carl Lerche / MIO contributors、Servo Project Developers、Tower Contributors、Tokio Contributors，未根据包作者字段猜测或补写版权。
+
+本轮仅扩充收集白名单与原文快照，不改变 Rust 执行代码、网络、沙盒或站外版行为。收录仍包含构建和间接依赖，不代表最终二进制清单或整个依赖树已核验。
+
+### 新核对但暂不纳入
+
+- `itoa@1.0.18`、`once_cell@1.21.4`、`pin-project-lite@0.2.17`：包内 LICENSE-MIT 有许可正文，但未含明确版权主体行。与前述 anyhow / serde / thiserror 同样继续核对来源，不从作者元数据补写，也不据此认定禁止使用。
+- `ryu@1.0.23`：声明为 Apache-2.0 OR BSL-1.0，存在 LICENSE-APACHE / LICENSE-BOOST；尚未完成该许可选择及归属核对，不因 Boost 文本也包含 “Permission is hereby granted” 就误归类为 MIT。
+- `memchr@2.8.3`：声明为 Unlicense OR MIT，LICENSE-MIT 含 Andrew Gallant 版权行；本轮未扩展收集器支持这一表达式，留待连同其他原文/嵌套声明核对后纳入。
+
+既有复杂许可、JS 插件全文、下载字体许可及镜像链路、图标/音频来源、最终签名包原生离线验收均保持待完成。本轮没有重做在线发布者身份验证，也没有新建签名包或上传。
+
+整合后验证：42 条 Rust 原文归档复核通过；离线资产共 91 条（49 条 npm、42 条 Rust），与 main 的 74 条既有记录逐项比较完全保留，新增 17 条。11 项 App Store Node 检查通过；`pnpm build` 类型检查、应用及原型生产构建通过；`git diff --check` 通过。四份版本清单已同步为 2.0.19。未运行外部模型 live 测试，未生成新签名包，未执行原生离线验收。整合前保存的临时工作副本不是发布资产，当前生成资产已包含 #848 全部记录。
