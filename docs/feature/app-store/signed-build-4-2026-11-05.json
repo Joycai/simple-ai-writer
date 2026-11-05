@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-11-05T02:12:49.383183+00:00",
+  "profile": {
+    "team": "H9WK585493",
+    "applicationId": "H9WK585493.com.simple-ai-writer.app.appstore",
+    "uuid": "c54cdaef-0b16-440d-b37d-068bcdc69821",
+    "expiresAt": "2027-11-05T01:47:47+00:00",
+    "certificateSHA1": "3B63BC5D87F87A908B21AEA7E2FDE817086566E6"
+  },
+  "applicationIdentity": "Apple Distribution: Cai Zhengxu (H9WK585493)",
+  "installerIdentity": "3rd Party Mac Developer Installer: Cai Zhengxu (H9WK585493)",
+  "installerSHA1": "46A9B011BDBB47AB5C695225BF1D29E1BA5B7DE4",
+  "buildNumber": "4",
+  "submissionReady": false,
+  "localSigningChecksPassed": true,
+  "app": "/Users/caizhengxu/.codex/worktrees/760b/simple-ai-writer/store-reports/signed-4-vn0w7_cd/Simple AI Writer Store.app",
+  "package": "/Users/caizhengxu/.codex/worktrees/760b/simple-ai-writer/store-reports/signed-4-vn0w7_cd/Simple-AI-Writer-Store-4.pkg",
+  "packageSHA256": "2861ea86462920d3e4de9f59cb3af3ba8992ac83f673f9a5122743371fde8383",
+  "pending": [
+    "App Store Connect validation/upload",
+    "Deferred native acceptance",
+    "Public privacy policy, metadata, license notices and encryption review"
+  ]
+}

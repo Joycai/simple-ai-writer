@@ -1,0 +1,20 @@
+[
+  {
+    "file": "sample.txt",
+    "sourceSha256": "df2753772a7abbed15bd4302bd7dde3d8030955a117695d941fbd9628ffce754",
+    "importedSha256": "df2753772a7abbed15bd4302bd7dde3d8030955a117695d941fbd9628ffce754",
+    "identical": true
+  },
+  {
+    "file": "sample.md",
+    "sourceSha256": "11ba30b780d62636148f1083b72cda96ee21e2218843de4edf651a37e916d999",
+    "importedSha256": "11ba30b780d62636148f1083b72cda96ee21e2218843de4edf651a37e916d999",
+    "identical": true
+  },
+  {
+    "file": "pixel.png",
+    "sourceSha256": "3fd24bcfdb17a6027c5f3ed896d17a020d6ff9d9e4d06362461a9b44b6ac1b52",
+    "importedSha256": "3fd24bcfdb17a6027c5f3ed896d17a020d6ff9d9e4d06362461a9b44b6ac1b52",
+    "identical": true
+  }
+]

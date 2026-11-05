@@ -1,0 +1,35 @@
+{
+  "outputs": [
+    {
+      "sourceFormat": "docx",
+      "output": "sample-2.md",
+      "sha256": "bff2cdd3437b49f3277692f4d252d2637741409ed25be08d4283cd9c79a0471c",
+      "content": "Sandbox import — 中文文本\n",
+      "expectedTextPresent": true
+    },
+    {
+      "sourceFormat": "pdf",
+      "output": "sample-3.md",
+      "sha256": "ec2c86aa84f5422579f9158a3dfaf2b3e58edd3d2d4425b8f45185a83994c7ad",
+      "content": "<!-- page 1 -->\n\nSandbox PDF import\n",
+      "expectedTextPresent": true
+    },
+    {
+      "sourceFormat": "pptx",
+      "output": "sample-4.md",
+      "sha256": "51cf76d401b91a9e75d8615bfd7f92efa720e9838e8824efae07268176286fcf",
+      "content": "<!-- slide 1 -->\n\n## Slide 1\n\n- Sandbox import — 中文文本\n",
+      "expectedTextPresent": true
+    },
+    {
+      "sourceFormat": "xlsx",
+      "output": "sample-5.md",
+      "sha256": "cea65d745d7da150be118af356e1c0058253fdf83c63526ba1322057938cd1f7",
+      "content": "## Sheet 1\n\n| Keep 00123 as text | 42 |\n| --- | --- |\n",
+      "expectedTextPresent": true
+    }
+  ],
+  "existingMarkdownUnchanged": true,
+  "sourceManifestVerified": true,
+  "uiAllOutputsVerified": false
+}

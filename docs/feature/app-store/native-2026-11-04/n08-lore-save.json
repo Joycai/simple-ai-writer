@@ -1,0 +1,13 @@
+{
+  "matchingEntries": [
+    {
+      "path": "characters/沙盒验收条目/index.md",
+      "namePresent": true,
+      "expectedSummaryPresent": false,
+      "sha256": "21a4c70547205d57610d79a53e04bad333822ff5bd5a8fbccab10db742766408",
+      "actualSummary": "这是本地知识库验收内容，不需要联网",
+      "contentMatchesIgnoringFinalPunctuation": true,
+      "note": "仅缺少测试句末句号，不作为保存失败；界面重新打开显示仍待用户确认。"
+    }
+  ]
+}

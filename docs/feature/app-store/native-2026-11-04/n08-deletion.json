@@ -1,0 +1,14 @@
+{
+  "deletedPath": "文件操作验收/移动后.md",
+  "deletedPathAbsent": true,
+  "otherFilesUnchanged": {
+    "sample.txt": true,
+    "sample.md": true,
+    "pixel.png": true,
+    "sample-2.md": true,
+    "sample-3.md": true,
+    "sample-4.md": true,
+    "sample-5.md": true,
+    "验收记录.md": true
+  }
+}

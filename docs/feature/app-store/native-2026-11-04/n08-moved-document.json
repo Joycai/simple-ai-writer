@@ -1,0 +1,9 @@
+{
+  "destination": "文件操作验收/移动后.md",
+  "content": "文件移动后内容不丢失",
+  "sha256": "b0463fcc7583eab37d77e9fb356aa49b000bd4adec54ee6a88303741a6cfc4a8",
+  "oldRootPathsExist": {
+    "移动前.md": false,
+    "移动后.md": false
+  }
+}

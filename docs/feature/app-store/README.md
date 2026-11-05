@@ -1,6 +1,6 @@
 # P4 商店提交资料与准备流程
 
-> Status: `partial` — 2.0.14 已完成无正式签名的本地准备工具与文案草稿。尚未创建或修改开发者账户记录，未上传、未发布。P1–P3 原生验收、公开隐私政策和正式签名继续待完成。
+> Status: `partial` — 2.0.14 已完成无正式签名的本地准备工具与文案草稿。2026-11-05 已配置正式签名材料并生成 2.0.15 / build 4 签名候选包；未上传、未发布。剩余原生验收、公开隐私政策和审核材料继续待完成。
 
 P5 的候选档案、测试批次和提审交接见 [P5 手册](p5-release-runbook.md)；本文保留 2.0.14 的 P4 实施记录，后续版本以主计划和实际候选档案为准。
 
@@ -122,9 +122,60 @@ P2 主计划 §9 是数据流事实来源。以下是填写问卷前的映射，
 
 ## 正式签名与上传的交接边界
 
-本阶段没有证书 / profile，因此不构造看似可上传的 `.pkg`。正式阶段按以下顺序衔接：确认 App ID、Team ID 与独立 Bundle ID → 创建匹配分发证书 / 安装包签名身份及 provisioning profile → 在商店专用配置嵌入 `Contents/embedded.provisionprofile` → 核对身份、有效期和 entitlement → 重新签名构建 → `codesign` 与 profile 匹配校验 → `productbuild` 生成签名 pkg 并用 `pkgutil --check-signature` 验证 → 经批准上传并记录处理结果。
+### 2026-11-05 账户配置起点
+
+用户确认开发者申请完成，决定暂缓剩余原生验收，先准备正式签名。只读本机检查：Xcode 路径为 `/Applications/Xcode.app/Contents/Developer`，`security find-identity -v -p codesigning` 返回 `0 valid identities found`。这不是对后台会员状态或安装包证书库存的检查。
+
+后续安装应用分发证书后，受限工具环境仍返回 0；经正常本机钥匙串访问环境复核，已识别有效身份 `Apple Distribution: Cai Zhengxu (H9WK585493)`，指纹 `3B63BC5D87F87A908B21AEA7E2FDE817086566E6`。因此不能单凭受限环境的 0 结果判断本机没有证书。用户 App ID 截图确认 Bundle ID 为 `com.simple-ai-writer.app.appstore`、Team ID / App ID Prefix 为 `H9WK585493`。应用分发签名身份已就绪；安装包证书和 profile 仍待配置，尚未执行正式签名。
+
+同日用户安装 Mac Installer Distribution 后，经 `security find-identity -v` 只读复核，已识别有效安装包身份 `3rd Party Mac Developer Installer: Cai Zhengxu (H9WK585493)`，指纹 `46A9B011BDBB47AB5C695225BF1D29E1BA5B7DE4`。两类签名身份均已就绪；下一步创建并核对 `Mac App Store Connect` profile，正式签名与上传仍未执行。剩余原生验收继续保留待完成状态。
+
+用户随后提供 `Simple_AI_Writer_Store_Distribution.provisionprofile`（原文件保留仓库外）。经本机 `security cms -D` 解码核对：名称 `Simple AI Writer Store Distribution`，UUID `c54cdaef-0b16-440d-b37d-068bcdc69821`，平台 `OSX`，Team ID / App ID Prefix 为 `H9WK585493`，应用标识为 `H9WK585493.com.simple-ai-writer.app.appstore`，有效期至北京时间 **2027-11-05 09:47:47**。内含应用分发证书 SHA-1 与上述 Apple Distribution 身份完全一致；没有设备列表或全设备分发标记。profile 带有团队、应用标识与 `H9WK585493.*` 钥匙串访问组授权，应用沙盒权限仍由商店 entitlements 声明。签名材料已核对齐备；签名配置接入、构建与最终产物校验仍待执行，不能视为已有可提交包。
+
+配置顺序：
+
+1. 在开发者后台登记明确 App ID：`com.simple-ai-writer.app.appstore`（与商店专用配置一致，站外版身份不变），记录 Team ID。
+2. 在本机生成 CSR，后台创建并下载安装到本机钥匙串的 `Apple Distribution`（或适用的 `Mac App Distribution`）应用证书，以及 `Mac Installer Distribution` 安装包证书。私钥必须留在生成 CSR 的本机并与证书配对；Developer ID 系列用于站外分发，不能代替这里的商店身份。
+3. 创建 `Mac App Store Connect` 描述文件，选择上述 App ID 和应用分发证书，下载 `.provisionprofile` 到仓库外位置。
+4. 在 App Store Connect 建立 macOS app 记录，使用完全相同的 Bundle ID；名称和 SKU 由作者确认。
+5. 提供 Team ID、两种证书的本机身份名称和 profile 路径后，再配置商店构建的签名身份、嵌入 profile、按 profile 核对应用标识与团队 entitlement，并产出签名 `.pkg`。暂不猜填 Team ID、应用前缀或加密声明，不将账户开通当作已完成签名。
+
+官方依据（2026-11-05 核对）：[证书类型](https://developer.apple.com/help/account/certificates/certificates-overview/)、[CSR 创建](https://developer.apple.com/help/account/certificates/create-a-certificate-signing-request)、[商店描述文件](https://developer.apple.com/help/account/provisioning-profiles/create-an-app-store-provisioning-profile)、[Tauri App Store 配置](https://tauri.app/distribute/app-store/)。
+
+P4 初始准备阶段没有证书 / profile，未产出提交用 `.pkg`；2026-11-05 签名材料已补齐，实际正式构建尚未执行。正式阶段按以下顺序衔接：确认 App ID、Team ID 与独立 Bundle ID → 创建匹配分发证书 / 安装包签名身份及 provisioning profile → 在商店专用配置嵌入 `Contents/embedded.provisionprofile` → 核对身份、有效期和 entitlement → 重新签名构建 → `codesign` 与 profile 匹配校验 → `productbuild` 生成签名 pkg 并用 `pkgutil --check-signature` 验证 → 经批准上传并记录处理结果。
 
 证书 / 私钥 / profile 不入仓库，正式配置不能通过站外发布入口注入。准备工作流没有预留 secrets 或运行上传；这可避免无证书时把 ad-hoc 产物误标成提交包。正式配置接入方式、签名工具链、钥匙串与跨升级书签仍需专门实测。不能将缺少正式公证警告等同于 App Store 签名检查通过。
+
+## 本地正式签名入口
+
+`python3 scripts/sign-appstore.py` 使用已安装在本机的分发身份，不导出私钥、不安装应用、不上传。示例（路径与指纹由本机材料替换）：
+
+```bash
+python3 scripts/sign-appstore.py \
+  --profile /absolute/path/Store.provisionprofile \
+  --app-identity APPLICATION_CERTIFICATE_SHA1 \
+  --installer-identity INSTALLER_CERTIFICATE_SHA1 \
+  --build-number 4
+```
+
+使用 Python 3、Node、pnpm、Rust 和 Xcode。脚本先解码 profile，拒绝过期、错误平台、设备分发、调试权限、Bundle ID / 团队 / 证书不匹配；身份必须是同团队的应用与安装包分发证书。App ID Prefix 独立读取，不假设它等于 Team ID。沙盒权限沿用商店基线，只补入实际 profile 授予的应用和团队标识，不额外加入通配钥匙串组。
+
+正式编译固定 `app-store`、arm64 和 macOS 14，独立使用 `src-tauri/target/app-store-signed`，避免覆盖原有 ad-hoc 验收包与站外产物。机器专用配置、profile 副本、entitlements、最终 app/pkg 和报告放入已忽略的 `store-reports/signed-<构建号>-<随机后缀>/`；不提交签名输入，不修改主版本号或站外配置。清理继承的 `TAURI_CONFIG` / `APPLE_*` 环境变量，避免旧配置或公证凭据影响本次签名。
+
+完成前须通过：嵌入 profile 字节一致、codesign 深度严格验证、实际签名证书指纹、完整 entitlements 一致、已有 bundle 审计、productbuild 签名以及 pkgutil 信任链 / 安装包证书指纹。成功才写入 `localSigningChecksPassed: true`；失败保留初始 false 报告与中间产物。`submissionReady` 始终为 false，Apple 服务端校验、原生验收、政策和审核材料另行完成。
+
+防错测试：`PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/__tests__ -p 'test_appstore_sign.py'`。没有改动运行时代码，本次仍使用 2.0.15，独立提升候选构建号至 4。
+
+### 2026-11-05 签名候选结果
+
+**2.0.15 / build 4** 已生成正式证书签名的 `.app` 和 `.pkg`。本次仅改动本地构建工具与文档，没有改动应用运行逻辑或站外发布配置。前端生产构建（含类型检查）、Rust release 构建、5 项签名前置 / 安装包校验测试、3 项原有构建策略测试及最终 bundle 审计通过。
+
+- 输出：`store-reports/signed-4-vn0w7_cd/Simple-AI-Writer-Store-4.pkg`。
+- SHA-256：`2861ea86462920d3e4de9f59cb3af3ba8992ac83f673f9a5122743371fde8383`。
+- [签名报告](signed-build-4-2026-11-05.json)、[最终包静态审计](signed-build-4-bundle-audit.json) 已归档；profile、证书文件与可执行产物不入仓库。
+- 应用签名为 Apple Distribution，安装包签名为同团队的 Mac Installer Distribution；实际证书指纹匹配，profile 字节匹配，六项沙盒权限和两项签名标识匹配；arm64、macOS 14、独立 Bundle ID、build 4 均符合配置。
+- 当前 macOS 的 `pkgutil` 对该商店安装包显示 `signed by a developer certificate issued by Apple (Development)`；校验结合实际 `3rd Party Mac Developer Installer` 身份、指纹与命令成功状态，不误用站外 Developer ID 的状态文案。曾因校验工具的文案 / 参数兼容问题中止，修正后对同一已生成包重新验证通过。
+- 未安装或启动此分发候选包，未执行 Apple 服务端验证、上传、TestFlight 或审核；不将本地签名校验视为可发布批准。现有 ad-hoc 验收包保持原样，暂停的原生验收、隐私政策发布、许可证和加密声明等材料仍待完成。
 
 ## 来源与待完成项
 
