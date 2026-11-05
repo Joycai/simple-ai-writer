@@ -28,7 +28,7 @@ const entries = direct.filter(p => p.source).map(p => {
   });
   if (p.name.startsWith('objc2')) {
     const vcs = JSON.parse(execFileSync('tar', ['-xOf', archive, `${p.name}-${p.version}/.cargo_vcs_info.json`], { encoding: 'utf8' }));
-    const name = `objc2-${vcs.git.sha1}.md`;
+    const name = `objc2-${vcs.git.sha1}.md.txt`;
     const text = readFileSync(join(root, 'docs/feature/app-store/license-sources', name), 'utf8');
     files.push({ name: 'LICENSE.md (upstream license declaration)', source: `https://github.com/madsmtm/objc2/blob/${vcs.git.sha1}/LICENSE.md`, sha256: digest(text), text });
   } else if (!files.some(f => f.text.includes(p.license === 'Apache-2.0' ? 'Apache License' : 'Permission is hereby granted'))) throw new Error(`Full notice missing: ${p.name}`);

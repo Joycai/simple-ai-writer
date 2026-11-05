@@ -1,6 +1,6 @@
 # 商店版许可来源与当前整理范围
 
-状态：partial；2026-11-05，应用版本 2.0.23。此目录是维护资料，不作为应用资源导入。
+> 状态：`partial`；2026-11-05，应用版本 2.0.23。此目录是维护资料，不作为应用资源导入。
 
 工作状态：按作者决定，本轮许可证整理到此结束。除非新增依赖，不再主动核查或扩大范围。下文待确认项仅保留历史事实，不安排继续调查；新增依赖只处理新增项。已有一致性测试照常运行，不等于重新开展许可审计。
 
@@ -25,8 +25,8 @@
 - download-font-notices.json：下载字体的完整协议文本、来源及证据状态。
 - MiSans-LICENSE.pdf / .txt：小米官网的协议原文件及 PDFKit 提取的完整双语文本；保留原 PDF 以核对文字提取。
 - HarmonyOS-Sans-LICENSE.txt：OpenHarmony 上游 LICENSE_Fonts，来源固定到 a52632e5d3901cc860b87fe923142077de194b42。
-- 两份字体包 README：当前项目使用版本的 npm 原文，仅作字体来源证据，不进入应用声明。
-- objc2 的两份提交级 LICENSE.md：由 crate 的 .cargo_vcs_info.json 定位上游提交；不是自行拼写的 MIT 模板。
+- 两份字体包 README.md.txt：当前项目使用版本的 npm 原文，仅作字体来源证据，不进入应用声明。
+- objc2 的两份提交级 LICENSE.md 原文（以 .md.txt 保存）：由 crate 的 .cargo_vcs_info.json 定位上游提交；不是自行拼写的 MIT 模板。
 
 应用侧只生成 src/assets/legal/third-party-notices.json：包名、版本、许可、来源以及许可/版权文本。完整 README、PATCH、归档清单、资源哈希和上游差异证据留在此目录。许可头中的实际版权与许可文字仍保留，不能将它们当作普通审计说明删掉。
 
