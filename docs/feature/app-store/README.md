@@ -477,3 +477,38 @@ PR #849 已合并，基准 main `316024c3` / 2.0.19。重新离线运行库存�
 本批未构建正式签名包、未上传或提审。来源快照保留审计证据；原文节选仅取完整文件头的许可块，并在名称标明 original license header，不将整个源文件作为许可证展示。
 
 验证：14 项 App Store Node 检查通过；文档源码引用守卫 1 项通过；TypeScript、应用及原型生产构建通过，保留既有大 chunk 提示；`git diff --check` 通过。首次沙盒内 pnpm 自动恢复依赖遇到 DNS 限制，停止后在正常缓存环境按 `--frozen-lockfile` 恢复并重新验证，未改动 pnpm-lock.yaml。未运行外部模型测试或原生 UI 验收。
+
+## 第七批：六个 Tauri JS 插件与 KaTeX 字体（2026-11-05）
+
+状态：本批原文与字体声明已补齐，整体分发许可审查仍为部分完成。PR #851 已合并，本批基于 main `3992f584`，版本通过技能同步为 **2.0.22**。离线清单从 101 增至 **107 条（65 npm、42 Rust）**。没有修改插件实现、字体文件、公式渲染、权限、下载或站外版入口。
+
+### 六个 JS 插件
+
+| npm 包 | 版本 | 发布标签 |
+| --- | --- | --- |
+| @tauri-apps/plugin-dialog | 2.7.3 | dialog-v2.7.3 |
+| @tauri-apps/plugin-fs | 2.5.2 | fs-v2.5.2 |
+| @tauri-apps/plugin-http | 2.6.0 | http-v2.6.0 |
+| @tauri-apps/plugin-notification | 2.4.0 | notification-v2.4.0 |
+| @tauri-apps/plugin-opener | 2.5.5 | opener-v2.5.5 |
+| @tauri-apps/plugin-sql | 2.4.1 | sql-v2.4.1 |
+
+本次查询六个标签均解析到 [plugins-workspace 固定提交](https://github.com/tauri-apps/plugins-workspace/tree/6aa2854f314481a459be1189b02c65a2450789ab)。逐包比较 plugins/<name>/package.json 与安装包 JSON 内容一致、README 字节一致；各自目录的 LICENSE_MIT / LICENSE_APACHE-2.0 为完整原文。按包声明 `MIT OR Apache-2.0` 选择 MIT，仍保留两份全文、npm 原有 LICENSE.spdx，以及 README 的原始 License 段落（包括 Tauri Programme 版权归属）。没有以同名 Rust 包证据替代 JS 包。
+
+固定来源、每份文本 SHA-256、上游 package.json/README 证据及每个安装包完整文件集哈希保存在 `scripts/legal/tauri-js-notices.json`。收集器校验版本、文件数和每项字节；测试另核对来源提交及清单/README。此证据绑定发布源码与本机锁定安装包，不宣称重现了上游 JS 编译或独立验证了 npm 发布者身份。
+
+直接前端依赖覆盖测试已移除这六个例外，当前所有直接依赖均有声明。此项不代表所有传递依赖或最终二进制已完成审查。
+
+### KaTeX 字体
+
+`src/lib/fs/markdown.ts` 导入 katex/dist/katex.min.css，字体为本地构建资源。安装包内 **20 款字体 × TTF/WOFF/WOFF2 = 60 个文件**；0.18.10 的全部字体逐字节匹配 [KaTeX 固定发布提交](https://github.com/KaTeX/KaTeX/tree/411da7029f5c095943c2805ce6db16c2be5f214d/fonts)。同时发现 @vscode/markdown-it-katex 引入 KaTeX 0.16.47；该已安装版本的 60 个字体与 0.18.10 全部相同，因此两个版本都补入相同字体声明，不依赖包名去重遗漏旧版本。
+
+逐个读取 TTF 的 name 表 ID 0（版权）、13（许可）及 14（许可 URL），原样保留：Design Science, Inc. 2009–2010、Khan Academy 2014–2018、OFL 1.1，以及各字体的 Reserved Font Name。去重仅针对同一字体中相同的编码记录，不合并不同字体的保留名称。20 份元数据文本与 [SIL 官方 OFL 1.1](https://openfontlicense.org/documents/OFL.txt) 的完整许可正文一起进入离线入口；官方示例版权占位头不冒充字体版权，实际版权和保留名称来自字体内嵌表。官方下载全文哈希与许可正文哈希分别记录。
+
+来源快照位于 `scripts/legal/katex-font-notices.json`。KaTeX 条目的显示许可改为 `MIT (code) + OFL-1.1 (fonts)`，根 MIT 原文不变；60 项文件名与哈希、明确允许的两个版本由生成检查约束。测试从字体二进制独立解析 name 表，核对离线文本、版权及保留名称，并验证两个版本的字体声明一致。本批使用上游未改动字体，不做切片、重命名或格式转换；日后修改字体需重新核对 OFL 的保留名称等条件。
+
+### 剩余边界
+
+六个 JS 插件“缺完整原文”和 KaTeX“未保留字体许可”两项由本节更新为已补齐。最终签名包实际资源覆盖、离线可读性和升级仍待验收；KaTeX 构建工具源文件的 Apache/OFL 头不等同于本应用运行时全部分发内容，本批未将源码构建工具一律当作随包组件。仍需继续核对其他传递依赖、MPL/EPL 义务、PDF.js 前批未决项、下载字体、图标/音频来源。没有新建正式签名包、上传或提审。
+
+验证：16 项 App Store Node 检查、文档源码引用守卫 1 项、TypeScript 检查及应用/原型生产构建全部通过；`git diff --check` 通过。原有 99 条非 KaTeX 声明逐项保持不变，两个 KaTeX 条目仅补充字体相关信息；保留既有大 chunk 提示。未运行外部模型测试或原生 UI 验收。

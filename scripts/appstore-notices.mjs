@@ -8,9 +8,11 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 if (process.argv.slice(2).some(x => x !== '--check')) throw new Error('Use --check or no arguments');
 const check = process.argv.includes('--check');
 const digest = text => createHash('sha256').update(text).digest('hex');
+const tauriJs = JSON.parse(readFileSync(join(root, 'scripts/legal/tauri-js-notices.json'), 'utf8')).entries;
 const selected = new Set(['react', 'react-dom', 'react-i18next', 'i18next', 'zustand', 'lucide-react', 'katex', 'markdown-it', 'docx', 'pptxgenjs', 'mammoth', 'jszip', '@tauri-apps/api', '@joplin/turndown-plugin-gfm', '@lezer/highlight', '@vscode/markdown-it-katex', 'codemirror', 'gray-matter', 'mermaid', 'motion', 'nanoid', 'turndown', 'pdfjs-dist']);
 const wanted = name => selected.has(name) || name.startsWith('@codemirror/') || name.startsWith('@fontsource/');
-const choices = { 'Apache-2.0 OR MIT': 'MIT', '(MIT OR GPL-3.0-or-later)': 'MIT' };
+for (const entry of tauriJs) selected.add(entry.name);
+const choices = { 'Apache-2.0 OR MIT': 'MIT', 'MIT OR Apache-2.0': 'MIT', '(MIT OR GPL-3.0-or-later)': 'MIT' };
 const markers = { 'Apache-2.0': 'TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION', MIT: 'Permission is hereby granted', ISC: 'Permission to use, copy, modify', 'OFL-1.1': 'SIL OPEN FONT LICENSE', 'BSD-2-Clause': 'Redistribution and use in source and binary forms' };
 const groups = JSON.parse(execFileSync('pnpm', ['licenses', 'list', '--prod', '--json'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
 const entries = [];
@@ -27,9 +29,35 @@ for (const group of Object.values(groups)) for (const item of group) for (const 
     const text = readFileSync(join(path, name), 'utf8');
     return { name, sha256: digest(text), text };
   });
+  const plugin = tauriJs.find(e => e.name === pkg.name);
+  if (plugin) {
+    if (plugin.version !== pkg.version) throw new Error(`Review JS plugin version: ${key}`);
+    const walk = dir => readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]);
+    if (walk(path).length !== plugin.packageFiles.length) throw new Error(`Review JS plugin file set: ${key}`);
+    for (const file of plugin.packageFiles) {
+      if (digest(readFileSync(join(path, file.name))) !== file.sha256) throw new Error(`Review JS plugin bytes: ${key}/${file.name}`);
+    }
+    for (const file of plugin.files) {
+      if (digest(file.text) !== file.sha256) throw new Error(`Invalid JS plugin source notice: ${key}/${file.name}`);
+      files.push(file);
+    }
+  }
   if (!files.some(f => f.text.includes(markers[license]))) throw new Error(`Full license text missing: ${key}`);
   let resources;
+  let displayLicense = license;
+  if (pkg.name === 'katex') {
+    const fonts = JSON.parse(readFileSync(join(root, 'scripts/legal/katex-font-notices.json'), 'utf8'));
+    if (!fonts.packageVersions.includes(pkg.version)) throw new Error('Review KaTeX font version');
+    resources = readdirSync(join(path, 'dist/fonts')).sort().map(name => ({ name: `dist/fonts/${name}`, sha256: digest(readFileSync(join(path, 'dist/fonts', name))) }));
+    if (JSON.stringify(resources) !== JSON.stringify(fonts.resources)) throw new Error('Review KaTeX font bytes or file set');
+    for (const file of fonts.files) {
+      if (digest(file.text) !== file.sha256) throw new Error(`Invalid KaTeX font notice: ${file.name}`);
+      files.push(file);
+    }
+    displayLicense = 'MIT (code) + OFL-1.1 (fonts)';
+  }
   if (pkg.name === 'pdfjs-dist') {
+    displayLicense = 'Apache-2.0 + bundled resource licenses (see files)';
     // Preserve mixed resource terms verbatim; collection is not clearance.
     const expected = ['cmaps/LICENSE', 'standard_fonts/LICENSE_FOXIT', 'standard_fonts/LICENSE_LIBERATION',
       'wasm/LICENSE_JBIG2', 'wasm/LICENSE_OPENJPEG', 'wasm/LICENSE_PDFJS_JBIG2',
@@ -66,7 +94,7 @@ for (const group of Object.values(groups)) for (const item of group) for (const 
       files.push(file);
     }
   }
-  entries.push({ name: pkg.name, version: pkg.version, license: resources ? 'Apache-2.0 + bundled resource licenses (see files)' : license, declaredLicense: pkg.license, ...(resources ? { resources } : {}), source: `https://www.npmjs.com/package/${pkg.name}/v/${pkg.version}`, files });
+  entries.push({ name: pkg.name, version: pkg.version, license: displayLicense, declaredLicense: pkg.license, ...(resources ? { resources } : {}), source: `https://www.npmjs.com/package/${pkg.name}/v/${pkg.version}`, files });
 }
 for (const name of [...selected, '@fontsource/spectral', '@fontsource/inter-tight', '@fontsource/jetbrains-mono']) {
   if (!entries.some(e => e.name === name)) throw new Error(`Required notice missing: ${name}`);
