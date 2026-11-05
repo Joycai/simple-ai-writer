@@ -1,0 +1,124 @@
+{
+  "packageVersion": "6.4.299",
+  "pdfjsCommit": "d0991a0d53f3bb3a7307e3b83f279c1d117aafb3",
+  "quickjsCommit": "3d5e064e9dd67c70f7962836505a7fa067bf0a4e",
+  "quickjsWrapperCandidate": "1b37671f1b529f887673f33ba4c5f00981a8065b",
+  "qcmsWrapperCommit": "2ae4ee72334782928210ba4050e3e77d9b2d35be",
+  "files": [
+    {
+      "name": "QuickJS/LICENSE",
+      "source": "https://github.com/bellard/quickjs/blob/3d5e064e9dd67c70f7962836505a7fa067bf0a4e/LICENSE",
+      "text": "QuickJS Javascript Engine\n\nCopyright (c) 2017-2021 Fabrice Bellard\nCopyright (c) 2017-2021 Charlie Gordon\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL\nTHE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n",
+      "sha256": "598fd7fc928e4350abce36e337ba5a1346923c5c692f5be92c3d8e29ddd7c18d"
+    },
+    {
+      "name": "QuickJS/cutils.c (original license header)",
+      "source": "https://github.com/bellard/quickjs/blob/3d5e064e9dd67c70f7962836505a7fa067bf0a4e/cutils.c",
+      "text": "/*\n * C utilities\n *\n * Copyright (c) 2017 Fabrice Bellard\n * Copyright (c) 2018 Charlie Gordon\n *\n * Permission is hereby granted, free of charge, to any person obtaining a copy\n * of this software and associated documentation files (the \"Software\"), to deal\n * in the Software without restriction, including without limitation the rights\n * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n * copies of the Software, and to permit persons to whom the Software is\n * furnished to do so, subject to the following conditions:\n *\n * The above copyright notice and this permission notice shall be included in\n * all copies or substantial portions of the Software.\n *\n * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL\n * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n * THE SOFTWARE.\n */",
+      "sha256": "defd35147dab4bae13954c9b6a29713090287cafd52fe2d7d63083e6d8007e12"
+    },
+    {
+      "name": "QuickJS/libregexp.c (original license header)",
+      "source": "https://github.com/bellard/quickjs/blob/3d5e064e9dd67c70f7962836505a7fa067bf0a4e/libregexp.c",
+      "text": "/*\n * Regular Expression Engine\n *\n * Copyright (c) 2017-2018 Fabrice Bellard\n *\n * Permission is hereby granted, free of charge, to any person obtaining a copy\n * of this software and associated documentation files (the \"Software\"), to deal\n * in the Software without restriction, including without limitation the rights\n * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n * copies of the Software, and to permit persons to whom the Software is\n * furnished to do so, subject to the following conditions:\n *\n * The above copyright notice and this permission notice shall be included in\n * all copies or substantial portions of the Software.\n *\n * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL\n * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n * THE SOFTWARE.\n */",
+      "sha256": "b65603688dd7d8ce02c3316f9621ad54e914770ffb60dde5f3d58abfad3a763f"
+    },
+    {
+      "name": "QuickJS/libunicode.c (original license header)",
+      "source": "https://github.com/bellard/quickjs/blob/3d5e064e9dd67c70f7962836505a7fa067bf0a4e/libunicode.c",
+      "text": "/*\n * Unicode utilities\n *\n * Copyright (c) 2017-2018 Fabrice Bellard\n *\n * Permission is hereby granted, free of charge, to any person obtaining a copy\n * of this software and associated documentation files (the \"Software\"), to deal\n * in the Software without restriction, including without limitation the rights\n * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n * copies of the Software, and to permit persons to whom the Software is\n * furnished to do so, subject to the following conditions:\n *\n * The above copyright notice and this permission notice shall be included in\n * all copies or substantial portions of the Software.\n *\n * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL\n * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n * THE SOFTWARE.\n */",
+      "sha256": "0edc91fb5bcc10e21c254bdd6e232c26a31e2968b2d69c4a2693aacb3a4fb5cf"
+    },
+    {
+      "name": "QuickJS/dtoa.c (original license header)",
+      "source": "https://github.com/bellard/quickjs/blob/3d5e064e9dd67c70f7962836505a7fa067bf0a4e/dtoa.c",
+      "text": "/*\n * Tiny float64 printing and parsing library\n *\n * Copyright (c) 2024 Fabrice Bellard\n *\n * Permission is hereby granted, free of charge, to any person obtaining a copy\n * of this software and associated documentation files (the \"Software\"), to deal\n * in the Software without restriction, including without limitation the rights\n * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n * copies of the Software, and to permit persons to whom the Software is\n * furnished to do so, subject to the following conditions:\n *\n * The above copyright notice and this permission notice shall be included in\n * all copies or substantial portions of the Software.\n *\n * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL\n * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n * THE SOFTWARE.\n */",
+      "sha256": "1189a2dd251a2872f7265fa4298ffbc0df8972fb08a5203044e97bc003ba5cde"
+    },
+    {
+      "name": "pdf.js.quickjs/src/exports.c (original license header)",
+      "source": "https://github.com/mozilla/pdf.js.quickjs/blob/1b37671f1b529f887673f33ba4c5f00981a8065b/src/exports.c",
+      "text": "/*\n * Permission is hereby granted, free of charge, to any person obtaining a copy\n * of this software and associated documentation files (the \"Software\"), to deal\n * in the Software without restriction, including without limitation the rights\n * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n * copies of the Software, and to permit persons to whom the Software is\n * furnished to do so, subject to the following conditions:\n *\n * The above copyright notice and this permission notice shall be included in\n * all copies or substantial portions of the Software.\n *\n * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL\n * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n * THE SOFTWARE.\n */",
+      "sha256": "6142c6351d85d48f4fa94258706ba7ea9e8b8768c8d58ec804c0da138b618bd0"
+    },
+    {
+      "name": "pdf.js.quickjs/src/myjs.js (original license header)",
+      "source": "https://github.com/mozilla/pdf.js.quickjs/blob/1b37671f1b529f887673f33ba4c5f00981a8065b/src/myjs.js",
+      "text": "/*\n * Permission is hereby granted, free of charge, to any person obtaining a copy\n * of this software and associated documentation files (the \"Software\"), to deal\n * in the Software without restriction, including without limitation the rights\n * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n * copies of the Software, and to permit persons to whom the Software is\n * furnished to do so, subject to the following conditions:\n *\n * The above copyright notice and this permission notice shall be included in\n * all copies or substantial portions of the Software.\n *\n * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL\n * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n * THE SOFTWARE.\n */",
+      "sha256": "6142c6351d85d48f4fa94258706ba7ea9e8b8768c8d58ec804c0da138b618bd0"
+    },
+    {
+      "name": "pdf.js.qcms/src/lib.rs (original license header)",
+      "source": "https://github.com/mozilla/pdf.js.qcms/blob/2ae4ee72334782928210ba4050e3e77d9b2d35be/src/lib.rs",
+      "text": "/*\n * MIT License\n *\n * Copyright (c) 2005 Mozilla Foundation\n *\n * Permission is hereby granted, free of charge, to any person obtaining a copy\n * of this software and associated documentation files (the \"Software\"), to deal\n * in the Software without restriction, including without limitation the rights\n * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n * copies of the Software, and to permit persons to whom the Software is\n * furnished to do so, subject to the following conditions:\n *\n * The above copyright notice and this permission notice shall be included in all\n * copies or substantial portions of the Software.\n *\n * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n * SOFTWARE.\n */",
+      "sha256": "1d9f85008f290896b95184bf99ed5f039c9fdcbed67fd2307465f660a659de7f"
+    },
+    {
+      "name": "QuickJS/quickjs.c (original license header)",
+      "source": "https://github.com/bellard/quickjs/blob/3d5e064e9dd67c70f7962836505a7fa067bf0a4e/quickjs.c",
+      "text": "/*\n * QuickJS Javascript Engine\n *\n * Copyright (c) 2017-2025 Fabrice Bellard\n * Copyright (c) 2017-2025 Charlie Gordon\n *\n * Permission is hereby granted, free of charge, to any person obtaining a copy\n * of this software and associated documentation files (the \"Software\"), to deal\n * in the Software without restriction, including without limitation the rights\n * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n * copies of the Software, and to permit persons to whom the Software is\n * furnished to do so, subject to the following conditions:\n *\n * The above copyright notice and this permission notice shall be included in\n * all copies or substantial portions of the Software.\n *\n * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL\n * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n * THE SOFTWARE.\n */",
+      "sha256": "62cbce770a95e0d2d610709de2e8c806ca37f792924e4661d7f1727b12a3560c"
+    },
+    {
+      "name": "PDF.js/external/quickjs/README.md",
+      "source": "https://github.com/mozilla/pdf.js/blob/d0991a0d53f3bb3a7307e3b83f279c1d117aafb3/external/quickjs/README.md",
+      "text": "## Build\n\nIn order to generate the file `quickjs-eval.js`:\n* git clone https://github.com/mozilla/pdf.js.quickjs/\n* the build requires to have a [Docker](https://www.docker.com/) setup and then:\n  * `node build.js -C` to build the Docker image\n  * `node build.js -co /pdf.js/external/quickjs/` to compile the sandbox\n\n## Licensing\n\n[Quickjs](https://bellard.org/quickjs/) and [pdf.js.quickjs](https://github.com/mozilla/pdf.js.quickjs/) are released under [MIT](https://opensource.org/licenses/MIT) license so `quickjs-eval.js` is released under [MIT](https://opensource.org/licenses/MIT) license too.\n",
+      "sha256": "cb9cf523e87eec4839071856bb3c173f2f308426613ae0b55f9c9a9920cad002"
+    },
+    {
+      "name": "PDF.js/external/qcms/README.md",
+      "source": "https://github.com/mozilla/pdf.js/blob/d0991a0d53f3bb3a7307e3b83f279c1d117aafb3/external/qcms/README.md",
+      "text": "## Build\n\nIn order to generate the files `qcms.js` and `qcms_bg.wasm`:\n* git clone https://github.com/mozilla/pdf.js.qcms/\n* the build requires to have a [Docker](https://www.docker.com/) setup and then:\n  * `node build.js -C` to build the Docker image\n  * `node build.js -co /pdf.js/external/qcms/` to compile the decoder\n\n## Licensing\n\n[qcms](https://github.com/FirefoxGraphics/qcms) is under [MIT](https://github.com/FirefoxGraphics/qcms/blob/main/COPYING)\nand [pdf.js.qcms](https://github.com/mozilla/pdf.js.qcms/) is released under [MIT](https://github.com/mozilla/pdf.js.qcms/blob/main/LICENSE) license so `qcms.js` and `qcms_bg.wasm` are released under [MIT](https://github.com/mozilla/pdf.js.qcms/blob/main/LICENSE) license too.\n",
+      "sha256": "9eed5608da83e2eb2ce6bb1cf70d91e083b01dbbf6c79a39129c81b1cab71e4f"
+    },
+    {
+      "name": "PDF.js/external/standard_fonts/README.md",
+      "source": "https://github.com/mozilla/pdf.js/blob/d0991a0d53f3bb3a7307e3b83f279c1d117aafb3/external/standard_fonts/README.md",
+      "text": "## Foxit fonts\n\nThe pfb files in this directory were extracted from Pdfium\n\nOriginal copyright notice:\n\n```\nCopyright 2014 PDFium Authors. All rights reserved.\n Use of this source code is governed by a BSD-style license that can be\n found in the LICENSE file.\n\nOriginal code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com\n```\n\nSee `LICENSE_FOXIT`.\n\n## Liberation fonts\n\nThe `LiberationSans-*.ttf` files are the unmodified upstream release of\nLiberation Sans **1.07.4**, which is licensed under the GNU General Public\nLicense v2 with the Liberation font exception (see `LICENSE_LIBERATION`, a copy\nof the `License.txt` and `COPYING` files shipped with that release):\nhttps://fedoraproject.org/wiki/Licensing:LiberationFontLicense\n\nNote that Liberation 2.0 and later are licensed under the SIL Open Font License\n1.1 instead, so `LICENSE_LIBERATION` must be updated as well whenever these font\nfiles are replaced.\n\nThe glyph order of these files is baked into `src/core/liberationsans_widths.js`\nand into the per-glyph scale factors in `src/core/*_factors.js`, so those files\nneed to be regenerated when the fonts are updated.\n",
+      "sha256": "f21d2a0f65f7dd53bbe42ca51b40c4331f566fe91a71e689682c1b762889c47e"
+    }
+  ],
+  "resources": [
+    {
+      "name": "wasm/quickjs-eval.js",
+      "sha256": "fe7930418e869791ce892567dbd0bc4698152b7e550b5cefa553992c56ddc325"
+    },
+    {
+      "name": "wasm/quickjs-eval.wasm",
+      "sha256": "7bcacc9f22cacf7e9b23866d2a6d1639693d40c7f144e41b7c69ed37ba9cbe8f"
+    },
+    {
+      "name": "wasm/qcms_bg.wasm",
+      "sha256": "663d86126d5f5fcb1c61490f94353e2a8375660b8c5498ab3ebab5a34b08800e"
+    },
+    {
+      "name": "wasm/LICENSE_QCMS",
+      "sha256": "36d847ae882f6574ebc72f56a4f354e4f104fde4a584373496482e97d52d31bc"
+    },
+    {
+      "name": "wasm/LICENSE_PDFJS_QCMS",
+      "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+    },
+    {
+      "name": "standard_fonts/LICENSE_LIBERATION",
+      "sha256": "d2c4d5b3e115a519cb58eb691aa64538397e2611f9ebe801392cf9667997e7dc"
+    },
+    {
+      "name": "standard_fonts/LiberationSans-Bold.ttf",
+      "sha256": "361c61b82d575c5c35fd9157fda8b0194bcfcd0d88ea8521a4fb5dd53d33dddc"
+    },
+    {
+      "name": "standard_fonts/LiberationSans-BoldItalic.ttf",
+      "sha256": "a224075ac17495ad0a3af3bc0a419ac0704a8b3fd1095456201fb9b095fc281d"
+    },
+    {
+      "name": "standard_fonts/LiberationSans-Italic.ttf",
+      "sha256": "832b4406dbef23628800d3aaad21048534ac84d7e3ad955be83b8172ed8ef512"
+    },
+    {
+      "name": "standard_fonts/LiberationSans-Regular.ttf",
+      "sha256": "f8ace1f892b2bd9dc1792ba7f097fa7588f84fed48321480e04de5390828221f"
+    }
+  ],
+  "scope": "Source notices and provenance only. QuickJS wrapper commit is a historical candidate; toolchain, transitive notices and Liberation source/distribution obligations remain under review."
+}
