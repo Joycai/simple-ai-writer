@@ -279,7 +279,7 @@ P1–P3 的原生验收、隐私政策发布、正式证书 / 描述文件 / 上
 
 除 Tokio 原声明为 MIT，其余均为 MIT / Apache-2.0 二选一，选择 MIT，保留包内所有根目录 LICENSE / NOTICE 文件（含另一许可全文和 SPDX 元数据）。不删除原作者版权信息，不把 SPDX 文件单独当作完整许可。本批完成的是这些包的原文取得与保留；包内嵌套第三方代码、最终链接范围与修改情况仍需产物核对，不能推广成整个传递依赖树均已批准。
 
-`node scripts/appstore-rust-notices.mjs [--check]` 使用本机离线 Cargo metadata 的 macOS arm64 / app-store 图，仅选择表中包。逐个核对缓存 `.crate` 归档 SHA-256 与 Cargo.lock 的 checksum，从归档读取许可，与已解包文件逐字比较；必须包含完整 MIT 条款及原有 Copyright。快照写入 `scripts/legal/rust-notices.json`，含 crates.io 版本链接、registry source、归档 checksum、每份原文 SHA-256；不保存机器绝对路径。更新依赖时先复核再重建。
+`node scripts/appstore-rust-notices.mjs [--check]` 使用本机离线 Cargo metadata 的 macOS arm64 / app-store 图，仅选择表中包。逐个核对缓存 `.crate` 归档 SHA-256 与 Cargo.lock 的 checksum，从归档读取许可，与已解包文件逐字比较；必须包含完整 MIT 条款及原有 Copyright。快照写入 `docs/feature/app-store/license-sources/rust-notices.json`，含 crates.io 版本链接、registry source、归档 checksum、每份原文 SHA-256；不保存机器绝对路径。更新依赖时先复核再重建。
 
 `appstore-notices.mjs` 将快照合入应用内资产，并校验每项锁定版本、registry source、归档 checksum 及文本 hash；默认前端 CI 不需要 Cargo 下载缓存。快照不能替代上游原文核验，需要在已备齐锁定依赖的开发机运行 Rust 收集器 `--check`。应用内读取仍完全离线。
 
@@ -458,7 +458,7 @@ PR #849 已合并，基准 main `316024c3` / 2.0.19。重新离线运行库存�
 
 ### 固定版本与字节证据
 
-核对 [PDF.js v6.4.299 源码](https://github.com/mozilla/pdf.js/tree/d0991a0d53f3bb3a7307e3b83f279c1d117aafb3)；该提交对应本地锁定的 pdfjs-dist 6.4.299。四个 LiberationSans TTF、LICENSE_LIBERATION、QuickJS JS/WASM、QCMS WASM 及两份 QCMS LICENSE 均与上游 external 目录逐字节一致。10 项 SHA-256、固定提交链接及原文快照保存在 `scripts/legal/pdfjs-resource-notices.json`，收集器在生成/检查时验证 npm 版本与资源字节，再把补充文本加入现有离线声明。CI 不依赖网络重新下载来源；依赖或绑定资源变更必须重新核对。
+核对 [PDF.js v6.4.299 源码](https://github.com/mozilla/pdf.js/tree/d0991a0d53f3bb3a7307e3b83f279c1d117aafb3)；该提交对应本地锁定的 pdfjs-dist 6.4.299。四个 LiberationSans TTF、LICENSE_LIBERATION、QuickJS JS/WASM、QCMS WASM 及两份 QCMS LICENSE 均与上游 external 目录逐字节一致。10 项 SHA-256、固定提交链接及原文快照保存在 `docs/feature/app-store/license-sources/pdfjs-resource-notices.json`，收集器在生成/检查时验证 npm 版本与资源字节，再把补充文本加入现有离线声明。CI 不依赖网络重新下载来源；依赖或绑定资源变更必须重新核对。
 
 ### 已确认并补齐
 
@@ -495,7 +495,7 @@ PR #849 已合并，基准 main `316024c3` / 2.0.19。重新离线运行库存�
 
 本次查询六个标签均解析到 [plugins-workspace 固定提交](https://github.com/tauri-apps/plugins-workspace/tree/6aa2854f314481a459be1189b02c65a2450789ab)。逐包比较 plugins/<name>/package.json 与安装包 JSON 内容一致、README 字节一致；各自目录的 LICENSE_MIT / LICENSE_APACHE-2.0 为完整原文。按包声明 `MIT OR Apache-2.0` 选择 MIT，仍保留两份全文、npm 原有 LICENSE.spdx，以及 README 的原始 License 段落（包括 Tauri Programme 版权归属）。没有以同名 Rust 包证据替代 JS 包。
 
-固定来源、每份文本 SHA-256、上游 package.json/README 证据及每个安装包完整文件集哈希保存在 `scripts/legal/tauri-js-notices.json`。收集器校验版本、文件数和每项字节；测试另核对来源提交及清单/README。此证据绑定发布源码与本机锁定安装包，不宣称重现了上游 JS 编译或独立验证了 npm 发布者身份。
+固定来源、每份文本 SHA-256、上游 package.json/README 证据及每个安装包完整文件集哈希保存在 `docs/feature/app-store/license-sources/tauri-js-notices.json`。收集器校验版本、文件数和每项字节；测试另核对来源提交及清单/README。此证据绑定发布源码与本机锁定安装包，不宣称重现了上游 JS 编译或独立验证了 npm 发布者身份。
 
 直接前端依赖覆盖测试已移除这六个例外，当前所有直接依赖均有声明。此项不代表所有传递依赖或最终二进制已完成审查。
 
@@ -505,10 +505,21 @@ PR #849 已合并，基准 main `316024c3` / 2.0.19。重新离线运行库存�
 
 逐个读取 TTF 的 name 表 ID 0（版权）、13（许可）及 14（许可 URL），原样保留：Design Science, Inc. 2009–2010、Khan Academy 2014–2018、OFL 1.1，以及各字体的 Reserved Font Name。去重仅针对同一字体中相同的编码记录，不合并不同字体的保留名称。20 份元数据文本与 [SIL 官方 OFL 1.1](https://openfontlicense.org/documents/OFL.txt) 的完整许可正文一起进入离线入口；官方示例版权占位头不冒充字体版权，实际版权和保留名称来自字体内嵌表。官方下载全文哈希与许可正文哈希分别记录。
 
-来源快照位于 `scripts/legal/katex-font-notices.json`。KaTeX 条目的显示许可改为 `MIT (code) + OFL-1.1 (fonts)`，根 MIT 原文不变；60 项文件名与哈希、明确允许的两个版本由生成检查约束。测试从字体二进制独立解析 name 表，核对离线文本、版权及保留名称，并验证两个版本的字体声明一致。本批使用上游未改动字体，不做切片、重命名或格式转换；日后修改字体需重新核对 OFL 的保留名称等条件。
+来源快照位于 `docs/feature/app-store/license-sources/katex-font-notices.json`。KaTeX 条目的显示许可改为 `MIT (code) + OFL-1.1 (fonts)`，根 MIT 原文不变；60 项文件名与哈希、明确允许的两个版本由生成检查约束。测试从字体二进制独立解析 name 表，核对离线文本、版权及保留名称，并验证两个版本的字体声明一致。本批使用上游未改动字体，不做切片、重命名或格式转换；日后修改字体需重新核对 OFL 的保留名称等条件。
 
 ### 剩余边界
 
 六个 JS 插件“缺完整原文”和 KaTeX“未保留字体许可”两项由本节更新为已补齐。最终签名包实际资源覆盖、离线可读性和升级仍待验收；KaTeX 构建工具源文件的 Apache/OFL 头不等同于本应用运行时全部分发内容，本批未将源码构建工具一律当作随包组件。仍需继续核对其他传递依赖、MPL/EPL 义务、PDF.js 前批未决项、下载字体、图标/音频来源。没有新建正式签名包、上传或提审。
 
 验证：16 项 App Store Node 检查、文档源码引用守卫 1 项、TypeScript 检查及应用/原型生产构建全部通过；`git diff --check` 通过。原有 99 条非 KaTeX 声明逐项保持不变，两个 KaTeX 条目仅补充字体相关信息；保留既有大 chunk 提示。未运行外部模型测试或原生 UI 验收。
+
+
+## 2026-11-05 许可范围收紧（2.0.23，当前口径）
+
+本节取代前面各批次中“继续扩大传递依赖树”的工作方向；历史核对结果保留供追溯。当前只将直接运行依赖与实际使用字体列为独立条目，组件内部声明归对应组件，审计材料移入 [license-sources](license-sources/README.md)。
+
+独立条目从 107 收紧到 68（40 npm、26 Rust、2 下载字体）。移除 58 个传递版本条目，新增 17 个直接 Rust 条目及 MiSans / HarmonyOS Sans SC 的真实协议；其中 4 个 objc2 条目只有上游许可声明，完整 MIT 版权原文仍待确认。其余 13 个新增 Rust 条目已核对 Cargo 归档。下载字体切片版本授权仍待确认，不能将协议收录视为全部授权已完成。
+
+PDF.js 的三份审计 README、vendor HTTP 完整 README/PATCH、资源指纹不进入应用离线声明。PDF.js / KaTeX 内部许可和版权原文仍保留在组件条目内。三套 Fontsource 内置字体原文保留。收集器通过直接依赖入口及 Cargo 根节点 normal 边限定范围，新增测试防止传递版本再次成为独立条目。
+
+本次只改声明、收集校验和文档，按版本技能同步四份清单至 2.0.23；未改站外版行为，未打包、签名或上传。旧签名包和 TestFlight 构建不因源码版本变更而更新。
