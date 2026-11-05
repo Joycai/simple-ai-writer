@@ -336,6 +336,19 @@ As with any bring-your-own-provider application, content sent to an AI endpoint 
 
 ---
 
+## Support and feedback / 支持与反馈
+
+For help, bug reports, or feature requests, contact us through either channel:
+
+- **Email / 邮箱:** [joycai@joycai.cn](mailto:joycai@joycai.cn)
+- **GitHub Issues / 问题与建议:** [Joycai/simple-ai-writer/issues](https://github.com/Joycai/simple-ai-writer/issues)
+
+使用过程中遇到问题，或希望提出功能建议，可以通过上述邮箱联系我们，也可以在 GitHub Issues 中提交反馈。提交问题时，请注明应用版本、操作系统版本、复现步骤及相关错误提示；无需 GitHub 账号也可以通过邮件获得支持。
+
+Please include the app version, operating system version, steps to reproduce, and any relevant error messages. Email support does not require a GitHub account. 请勿在公开反馈中附上 API 密钥、密码或私人文档 / Do not include API keys, passwords, or private documents in public reports.
+
+---
+
 ## License
 
 Simple AI Writer is available under the [MIT License](./LICENSE).
