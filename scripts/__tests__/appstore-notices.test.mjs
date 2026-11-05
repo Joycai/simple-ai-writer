@@ -28,3 +28,31 @@ test('every bundled Fontsource import has an OFL notice with original copyright'
     assert.ok(entry.files.some(f => f.text.includes('Copyright') && f.text.includes('SIL OPEN FONT LICENSE')), name);
   }
 });
+
+test('direct frontend dependencies have notices or an explicit unresolved JS-plugin exception', () => {
+  const data = JSON.parse(readFileSync(new URL('../../src/assets/legal/third-party-notices.json', import.meta.url)));
+  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url)));
+  // LICENSE.spdx alone has not yet supplied full original terms for these JS packages.
+  const pending = new Set(['@tauri-apps/plugin-dialog', '@tauri-apps/plugin-fs', '@tauri-apps/plugin-http',
+    '@tauri-apps/plugin-notification', '@tauri-apps/plugin-opener', '@tauri-apps/plugin-sql']);
+  for (const name of Object.keys(pkg.dependencies)) {
+    assert.ok(pending.has(name) || data.entries.some(e => e.name === name && e.source?.startsWith('https://www.npmjs.com/')), name);
+  }
+});
+
+test('PDF preview resource glob has complete byte-preserving notice and resource inventory', () => {
+  const data = JSON.parse(readFileSync(new URL('../../src/assets/legal/third-party-notices.json', import.meta.url)));
+  const entry = data.entries.find(e => e.name === 'pdfjs-dist');
+  const preview = readFileSync(new URL('../../src/components/editor/PdfPreview.tsx', import.meta.url), 'utf8');
+  assert.ok(preview.includes('/node_modules/pdfjs-dist/{cmaps,standard_fonts,wasm}/*'), 'Review changed PDF asset scope');
+  for (const resource of entry.resources) {
+    const bytes = readFileSync(new URL(`../../node_modules/pdfjs-dist/${resource.name}`, import.meta.url));
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), resource.sha256, resource.name);
+    if (/\/(LICENSE|NOTICE|COPYING)/i.test(resource.name)) {
+      const notice = entry.files.find(f => f.name === resource.name);
+      assert.equal(notice?.text, bytes.toString('utf8'), resource.name);
+    }
+  }
+  assert.ok(entry.files.find(f => f.name === 'standard_fonts/LICENSE_LIBERATION').text.includes('GNU GENERAL PUBLIC LICENSE'));
+  assert.ok(entry.files.find(f => f.name === 'wasm/LICENSE_JBIG2').text.includes('Apache License'));
+});

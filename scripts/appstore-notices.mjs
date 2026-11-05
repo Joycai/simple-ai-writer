@@ -8,10 +8,10 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 if (process.argv.slice(2).some(x => x !== '--check')) throw new Error('Use --check or no arguments');
 const check = process.argv.includes('--check');
 const digest = text => createHash('sha256').update(text).digest('hex');
-const selected = new Set(['react', 'react-dom', 'react-i18next', 'i18next', 'zustand', 'lucide-react', 'katex', 'markdown-it', 'docx', 'pptxgenjs', 'mammoth', 'jszip', '@tauri-apps/api']);
+const selected = new Set(['react', 'react-dom', 'react-i18next', 'i18next', 'zustand', 'lucide-react', 'katex', 'markdown-it', 'docx', 'pptxgenjs', 'mammoth', 'jszip', '@tauri-apps/api', '@joplin/turndown-plugin-gfm', '@lezer/highlight', '@vscode/markdown-it-katex', 'codemirror', 'gray-matter', 'mermaid', 'motion', 'nanoid', 'turndown', 'pdfjs-dist']);
 const wanted = name => selected.has(name) || name.startsWith('@codemirror/') || name.startsWith('@fontsource/');
 const choices = { 'Apache-2.0 OR MIT': 'MIT', '(MIT OR GPL-3.0-or-later)': 'MIT' };
-const markers = { MIT: 'Permission is hereby granted', ISC: 'Permission to use, copy, modify', 'OFL-1.1': 'SIL OPEN FONT LICENSE', 'BSD-2-Clause': 'Redistribution and use in source and binary forms' };
+const markers = { 'Apache-2.0': 'TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION', MIT: 'Permission is hereby granted', ISC: 'Permission to use, copy, modify', 'OFL-1.1': 'SIL OPEN FONT LICENSE', 'BSD-2-Clause': 'Redistribution and use in source and binary forms' };
 const groups = JSON.parse(execFileSync('pnpm', ['licenses', 'list', '--prod', '--json'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
 const entries = [];
 const seen = new Set();
@@ -28,7 +28,31 @@ for (const group of Object.values(groups)) for (const item of group) for (const 
     return { name, sha256: digest(text), text };
   });
   if (!files.some(f => f.text.includes(markers[license]))) throw new Error(`Full license text missing: ${key}`);
-  entries.push({ name: pkg.name, version: pkg.version, license, declaredLicense: pkg.license, source: `https://www.npmjs.com/package/${pkg.name}/v/${pkg.version}`, files });
+  let resources;
+  if (pkg.name === 'pdfjs-dist') {
+    // Preserve mixed resource terms verbatim; collection is not clearance.
+    const expected = ['cmaps/LICENSE', 'standard_fonts/LICENSE_FOXIT', 'standard_fonts/LICENSE_LIBERATION',
+      'wasm/LICENSE_JBIG2', 'wasm/LICENSE_OPENJPEG', 'wasm/LICENSE_PDFJS_JBIG2',
+      'wasm/LICENSE_PDFJS_OPENJPEG', 'wasm/LICENSE_PDFJS_QCMS', 'wasm/LICENSE_QCMS'].sort();
+    const resourceNames = ['cmaps', 'standard_fonts', 'wasm'].flatMap(dir =>
+      readdirSync(join(path, dir), { withFileTypes: true }).map(e => {
+        if (!e.isFile()) throw new Error(`Review new PDF resource directory: ${dir}/${e.name}`);
+        return `${dir}/${e.name}`;
+      })).sort();
+    const notices = resourceNames.filter(name => /\/(license|notice|copying)([._-]|$)/i.test(name));
+    if (JSON.stringify(notices) !== JSON.stringify(expected)) throw new Error('Review PDF resource notice set');
+    for (const name of notices) {
+      const text = readFileSync(join(path, name), 'utf8');
+      files.push({ name, sha256: digest(text), text });
+    }
+    // The distributed JavaScript carries attribution absent from the generic Apache template.
+    const code = readFileSync(join(path, 'build/pdf.mjs'), 'utf8');
+    const header = code.match(/^\/\*\*[\s\S]*?@licend[\s\S]*?\*\//)?.[0];
+    if (!header?.includes('Copyright 2024 Mozilla Foundation')) throw new Error('Review PDF.js attribution header');
+    files.push({ name: 'build/pdf.mjs (original license header)', sha256: digest(header), text: header });
+    resources = resourceNames.map(name => ({ name, sha256: digest(readFileSync(join(path, name))) }));
+  }
+  entries.push({ name: pkg.name, version: pkg.version, license: resources ? 'Apache-2.0 + bundled resource licenses (see files)' : license, declaredLicense: pkg.license, ...(resources ? { resources } : {}), source: `https://www.npmjs.com/package/${pkg.name}/v/${pkg.version}`, files });
 }
 for (const name of [...selected, '@fontsource/spectral', '@fontsource/inter-tight', '@fontsource/jetbrains-mono']) {
   if (!entries.some(e => e.name === name)) throw new Error(`Required notice missing: ${name}`);
