@@ -306,3 +306,47 @@ P1–P3 的原生验收、隐私政策发布、正式证书 / 描述文件 / 上
 本节更新第一批“所有 Rust 尚未整理”的状态，不改写历史 2.0.14 扫描快照，也不将 61 条等同于最终随包组件数。
 
 本批验证：12 条 Rust 原文归档复核 `--check` 通过；App Store Node 检查 11 项通过（含原文 hash、锁文件一致性、内置字体导入覆盖）；`pnpm build` 类型检查与构建通过，仅有现存 chunk 大小提示；`git diff --check` 通过。首次构建遇到 pnpm 缓存/依赖恢复失败，恢复锁定依赖后重跑通过，没有修改依赖锁定版本。未运行外部模型 live 测试，未新建签名包或执行原生验收。
+
+## 2026-11-05 离线声明第三批（2.0.18）
+
+状态：部分整理完成，整体许可清单仍未验收完成。PR #847 已合并，本批从 main 创建独立分支，版本技能同步至 2.0.18。仅增加许可原文、证据校验与文档，不修改 vendor 插件源码、网络行为、字体下载或站外版界面。
+
+### vendor HTTP 插件已核对的范围
+
+`src-tauri/vendor/tauri-plugin-http` 来自 `tauri-plugin-http@2.6.0`，本机缓存 `.crate` 实算 SHA-256 为 `7241a0c762649be8fba7dd4cc84684d0e409f26b335a978ef4dd5fe78da74ce6`，与已有 `PATCH.md` 的上游 registry checksum 记录一致。这里是本机归档对仓库来源记录的核验，未将路径依赖伪装成当前 Cargo.lock 中有 registry checksum 的依赖，也未声称进行了新的在线发布者身份核验。
+
+逐文件比较结果：
+
+- `LICENSE_MIT`、`LICENSE_APACHE-2.0` 及 README 与上游归档一致；MIT 原有 Tauri Apps Contributors 版权行保留。README 还包含 The Tauri Programme within The Commons Conservancy 的版权说明，故全文同时加入离线声明，不截掉这一处信息。
+- 修改文件仅 `Cargo.toml`、`src/commands.rs`、`src/error.rs`、`src/lib.rs`。核对差异为测试依赖、共享 client builder / TCP keepalive 配置、脱敏诊断与阶段计时、对应测试；与已有 PATCH 说明相符。本次不更改这些行为。
+- 本地增加 `PATCH.md`，也加入离线声明，明确这是修改版而非原封不动的上游包。
+- 上游归档有而本地未复制的文件为 `.cargo_vcs_info.json`、`CHANGELOG.md`、`Cargo.lock`、`Cargo.toml.orig`、`LICENSE.spdx`、`SECURITY.md`。这份差异清单保留在快照中；SPDX 元数据的缺席不以“无许可”判断，完整双许可原文及 README 版权已保留。
+- 本批依上游 `Apache-2.0 OR MIT` 声明选择 MIT，保留两份全文。不会因整理该插件而把 Reqwest 等所有传递依赖一并标为完成。
+
+Rust 原文收集器现在单独处理 vendor：固定上游归档 checksum、校验已核对的改动/缺省/新增文件集合，并记录完整本地文件树的 SHA-256。前端声明生成器校验 Cargo 路径绑定、锁定版本、本地文件数与每份文件 hash、许可文本与本地来源一致；vendor 内容变化会要求重新复核快照。`--check` 不联网，也不改写 vendor 目录。新增快照中的 `vendorPath` 与 `upstreamDifferences` 明确区分修改版证据与 registry 包证据。
+
+### 同时纳入的可确认依赖
+
+新增 registry 包记录 12 条，沿用归档 checksum 对照 Cargo.lock、原文与解包文件逐字比较的机制：
+
+| 包 | 版本 | 选择 |
+| --- | --- | --- |
+| base64 | 0.21.7 / 0.22.1 / 0.23.1 | MIT |
+| bytes | 1.12.1 | MIT |
+| futures-core / futures-util | 各 0.3.34 | MIT |
+| http | 1.5.0 | MIT |
+| http-body | 1.1.0 | MIT |
+| log | 0.4.34 | MIT |
+| mime | 0.3.17 | MIT |
+| percent-encoding | 2.3.2 | MIT |
+| url | 2.5.8 | MIT |
+
+每个版本的版权主体来自各自原文件，未跨版本套用（例如 base64 的版本间版权行不同）。Bytes / http-body 原声明 MIT，其他为 MIT OR Apache-2.0，选择 MIT 并保存包内全部根目录 LICENSE / NOTICE 文件。本轮新增 13 条（含 vendor），Rust 共 25 条，整体离线声明 **74 条**。多版本及构建/间接依赖仍保留，不把这个数量当成最终安装包组件数。
+
+### 仍待完成
+
+第二批的 vendor HTTP“尚未取得原文和补丁证据”项由本节更新；其最终产物覆盖和依赖树仍待检查。其余未收录 Rust / npm、JS 插件完整原文、MPL / EPL 等义务、缺版权主体行包的进一步来源核对仍未结清。下载字体官方对应版本许可、切片/镜像链路、图标与样例音频权利证据也保持待确认。本次未取得新证据，不降低这些事项状态。
+
+最终签名包的离线声明可读性、升级验证仍待原生验收；暂不宣称完整第三方分发义务已完成。
+
+本批验证：`appstore-rust-notices.mjs --check` 通过（25 条，含 vendor 归档及本地文件树复核）；App Store Node 检查 11 项通过；`pnpm build` 类型检查和生产/原型构建通过，仅保留既有 chunk 大小提示；`git diff --check` 通过。本次没有修改 Rust 执行代码，未运行外部模型 live 测试，未生成或上传新签名包。

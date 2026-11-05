@@ -39,7 +39,18 @@ const rust = JSON.parse(readFileSync(join(root, 'scripts/legal/rust-notices.json
 const cargoLock = readFileSync(join(root, 'src-tauri/Cargo.lock'), 'utf8');
 for (const entry of rust.entries) {
   const block = cargoLock.split('[[package]]').find(b => b.includes(`name = "${entry.name}"\nversion = "${entry.version}"`));
-  if (!block?.includes(`checksum = "${entry.crateChecksum}"`) || !block.includes(`source = "${entry.registrySource}"`)) throw new Error(`Rust notice no longer matches lock: ${entry.name}`);
+  if (entry.vendorPath) {
+    if (entry.vendorPath !== 'src-tauri/vendor/tauri-plugin-http' || !block || /^source = /m.test(block)) throw new Error('Vendor source changed');
+    const manifest = readFileSync(join(root, 'src-tauri/Cargo.toml'), 'utf8');
+    if (!manifest.includes('tauri-plugin-http = { version = "=2.6.0", path = "vendor/tauri-plugin-http"')) throw new Error('Review vendor dependency binding');
+    for (const file of entry.localFiles) {
+      if (file.name.split('/').includes('..') || file.name.startsWith('/')) throw new Error('Invalid vendor evidence path');
+      if (digest(readFileSync(join(root, entry.vendorPath, file.name))) !== file.sha256) throw new Error(`Vendor changed; review notices: ${file.name}`);
+    }
+    const walk = dir => readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]);
+    if (walk(join(root, entry.vendorPath)).length !== entry.localFiles.length) throw new Error('Vendor file set changed');
+    for (const file of entry.files) if (!entry.localFiles.some(f => f.name === file.name && f.sha256 === file.sha256)) throw new Error('Vendor notice differs from source');
+  } else if (!block?.includes(`checksum = "${entry.crateChecksum}"`) || !block.includes(`source = "${entry.registrySource}"`)) throw new Error(`Rust notice no longer matches lock: ${entry.name}`);
   for (const file of entry.files) if (digest(file.text) !== file.sha256) throw new Error(`Rust text hash mismatch: ${entry.name}/${file.name}`);
   entries.push(entry);
 }
