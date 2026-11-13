@@ -1,3 +1,4 @@
+import { usePresentationExport } from "./usePresentationExport";
 import { SchemaMergePanel } from "./SchemaMergePanel";
 import type { SchemaChoices } from "../../lib/profile/transferSchema";
 import { useState, useMemo, useEffect, useRef } from "react";
@@ -74,6 +75,7 @@ function rotationFor(id: string): number {
 }
 
 export function LoreWall() {
+  const presentationItems = usePresentationExport();
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { index, scanProject, refreshEntity, createNewEntity, deleteEntity, moveToCategory, detailPath, detailEditing, openDetail } = useLoreStore();
@@ -646,6 +648,7 @@ export function LoreWall() {
         action: () => openDetail(e.dirPath, true) },
       { kind: "item", icon: <FileDown size={13} />, label: t("lore.transfer.export"),
         disabled: !projectPath || transferBusy, action: () => void handleExport([e]) },
+      ...presentationItems(e, transferBusy),
       { kind: "item", icon: <Camera size={13} />, label: t("lore.wall.changeAvatar", { defaultValue: "更换头像" }),
         action: () => void handleAvatarPick(e) },
       // 只在真有头像时出现：「移除」一个不存在的东西是空动作，留着只会让作者点一下

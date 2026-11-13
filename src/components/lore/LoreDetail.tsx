@@ -1,3 +1,4 @@
+import { usePresentationExport } from "./usePresentationExport";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, MoreHorizontal, ImageOff } from "lucide-react";
@@ -80,6 +81,7 @@ interface Props {
 }
 
 export function LoreDetail({ entity: initialEntity, onBack, initialEditing = false }: Props) {
+  const presentationItems = usePresentationExport();
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { setActiveFilePath, projectPath, workspace } = useProjectStore();
@@ -1680,6 +1682,8 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           x={moreMenu.x}
           y={moreMenu.y}
           items={([
+            ...presentationItems(entity, busy || editing),
+            { kind: "divider" },
             { kind: "item", icon: <ExternalLink size={13} />, label: t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" }),
               action: openInEditor },
             { kind: "item", icon: <FolderOpen size={13} />, label: t("lore.panel.showInBrowser"),

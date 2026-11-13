@@ -37,6 +37,7 @@ reaching for is one of the states above, plus a modifier if it needs one.
 
 | Doc | Status | Scope |
 |---|---|---|
+| [entry-presentation.md](feature/lore/entry-presentation.md) | `living` | 单条知识库阅读展示导出：HTML / Markdown / 打印 PDF，完整特征与内嵌图片 |
 | [mac-app-store-acceptance.md](feature/mac-app-store-acceptance.md) | `partial` | 商店候选系统、合成样例、本地网络服务与逐项原生验收；交互验收待完成 |
 | [app-store/native-acceptance-2026-11-04.md](feature/app-store/native-acceptance-2026-11-04.md) | `partial` | 2.0.15 build 3 ad-hoc 原生验收逐步记录；静态检查、启动及取消选择通过，其余交互继续验收 |
 | [app-store/p5-release-runbook.md](feature/app-store/p5-release-runbook.md) | `partial` | P5 本地候选档案、测试用例与反馈 / 提审 / 维护交接；TestFlight 和正式提交待完成 |
