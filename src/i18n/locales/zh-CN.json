@@ -3479,6 +3479,35 @@
     }
   },
   "lore": {
+    "presentation": {
+      "fields": {
+        "category": "分类",
+        "name": "名称",
+        "aliases": "别名",
+        "summary": "概要",
+        "collections": "集合",
+        "dict": "翻译词典",
+        "cover": "封面",
+        "facet": "特征",
+        "mode": "启用方式",
+        "keys": "触发词",
+        "group": "互斥组",
+        "slot": "槽位",
+        "priority": "优先级",
+        "file": "来源文件"
+      },
+      "html": "导出展示页 · HTML",
+      "pdf": "打印展示页 · PDF",
+      "md": "导出展示页 · Markdown",
+      "overview": "基本信息与正文",
+      "gallery": "图集",
+      "avatar": "头像",
+      "cover": "封面",
+      "contents": "目录",
+      "missingIndex": "主条目文件不存在，无法生成完整展示页。",
+      "imageError": "无法读取图片「{{file}}」，导出已停止。",
+      "failed": "展示页导出失败"
+    },
     "read": {
       "modeSwitch": "查看模式",
       "modeSwitchKey": "R 切换",

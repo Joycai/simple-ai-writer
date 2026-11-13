@@ -1,0 +1,45 @@
+
+:root { color-scheme: light; --ink: #292622; --muted: #746b61; --rule: #ded7cc; --accent: #925535; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f3f0e9; color: var(--ink); font: 16px/1.85 Georgia, "Noto Serif CJK SC", "Songti SC", SimSun, serif; overflow-wrap: anywhere; }
+main { max-width: 920px; margin: 48px auto; padding: 64px 72px; background: #fffefa; box-shadow: 0 8px 40px #2926220a; }
+header { border-top: 3px solid var(--accent); border-bottom: 1px solid var(--rule); padding: 32px 0; display: flow-root; }
+h1 { font-size: clamp(32px, 5vw, 52px); line-height: 1.25; margin: 12px 0 20px; letter-spacing: -.025em; }
+h2 { font-size: 24px; line-height: 1.4; margin: 0 0 24px; }
+h3 { font-size: 20px; }
+a { color: var(--accent); text-underline-offset: .2em; }
+.eyebrow, figcaption, .metadata, nav { font-family: system-ui, sans-serif; }
+.eyebrow { color: var(--accent); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; }
+.summary { color: var(--muted); font-size: 19px; }
+.avatar { float: right; width: 120px; margin: 0 0 20px 24px; }
+.avatar img { max-height: 180px; }
+nav { padding: 28px 0; border-bottom: 1px solid var(--rule); }
+nav h2 { font-size: 13px; color: var(--muted); }
+nav ol { columns: 2; margin: 0; padding-left: 24px; }
+nav li { break-inside: avoid; padding: 3px 0; }
+section { padding: 36px 0; border-bottom: 1px solid var(--rule); }
+section > h2 { border-left: 3px solid var(--accent); padding-left: 16px; }
+img { max-width: 100%; height: auto; object-fit: contain; }
+figure { margin: 28px 0; text-align: center; }
+figure img { max-height: 680px; }
+figcaption { font-size: 12px; color: var(--muted); margin-top: 10px; }
+table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+th, td { border-bottom: 1px solid var(--rule); text-align: left; padding: 9px 12px; vertical-align: top; }
+.metadata th { width: 24%; color: var(--muted); font-weight: 500; }
+.metadata td { white-space: pre-wrap; }
+blockquote { margin: 24px 0; border-left: 2px solid var(--rule); padding-left: 24px; color: var(--muted); }
+pre { padding: 20px; background: #f3f0e9; white-space: pre-wrap; overflow-wrap: anywhere; }
+code { font-family: ui-monospace, monospace; font-size: .88em; }
+.katex-html { display: none; }
+.katex-display { display: block; text-align: center; margin: 1em 0; }
+@media (max-width: 640px) { main { margin: 0; padding: 28px 24px; } nav ol { columns: 1; } .avatar { width: 88px; } }
+@page { size: A4; margin: 18mm; }
+@media print {
+ body, main { background: white; }
+ main { max-width: none; margin: 0; padding: 0; box-shadow: none; }
+ header, nav, figure, tr { break-inside: avoid; }
+ h1, h2, h3 { break-after: avoid; }
+ section { padding: 24px 0; }
+ img, figure img { max-height: 220mm; }
+ a { color: inherit; text-decoration: none; }
+}
