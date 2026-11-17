@@ -2904,6 +2904,8 @@
       "thinkingCatDoubaoHint": "Doubao Seed on Volcengine Ark: reasoning_effort as low/medium/high; \"Off\" sends thinking:{type:disabled} alone (Ark refuses the two together).",
       "thinkingCatQwenBudget": "Qwen · budget",
       "thinkingCatQwenBudgetHint": "An enable_thinking switch plus a thinking_budget token cap (DashScope compatible-mode). Set the budget once on; blank uses the default.",
+      "thinkingCatQwen4": "Qwen4 · effort",
+      "thinkingCatQwen4Hint": "Qwen4-Max supports Low, High and Extra High. Thinking is on by default and returns a summary.",
       "thinkingCatQwenEffort": "Qwen · effort",
       "thinkingCatQwenEffortHint": "enable_thinking plus a reasoning_effort level (Qwen-Max supports xhigh); mutually exclusive with the budget mode.",
       "thinkingCatGlm": "GLM-5.3",

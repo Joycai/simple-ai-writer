@@ -174,9 +174,10 @@ export async function streamDashscope(opts: StreamOptions): Promise<void> {
   // as a whole one (streaming.md, the failures that look like success).
   if (!finished) throw new Error(`${LABEL}: the stream ended before the answer finished (no finish_reason)`);
 
-  const { stopReason, truncated } = choices.finish();
+  const { stopReason, truncated, _reasoning } = choices.finish();
   opts.onChunk({
     done: true, inputTokens, outputTokens,
+    ...(_reasoning ? { _reasoning } : {}),
     ...(truncated ? { truncated } : {}),
     ...(stopReason ? { stopReason } : {}),
     ...(cachedTokens ? { cachedTokens } : {}),

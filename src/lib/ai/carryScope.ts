@@ -20,10 +20,10 @@ export function projectCarry(messages: StreamMessage[], scope: string): StreamMe
     // and bare tool calls/results; the target adapter rebuilds its own spelling.
     const copy = { ...message };
     delete copy._responseItems;
+    delete copy._thinkingBlocks;
     delete copy._carryScope;
     if ("tool_calls" in copy) {
       delete copy._geminiModelParts;
-      delete copy._thinkingBlocks;
       // Plain reasoning is part of the portable tool transcript, not an
       // account-bound credential. Chat adapters replay its original field;
       // other protocol adapters ignore it. Strip only its opaque payload,
@@ -31,6 +31,8 @@ export function projectCarry(messages: StreamMessage[], scope: string): StreamMe
       if (copy._reasoning) {
         copy._reasoning = { field: copy._reasoning.field, text: copy._reasoning.text };
       }
+    } else {
+      delete copy._reasoning;
     }
     // A reasoning-only Responses turn has no portable visible message after
     // its carrier is removed. Omit only the request copy, preserving the stored

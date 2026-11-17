@@ -126,6 +126,7 @@ type ThinkingShape = "levels" | "onoff" | "budget" | "none";
 export type ThinkingCategoryId =
   | "off"
   | "openai-generic" | "deepseek" | "qwen-budget" | "qwen-effort" | "glm" | "glm-effort" | "glm-switch" | "doubao"
+  | "qwen4-chat" | "qwen4-responses" | "qwen4-anthropic"
   | "responses-effort"
   | "gemini3"
   | "claude-adaptive" | "claude-budget" | "minimax" | "doubao-switch";
@@ -163,6 +164,8 @@ export interface ThinkingCategory {
   effortWire?: Partial<Record<Exclude<ReasoningEffort, "default">, string>>;
   /** A static fragment always merged into the request while this category is on. */
   extra?: Record<string, unknown>;
+  /** Request fields that opt into the endpoint's summary at its default effort. */
+  defaultBody?: Record<string, unknown>;
   /**
    * How a Chat Completions endpoint spells this category (family `openai`
    * only; absent = `effort`):
@@ -226,6 +229,18 @@ export interface ThinkingCategory {
   temperatureWhenOff?: { zeroIsUnset?: true };
 }
 
+const QWEN4_CHAT_SUMMARY = { thinking_display: "summarized", preserve_thinking: true };
+
+const QWEN4_EFFORT = {
+  labelKey: "aiConfig.models.thinkingCatQwen4",
+  hintKey: "aiConfig.models.thinkingCatQwen4Hint",
+  shape: "levels",
+  offSpelling: "disable",
+  unsetThinks: true,
+  menu: ["off", "low", "high", "xhigh"],
+  effortWire: { minimal: "low", medium: "high", max: "xhigh" },
+} satisfies Partial<ThinkingCategory>;
+
 /**
  * The registry. One entry per vendor/generation the app knows how to spell.
  *
@@ -276,6 +291,22 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     // Qwen-Max tops out at `xhigh`, not `max`; `medium` between low and xhigh.
     menu: ["off", "low", "medium", "xhigh"],
     openaiWire: "switch-effort", forcing: "while-thinking", offSpelling: "disable",
+  },
+  "qwen4-chat": {
+    ...QWEN4_EFFORT,
+    id: "qwen4-chat", family: "openai", dialect: "none",
+    openaiWire: "switch-effort", forcing: "while-thinking",
+    extra: QWEN4_CHAT_SUMMARY,
+    defaultBody: { enable_thinking: true, ...QWEN4_CHAT_SUMMARY },
+  },
+  "qwen4-responses": {
+    ...QWEN4_EFFORT,
+    id: "qwen4-responses", family: "responses", dialect: "none",
+    defaultBody: { reasoning: { summary: "auto" } },
+  },
+  "qwen4-anthropic": {
+    ...QWEN4_EFFORT,
+    id: "qwen4-anthropic", family: "anthropic", dialect: "extended",
   },
   glm: {
     id: "glm",
@@ -599,8 +630,8 @@ const OPENAI_EFFORT: Record<Exclude<ReasoningEffort, "default">, string> = {
  * The request-body fragment for this model's category + effort, or undefined to
  * send nothing at all.
  *
- * Undefined is returned for the `off`/`none` category and for `default`/absent
- * effort — both mean "leave the endpoint's own default alone". The `budget`
+ * The `off`/`none` category sends nothing. An absent/default effort keeps
+ * the endpoint's default depth and may request a reasoning summary. The `budget`
  * argument is read only by budget-shape OpenAI categories (Qwen); the Anthropic
  * budget travels through `thinkingBody` instead.
  */
@@ -615,7 +646,7 @@ export function reasoningBody(
   // depends on. On budget/onoff categories this means the author must turn
   // thinking on explicitly (pick a level, or flip the toggle to a non-off
   // effort); until then the request is byte-identical to before this existed.
-  if (!effort || effort === "default") return undefined;
+  if (!effort || effort === "default") return category.defaultBody;
   const eff = effort as Exclude<ReasoningEffort, "default">;
   const on = eff !== "off";
 
@@ -646,7 +677,7 @@ export function reasoningBody(
           // Qwen-Max: the switch and the level travel together (they are
           // documented as mutually exclusive with the *budget*, not each other).
           return on
-            ? { enable_thinking: true, reasoning_effort: effortWire(category, eff, OPENAI_EFFORT) }
+            ? { enable_thinking: true, ...category.extra, reasoning_effort: effortWire(category, eff, OPENAI_EFFORT) }
             : { enable_thinking: false };
         case "thinking-type":
           // The switch alone: GLM before 5.3 ignores reasoning_effort, so
@@ -689,7 +720,7 @@ export function reasoningBody(
       // `output_config` — depth there is carried by `thinking` alone
       // (`thinkingBody`). Volunteering the field would be an unknown top-level
       // argument on an endpoint whose schema doesn't have one.
-      if (category.dialect === "switch" || category.shape === "budget") return undefined;
+      if (category.dialect === "switch" || category.shape === "budget" || (!on && category.offSpelling === "disable")) return undefined;
       return { output_config: { effort: effortWire(category, eff, ANTHROPIC_EFFORT) } };
   }
 }

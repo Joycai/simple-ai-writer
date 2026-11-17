@@ -23,7 +23,7 @@
  *     were never measured with it).
  */
 
-import { bySpecificity, canonicalModelId, prefix, rowSetting, type ModelPattern } from "../modelId";
+import { bySpecificity, canonicalModelId, eq, prefix, rowSetting, type ModelPattern } from "../modelId";
 import type { ReasoningEffort } from "../../reasoning";
 
 interface IntrinsicFacts {
@@ -113,6 +113,7 @@ const MODEL_CATALOG: readonly CatalogRow[] = bySpecificity<CatalogRow>([
   // silent truncation rather than a wrong number.
   row("deepseek-flash", { maxOutput: 393_216 }),
   // ── Qwen (DashScope) ──
+  { match: eq("qwen4-max"), set: { contextSize: 1_000_000, maxOutput: 131_072, ...STRICT } },
   row("qwen-max", { maxOutput: 8_192 }),
   row("qwen-plus", { maxOutput: 8_192 }),
   row("qwen-turbo", { maxOutput: 8_192 }),

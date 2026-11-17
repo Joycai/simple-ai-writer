@@ -124,8 +124,9 @@ const DEEPSEEK_MODELS: StarterModel[] = [
 ];
 
 /**
- * DashScope's image-reading models, typed so the author does not have to know
- * which ids look at pictures (measured 2026-09-14, docs/api/landscape.md §6):
+ * Bailian's image-reading models. Qwen4-Max follows its official model page
+ * (docs/api/reasoning-plan.md, Qwen4-Max); the earlier models were measured
+ * 2026-09-14 (docs/api/landscape.md §6):
  * qwen3.8-flash is a general model that also reads images (multimodal); the
  * qwen3-vl pair and the OCR model are the specialists (vision). Window and cap
  * are filled only where the model page states them (qwen3-vl-plus 262K / 32K).
@@ -134,6 +135,7 @@ const DEEPSEEK_MODELS: StarterModel[] = [
  * catalogue was not checked, and qwen3-vl-plus refuses the Responses wire.
  */
 const DASHSCOPE_MODELS: StarterModel[] = [
+  { modelId: "qwen4-max", name: "Qwen4-Max", type: "multimodal", videoInput: true },
   // videoInput: all three read an mp4 / mov / webm clip on compatible-mode
   // (docs/api/landscape.md §7 第六个样本「视觉理解」, 2026-09-14).
   { modelId: "qwen3.8-flash", name: "Qwen3.8 Flash", type: "multimodal", videoInput: true },

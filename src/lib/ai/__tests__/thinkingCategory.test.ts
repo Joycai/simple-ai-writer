@@ -106,7 +106,7 @@ describe("the family default / categoriesForFamily", () => {
     // wire that spells it `reasoning.effort`.
     expect(resolveThinkingCategory({}, "openai_responses").id).toBe("responses-effort");
     expect(resolveThinkingCategory({}, "openai_responses_compat").id).toBe("responses-effort");
-    expect(categoriesForFamily("responses")).toEqual(["responses-effort", "off"]);
+    expect(categoriesForFamily("responses")).toEqual(["qwen4-responses", "responses-effort", "off"]);
     expect(categoriesForFamily("openai")).not.toContain("responses-effort");
   });
 
@@ -135,7 +135,7 @@ describe("the family default / categoriesForFamily", () => {
     expect(openai[openai.length - 1]).toBe("off");
 
     const anthropic = categoriesForFamily("anthropic");
-    expect(anthropic).toEqual(["claude-adaptive", "claude-budget", "minimax", "doubao-switch", "off"]);
+    expect(anthropic).toEqual(["qwen4-anthropic", "claude-adaptive", "claude-budget", "minimax", "doubao-switch", "off"]);
   });
 
   it("parseThinkingCategory narrows a free-text column, else undefined", () => {

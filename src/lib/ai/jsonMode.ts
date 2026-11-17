@@ -30,7 +30,7 @@ import { capabilityModelOf, type RelayUpstreamChoice } from "./relayUpstream";
 import { forAnthropic, strictify } from "./jsonSchemaStrict";
 import { catalogFact } from "./capability/cells/catalog";
 import { learnedCeiling, STRUCTURED_RANK } from "./capability/learned";
-import { resolvePlatform, type PlatformId, type Wire } from "./platforms";
+import { isQwen4BailianResponses, resolvePlatform, type PlatformId, type Wire } from "./platforms";
 import { familyOf, type ApiStandard, type StreamMessage } from "./types";
 
 // ─── The author's declaration ─────────────────────────────────────────────────
@@ -294,12 +294,11 @@ export function jsonModeShaping(
       // The `json_object` precondition is the same "the word json must
       // appear" as ①, so the cue rule is the same.
       if (mode === "json_schema" && schema) {
-        return {
-          mode,
-          extraBody: {
-            text: { format: { type: "json_schema", name: schema.name, schema: strictify(schema.parameters) } },
-          },
-        };
+        const config = { name: schema.name, schema: strictify(schema.parameters) };
+        const format = isQwen4BailianResponses(targetWire(t), t.modelId)
+          ? { type: "json_schema", json_schema: { ...config, strict: true } }
+          : { type: "json_schema", ...config };
+        return { mode, extraBody: { text: { format } } };
       }
       return {
         mode: "json_object",

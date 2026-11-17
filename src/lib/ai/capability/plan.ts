@@ -19,7 +19,7 @@
 import { effortOnWire, hasCapability, platformResponsesInclude, temperatureReaches } from "../capabilities";
 import { effectiveStructuredOutput, jsonModeShaping, messagesText, type JsonModeShaping, type StructuredOutputMode } from "../jsonMode";
 import { requiredMaxTokens } from "../modelLimits";
-import { wireOf, type Wire } from "../platforms";
+import { isQwen4BailianResponses, wireOf, type Wire } from "../platforms";
 import { forcesToolChoiceAuto, type ReasoningEffort, type ThinkingCategory } from "../reasoning";
 import { capabilityModelOf } from "../relayUpstream";
 import { effectiveServerTools, type ServerToolId } from "../serverTools";
@@ -100,6 +100,8 @@ export interface RequestPlan {
   instructionsField: boolean;
   /** Responses' `include`: empty for a model with no reasoning to encrypt. */
   responsesInclude: readonly string[];
+  /** Bailian spells forced selections as allowed_tools when the list is not singular. */
+  responsesAllowedTools?: boolean;
   /** Cache breakpoints on the system prompt and the toolset. */
   promptCache: boolean;
   /**
@@ -150,7 +152,9 @@ function toolChoiceOf(
   if (!opts.tools) return undefined;
   const requested = opts.toolChoice;
   if (!isForcedToolChoice(requested)) return { requested, sent: requested };
-  const downgradedBy = forcesToolChoiceAuto(category, effort)
+  // Bailian Chat cannot guarantee required on Qwen even with thinking off.
+  const unsupportedRequired = requested === "required" && category.id === "qwen4-chat";
+  const downgradedBy = unsupportedRequired || forcesToolChoiceAuto(category, effort)
     ? "category"
     : !hasCapability("forcedToolChoice", wire, model)
       ? "cell"
@@ -251,6 +255,7 @@ export function planRequest(opts: PlanInput): RequestPlan {
     // No `include` for a model with no reasoning to encrypt (the catalog's
     // `reasons` rows): OpenAI answers that combination with a 400, and xAI's
     // non-reasoning ids were never measured with it.
+    ...(isQwen4BailianResponses(wire, opts.modelId) ? { responsesAllowedTools: true } : {}),
     responsesInclude: catalogFact("reasons", opts.canonicalModelId ?? opts.modelId) === false ? [] : platformResponsesInclude(wire.platform),
     promptCache: hasCapability("promptCache", wire, model),
     media,

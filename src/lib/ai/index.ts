@@ -145,7 +145,7 @@ export async function streamCompletion(opts: StreamOptions): Promise<StreamResul
   const merged: StreamOptions = {
     ...opts, messages: applyPrefix(projectCarry(opts.messages, scope), opts.prefix),
     onChunk: (chunk) => opts.onChunk(
-      "toolCalls" in chunk || ("done" in chunk && chunk._responseItems)
+      "toolCalls" in chunk || ("done" in chunk && (chunk._responseItems || chunk._reasoning || chunk._thinkingBlocks))
         ? { ...chunk, _carryScope: scope } : chunk,
     ),
   };

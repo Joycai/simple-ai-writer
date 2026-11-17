@@ -92,7 +92,9 @@ interface PlatformCells {
 }
 
 /** Documented control spellings (2026-10-19, Seed Pro 2026-10-26), not measured capability flags. */
+const QWEN4_MAX = eq("qwen4-max");
 const QWEN_THINKING: readonly PlatformModelRow[] = [
+  { match: QWEN4_MAX, set: { thinkingCategory: "qwen4-chat" } },
   { match: /^qwen3\.8-(?:max|flash|27b)(?:$|-)/, set: { thinkingCategory: "qwen-effort" } },
   { match: /^qwen3\.7-plus(?:$|-)/, set: { thinkingCategory: "qwen-budget" } },
 ];
@@ -192,7 +194,15 @@ const DASHSCOPE: PlatformCells = {
       web_search_image: true,
       image_search: true,
       code_interpreter: "per-model",
-      models: DASHSCOPE_CODE_INTERPRETER.responses,
+      models: [
+        ...DASHSCOPE_CODE_INTERPRETER.responses,
+        { match: QWEN4_MAX, set: {
+          thinkingCategory: "qwen4-responses", jsonSchema: true,
+        } },
+      ],
+    },
+    anthropic: {
+      models: [{ match: QWEN4_MAX, set: { thinkingCategory: "qwen4-anthropic" } }],
     },
     // The native `/api/v1` route (dashscope.ts): `parameters.enable_search`,
     // the same private field ① sends at the top level; json_schema held

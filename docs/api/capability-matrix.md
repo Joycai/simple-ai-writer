@@ -354,9 +354,9 @@
 | anthropic |  |  |  | ✓ measured |  |
 | google |  |  | ✓ measured |  |  |
 | deepseek | ? unmeasured | ? unmeasured |  | ? unmeasured |  |
-| dashscope | ✓ measured | ? unmeasured |  | ? unmeasured | ✓ measured |
+| dashscope | ✓ measured | ? 按模型 unmeasured |  | ? unmeasured | ✓ measured |
 | dashscope-plan | ? unmeasured |  |  | ? unmeasured |  |
-| dashscope-intl | ✓ measured | ? unmeasured |  |  |  |
+| dashscope-intl | ✓ measured | ? 按模型 unmeasured |  |  |  |
 | xai | ? unmeasured | ✓ measured |  |  |  |
 | minimax | ? unmeasured |  |  | ? unmeasured |  |
 | volcengine | ? unmeasured | ? unmeasured |  |  |  |
@@ -545,6 +545,12 @@
 | --- | --- | --- | --- |
 | deepseek | Chat | `deepseek-flash` | `deepseek` |
 | deepseek | Chat | `deepseek-v4-pro` | `deepseek` |
+| dashscope | Chat | `qwen4-max` | `qwen4-chat` |
+| dashscope | Resp | `qwen4-max` | `qwen4-responses` |
+| dashscope | Anth | `qwen4-max` | `qwen4-anthropic` |
+| dashscope | DashScope | `qwen4-max` | `qwen4-chat` |
+| dashscope-intl | Chat | `qwen4-max` | `qwen4-chat` |
+| dashscope-intl | Resp | `qwen4-max` | `qwen4-responses` |
 | volcengine-plan | Chat | `doubao-seed-2.0-lite` | `doubao` |
 | volcengine-plan | Chat | `doubao-seed-2.0-mini` | `doubao` |
 | volcengine-plan | Chat | `doubao-seed-2.1-turbo` | `doubao` |

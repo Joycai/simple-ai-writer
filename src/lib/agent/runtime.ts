@@ -1279,6 +1279,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
             roundResponseItems = chunk._responseItems;
             roundCarryScope = chunk._carryScope;
           } else if ("done" in chunk) {
+            roundReasoning = chunk._reasoning ?? roundReasoning;
+            roundThinkingBlocks = chunk._thinkingBlocks ?? roundThinkingBlocks;
             roundResponseItems = chunk._responseItems ?? roundResponseItems;
             roundCarryScope = chunk._carryScope ?? roundCarryScope;
             totalInputTokens += chunk.inputTokens;
@@ -1529,13 +1531,17 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // Anything else this round called is an ordinary tool round; fall through.
     }
 
+    const plainReply = { role: "assistant", content: roundText,
+      ...(roundResponseItems ? { _responseItems: roundResponseItems } : {}),
+      ...(roundReasoning ? { _reasoning: roundReasoning } : {}),
+      ...(roundThinkingBlocks ? { _thinkingBlocks: roundThinkingBlocks } : {}),
+      ...(roundCarryScope ? { _carryScope: roundCarryScope } : {}),
+    } satisfies StreamMessage;
     // An early prose answer ends research, not the collector contract. Give
     // it the same bounded submission phase without reopening research.
     if (!hasPlan && !finalizing && roundToolCalls.length === 0) {
       if (roundText.trim() || roundResponseItems?.items.length) {
-        history.push({ role: "assistant", content: roundText,
-          ...(roundResponseItems ? { _responseItems: roundResponseItems, _carryScope: roundCarryScope } : {}),
-        });
+        history.push(plainReply);
       }
       history.push({ role: "user", content: "Create the task plan with task_plan before investigating or answering." });
       opts.onOutputText(committedText);
@@ -1543,9 +1549,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     }
     if (preset.finalization && !finalizing && roundToolCalls.length === 0) {
       if (roundText.trim() || roundResponseItems?.items.length) {
-        history.push({ role: "assistant", content: roundText,
-          ...(roundResponseItems ? { _responseItems: roundResponseItems, _carryScope: roundCarryScope } : {}),
-        });
+        history.push(plainReply);
       }
       researchEnded = true;
       maxRounds = round + preset.finalization.rounds;
@@ -1561,9 +1565,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // model has never seen its own answer. Empty text stays out — Anthropic
       // rejects empty content blocks.
       if (roundText.trim() || roundResponseItems?.items.length) {
-        history.push({ role: "assistant", content: roundText,
-          ...(roundResponseItems ? { _responseItems: roundResponseItems, _carryScope: roundCarryScope } : {}),
-        });
+        history.push(plainReply);
       }
 
       // Cut off mid-sentence: ask for the rest instead of handing the author

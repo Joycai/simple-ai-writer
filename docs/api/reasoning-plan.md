@@ -622,3 +622,25 @@ UI 侧选项按族给：anthropic 族四个形状照旧，openai 族只有「自
   之间，两者共用一个上限，谁也不能饿死对方。
 
 其余实测项见 [`thinking-verification.md`](../issues/thinking-verification.md) §4。
+
+## 百炼 Qwen4-Max
+
+按 2026-11-17 的[模型规格](https://docs.bailian.console.aliyun.com/zh/model-studio/qwen4-max)
+接入正式模型 ID `qwen4-max`。在百炼渠道填入控制台给出的业务空间域名，再选所需协议线路。
+模型目录以 1,000,000 token 作为规划窗口，输出规划取思考开关两种模式的共同上限 131,072。
+百炼文档列出的思考模式输出上限为 262,144，包含思考和回答。
+
+思考控件提供低、高、超高及关闭。Chat Completions 与 DashScope 原生使用
+`enable_thinking` 和 `reasoning_effort`，Responses 使用 `reasoning.effort`，
+Messages 使用 `thinking.type` 和 `output_config.effort`。自动档保留原厂默认力度，
+同时请求[思考摘要与密文](https://docs.bailian.console.aliyun.com/zh/model-studio/cot-summary)。
+普通回答和工具轮都保存密文，沿用既有跨轮来源校验，仅回传给原端点、协议、模型与凭据。
+Responses 若只在终止事件中补发密文，只更新历史项，界面不会重复显示摘要。
+
+[百炼 Responses](https://docs.bailian.console.aliyun.com/zh/model-studio/qwen-api-via-openai-responses)
+的严格 Schema 写入 `text.format.json_schema`，多个工具的强制选择写入
+`allowed_tools`。Chat 的 `required` 在千问上无法保证生效，开启思考时也无法强制指定
+某个函数，因此走已有的自动调用与结构化回退。见[百炼 Chat API](https://docs.bailian.console.aliyun.com/en/model-studio/qwen-api-via-openai-chat-completions)。
+
+实现依据为官方接口文档与本地流式夹具，尚未实测远端端点。模型预设标为多模态，
+视频沿用应用主聊天线路的 `video_url` 支持。
