@@ -236,7 +236,7 @@ export function pump(set: Set, get: Get): void {
 async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
   const {
     key, projectPath, focus, message, quoted, refs, model, provider, effectiveSubs,
-    wireMessage, matchText, composed, assistantTurnId,
+    opts, wireMessage, matchText, composed, assistantTurnId,
   } = job;
   const { useAppStore } = await import("../appStore");
   const activeFilePath = focus.filePath;
@@ -395,6 +395,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
     // The Beta switch decides the tier for the WHOLE turn: ceiling, routing,
     // round cap and briefing all read this one value (lib/agent/packs).
     const chatPreset = chatAgentPreset();
+    const mcpSettings = opts?.mcpSettings === true;
     const contextWindow = plannedLimits({ model, provider }).contextSize;
     const messageCeiling = messageCeilingFor(
       contextWindow,
@@ -408,7 +409,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
       // reason: with the dev flag on, run_pack is resident on every round.
       // providers: whether the search subagent is live depends on what its
       // model's platform sends (serverToolsSent) — the turn asks the same.
-      { handoff: true, packs: true, mcp: true, providers: useAiStore.getState().providers },
+      { handoff: true, packs: true, mcp: true, mcpSettings, providers: useAiStore.getState().providers },
     );
     let history = get().chats[key]?.history ?? null;
     if (!history) {
@@ -725,10 +726,11 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
       // selfConn through ToolContext — see run_pack's guards (agent/packs).
       // commands: same area renders the command card (lib/cli).
       // providers: the search model's wire decides whether it can read pages.
-      { handoff: true, askAuthor: true, packs: true, commands: true, mcp: true, providers: useAiStore.getState().providers },
+      { handoff: true, askAuthor: true, packs: true, commands: true, mcp: true, mcpSettings, providers: useAiStore.getState().providers },
     );
     const effectivePreset = {
       ...chatPreset,
+      scratchpad: mcpSettings ? "off" as const : chatPreset.scratchpad,
       tools: routed.tools,
       serverTools: routed.serverTools,
       finishPolicy: routed.finishPolicy,

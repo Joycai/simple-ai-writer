@@ -1,4 +1,7 @@
+import type { ToolContext } from "../../agent/toolTypes";
+import { applyMcpSettings, manageMcpSettings } from "../settingsTool";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("../../platform", () => ({ IS_TAURI: true }));
 const prefs = new Map<string, string>();
 const secrets = new Map<string, string>();
 const save = vi.fn(async (id: string, value: string) => { secrets.set(id, value); });
@@ -7,7 +10,7 @@ vi.mock("../../prefs", () => ({ readPref: (k: string) => prefs.get(k) ?? null,
   writePref: (k: string, v: string) => prefs.set(k, v), writePrefConfirmed: async (k: string, v: string) => { prefs.set(k, v); } }));
 vi.mock("../../keyStore", () => ({ saveApiKey: (...args: [string, string]) => save(...args),
   loadApiKey: async (id: string) => secrets.get(id) ?? null, clearAllSecrets: (ids: string[]) => wipe(ids) }));
-import { endpoint, importMcpServers, mcpHeaders, parseMcpImport, readMcpServers, removeMcpServer } from "../config";
+import { endpoint, importMcpServers, mcpHeaders, parseMcpImport, readMcpServers, removeMcpServer, saveMcpServer } from "../config";
 vi.mock("../catalogueDb", () => ({ deleteCatalogueRow: vi.fn(async () => {}) }));
 const raw = JSON.stringify({ mcpServers: { images: { url: "http://127.0.0.1:39287/mcp", headers: { Authorization: "Bearer test-secret" } } } });
 beforeEach(() => { prefs.clear(); secrets.clear(); vi.clearAllMocks(); });
@@ -77,5 +80,52 @@ describe("MCP editing", () => {
     const { saveMcpServer } = await import("../config");
     await Promise.all(["a", "b"].map(name => saveMcpServer({ name, url: "https://example.com/mcp", enabled: true, headers: {} })));
     expect(readMcpServers().map(s => s.name)).toEqual(["a", "b"]);
+  });
+});
+
+describe("MCP chat configuration", () => {
+  const run = (args: Record<string, unknown>, requestApproval: NonNullable<ToolContext["requestApproval"]>) =>
+    manageMcpSettings({ id: "call", name: "manage_mcp_settings", arguments: JSON.stringify(args) },
+      { projectPath: "/project", requestApproval } as ToolContext);
+
+  it("lists metadata and leaves a declined addition untouched", async () => {
+    await importMcpServers(raw);
+    const approve = vi.fn(async () => ({ approved: false as const }));
+    const list = await run({ action: "list" }, approve);
+    expect(JSON.parse(list.content)).toEqual([{ name: "images", url: "http://127.0.0.1:39287/mcp", enabled: true }]);
+    expect(approve).not.toHaveBeenCalled();
+    await run({ action: "add", new_name: "new", url: "https://example.com/mcp" }, approve);
+    expect(approve).toHaveBeenCalledOnce();
+    expect(readMcpServers()).toHaveLength(1);
+  });
+
+  it("adds and redirects endpoints disabled while preserving stored headers", async () => {
+    await importMcpServers(raw);
+    const approve: NonNullable<ToolContext["requestApproval"]> = async proposal => {
+      if (proposal.kind !== "mcpSettings") throw new Error("Unexpected proposal");
+      return { approved: true, backupPath: await applyMcpSettings(proposal) };
+    };
+    await run({ action: "add", new_name: "new", url: "https://example.com/mcp" }, approve);
+    expect(readMcpServers()[1]).toMatchObject({ name: "new", enabled: false });
+    await run({ action: "update", server: "images", url: "https://other.example/mcp" }, approve);
+    const updated = readMcpServers()[0];
+    expect(updated).toMatchObject({ url: "https://other.example/mcp", enabled: false });
+    expect(await mcpHeaders(updated)).toEqual({ Authorization: "Bearer test-secret" });
+  });
+
+  it("rejects stale approvals and credential or enable arguments", async () => {
+    await importMcpServers(raw);
+    await run({ action: "update", server: "images", new_name: "proposed" }, async proposal => {
+      if (proposal.kind !== "mcpSettings") throw new Error("Unexpected proposal");
+      const server = readMcpServers()[0];
+      await saveMcpServer({ ...server, name: "edited in settings" });
+      await expect(applyMcpSettings(proposal)).rejects.toThrow("changed");
+      return { approved: false };
+    });
+    const approve = vi.fn();
+    await expect(run({ action: "add", new_name: "new", url: "https://example.com/mcp", headers: {} }, approve)).rejects.toThrow();
+    await expect(run({ action: "update", server: "edited in settings", disabled: false }, approve)).rejects.toThrow();
+    expect(approve).not.toHaveBeenCalled();
+    expect(readMcpServers()[0].name).toBe("edited in settings");
   });
 });

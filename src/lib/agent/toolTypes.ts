@@ -616,8 +616,15 @@ export interface McpProposal extends ProposalBase {
   arguments: Record<string, unknown>;
 }
 
+export interface McpSettingsProposal extends ProposalBase {
+  kind: "mcpSettings";
+  before?: { id: string; revision: string; name: string; url: string; enabled: boolean };
+  after: { name: string; url: string; enabled: boolean };
+}
+
 export type Proposal =
   | McpProposal
+  | McpSettingsProposal
   | EditProposal
   | RewriteProposal
   | AppendProposal
@@ -1070,6 +1077,7 @@ export interface RegisteredTool {
 export type ToolId =
   | "discover_mcp_tools"
   | "call_mcp_tool"
+  | "manage_mcp_settings"
   | "list_lore_entities"
   | "read_lore_entity"
   | "read_lore_image"

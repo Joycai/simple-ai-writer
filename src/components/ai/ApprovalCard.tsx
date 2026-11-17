@@ -19,6 +19,7 @@ import { isHtmlPath } from "../../lib/fs/images";
 import { HtmlFrame } from "../editor/HtmlPreview";
 import type {
   McpProposal,
+  McpSettingsProposal,
   AppendProposal,
   CopyProposal,
   CreateProposal,
@@ -119,6 +120,8 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
       return t("ai.approval.titleConvert", { defaultValue: "转换为 Markdown" });
     case "transcribe":
       return t("ai.approval.titleTranscribe", { defaultValue: "请求转写" });
+    case "mcpSettings":
+      return t("mcp.settingsApprovalTitle");
     case "mcp":
       return t("mcp.approvalTitle");
     case "command":
@@ -191,6 +194,8 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
       // The size of what is about to be uploaded — the only number known
       // before the paid step (设计稿 02f 屏 1e: mono right column "2.4 MB").
       return formatBytes(proposal.bytes);
+    case "mcpSettings":
+      return proposal.after.name;
     case "mcp":
       return proposal.serverName;
     case "command":
@@ -1402,6 +1407,8 @@ function ProposalBody({
       return <ConvertBody proposal={proposal} />;
     case "transcribe":
       return <TranscribeBody proposal={proposal} />;
+    case "mcpSettings":
+      return <McpSettingsBody proposal={proposal} />;
     case "mcp":
       return <McpBody proposal={proposal} />;
     case "command":
@@ -1409,6 +1416,22 @@ function ProposalBody({
     case "loreStep":
       return <LoreStepBody proposal={proposal} narrow={narrow} />;
   }
+}
+
+function McpSettingsBody({ proposal }: { proposal: McpSettingsProposal }) {
+  const { t } = useTranslation();
+  const rows = proposal.before
+    ? [{ label: "mcp.settingsBefore", value: proposal.before }, { label: "mcp.settingsAfter", value: proposal.after }]
+    : [{ label: "mcp.settingsAfter", value: proposal.after }];
+  return <>
+    <div className={styles.emptyNote}>{t("mcp.settingsApprovalNote")}</div>
+    <div className={styles.specRows}>
+      {rows.map(({ label, value }) => <div className={styles.specRow} key={label}>
+        <span className={styles.specKey}>{t(label)}</span>
+        <span className={styles.specVal}>{value.name} · {value.url} · {t(value.enabled ? "mcp.manage.enabled" : "mcp.manage.disabled")}</span>
+      </div>)}
+    </div>
+  </>;
 }
 
 function McpBody({ proposal }: { proposal: McpProposal }) {

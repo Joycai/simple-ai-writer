@@ -92,7 +92,7 @@ interface McpServerDraft {
   headers?: Record<string, string | null>;
   replaceHeaders?: boolean;
 }
-export function saveMcpServer(draft: McpServerDraft): Promise<McpServer> {
+export function saveMcpServer(draft: McpServerDraft, signal?: AbortSignal): Promise<McpServer> {
   return mutate(async () => {
     const list = readMcpServers();
     const old = draft.id ? list.find(s => s.id === draft.id) : undefined;
@@ -119,6 +119,7 @@ export function saveMcpServer(draft: McpServerDraft): Promise<McpServer> {
       revision: crypto.randomUUID(), connectionRevision: changed ? crypto.randomUUID() : connectionRevision(old),
       headerNames: headers ? Object.keys(headers) : old?.headerNames };
     const replace = (value: McpServer) => old ? list.map(s => s.id === old.id ? value : s) : [...list, value];
+    signal?.throwIfAborted();
     if (headers) {
       await persist(replace({ ...server, enabled: false }));
       try { await saveApiKey(mcpSecretAccount(server.id), JSON.stringify(headers)); }

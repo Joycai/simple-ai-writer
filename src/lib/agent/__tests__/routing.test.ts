@@ -893,6 +893,18 @@ describe("MCP surface routing", () => {
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
     asr: { kind: "asr", modelId: null, enabled: false },
   };
+  it("exposes only MCP configuration on an explicit desktop settings turn", () => {
+    const options = { mcp: true, commands: true, packs: true, handoff: true, mcpSettings: true };
+    expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, options)).toMatchObject({
+      tools: ["manage_mcp_settings"], serverTools: "off", finishPolicy: "force-text",
+    });
+    expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS, options).tools).toEqual(["manage_mcp_settings"]);
+    expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { mcp: true }).tools).not.toContain("manage_mcp_settings");
+    platform.tauri = false;
+    try {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, options).tools).toEqual([]);
+    } finally { platform.tauri = true; }
+  });
   it("requires Beta, an enabled server, Tauri and an approval surface, and prices the same tools", () => {
     const tools = () => routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { mcp: true }).tools;
     try {

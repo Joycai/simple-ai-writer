@@ -180,6 +180,8 @@ interface SendChatOptions {
    * goes to the model — this only changes what the author reads.
    */
   displayText?: string;
+  /** Explicitly selected by the chat composer for this turn. */
+  mcpSettings?: boolean;
 }
 
 interface ChatUsage {

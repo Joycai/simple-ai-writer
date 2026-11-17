@@ -1,6 +1,8 @@
 import type { RegisteredTool } from "../toolTypes";
 import { callMcpTool, discoverMcpTools } from "../../mcp/tools";
 
+import { manageMcpSettings } from "../../mcp/settingsTool";
+
 export const MCP_TOOLS = {
   discover_mcp_tools: {
     access: "read",
@@ -21,5 +23,18 @@ export const MCP_TOOLS = {
       required: ["server", "tool", "arguments", "reason"] },
     } },
     execute: callMcpTool,
+  },
+  manage_mcp_settings: {
+    access: "write-approval",
+    definition: { type: "function", function: {
+      name: "manage_mcp_settings",
+      description: "For the current /settings request, list local MCP server configurations or propose one change for approval. Add needs new_name and url. Update needs the existing server and a new_name, url, or disabled=true. New servers and changed endpoints are saved disabled. Use the settings UI for credentials, enabling, and deletion. Ask the author to send any missing details in a new /settings message. Never request credentials in chat.",
+      parameters: { type: "object", additionalProperties: false, required: ["action"], properties: {
+        action: { type: "string", enum: ["list", "add", "update"] },
+        server: { type: "string", description: "Existing server name for update." },
+        new_name: { type: "string" }, url: { type: "string" }, disabled: { type: "boolean", description: "Set true to disable a server." },
+      } },
+    } },
+    execute: manageMcpSettings,
   },
 } satisfies Record<string, RegisteredTool>;

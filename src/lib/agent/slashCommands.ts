@@ -4,6 +4,11 @@ export function parseSlash(text: string): { command: string; request: string } |
   // File paths and literal slash-prefixed prose remain ordinary messages.
   return match && !match[1].includes("/") ? { command: match[1], request: match[2].trim() } : null;
 }
+export const isSettingsRequest = (text: string): boolean => {
+  const parsed = parseSlash(text);
+  return parsed?.command === "settings" && !!parsed.request;
+};
+
 /** Replace only the command token; preserve the author’s request verbatim. */
 export function insertSlashCommand(draft: string, command: string): string {
   const tail = /^\/[^\s]*(\s[\s\S]*)$/.exec(draft)?.[1];
