@@ -215,6 +215,10 @@ export async function applyProposal(
   const { createEntry, moveEntry, deleteEntry, copyEntry } = deps.entries();
 
   switch (proposal.kind) {
+    case "mcpSettings": {
+      const { applyMcpSettings } = await import("../mcp/settingsTool");
+      return { report: await applyMcpSettings(proposal, signal) };
+    }
     case "mcp": {
       const { applyMcpCall } = await import("../mcp/tools");
       return applyMcpCall(proposal, signal);

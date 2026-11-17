@@ -5,7 +5,7 @@ import styles from "./ChatUserText.module.css";
 /** Presentation only: keep the stored command and request verbatim for copying. */
 export function ChatUserText({ text }: { text: string }) {
   const parsed = parseSlash(text);
-  const command = parsed && (parsed.command === "imageGen" || mcpTarget(parsed.command))
+  const command = parsed && (parsed.command === "imageGen" || parsed.command === "settings" || mcpTarget(parsed.command))
     ? `/${parsed.command}` : null;
   const body = command ? text.slice(command.length) : text;
   return <>

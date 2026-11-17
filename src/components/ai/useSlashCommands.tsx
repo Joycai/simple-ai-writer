@@ -54,16 +54,18 @@ export function useSlashCommands(scope: string, draft: string, setDraft: (text: 
     const controller = new AbortController(); controllers.current.set(id, controller);
     try { await refreshCatalogue(server, controller.signal); } catch { /* shared per-server state renders failure */ }
   };
+  const settingsSelected = parsed?.command === "settings";
   const serverSignature = servers.map(s => `${s.id}:${s.revision}`).join("|");
   useEffect(() => {
-    if (!enabled || (!open && browser !== "mcp")) return;
+    if (!enabled || (browser !== "mcp" && (!open || settingsSelected))) return;
     const controller = new AbortController();
     for (const server of readMcpServers().filter(s => s.enabled)) void browseCatalogue(server, controller.signal).catch(() => {});
     return () => controller.abort();
-  }, [enabled, open, browser, serverSignature]);
+  }, [enabled, open, browser, serverSignature, settingsSelected]);
   const entries = [
     { command: "help", description: t("slash.help"), unavailable: false },
     { command: "mcp", description: t("slash.mcp"), unavailable: false },
+    { command: "settings", description: t(IS_TAURI ? "slash.manageSettings" : "mcp.desktopOnly"), unavailable: !IS_TAURI },
     { command: "imageGen", description: t(imageAvailable ? "slash.image" : "slash.imageUnavailable"), unavailable: !imageAvailable },
     ...servers.filter(s => enabled && s.enabled).flatMap(s => (catalogueOf(s.id, s.revision)?.tools ?? []).map(tool => ({
       command: mcpCommand(s.name, tool.name), description: tool.description?.slice(0, 240) || tool.name, unavailable: false,
@@ -115,6 +117,11 @@ export function useSlashCommands(scope: string, draft: string, setDraft: (text: 
     if (!p) return draft;
     if (p.command === "help" || p.command === "mcp") { browse(p.command); return null; }
     if (!p.command) { setDismissed(null); return null; }
+    if (p.command === "settings") {
+      if (IS_TAURI && p.request) return draft;
+      setError(true);
+      return null;
+    }
     const target = mcpTarget(p.command);
     // Only known command syntax claims a message. A slash alone does not
     // reserve arbitrary prose or paths, even after the picker is dismissed.

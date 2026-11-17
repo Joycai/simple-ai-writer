@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { commandRequest, insertSlashCommand, mcpCommand, mcpTarget, parseSlash } from "../slashCommands";
+import { commandRequest, insertSlashCommand, isSettingsRequest, mcpCommand, mcpTarget, parseSlash } from "../slashCommands";
 
 describe("chat slash commands", () => {
   it("only recognizes commands at the start and preserves multiline requests", () => {
     expect(parseSlash("use /mcp here")).toBeNull();
     expect(parseSlash("/imageGen a tree\nwith birds")).toEqual({ command: "imageGen", request: "a tree\nwith birds" });
     expect(parseSlash("/mcp ")).toEqual({ command: "mcp", request: "" });
+  });
+  it("opts in only for an explicit settings command with a request", () => {
+    expect(isSettingsRequest("/settings 列出 MCP 服务")).toBe(true);
+    for (const text of ["/settings", "/settings/path list", "解释 /settings 命令", "列出 MCP 服务"]) {
+      expect(isSettingsRequest(text)).toBe(false);
+    }
   });
   it("round trips server and tool names without namespace collisions", () => {
     for (const server of ["images", "two words", "a:b", "图片", "a/b", "%"]) {

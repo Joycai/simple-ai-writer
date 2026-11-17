@@ -103,6 +103,8 @@ export interface RouteOptions {
   commands?: boolean;
   /** External MCP calls need a visible approval card. */
   mcp?: boolean;
+  /** Only a current, explicit /settings request on the chat approval surface. */
+  mcpSettings?: boolean;
   /**
    * The provider list, so `searchReadsPages` can check the search model's wire
    * — not a per-surface choice like the rest, but carried here so the pricing
@@ -178,6 +180,10 @@ function route(
   models: Model[],
   options?: RouteOptions,
 ): RoutedTools {
+  if (options?.mcpSettings) return {
+    tools: IS_TAURI ? ["manage_mcp_settings"] : [],
+    serverTools: "off", finishPolicy: "force-text", visionDelegate: false, searchReadsPages: false,
+  };
   let tools = preset.tools.filter((id) => (id !== "run_command" || terminalAvailable()) && (id !== "translate" || distributionAllows("sakura")));
   // Usable, not merely enabled. A search subagent bound to a model without
   // web_search would otherwise take the main model's own browsing away

@@ -37,6 +37,10 @@
     "working": "Working…",
     "failed": "Could not complete the operation. Check the JSON, server connection, credentials and keyring access. Only HTTPS or localhost HTTP is supported.",
     "connected": "{{name}} connected · tools ({{count}}): {{tools}}",
+    "settingsApprovalTitle": "Review MCP configuration",
+    "settingsApprovalNote": "Credentials can be managed in MCP settings. New servers and changed endpoints are saved disabled.",
+    "settingsBefore": "Before",
+    "settingsAfter": "After",
     "approvalTitle": "Call an MCP tool",
     "approvalNote": "These arguments will be sent to the external server. It may modify files or charge for work. External costs are unknown and are not recorded in app usage. Stopping the request may not stop work already submitted.",
     "server": "Server",
@@ -5363,6 +5367,7 @@
     "grok": "Grok Imagine 2.0"
   },
   "slash": {
+    "manageSettings": "Maintain MCP server settings",
     "title": "Commands",
     "help": "Browse commands",
     "mcp": "Browse MCP servers and tools",

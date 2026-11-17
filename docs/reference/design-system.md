@@ -499,7 +499,7 @@ text, accent-selection and shadow tokens. Completion floats above the composer w
 an explicit close action and (for MCP) server discovery controls; command names use the monospace token. Server statuses and
 refresh controls share the same theme palette, including installed themes.
 
-Sent chat messages render executable `/imageGen` and `/server:tool` prefixes as
+Sent chat messages render executable `/settings`, `/imageGen` and `/server:tool` prefixes as
 inline monospace command labels, using accent tint, accent text and a neutral
 border. This separates the invocation from its request without suggesting a
 clickable control. Long names wrap within narrow chat rails; the original token,

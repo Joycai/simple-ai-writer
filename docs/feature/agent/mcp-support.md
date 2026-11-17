@@ -48,6 +48,23 @@ closing a session does not cancel a durable job; `cancel_generation` is a separa
 approved call. Charges are external, unknown to the app, and not entered into its
 LLM usage ledger.
 
+### Maintain MCP settings from chat
+
+Use `/settings` in the desktop chat assistant to list, add, rename, change the
+endpoint of, or disable an MCP server. For example, `/settings add an MCP server
+named images at https://example.com/mcp`. Start each follow-up with `/settings` as
+well. Changes require an individual approval
+showing the effective name, URL, and enabled state. The save uses the same
+validation and revision checks as the settings pane. New services and changed
+endpoints are saved disabled so the assistant cannot connect to a new address
+with stored credentials. Use the MCP settings pane to manage credentials, enable
+services, check connections, and delete entries.
+
+The current composer command opts the turn into the local configuration schema
+without requiring MCP Beta or an existing server. Ordinary chat requests do
+not carry this schema. Configuration turns carry only the configuration tool and keep the response
+with the main assistant, which reports the result of the approved write.
+
 ## Design and boundaries
 
 - `lib/mcp/config.ts`: only metadata in `app:mcpServers`; Beta and server list are

@@ -1,3 +1,4 @@
+import { isSettingsRequest } from "../../lib/agent/slashCommands";
 import { routePlannedTools } from "../../lib/agent/routing";
 import { useSlashCommands } from "./useSlashCommands";
 import { RetrievalProgressText } from "./RetrievalProgressText";
@@ -546,6 +547,7 @@ export function AgentChat() {
   // hasMessage: words, or a picture on its own (chat-image-paste-plan §10).
   const canSend = hasMessage(draft, refs) && !chatRunning && !chatQueued && !chatCompacting && !pasting && !reading && !!activeModelId;
 
+  const mcpSettings = isSettingsRequest(draft);
   const slash = useSlashCommands(
     activeKey, draft,
     (text) => { setDraft(text); inputRef.current?.focus(); },
@@ -569,7 +571,7 @@ export function AgentChat() {
     // Asking a question is an intent to watch the answer: re-arm the follow even
     // if the author had scrolled back into history to write it.
     stick.toBottom();
-    void sendChat(text, attachedQuote, sending, { displayText: draft });
+    void sendChat(text, attachedQuote, sending, { displayText: draft, mcpSettings });
   };
 
   // 2d: the composer stays typeable during a run, and Enter queues the draft
@@ -758,8 +760,8 @@ export function AgentChat() {
     // carries the thin tier, and this bar is where the作者 sees that saving.
     // (Flag flips don't re-render this memo — the number catches up on the
     // next deps change or remount, same read-once tolerance as the briefing.)
-    () => plannedToolTokens(chatAgentPreset(), effectiveSubs, models, { handoff: true, packs: true, mcp: true, providers }),
-    [effectiveSubs, models, providers],
+    () => plannedToolTokens(chatAgentPreset(), effectiveSubs, models, { handoff: true, packs: true, mcp: true, mcpSettings, providers }),
+    [effectiveSubs, models, mcpSettings, providers],
   );
   const context = useMemo(
     () =>
