@@ -248,7 +248,11 @@ export function convertToAnthropicMessages(
     }
 
     const regular = msg as { role: "user" | "assistant"; content: MessageContent };
-    out.push({ role: regular.role, content: blocksOf(regular.content) });
+    const content = blocksOf(regular.content);
+    out.push({
+      role: regular.role,
+      content: regular.role === "assistant" ? [...thinkingBlocksFor(msg, modelId), ...content] : content,
+    });
     i++;
   }
 
@@ -329,6 +333,9 @@ function thinkingFor(
   category: ThinkingCategory,
   maxTokens: number,
 ): Record<string, unknown> | undefined {
+  if (category.dialect === "extended" && category.shape === "levels") {
+    return opts.reasoningEffort === "off" ? { type: "disabled" } : { type: "enabled", display: "summarized" };
+  }
   // The author's budget when set (a budget-shape category), else the app
   // default; capped at half the reply ceiling either way so thinking can't
   // starve the response (the API requires budget < max_tokens).
@@ -606,6 +613,10 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
     return n;
   };
 
+  const sortedThinkingBlocks = () => [...thinkingBlocks]
+    .sort((a, b) => a.leg - b.leg || a.index - b.index)
+    .map((entry) => entry.block);
+
   const emitToolCalls = () => {
     if (toolBlocks.size === 0) return;
     const toolCalls: AccumulatedToolCall[] = [...toolBlocks.entries()]
@@ -619,13 +630,10 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
         // loop sees a call it can't parse.
         arguments: tc.args.trim() ? tc.args : "{}",
       }));
-    const blocks = [...thinkingBlocks]
-      .sort((a, b) => a.leg - b.leg || a.index - b.index)
-      .map((t) => t.block);
+    const blocks = sortedThinkingBlocks();
     opts.onChunk({
       toolCalls,
-      // Only on a tool round: between plain turns the API filters prior
-      // thinking itself, so carrying it would be tokens paid for nothing.
+      // Tool rounds always carry their thinking. Plain turns opt in below.
       ...(blocks.length ? { _thinkingBlocks: { modelId: opts.modelId, blocks } } : {}),
     });
   };
@@ -634,8 +642,12 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
     if (finished) return;
     finished = true;
     emitToolCalls();
+    const blocks = toolBlocks.size === 0 && category.id === "qwen4-anthropic"
+      ? sortedThinkingBlocks().filter((block) => block.type === "thinking" && block.signature)
+      : [];
     opts.onChunk({
       done: true,
+      ...(blocks.length ? { _thinkingBlocks: { modelId: opts.modelId, blocks } } : {}),
       inputTokens: total.inputTokens,
       outputTokens: total.outputTokens,
       ...(stopReason ? { stopReason } : {}),

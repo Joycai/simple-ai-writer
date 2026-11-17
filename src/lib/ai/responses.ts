@@ -198,7 +198,14 @@ function toResponsesTools(tools: ToolDefinition[]): Record<string, unknown>[] {
 }
 
 /** `tool_choice` in this wire's spelling — the named form loses its `function` wrapper. */
-function toResponsesToolChoice(tc: StreamOptions["toolChoice"]): unknown {
+function toResponsesToolChoice(
+  tc: StreamOptions["toolChoice"], tools: NonNullable<StreamOptions["tools"]>, serverToolCount: number,
+  allowedTools: boolean | undefined,
+): unknown {
+  if (allowedTools && ((tc === "required" && tools.length + serverToolCount > 1) || typeof tc === "object")) {
+    const names = typeof tc === "object" ? [tc.function.name] : tools.map((tool) => tool.function.name);
+    return { type: "allowed_tools", mode: "required", tools: names.map((name) => ({ type: "function", name })) };
+  }
   if (!tc || typeof tc === "string") return tc ?? "auto";
   return { type: "function", name: tc.function.name };
 }
@@ -264,7 +271,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
       ? { tools: [...toResponsesTools(opts.tools ?? []), ...serverTools] }
       : {}),
     // A forced choice the plan downgraded goes out as `auto` (RequestPlan.toolChoice).
-    ...(opts.tools ? { tool_choice: toResponsesToolChoice(plan.toolChoice?.sent) } : {}),
+    ...(opts.tools ? { tool_choice: toResponsesToolChoice(plan.toolChoice?.sent, opts.tools, serverTools.length, plan.responsesAllowedTools) } : {}),
     // `reasoning: {effort, summary}` — absent unless the author set an effort
     // on this model, for the same reason as every other adapter: an unset
     // model must keep sending exactly what it sent before, and each model's
@@ -386,6 +393,20 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     }
   };
 
+  // Bailian can supply the ciphertext only in the terminal snapshot.
+  // Update the carried item without emitting the summary a second time.
+  const completeReasoningItems = (output: unknown) => {
+    if (!Array.isArray(output)) return;
+    output.filter(isEchoItem).forEach((item, index) => {
+      if (item.type !== "reasoning" || typeof item.encrypted_content !== "string" || !item.encrypted_content) return;
+      const existing = typeof item.id === "string"
+        ? items.findIndex((value) => (value as { id?: unknown }).id === item.id)
+        : -1;
+      if (existing === -1) items.splice(index, 0, item);
+      else items[existing] = { ...(items[existing] as Record<string, unknown>), ...item };
+    });
+  };
+
   const callAt = (index: unknown) => {
     const idx = typeof index === "number" ? index : 0;
     let entry = calls.get(idx);
@@ -474,10 +495,12 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
         return false;
       }
       case "response.completed":
+        completeReasoningItems(json.response?.output);
         readTerminalUsage(json.response);
         stopReason = "completed";
         return true;
       case "response.incomplete": {
+        completeReasoningItems(json.response?.output);
         readTerminalUsage(json.response);
         const reason = json.response?.incomplete_details?.reason;
         // Same treatment as Chat Completions' finish_reason: a filter stop is

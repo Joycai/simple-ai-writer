@@ -2896,6 +2896,8 @@
       "thinkingCatDoubaoHint": "火山方舟的豆包 Seed：reasoning_effort 取 low/medium/high；「关闭」发 thinking:{type:disabled}（两者不能同时出现，方舟会拒绝）。",
       "thinkingCatQwenBudget": "千问 · 预算",
       "thinkingCatQwenBudgetHint": "enable_thinking 开关 + thinking_budget 思考预算（DashScope 兼容模式）。开启后填预算，留空用默认。",
+      "thinkingCatQwen4": "千问 4 · 力度",
+      "thinkingCatQwen4Hint": "Qwen4-Max 提供低、高、超高三档，默认开启思考并返回摘要。",
       "thinkingCatQwenEffort": "千问 · 力度",
       "thinkingCatQwenEffortHint": "enable_thinking + reasoning_effort 档位（Qwen-Max 支持 xhigh）；与预算模式互斥。",
       "thinkingCatGlm": "GLM-5.3",

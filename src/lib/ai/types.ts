@@ -315,8 +315,10 @@ export type StreamChunk =
   | { toolArgs: { name: string; chars: number } }
   | {
       done: true;
-      /** Full output items, including on a plain (non-tool) turn. */
+      /** Native history to carry into the next request, including after plain replies. */
       _responseItems?: ResponseItemCarry;
+      _reasoning?: NativeReasoning;
+      _thinkingBlocks?: ThinkingBlockCarry;
       /** Digest of the originating route and credential; never sent on the wire. */
       _carryScope?: string;
       inputTokens: number;
@@ -367,8 +369,7 @@ export type StreamChunk =
       /**
        * The round's reasoning, whole, for echoing back on the assistant message
        * this chunk becomes. Delivered here rather than assembled from the
-       * `{reasoning}` fragments above because only a tool round needs it —
-       * see `StreamMessage`.
+       * `{reasoning}` fragments above, which are for display.
        */
       _reasoning?: NativeReasoning;
       /** Anthropic's thinking blocks for this turn — see `StreamMessage`. */
@@ -382,6 +383,8 @@ export type StreamMessage =
   | {
       role: "system" | "user" | "assistant";
       content: MessageContent;
+      _reasoning?: NativeReasoning;
+      _thinkingBlocks?: ThinkingBlockCarry;
       _responseItems?: ResponseItemCarry;
       _carryScope?: string;
     }
@@ -394,13 +397,8 @@ export type StreamMessage =
       /**
        * Reasoning this assistant turn produced, echoed back verbatim.
        *
-       * Not an optimisation — a correctness requirement, and only on messages
-       * that carry `tool_calls`. Endpoints whose models think before calling a
-       * tool treat that reasoning as part of the turn: omit it from the history
-       * and the next request is rejected outright, so a thinking model could
-       * never finish a tool loop. Between plain user turns the same field is
-       * ignored by those endpoints, which is why it is not kept there — it
-       * would be tokens paid for nothing.
+       * Some endpoints require reasoning as part of the tool-call turn.
+       * Endpoints with encrypted reasoning may also reuse it on plain turns.
        *
        * Fields prefixed `_` are this app's own; adapters strip them before a
        * message reaches the wire and re-express whatever their protocol needs.

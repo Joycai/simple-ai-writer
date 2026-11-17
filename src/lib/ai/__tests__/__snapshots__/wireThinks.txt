@@ -4,6 +4,9 @@ openai-generic unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- m
 deepseek unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 qwen-budget unset:- default:- off:- minimal:auto low:auto medium:auto high:auto xhigh:auto max:auto
 qwen-effort unset:- default:- off:- minimal:auto low:auto medium:auto high:auto xhigh:auto max:auto
+qwen4-chat unset:auto default:auto off:- minimal:auto low:auto medium:auto high:auto xhigh:auto max:auto
+qwen4-responses unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+qwen4-anthropic unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 glm unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 glm-effort unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 glm-switch unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
@@ -21,6 +24,9 @@ openai openai-generic unset:yes default:yes off:yes minimal:yes low:yes medium:y
 openai deepseek unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 openai qwen-budget unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 openai qwen-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai qwen4-chat unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai qwen4-responses unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+openai qwen4-anthropic unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 openai glm unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 openai glm-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 openai glm-switch unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
@@ -36,6 +42,9 @@ responses openai-generic unset:yes default:yes off:yes minimal:yes low:yes mediu
 responses deepseek unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 responses qwen-budget unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 responses qwen-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses qwen4-chat unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses qwen4-responses unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+responses qwen4-anthropic unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 responses glm unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 responses glm-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 responses glm-switch unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
@@ -51,6 +60,9 @@ gemini openai-generic unset:yes default:yes off:yes minimal:yes low:yes medium:y
 gemini deepseek unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 gemini qwen-budget unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 gemini qwen-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini qwen4-chat unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini qwen4-responses unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+gemini qwen4-anthropic unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 gemini glm unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 gemini glm-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 gemini glm-switch unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
@@ -66,6 +78,9 @@ anthropic openai-generic unset:- default:- off:- minimal:- low:- medium:- high:-
 anthropic deepseek unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 anthropic qwen-budget unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 anthropic qwen-effort unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic qwen4-chat unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic qwen4-responses unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+anthropic qwen4-anthropic unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 anthropic glm unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 anthropic glm-effort unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
 anthropic glm-switch unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
@@ -81,6 +96,9 @@ dashscope openai-generic unset:yes default:yes off:yes minimal:yes low:yes mediu
 dashscope deepseek unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 dashscope qwen-budget unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 dashscope qwen-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope qwen4-chat unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope qwen4-responses unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
+dashscope qwen4-anthropic unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 dashscope glm unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 dashscope glm-effort unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
 dashscope glm-switch unset:yes default:yes off:yes minimal:yes low:yes medium:yes high:yes xhigh:yes max:yes
@@ -138,6 +156,33 @@ qwen-effort medium tools=- enable_search=true search_options={"search_strategy":
 qwen-effort high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="high"
 qwen-effort xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="xhigh"
 qwen-effort max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="max"
+qwen4-chat unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true
+qwen4-chat default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true
+qwen4-chat off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=false
+qwen4-chat minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="low"
+qwen4-chat low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="low"
+qwen4-chat medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="high"
+qwen4-chat high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="high"
+qwen4-chat xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="xhigh"
+qwen4-chat max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="xhigh"
+qwen4-responses unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+qwen4-responses default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+qwen4-responses off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="none"
+qwen4-responses minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="minimal"
+qwen4-responses low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="low"
+qwen4-responses medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="medium"
+qwen4-responses high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="high"
+qwen4-responses xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="xhigh"
+qwen4-responses max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="max"
+qwen4-anthropic unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+qwen4-anthropic default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+qwen4-anthropic off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="none"
+qwen4-anthropic minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="minimal"
+qwen4-anthropic low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="low"
+qwen4-anthropic medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="medium"
+qwen4-anthropic high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="high"
+qwen4-anthropic xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="xhigh"
+qwen4-anthropic max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="max"
 glm unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
 glm default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
 glm off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="none"
@@ -275,6 +320,33 @@ qwen-effort medium tools=function enable_search=true enable_thinking=true reason
 qwen-effort high tools=function enable_search=true enable_thinking=true reasoning_effort="high"
 qwen-effort xhigh tools=function enable_search=true enable_thinking=true reasoning_effort="xhigh"
 qwen-effort max tools=function enable_search=true enable_thinking=true reasoning_effort="max"
+qwen4-chat unset tools=function enable_search=true enable_thinking=true
+qwen4-chat default tools=function enable_search=true enable_thinking=true
+qwen4-chat off tools=function enable_search=true enable_thinking=false
+qwen4-chat minimal tools=function enable_search=true enable_thinking=true reasoning_effort="low"
+qwen4-chat low tools=function enable_search=true enable_thinking=true reasoning_effort="low"
+qwen4-chat medium tools=function enable_search=true enable_thinking=true reasoning_effort="high"
+qwen4-chat high tools=function enable_search=true enable_thinking=true reasoning_effort="high"
+qwen4-chat xhigh tools=function enable_search=true enable_thinking=true reasoning_effort="xhigh"
+qwen4-chat max tools=function enable_search=true enable_thinking=true reasoning_effort="xhigh"
+qwen4-responses unset tools=function enable_search=true
+qwen4-responses default tools=function enable_search=true
+qwen4-responses off tools=function enable_search=true reasoning_effort="none"
+qwen4-responses minimal tools=function enable_search=true reasoning_effort="minimal"
+qwen4-responses low tools=function enable_search=true reasoning_effort="low"
+qwen4-responses medium tools=function enable_search=true reasoning_effort="medium"
+qwen4-responses high tools=function enable_search=true reasoning_effort="high"
+qwen4-responses xhigh tools=function enable_search=true reasoning_effort="xhigh"
+qwen4-responses max tools=function enable_search=true reasoning_effort="max"
+qwen4-anthropic unset tools=function enable_search=true
+qwen4-anthropic default tools=function enable_search=true
+qwen4-anthropic off tools=function enable_search=true reasoning_effort="none"
+qwen4-anthropic minimal tools=function enable_search=true reasoning_effort="minimal"
+qwen4-anthropic low tools=function enable_search=true reasoning_effort="low"
+qwen4-anthropic medium tools=function enable_search=true reasoning_effort="medium"
+qwen4-anthropic high tools=function enable_search=true reasoning_effort="high"
+qwen4-anthropic xhigh tools=function enable_search=true reasoning_effort="xhigh"
+qwen4-anthropic max tools=function enable_search=true reasoning_effort="max"
 glm unset tools=function enable_search=true
 glm default tools=function enable_search=true
 glm off tools=function enable_search=true reasoning_effort="none"
@@ -412,6 +484,33 @@ qwen-effort medium tools=web_search,web_extractor,code_interpreter reasoning={"e
 qwen-effort high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
 qwen-effort xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
 qwen-effort max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+qwen4-chat unset tools=web_search,web_extractor,code_interpreter
+qwen4-chat default tools=web_search,web_extractor,code_interpreter
+qwen4-chat off tools=web_search,web_extractor reasoning={"effort":"none"}
+qwen4-chat minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+qwen4-chat low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+qwen4-chat medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+qwen4-chat high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+qwen4-chat xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+qwen4-chat max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+qwen4-responses unset tools=web_search,web_extractor,code_interpreter reasoning={"summary":"auto"}
+qwen4-responses default tools=web_search,web_extractor,code_interpreter reasoning={"summary":"auto"}
+qwen4-responses off tools=web_search,web_extractor reasoning={"effort":"none"}
+qwen4-responses minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+qwen4-responses low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+qwen4-responses medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+qwen4-responses high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+qwen4-responses xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+qwen4-responses max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+qwen4-anthropic unset tools=web_search,web_extractor,code_interpreter
+qwen4-anthropic default tools=web_search,web_extractor,code_interpreter
+qwen4-anthropic off tools=web_search,web_extractor reasoning={"effort":"none"}
+qwen4-anthropic minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+qwen4-anthropic low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+qwen4-anthropic medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+qwen4-anthropic high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+qwen4-anthropic xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+qwen4-anthropic max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
 glm unset tools=web_search,web_extractor,code_interpreter
 glm default tools=web_search,web_extractor,code_interpreter
 glm off tools=web_search,web_extractor reasoning={"effort":"none"}
@@ -549,6 +648,33 @@ qwen-effort medium tools=function,web_search,web_extractor,code_interpreter reas
 qwen-effort high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
 qwen-effort xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
 qwen-effort max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+qwen4-chat unset tools=function,web_search,web_extractor,code_interpreter
+qwen4-chat default tools=function,web_search,web_extractor,code_interpreter
+qwen4-chat off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+qwen4-chat minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+qwen4-chat low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+qwen4-chat medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+qwen4-chat high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+qwen4-chat xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+qwen4-chat max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+qwen4-responses unset tools=function,web_search,web_extractor,code_interpreter reasoning={"summary":"auto"}
+qwen4-responses default tools=function,web_search,web_extractor,code_interpreter reasoning={"summary":"auto"}
+qwen4-responses off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+qwen4-responses minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+qwen4-responses low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+qwen4-responses medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+qwen4-responses high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+qwen4-responses xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+qwen4-responses max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+qwen4-anthropic unset tools=function,web_search,web_extractor,code_interpreter
+qwen4-anthropic default tools=function,web_search,web_extractor,code_interpreter
+qwen4-anthropic off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+qwen4-anthropic minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+qwen4-anthropic low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+qwen4-anthropic medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+qwen4-anthropic high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+qwen4-anthropic xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+qwen4-anthropic max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
 glm unset tools=function,web_search,web_extractor,code_interpreter
 glm default tools=function,web_search,web_extractor,code_interpreter
 glm off tools=function,web_search,web_extractor reasoning={"effort":"none"}

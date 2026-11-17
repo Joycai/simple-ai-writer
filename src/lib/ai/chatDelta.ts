@@ -55,7 +55,7 @@ interface ChatDeltaReader {
    * The stream is over: flush the `<think>` splitter and hand the tool calls
    * over. Called once.
    */
-  finish(): { stopReason?: string; truncated: boolean };
+  finish(): { stopReason?: string; truncated: boolean; _reasoning?: NativeReasoning };
 }
 
 /**
@@ -185,7 +185,7 @@ export function createChatDeltaReader(opts: StreamOptions, label = "OpenAI"): Ch
       if (refusal) throw new Error(`${label}: refusal: ${refusal}`);
       emit(inlineThink.flush());
       emitToolCalls();
-      return { stopReason, truncated };
+      return { stopReason, truncated, ...(toolCallMap.size === 0 && reasoning?.encrypted ? { _reasoning: reasoning } : {}) };
     },
   };
 }

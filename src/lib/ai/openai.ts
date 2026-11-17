@@ -197,9 +197,10 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       if (!trimmed || !trimmed.startsWith("data:")) continue;
       const data = trimmed.slice(5).trim();
       if (data === "[DONE]") {
-        const { stopReason, truncated } = choices.finish();
+        const { stopReason, truncated, _reasoning } = choices.finish();
         opts.onChunk({
           done: true, inputTokens, outputTokens,
+          ...(_reasoning ? { _reasoning } : {}),
           ...(truncated ? { truncated } : {}),
           ...(stopReason ? { stopReason } : {}),
           ...(cachedTokens ? { cachedTokens } : {}),
@@ -222,9 +223,10 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   if (!terminalSentinel && !choices.hasFinishReason()) {
     throw new Error("OpenAI: stream interrupted before completion");
   }
-  const { stopReason, truncated } = choices.finish();
+  const { stopReason, truncated, _reasoning } = choices.finish();
   opts.onChunk({
     done: true, inputTokens, outputTokens,
+    ...(_reasoning ? { _reasoning } : {}),
     ...(truncated ? { truncated } : {}),
     ...(stopReason ? { stopReason } : {}),
     ...(cachedTokens ? { cachedTokens } : {}),

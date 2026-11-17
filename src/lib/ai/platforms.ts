@@ -368,6 +368,8 @@ export function inferPlatform(baseUrl: string, standard: ApiStandard): PlatformI
   }
   const addr = addressOf(baseUrl);
   if (!addr) return "custom";
+  // Bailian issues per-workspace MaaS hosts for its new model endpoints.
+  if (/^[a-z0-9-]+\.[a-z0-9-]+\.maas\.aliyuncs\.com(?:\/|$)/.test(addr)) return "dashscope";
   let best: PlatformId = "custom";
   let bestLen = 0;
   for (const id of PLATFORM_IDS) {
@@ -394,6 +396,13 @@ export function inferPlatform(baseUrl: string, standard: ApiStandard): PlatformI
 export function resolvePlatform(stored: PlatformId | undefined, baseUrl: string, standard: ApiStandard): PlatformId {
   if (!isCompatStandard(standard)) return inferPlatform(baseUrl, standard);
   return stored ?? inferPlatform(baseUrl, standard);
+}
+
+/** Qwen4-Max uses Bailian's Responses request shapes. */
+export function isQwen4BailianResponses(wire: Wire, modelId: string | undefined): boolean {
+  return familyOf(wire.standard) === "responses"
+    && (wire.platform === "dashscope" || wire.platform === "dashscope-intl")
+    && modelId?.toLowerCase() === "qwen4-max";
 }
 
 /**
