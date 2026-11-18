@@ -167,7 +167,8 @@ it("does not turn always-reasoning models off on any currently restricted tools 
     for (const id of ["gpt-6-astra", "gpt-6.1-sol"]) {
       const modelId = platform === "orcarouter" ? "openai/" + id : id;
       const wire = { platform, standard: "openai_compat" as const };
-      expect(hasCapability("effortWithTools", wire, { modelId })).toBe(true);
+      expect(hasCapability("functionCalling", wire, { modelId })).toBe(platform !== "openai");
+      expect(hasCapability("effortWithTools", wire, { modelId })).toBe(platform !== "openai");
       expect(effortOnWire("high", wire, { modelId }, true)).toBe("high");
     }
   }

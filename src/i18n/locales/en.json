@@ -1244,6 +1244,7 @@
     }
   },
   "ai": {
+    "functionCallingRequiresResponses": "{{model}} requires the Responses API for tool calling. Select the Responses route in the model settings.",
     "tasks": {
       "continue": "Continue writing",
       "continueDesc": "Continue writing at the chosen position (opening / end / marked range)",

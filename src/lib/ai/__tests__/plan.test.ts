@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { streamAnthropic } from "../anthropic";
 import { __resetLearned, noteLearned } from "../capability/learned";
 import { planRequest, type PlanInput } from "../capability/plan";
+import { modelValue } from "../capability/values";
 import { streamGemini } from "../gemini";
 import { streamDashscope } from "../dashscope";
 import { streamOpenAI } from "../openai";
@@ -54,6 +55,60 @@ afterEach(() => {
 });
 
 describe("planRequest", () => {
+  const officialGpt = {
+    baseUrl: "https://api.openai.com/v1", apiKey: "test",
+    messages: [{ role: "user", content: "Test" }], onChunk: () => {},
+    temperature: 0.3, topP: 0.8,
+  } satisfies Partial<StreamOptions>;
+
+  it.each(["gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6.2-sol", "gpt-6.2-astra"])(
+    "%s requires Responses for functions and still supports Chat Completions without tools",
+    async (modelId) => {
+      const chat = { ...officialGpt, modelId, standard: "openai" as const, tools: [TOOL] };
+      expect(planRequest(chat).functionCalling).toBe(false);
+      const fetch = vi.fn();
+      vi.stubGlobal("fetch", fetch);
+      await expect(streamOpenAI(chat)).rejects.toThrow(/Responses/);
+      expect(fetch).not.toHaveBeenCalled();
+
+      const text = JSON.parse(await bodyOf("openai", { ...chat, tools: undefined }));
+      expect(text).not.toHaveProperty("temperature");
+      expect(text).not.toHaveProperty("top_p");
+
+      const responses = { ...chat, standard: "openai_responses" as const, reasoningEffort: "high" as const };
+      const body = JSON.parse(await bodyOf("responses", responses));
+      expect(body.tools[0]).toMatchObject({ name: "pick", type: "function" });
+      expect(body.reasoning.effort).toBe("high");
+      expect(body).not.toHaveProperty("temperature");
+      expect(body).not.toHaveProperty("top_p");
+    },
+  );
+
+  it("sends reasoning none with GPT-6 Luna Chat tools even when the saved control is disabled", async () => {
+    const opts: StreamOptions = {
+      ...officialGpt, standard: "openai", modelId: "gpt-6-luna", thinkingCategory: "off",
+      tools: [TOOL],
+    };
+    const body = JSON.parse(await bodyOf("openai", opts));
+    expect(body).toMatchObject({ reasoning_effort: "none", temperature: 0.3, top_p: 0.8 });
+    expect(body.tools).toHaveLength(1);
+  });
+
+  it("uses GPT-6.2 limits and coerces saved Off or Minimal on direct Responses", async () => {
+    const opts: StreamOptions = { ...officialGpt, standard: "openai_responses", modelId: "gpt-6.2-sol" };
+    const route = { standard: opts.standard, platform: "openai" as const };
+    expect(modelValue("contextSize", opts, route)?.value).toBe(1_050_000);
+    expect(modelValue("maxOutput", opts, route)?.value).toBe(128_000);
+    for (const reasoningEffort of ["off", "minimal"] as const) {
+      const body = JSON.parse(await bodyOf("responses", { ...opts, reasoningEffort }));
+      expect(body.reasoning.effort).toBe("low");
+      expect(body).not.toHaveProperty("temperature");
+      expect(body).not.toHaveProperty("top_p");
+    }
+    expect(planRequest({ ...opts, baseUrl: "https://relay.invalid/v1", standard: "openai_compat", tools: [TOOL] }))
+      .toMatchObject({ functionCalling: true, temperature: 0.3, topP: 0.8 });
+  });
+
   it.each(["openai", "responses"] as const)("shapes Seed 2.1 Pro on %s without Kimi restrictions", async (family) => {
     const opts: StreamOptions = {
       standard: family === "openai" ? "openai_compat" : "openai_responses_compat",

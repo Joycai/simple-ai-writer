@@ -805,13 +805,13 @@ describe("streamCompletion — effort on the wire (effortWithTools / reasoningOf
       expect(calls[0].body.reasoning_effort).toBe("none");
     }
     expect((await official("gpt-5.4", { tools: true })).calls[0].body.reasoning_effort).toBe("none");
+    expect((await official("gpt-6-sol", { tools: true, reasoningEffort: "high" })).calls[0].body.reasoning_effort).toBe("none");
   });
 
   it("leaves the row's effort alone without tools, and on models the rule does not cover", async () => {
     expect((await official("gpt-5.6-sol", { reasoningEffort: "high" })).calls[0].body.reasoning_effort).toBe("high");
     expect((await official("gpt-5.6-sol", {})).calls[0].body).not.toHaveProperty("reasoning_effort");
     expect((await official("gpt-5.3", { tools: true, reasoningEffort: "high" })).calls[0].body.reasoning_effort).toBe("high");
-    expect((await official("gpt-6-sol", { tools: true, reasoningEffort: "high" })).calls[0].body.reasoning_effort).toBe("high");
   });
 
   it("singles out OrcaRouter's gpt-5.6-sol, not the ids it reroutes", async () => {

@@ -72,20 +72,21 @@ const TOOL_CAPABILITY_ERROR = new RegExp(
 /**
  * Whether the forced-tool attempt is a round trip we already know we will lose.
  *
- * Two facts, both in the request plan before sending: the forced
+ * If the route cannot call functions, go straight to JSON. Otherwise check
+ * two facts in the request plan before sending: whether the forced
  * `tool_choice` goes out as `auto` — for any of the plan's reasons: the
  * thinking dialect (Qwen's switch with thinking on, MiniMax always), the
  * table's cell (智谱; a relay's Kiro or anti upstream; Azure's Chat route), or
- * the endpoint's own 400, learned — **and** the JSON path gets
+ * the endpoint's own 400, learned — **and** whether the JSON path gets
  * strict `json_schema`. Under `auto` the model may still call the tool, so
  * with only `json_object` to fall back on the attempt is a gamble worth
  * making. With `json_schema` available the JSON path enforces the same schema,
  * so the gamble buys nothing and costs a whole request — tens of seconds on
  * the local models this happens on most.
  */
-function forcedToolIsWasted(o: ConnOptions, outputTool: ToolDefinition): boolean {
+function shouldUseJson(o: ConnOptions, outputTool: ToolDefinition): boolean {
   const plan = planRequest({ ...o, tools: [outputTool], toolChoice: "required" });
-  return plan.toolChoice?.downgradedBy !== undefined && plan.structured === "json_schema";
+  return !plan.functionCalling || (plan.toolChoice?.downgradedBy !== undefined && plan.structured === "json_schema");
 }
 
 /**
@@ -181,7 +182,7 @@ export async function runStructuredTask(args: StructuredTaskArgs): Promise<strin
     return structured === "json_schema" ? JSON.stringify(stripNulls(JSON.parse(raw))) : raw;
   };
 
-  if (forcedToolIsWasted(common, args.outputTool)) return runJson();
+  if (shouldUseJson(common, args.outputTool)) return runJson();
 
   try {
     return await runTool();

@@ -16,7 +16,7 @@
  * itself, so the two cannot differ.
  */
 
-import { effortOnWire, hasCapability, platformResponsesInclude, temperatureReaches } from "../capabilities";
+import { effortOnWire, hasCapability, platformResponsesInclude, samplingReaches, temperatureReaches } from "../capabilities";
 import { effectiveStructuredOutput, jsonModeShaping, messagesText, type JsonModeShaping, type StructuredOutputMode } from "../jsonMode";
 import { requiredMaxTokens } from "../modelLimits";
 import { isQwen4BailianResponses, wireOf, type Wire } from "../platforms";
@@ -44,7 +44,7 @@ type ToolChoice = NonNullable<StreamOptions["toolChoice"]>;
 export type PlanInput = Pick<
   StreamOptions,
   | "standard" | "baseUrl" | "platform" | "modelId" | "canonicalModelId" | "relayUpstream"
-  | "thinkingCategory" | "reasoningEffort" | "thinkingBudget" | "temperature" | "maxOutput" | "provenance"
+  | "thinkingCategory" | "reasoningEffort" | "thinkingBudget" | "temperature" | "topP" | "maxOutput" | "provenance"
   | "tools" | "toolChoice" | "serverTools" | "structuredOutput" | "textVerbosity" | "vlHighResolution"
   | "modelType" | "videoInput" | "pdfInput" | "videoFps"
 > & Partial<Pick<StreamOptions, "messages" | "structured">>;
@@ -70,12 +70,15 @@ export interface RequestPlan {
   };
   /** Absent = not sent: none declared, or the wire refuses one under this request. */
   temperature?: number;
+  topP?: number;
   /**
    * The `max_tokens` a wire that requires one sends (the Messages API); the
    * others do not use this field (Argon uses `gemini.maxOutputTokens`). Only the author's cap (`TRUST.anthropicMaxTokens`, D2),
    * else the adapter's own default.
    */
   maxTokensOnWire: number;
+  /** Whether this model and route can carry function calls at any reasoning effort. */
+  functionCalling: boolean;
   /**
    * Only when the request carries a function-tool list. `sent` is what goes on the
    * wire; `downgradedBy` says why a forced choice became `auto` — the
@@ -216,13 +219,20 @@ export function mediaProjection(opts: MediaPlanInput): (messages: readonly Strea
 export function planRequest(opts: PlanInput): RequestPlan {
   const wire = wireOf(opts);
   const model = planModel(opts);
-  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory, modelId: opts.modelId }, opts.standard, wire.platform, opts.canonicalModelId);
-  const functionTools = !!opts.tools?.length;
+  const declaredCategory = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory, modelId: opts.modelId }, opts.standard, wire.platform, opts.canonicalModelId);
+  const functionCalling = hasCapability("functionCalling", wire, model);
+  const functionTools = functionCalling && !!opts.tools?.length;
   // The row's effort as this wire takes it: `off` beside function tools where
   // the wire refuses any other effort there, the nearest level the model takes
   // where it refuses `off` / `max` / `minimal`. Unchanged everywhere else, so
   // an unset model still sends nothing.
   const effort = effortOnWire(opts.reasoningEffort, wire, model, functionTools, opts.canonicalModelId);
+  // Disabling the reasoning control normally omits the field. A tool request
+  // that requires "none" needs the route's default spelling instead.
+  const category = declaredCategory.shape === "none" && effort === "off" && functionTools
+    && hasCapability("reasoningOff", wire, model) && !hasCapability("effortWithTools", wire, model)
+    ? resolveThinkingCategory({ modelId: opts.modelId }, opts.standard, wire.platform, opts.canonicalModelId)
+    : declaredCategory;
   const state = wireThinks(category, effort);
   // What the request's conditions read (`capability/conditions.ts`).
   const request: CapabilityModel = { ...model, thinking: state, functionTools };
@@ -244,8 +254,10 @@ export function planRequest(opts: PlanInput): RequestPlan {
     } } : {}),
     thinking: { category, effort, budget: opts.thinkingBudget, state },
     ...(opts.temperature !== undefined && temperatureReaches(wire, model, category, effort) ? { temperature: opts.temperature } : {}),
+    ...(opts.topP !== undefined && samplingReaches(wire, model, state) ? { topP: opts.topP } : {}),
     maxTokensOnWire: requiredMaxTokens(trusted(carried(opts.maxOutput, opts.provenance?.maxOutput), "anthropicMaxTokens")),
-    toolChoice: toolChoiceOf(opts, category, effort, wire, model),
+    functionCalling,
+    toolChoice: functionCalling ? toolChoiceOf(opts, category, effort, wire, model) : undefined,
     serverTools: effectiveServerTools(wire, opts.serverTools, opts.modelId, opts.relayUpstream, request) ?? [],
     structured: effectiveStructuredOutput(json),
     ...(opts.structured ? { json: jsonModeShaping(json, messagesText(opts.messages ?? []), opts.structured.schema) } : {}),

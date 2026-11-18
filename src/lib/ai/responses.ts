@@ -261,7 +261,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     // Same `!== undefined` rule as the Chat Completions adapter: 0 is a real
     // value for all three, and an unset one must send nothing.
     ...(plan.temperature !== undefined ? { temperature: plan.temperature } : {}),
-    ...(opts.topP !== undefined ? { top_p: opts.topP } : {}),
+    ...(plan.topP !== undefined ? { top_p: plan.topP } : {}),
     ...(opts.frequencyPenalty !== undefined ? { frequency_penalty: opts.frequencyPenalty } : {}),
     // Function tools first, then the endpoint's built-in ones (web_search /
     // web_extractor / code_interpreter — lib/ai/serverTools.ts). `tool_choice` stays tied to the

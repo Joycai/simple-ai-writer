@@ -18,11 +18,13 @@ export type CapabilityId =
   | "videoInput"
   | "videoFps"
   | "forcedToolChoice"
+  | "functionCalling"
   | "effortWithTools"
   | "reasoningOff"
   | "effortMax"
   | "effortMinimal"
   | "temperature"
+  | "samplingWithReasoning"
   | "textVerbosity"
   | "instructionsField"
   | "translateFormat"
@@ -90,8 +92,8 @@ export interface CapabilityVerdict {
  * `capabilities.test.ts` holds it complete.
  */
 export const CAPABILITY_IDS: readonly CapabilityId[] = [
-  "pdfInput", "vlHighResolution", "videoInput", "videoFps", "forcedToolChoice", "effortWithTools", "reasoningOff", "effortMax", "effortMinimal",
-  "temperature", "textVerbosity", "instructionsField", "translateFormat", "structuredOutput", "jsonSchema", "jsonObjectTier",
+  "pdfInput", "vlHighResolution", "videoInput", "videoFps", "functionCalling", "forcedToolChoice", "effortWithTools", "reasoningOff", "effortMax", "effortMinimal",
+  "temperature", "samplingWithReasoning", "textVerbosity", "instructionsField", "translateFormat", "structuredOutput", "jsonSchema", "jsonObjectTier",
   "promptCache",
   "web_search", "web_extractor", "web_search_image", "image_search", "code_interpreter",
 ];

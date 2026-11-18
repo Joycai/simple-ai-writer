@@ -16,7 +16,7 @@ import { catalogFact } from "./cells/catalog";
 import { CAPABILITY_RULES } from "./rules";
 import { PLATFORM_CELLS, platformCell } from "./cells/platform";
 import { UPSTREAM_CELLS } from "./cells/upstream";
-import { conditionFires, temperatureHeard, type RequestContext } from "./conditions";
+import { conditionFires, temperatureHeard, wireThinks, type RequestContext, type ThinkingState } from "./conditions";
 import type { ReasoningEffort, ThinkingCategory } from "../reasoning";
 import { patternMatches, rawModelKey } from "./modelId";
 
@@ -82,6 +82,11 @@ export function familyVerdict(
   }
   const fired = rule.unless?.[family]?.find((c) => conditionFires(c, model));
   if (fired) return verdict("no", fired.when === "temperatureIgnored" ? "thinking" : "condition");
+  if (id === "temperature" && model.thinking !== "off" &&
+    CAPABILITY_RULES.samplingWithReasoning.families.includes(family) &&
+    familyVerdict("samplingWithReasoning", platform, family, model, official).status === "no") {
+    return verdict("no", "thinking");
+  }
 
   // Behind a relay the upstream is the more specific measurement: the relay's
   // own cells hold for whatever upstream a model has, these for one.
@@ -127,12 +132,20 @@ export function hasCapability(id: CapabilityId, wire: Wire, model?: CapabilityMo
 /**
  * Whether a declared temperature goes out — the one question the planner asks
  * before sending it and the drawer asks before showing the field, so the two
- * cannot drift. `category` resolved, `effort` as the wire takes it (the drawer
- * passes the form's: `effortOnWire` touches only the OpenAI ladders, which
- * have no temperature condition).
+ * cannot drift. The drawer checks the form's effort for an ordinary request;
+ * the planner checks the effort that will actually be sent, including the
+ * Chat Completions tool-call override.
  */
 export function temperatureReaches(
   wire: Wire, model: CapabilityModel, category: ThinkingCategory, effort: ReasoningEffort | undefined,
 ): boolean {
-  return hasCapability("temperature", wire, { ...model, temperatureHeard: temperatureHeard(category, effort) });
+  return hasCapability("temperature", wire, {
+    ...model, thinking: wireThinks(category, effort), temperatureHeard: temperatureHeard(category, effort),
+  });
+}
+
+/** Undeclared effort on a route with this restriction runs at a reasoning default. */
+export function samplingReaches(wire: Wire, model: CapabilityModel, thinking: ThinkingState): boolean {
+  return !CAPABILITY_RULES.samplingWithReasoning.families.includes(familyOf(wire.standard)) || thinking === "off"
+    || hasCapability("samplingWithReasoning", wire, model);
 }

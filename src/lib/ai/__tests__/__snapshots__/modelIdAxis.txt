@@ -471,6 +471,12 @@
 "[x]no-such-model" - -
 
 # platform calibration
+openai "gpt-5.6-sol" {"pdfInput":true,"type":"multimodal"}
+openai "  GPT-5.6-SOL  " {"pdfInput":true,"type":"multimodal"}
+openai "gpt-5.6-sol-2026-01-01" {"pdfInput":true,"type":"multimodal"}
+openai "gpt-5.6-terra" {"pdfInput":true,"type":"multimodal"}
+openai "  GPT-5.6-TERRA  " {"pdfInput":true,"type":"multimodal"}
+openai "gpt-5.6-terra-2026-01-01" {"pdfInput":true,"type":"multimodal"}
 deepseek "deepseek-flash" {"contextSize":1048576,"maxOutput":393216,"thinkingCategory":"deepseek","type":"multimodal"}
 deepseek "  DEEPSEEK-FLASH  " {"contextSize":1048576,"maxOutput":393216,"thinkingCategory":"deepseek","type":"multimodal"}
 deepseek "deepseek-v4-pro" {"contextSize":1048576,"maxOutput":393216,"thinkingCategory":"deepseek"}
