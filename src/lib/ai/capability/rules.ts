@@ -86,7 +86,8 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // protocol is in this list and the four below it because its `parameters`
   // are these same fields (dashscope.ts); what it lacks — video, PDF, the
   // interpreter, page reading — is simply not listed for it.
-  forcedToolChoice: { families: ["openai", "responses", "gemini", "anthropic", "dashscope"], origin: "native" },
+  functionCalling: { families: ["openai", "responses", "gemini", "anthropic", "dashscope"], origin: "native" },
+  forcedToolChoice: { families: ["openai", "responses", "gemini", "anthropic", "dashscope"], origin: "native", requires: ["functionCalling"] },
   // A thinking effort beside function tools. The protocol has both, but
   // OpenAI's own Chat Completions refuses the pair from GPT-5.4 on unless the
   // effort is `none` — and the model's default is not `none`, so a request
@@ -94,7 +95,7 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // 「GPT 全家补测」, the error in OpenAI's words). Where this is `no` the Chat
   // adapter sends `reasoning_effort: "none"` on every request that carries
   // tools (`effortOnWire`). Responses takes the pair everywhere.
-  effortWithTools: { families: ["openai", "responses"], origin: "native" },
+  effortWithTools: { families: ["openai", "responses"], origin: "native", requires: ["functionCalling"] },
   // The effort ladder's `none` — what the 关闭 chip sends on the two OpenAI
   // wires. A model that refuses it has no off: the chip is not offered
   // (`effortMenuOnWire`), and an `off` already stored on the row, or forced by
@@ -123,6 +124,8 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   temperature: {
     families: ["openai", "responses", "gemini", "anthropic", "dashscope"], origin: "native", unless: { anthropic: [TEMPERATURE_IGNORED] },
   },
+  // Controls temperature and top_p together where the route requires reasoning off.
+  samplingWithReasoning: { families: ["openai", "responses"], origin: "native" },
   // `text.verbosity` exists on the Responses family only.
   textVerbosity: { families: ["responses"], origin: "native" },
   // The system prompt as the top-level `instructions` field. Where the wire

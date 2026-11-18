@@ -104,6 +104,30 @@
 | comfyui | · |  |  |  |  |
 | custom | ? relay | · | · | · |  |
 
+## functionCalling
+
+`native` · 规则缺省适用的协议族：Chat / Resp / Gemini / Anth / DashScope
+
+| 平台 | Chat | Resp | Gemini | Anth | DashScope |
+| --- | --- | --- | --- | --- | --- |
+| openai | ✓ 按模型 protocol | ✓ protocol |  |  |  |
+| anthropic |  |  |  | ✓ protocol |  |
+| google |  |  | ✓ protocol |  |  |
+| deepseek | ✓ protocol | ✓ protocol |  | ✓ protocol |  |
+| dashscope | ✓ protocol | ✓ protocol |  | ✓ protocol | ✓ protocol |
+| dashscope-plan | ✓ protocol |  |  | ✓ protocol |  |
+| dashscope-intl | ✓ protocol | ✓ protocol |  |  |  |
+| xai | ✓ protocol | ✓ protocol |  |  |  |
+| minimax | ✓ protocol |  |  | ✓ protocol |  |
+| volcengine | ✓ protocol | ✓ protocol |  |  |  |
+| volcengine-plan | ✓ protocol | ✓ protocol |  | ✓ protocol |  |
+| zhipu | ✓ protocol |  |  |  |  |
+| orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | ✓ protocol |  |
+| newapi | ✓ protocol | ✓ protocol | ✓ protocol | ✓ protocol |  |
+| ollama | ✓ protocol |  |  |  |  |
+| comfyui | ✓ protocol |  |  |  |  |
+| custom | ✓ protocol | ✓ protocol | ✓ protocol | ✓ protocol |  |
+
 ## forcedToolChoice
 
 `native` · 规则缺省适用的协议族：Chat / Resp / Gemini / Anth / DashScope
@@ -206,7 +230,7 @@
 
 | 平台 | Chat | Resp | Gemini | Anth | DashScope |
 | --- | --- | --- | --- | --- | --- |
-| openai | ✓ protocol | ✓ protocol |  |  |  |
+| openai | ✓ 按模型 protocol | ✓ 按模型 protocol |  |  |  |
 | anthropic |  |  |  | · |  |
 | google |  |  | · |  |  |
 | deepseek | ✓ protocol | ✓ protocol |  | · |  |
@@ -230,7 +254,7 @@
 
 | 平台 | Chat | Resp | Gemini | Anth | DashScope |
 | --- | --- | --- | --- | --- | --- |
-| openai | ✓ protocol | ✓ 按模型 protocol |  |  |  |
+| openai | ✓ 按模型 protocol | ✓ 按模型 protocol |  |  |  |
 | anthropic |  |  |  | · |  |
 | google |  |  | ✓ protocol |  |  |
 | deepseek | ✓ protocol | ✓ protocol |  | · |  |
@@ -247,6 +271,30 @@
 | ollama | ✓ protocol |  |  |  |  |
 | comfyui | ✓ protocol |  |  |  |  |
 | custom | ✓ protocol | ✓ 按上游 protocol | ✓ protocol | · |  |
+
+## samplingWithReasoning
+
+`native` · 规则缺省适用的协议族：Chat / Resp
+
+| 平台 | Chat | Resp | Gemini | Anth | DashScope |
+| --- | --- | --- | --- | --- | --- |
+| openai | ✓ 按模型 protocol | ✓ 按模型 protocol |  |  |  |
+| anthropic |  |  |  | · |  |
+| google |  |  | · |  |  |
+| deepseek | ✓ protocol | ✓ protocol |  | · |  |
+| dashscope | ✓ protocol | ✓ protocol |  | · | · |
+| dashscope-plan | ✓ protocol |  |  | · |  |
+| dashscope-intl | ✓ protocol | ✓ protocol |  |  |  |
+| xai | ✓ protocol | ✓ protocol |  |  |  |
+| minimax | ✓ protocol |  |  | · |  |
+| volcengine | ✓ protocol | ✓ protocol |  |  |  |
+| volcengine-plan | ✓ protocol | ✓ protocol |  | · |  |
+| zhipu | ✓ protocol |  |  |  |  |
+| orcarouter | ✓ protocol | ✓ protocol | · | · |  |
+| newapi | ✓ protocol | ✓ protocol | · | · |  |
+| ollama | ✓ protocol |  |  |  |  |
+| comfyui | ✓ protocol |  |  |  |  |
+| custom | ✓ protocol | ✓ protocol | · | · |  |
 
 ## textVerbosity
 

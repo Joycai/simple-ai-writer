@@ -45,7 +45,7 @@ const BASE_URL = "https://capability-consistency.invalid/v1";
  */
 const MODEL_IDS = [
   "qwen3.5-plus", "qwen3.8-flash", "no-such-model", "[特价kiro量]claude-opus-5",
-  "gpt-5.6-sol", "openai/gpt-5.6-sol", "openai/gpt-6-astra",
+  "gpt-5.6-sol", "openai/gpt-5.6-sol", "openai/gpt-6-astra", "gpt-6-luna", "gpt-6.2-astra",
 ];
 /** One id per model family some upstream's measurements cover, under a prefix that names no upstream. */
 const UPSTREAM_MODEL_IDS = ["[x]claude-opus-4-6", "[x]gpt-5.6-sol"];
@@ -167,6 +167,9 @@ const PROBES: Record<CapabilityId, Probe> = {
     summary: summarySends(ctx, { videoInput: true }, { videoInput: true, videoFps: 1 }),
     request: await requestSends(ctx, { videoFps: 1 }),
   }),
+  functionCalling: async (ctx) => ({
+    adapter: (await bodyOf(ctx, { tools: [FUNCTION_TOOL] })).includes('"pick"'),
+  }),
   forcedToolChoice: async (ctx) => ({
     adapter: await adapterSends(ctx, { tools: [FUNCTION_TOOL], toolChoice: "auto" }, { tools: [FUNCTION_TOOL], toolChoice: "required" }),
   }),
@@ -200,6 +203,9 @@ const PROBES: Record<CapabilityId, Probe> = {
     adapter: await adapterSends(ctx, {}, { temperature: 0.5 }),
     summary: summarySends(ctx, {}, { temperature: 0.5 }),
   }),
+  samplingWithReasoning: async (ctx) => (effortLadder(ctx) ? {
+    adapter: await adapterSends(ctx, { reasoningEffort: "high" }, { reasoningEffort: "high", topP: 0.5 }),
+  } : NO_ASKER),
   textVerbosity: async (ctx) => ({
     adapter: await adapterSends(ctx, {}, { textVerbosity: "low" }),
     summary: summarySends(ctx, {}, { textVerbosity: "low" }),

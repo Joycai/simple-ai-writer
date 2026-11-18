@@ -49,7 +49,7 @@ export { CAPABILITY_IDS, CAPABILITY_REASONS, SERVER_TOOL_CAPABILITIES, type Capa
 export { CAPABILITY_RULES } from "./capability/rules";
 export { PLATFORM_CELLS, platformModelCalibration, platformResponsesInclude } from "./capability/cells/platform";
 export { UPSTREAM_CELLS } from "./capability/cells/upstream";
-export { familyVerdict, hasCapability, temperatureReaches, upstreamApplies } from "./capability/resolve";
+export { familyVerdict, hasCapability, samplingReaches, temperatureReaches, upstreamApplies } from "./capability/resolve";
 export { carried, TRUST, trusted, type Source, type Sourced } from "./capability/intent";
 export { modelValue, resolveThinkingCategory, thinkingCategoryOf } from "./capability/values";
 export { canonicalModelId } from "./capability/modelId";
@@ -80,8 +80,8 @@ function effortLadderWire(wire: Wire): boolean {
  * The effort a request actually carries on this wire, from the one the model
  * row holds. Two cells can change it, and only on the OpenAI wires:
  *
- *   - `effortWithTools` is `no` and the request carries function tools → `off`,
- *     whatever the row says. OpenAI's Chat Completions refuses any other
+ *   - The route takes function tools and requires reasoning off with them →
+ *     `off`, whatever the row says. OpenAI's Chat Completions refuses any other
  *     effort beside tools, the model's own default included, so an agent run
  *     would fail on its first round; thinking is what gives way.
  *   - `reasoningOff` is `no` and the row says `off` → `low`, the least thinking
@@ -100,8 +100,10 @@ export function effortOnWire(
 ): ReasoningEffort | undefined {
   if (!effortLadderWire(wire)) return effort;
   const at = catalogId ? { ...model, catalogId } : model;
-  if (withTools && !hasCapability("effortWithTools", wire, model)) return "off";
-  if (effort === "off" && !hasCapability("reasoningOff", wire, at)) return "low";
+  const canTurnOff = hasCapability("reasoningOff", wire, at);
+  if (withTools && canTurnOff && hasCapability("functionCalling", wire, model) &&
+    !hasCapability("effortWithTools", wire, model)) return "off";
+  if (effort === "off" && !canTurnOff) return "low";
   if (effort === "max" && !hasCapability("effortMax", wire, model)) return "xhigh";
   if (effort === "minimal" && !hasCapability("effortMinimal", wire, model)) return "low";
   return effort;

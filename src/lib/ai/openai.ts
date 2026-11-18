@@ -3,6 +3,7 @@ import { usageSnapshot } from "./streamUsage";
  * OpenAI (and compatible) streaming adapter — chat/completions with SSE parsing.
  */
 
+import i18n from "../../i18n";
 import { fetch } from "../http";
 import { refusalText } from "./refusal";
 import { reasoningBody, type NativeReasoning, ENCRYPTED_REASONING_FIELD } from "./reasoning";
@@ -71,7 +72,7 @@ export function chatParams(opts: StreamOptions, plan: RequestPlan): Record<strin
     // come from the task rather than from the model's config — today only the
     // Sakura translation engine sets them — so a request that doesn't ask for
     // them is byte-identical to one from before they existed.
-    ...(opts.topP !== undefined ? { top_p: opts.topP } : {}),
+    ...(plan.topP !== undefined ? { top_p: plan.topP } : {}),
     ...(opts.frequencyPenalty !== undefined ? { frequency_penalty: opts.frequencyPenalty } : {}),
     // A task's per-request cap (StreamOptions.maxTokens), never the model's
     // maxOutput — see the field for why the two are kept apart.
@@ -105,6 +106,9 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   // takes it, the temperature, the tool choice, the server tools — is the
   // plan's (capability/plan.ts); this function only spells it.
   const plan = opts._plan ?? planRequest(opts);
+  if (!plan.functionCalling && opts.tools?.length) {
+    throw new Error(i18n.t("ai.functionCallingRequiresResponses", { model: opts.modelId }));
+  }
   const body: Record<string, unknown> = {
     model: opts.modelId,
     messages: toWireMessages(opts.messages, opts.modelId),

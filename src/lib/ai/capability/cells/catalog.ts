@@ -57,14 +57,18 @@ const STRICT = { strictSchemaModel: true } as const;
 const GPT_LEVELS: readonly ReasoningEffort[] = ["off", "low", "medium", "high", "xhigh", "max"];
 const ALWAYS_LEVELS = GPT_LEVELS.filter((e) => e !== "off");
 const CLAUDE_LEVELS = ["low", "medium", "high", "max"] as const;
+const GPT_LIMITS = { contextSize: 1_050_000, maxOutput: 128_000, ...STRICT };
+const GPT_OPTIONAL_REASONING = {
+  ...GPT_LIMITS, effortProfile: { family: "openai", levels: GPT_LEVELS },
+} satisfies IntrinsicFacts;
+const GPT_REQUIRED_REASONING = {
+  ...GPT_LIMITS, reasoningOff: false, effortProfile: { family: "openai", levels: ALWAYS_LEVELS },
+} satisfies IntrinsicFacts;
 
 const MODEL_CATALOG: readonly CatalogRow[] = bySpecificity<CatalogRow>([
-  // Official model/effort docs checked 2026-10-19; reasoning-plan.md §0.1.
-  row("gpt-5.6", { effortProfile: { family: "openai", levels: GPT_LEVELS } }),
-  row("gpt-6-sol", { effortProfile: { family: "openai", levels: GPT_LEVELS } }),
-  row("gpt-6-luna", { effortProfile: { family: "openai", levels: GPT_LEVELS } }),
-  row("gpt-6-astra", { reasoningOff: false, effortProfile: { family: "openai", levels: ALWAYS_LEVELS } }),
-  row("gpt-6.1-sol", { reasoningOff: false, effortProfile: { family: "openai", levels: ALWAYS_LEVELS } }),
+  // Official model pages, checked 2026-11-18; reasoning-plan.md §0.1.
+  ...["gpt-5.6", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-terra"].map((id) => row(id, GPT_OPTIONAL_REASONING)),
+  ...["gpt-6-astra", "gpt-6.1-sol", "gpt-6.2-sol", "gpt-6.2-astra"].map((id) => row(id, GPT_REQUIRED_REASONING)),
   ...["claude-opus-4-6", "claude-opus-4.6"].map((p) => row(p, { effortProfile: { family: "anthropic", levels: CLAUDE_LEVELS } })),
   ...["claude-opus-4-7", "claude-opus-4.7", "claude-opus-4-8", "claude-opus-4.8", "claude-opus-5"]
     .map((p) => row(p, { effortProfile: { family: "anthropic", levels: ALWAYS_LEVELS } })),

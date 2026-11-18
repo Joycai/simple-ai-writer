@@ -1241,6 +1241,7 @@
     }
   },
   "ai": {
+    "functionCallingRequiresResponses": "{{model}} 需要通过 Responses API 调用工具。请在模型设置中选择 Responses 线路。",
     "tasks": {
       "continue": "续写",
       "continueDesc": "在选定位置继续写作（开篇 / 文末 / 扩写选区）",

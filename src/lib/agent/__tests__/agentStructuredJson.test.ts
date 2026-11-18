@@ -66,6 +66,17 @@ beforeEach(() => __resetLearned());
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the structured task's JSON path", () => {
+  it("uses strict JSON directly on GPT-6.2 Chat Completions", async () => {
+    const bodies = script([text('{"name":"Ava","note":null}')]);
+    const out = await runStructuredTask(makeArgs({
+      standard: "openai", platform: "openai", baseUrl: "https://api.openai.com/v1", modelId: "gpt-6.2-sol",
+    }));
+    expect(JSON.parse(out)).toEqual({ name: "Ava" });
+    expect(bodies).toHaveLength(1);
+    expect(format(bodies[0])?.type).toBe("json_schema");
+    expect(bodies[0]).not.toHaveProperty("tools");
+  });
+
   it("enforces the output schema in strict mode on a model that takes it, and takes the nulls back out", async () => {
     // Forced tool refused → re-sent under auto, which the model answers in
     // prose → the JSON path, in json_schema.

@@ -505,6 +505,7 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
 
 | # | 变化 | 期 | 今天的差异 | 为什么是对的 |
 | --- | --- | --- | --- | --- |
+| B22 | GPT-5.6 至 GPT-6.2 按 OpenAI 直连能力整形 | 2026-11-18 | 直连按型号限制采样和函数工具；目录补齐窗口、输出上限和力度档位 | 官方工具支持随接口和型号变化，函数不可用时结构化任务走 JSON，见 reasoning-plan.md §0.1 |
 | B21 | 已知 GPT 的不可关闭思考参与统一能力裁决 | 2026-10-19 | 原先除 OrcaRouter 特例外，gpt-6-astra 旧 off 会发 none；现在发 low，并在菜单隐藏关闭。GPT-6.1 Sol 同理 | 官方档位是模型目录缺省；保留线路实测优先级，见 reasoning-plan.md §0.1 |
 | B1 | Anthropic `max_tokens` 只收作者值 | P6 | 没填上限、又设了应用缺省的 Anthropic 行；④ 线路上不是 Claude 的 id | `modelLimits.ts` 头注第 1 条；D2 |
 | B2 | 平台格的思考类目、窗口、上限成为运行时缺省 | P6 | 在有格的平台上把这些字段留空的行 | zhipu-plan G11；D1 |

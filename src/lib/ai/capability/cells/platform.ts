@@ -12,8 +12,7 @@ import { bySpecificity, eq, rawModelKey, rowSetting, type ModelPattern } from ".
 
 /**
  * A family block's answer for a capability, for every model on the wire:
- * `true` = measured working, `false` = measured absent (refused, or accepted
- * and ignored).
+ * `true` = supported, `false` = documented or measured as unavailable.
  *
  * `"per-model"`: the platform runs it for the ids its `models` rows name
  * (`true`) and not for the ids they refuse (`false`). An id no row names is
@@ -340,31 +339,47 @@ const LOCAL: PlatformCells = {
   families: { all: { web_search: false } },
 };
 
+const GPT_56 = /^gpt-5\.6(?:-(?:sol|terra|luna))?(?:-\d{4}-\d{2}-\d{2})?$/;
+const GPT_6_SOL_LUNA = /^gpt-6-(?:sol|luna)(?:-\d{4}-\d{2}-\d{2})?$/;
+const GPT_RESPONSES_TOOLS = /^gpt-6(?:-astra|\.1-(?:sol|terra)|\.2-(?:astra|sol))(?:-\d{4}-\d{2}-\d{2})?$/;
+const GPT_NO_SAMPLING = /^gpt-6(?:-astra|\.1-sol|\.2-(?:astra|sol))(?:-\d{4}-\d{2}-\d{2})?$/;
+const OPENAI_GPT_MODELS: readonly PlatformModelRow[] = [GPT_56, GPT_6_SOL_LUNA, GPT_RESPONSES_TOOLS].map(
+  (match) => ({
+    match,
+    set: { effortMinimal: false, ...(match !== GPT_56 ? { samplingWithReasoning: false } : {}) },
+    prefill: MULTIMODAL_PDF,
+  }),
+);
+
+// Model pages and migration guides, docs/api/reasoning-plan.md §0.1.
+const OPENAI_GPT_NO_TEMPERATURE = refuses("temperature", [GPT_NO_SAMPLING]);
+
 /**
- * The platforms' side — only what a sample measured. Where each entry comes
+ * The platforms' side — documented rules and measurements. Where each entry comes
  * from is the platform's `source` line in `platforms.ts`.
  *
  * An absent cell is not "no": it falls to {@link CAPABILITY_RULES} (protocol
- * default for a native capability, `no` for a private one). Write `false` only
- * for something measured absent.
+ * default for a native capability, `no` for a private one). A `false` cell
+ * needs either an applicable vendor rule or a measurement.
  */
 export const PLATFORM_CELLS: Record<PlatformId, PlatformCells> = {
-  // Chat Completions: no server tool (official rejects unknown top-level fields).
-  // `effortWithTools`: from GPT-5.4 on (OpenAI's own words, reached through
-  // OrcaRouter's verbatim route — 第十八个样本「GPT 全家补测」; responses.md §7).
   openai: {
     families: {
-      all: { jsonSchema: true },
+      all: { jsonSchema: true, models: OPENAI_GPT_MODELS },
       openai: {
         web_search: false,
-        models: refuses("effortWithTools", [/^gpt-5\.[4-9](?:[.-]|$)/]),
+        models: [
+          ...refuses("functionCalling", [GPT_RESPONSES_TOOLS]),
+          ...refuses("effortWithTools", [/^gpt-5\.[4-9](?:[.-]|$)/, GPT_6_SOL_LUNA]),
+          ...OPENAI_GPT_NO_TEMPERATURE,
+        ],
       },
       // `temperature`: gpt-5.6-sol's Responses refuses it outright (`Unsupported
       // parameter: 'temperature' is not supported with this model.`) — the same
       // OpenAI body OrcaRouter hands back verbatim (GPT 全家补测).
       responses: {
         web_search: true,
-        models: refuses("temperature", [/^gpt-5\.6-sol$/]),
+        models: [...OPENAI_GPT_NO_TEMPERATURE, ...refuses("temperature", [/^gpt-5\.6-sol$/])],
       },
     },
   },

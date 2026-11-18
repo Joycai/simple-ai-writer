@@ -45,6 +45,35 @@
 本次不增加 pro mode，也不改已有 Chat Completions 工具轮的降级策略。滑块表达模型行的
 力度意图；实际线路的工具限制继续由请求计划裁决。
 
+### OpenAI 直连 GPT-5.6 至 GPT-6.2（2026-11-18）
+
+这些型号的目录默认值是 1,050,000 token 上下文和 128,000 token 输出。作者声明的值和线路校准优先。
+两种协议都支持流式响应和严格 JSON Schema。直连新建模型时可预填多模态和 PDF 输入，已有声明保留。
+
+| 模型 | 思考可关闭 | Responses 函数调用 | Chat Completions 函数调用 |
+| --- | --- | --- | --- |
+| GPT-5.6（含 Sol、Terra、Luna） | 可 | 可 | 发送 `reasoning_effort: "none"` |
+| GPT-6 Sol、Luna | 可 | 可 | 发送 `reasoning_effort: "none"` |
+| GPT-6 Astra、GPT-6.1 Sol | 不可 | 可 | 需改用 Responses |
+| GPT-6.1 Terra | 可 | 可 | 需改用 Responses，即使已关闭思考 |
+| GPT-6.2 Sol、Astra | 不可 | 可 | 需改用 Responses |
+
+设置里保留的 `minimal` 在这些直连型号上改发 `low`，不可关闭的型号也将旧的 `off` 改发 `low`。
+GPT-6 系列的直连请求仅在实际关闭思考时发送 `temperature` 和 `top_p`。GPT-5.6 保留此前的线路规则，
+包括官方 Responses 上对 Sol 的温度拦截。GPT-6.2 文档也要求省略对数概率字段，应用的常规请求没有这类字段。
+
+函数工具不可用时，结构化任务直接使用 JSON 路径。需要实际执行工具的任务在发请求前提示切换线路，
+避免丢掉工具后把普通文本当成任务结果。直连限制通过平台格生效，中转的协议行为仍由自己的测量记录决定。
+应用继续使用已接入的 Responses 内置联网搜索，目录中列出的其他 OpenAI 托管工具有各自的请求格式。
+
+依据为官方文档，尚未在 app 内实测付费端点。参见
+[OpenAI 部署清单](https://developers.openai.com/api/docs/guides/deployment-checklist)、
+[GPT-6.1 Terra](https://developers.openai.com/api/docs/models/gpt-6.1-terra)、
+[GPT-6.2 迁移指南](https://developers.openai.com/api/docs/guides/latest-model#migration-quickstart)、
+[GPT-6.2 Sol](https://developers.openai.com/api/docs/models/gpt-6.2-sol)、
+[GPT-6.2 Astra](https://developers.openai.com/api/docs/models/gpt-6.2-astra)和
+[文件输入](https://developers.openai.com/api/docs/guides/file-inputs)。
+
 ## 0.2 Seed、DeepSeek Flash 与 Qwen 控件（2026-10-19）
 
 在 §0.1 的统一目录中追加模型档位：
