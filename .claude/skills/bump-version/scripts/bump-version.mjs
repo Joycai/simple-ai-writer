@@ -272,8 +272,10 @@ function main() {
   const next = SEMVER_RE.test(spec) ? spec : bump(current, spec);
 
   if (next === current && distinct.length === 1) {
-    console.error(`Already at ${current} — nothing to do.`);
-    process.exit(1);
+    // Release runs this after merging the version bump, and retries must be
+    // safe. All four manifests already agree: this is success, not an error.
+    console.log(`Already at ${current} — all four manifests agree; nothing to do.`);
+    return;
   }
 
   console.log(`${distinct.length > 1 ? "(drift)" : current} -> ${next}\n`);
