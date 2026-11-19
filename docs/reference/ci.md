@@ -13,6 +13,14 @@ The [`CI`](../../.github/workflows/ci.yml) workflow runs on every pull request t
 > Ordinary `pnpm tauri build` retains ad-hoc signing for development. See
 > [macos-signing.md](macos-signing.md) for local setup, Secrets and pending acceptance.
 >
+> Release updates all four manifests through the bump-version script. An explicit
+> version already present in every manifest is a successful no-op, including
+> `--dry-run`: the normal release starts from a merged version bump. Drift and
+> invalid inputs still fail. Regression tests exercise the real CLI on isolated
+> LF/CRLF fixtures, including repeated dry-run/apply and drift rejection. This
+> prevents the three-platform failure seen in run `44467252245` (exit 1 on
+> “Already at 2.0.28”, before compilation or Apple credential use).
+>
 > The sync server's prebuilt binaries (Linux x86_64 / arm64, Windows with the tray exe, macOS)
 > come from a third, also manually-triggered workflow,
 > [`Package server`](../../.github/workflows/package-server.yml) — artifacts by default, a

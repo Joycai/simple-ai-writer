@@ -66,6 +66,9 @@ jobs:
       - name: macOS release guards
         run: node --test scripts/__tests__/macos-release.test.mjs
 
+      - name: Release version guards
+        run: node --test scripts/__tests__/release-version.test.mjs
+
       - name: App Store preparation guards
         run: |
           node --test scripts/__tests__/appstore-*.test.mjs
