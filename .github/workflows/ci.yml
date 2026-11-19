@@ -63,6 +63,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: macOS release guards
+        run: node --test scripts/__tests__/macos-release.test.mjs
+
       - name: App Store preparation guards
         run: |
           node --test scripts/__tests__/appstore-*.test.mjs

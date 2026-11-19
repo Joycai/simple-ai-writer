@@ -7,10 +7,11 @@ The [`CI`](../../.github/workflows/ci.yml) workflow runs on every pull request t
 
 > Release builds (installers for macOS/Windows/Linux) are produced separately by the
 > manually-triggered [`Release`](../../.github/workflows/release.yml) workflow — not by CI.
-> On macOS the bundle is **ad-hoc signed as a whole** (`bundle.macOS.signingIdentity: "-"` in
-> `tauri.conf.json`, since #746 — what macOS's Local Network permission needs), but not signed with
-> a real certificate; [macos-signing.md](macos-signing.md) says what that does and doesn't buy, and
-> is the manual for the fixed self-signed certificate that is still to come.
+> On macOS, the manual Release workflow calls `pnpm tauri:macos:release` to produce a
+> Developer ID signed, notarized and stapled Universal DMG. All six Apple Secrets are
+> required; missing credentials or failed artifact verification stop the release.
+> Ordinary `pnpm tauri build` retains ad-hoc signing for development. See
+> [macos-signing.md](macos-signing.md) for local setup, Secrets and pending acceptance.
 >
 > The sync server's prebuilt binaries (Linux x86_64 / arm64, Windows with the tray exe, macOS)
 > come from a third, also manually-triggered workflow,
@@ -43,6 +44,7 @@ involved: this is the server's independent distribution. See `server/DEPLOY.md` 
 
 Notes:
 - Frontend tests run with Vitest (`src/**/*.test.ts`, config in `vitest.config.ts`) — one test file per module in the nearest `__tests__/`, plus the repo-wide source-scanning guards in `src/lib/__tests__/` (the Hard Rules in `AGENTS.md` are what they enforce).
+- macOS release policy guards run separately with `node --test scripts/__tests__/macos-release.test.mjs` without any Apple credentials.
 - `pnpm build` also runs `prototypes:build`: a strict check of the local design studio and a separate Vite bundle into `prototypes/dist/`. The app bundle remains in the root `dist/`, which is the only frontend directory Tauri packages. See [prototyping.md](prototyping.md).
 - Rust unit tests live inline (`#[cfg(test)] mod tests`) in the modules they test, under `src-tauri/src/` and `server/src/` — there is no separate `tests/` directory in either crate. `grep -l "mod tests" src-tauri/src/*.rs server/src/*.rs` lists them.
   The patched HTTP plugin is also tested with `cargo test -p tauri-plugin-http` in the app's Rust job; this exercises its actual cancellation entry points. Local 65-second header/SSE regressions run explicitly with `cargo test --all-features http_diagnostics -- --include-ignored` (see [network-diagnostics.md](network-diagnostics.md)).

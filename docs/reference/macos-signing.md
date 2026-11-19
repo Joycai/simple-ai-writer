@@ -1,12 +1,94 @@
-# macOS 代码签名（自签名证书）· 操作手册
+# macOS 站外分发签名与公证
 
-> **分发范围**：本文记录站外版 ad-hoc / 自签名方案，不适用于 Mac App Store 提交。
-> 商店版签名、沙盒、文件授权与隐私改造见 [Mac App Store 上架计划](../feature/mac-app-store-plan.md)（`partial`）；保留现有站外渠道，不用本手册的自签名步骤替代商店分发证书与描述文件。
+> Status: **`partial`** — 本地正式打包入口与 Release workflow 已接入 Developer ID Application 和 API key 公证；正式产物的端到端验收仍待完成。历史 ad-hoc / 自签名实验保留在本文末尾，不能作为当前正式发布流程。
+>
+> 本文只覆盖站外分发。Mac App Store 的签名、沙盒和描述文件继续走 [商店发布手册](../feature/app-store/p5-release-runbook.md)。
 
-> Status: **`partial`** — **已做**：bundle 整体 ad-hoc 签名（`tauri.conf.json` 的 `bundle.macOS.signingIdentity: "-"`）
-> 和 `src-tauri/Info.plist` 里的 `NSLocalNetworkUsageDescription`，解决的是本地网络权限（下文「已经做了的一半」）。
-> **没做**：固定的自签名证书（§1 起的手册；`release.yml` 没有任何 `APPLE_*` 签名配置），所以钥匙串在每次更新后
-> 仍会索要登录密码。手册里的每条命令都在真机上跑过（§附录 A 是实测记录）；证书接上之后把这行改成 `living`。
+## 决策与边界
+
+正式站外包使用 **Developer ID Application → Apple 公证 → 装订票据 → Gatekeeper 校验**。原因是 ad-hoc / 自签名只能封存资源，不能满足默认 Gatekeeper 的分发验证；固定 Developer ID 身份也使跨版本的代码身份保持稳定。已有 ad-hoc 包的钥匙串授权可能需要重新确认一次。
+
+`tauri.conf.json` 仍保留 `signingIdentity: "-"` 作为普通开发打包默认值。正式入口 `pnpm tauri:macos:release` 显式覆盖身份、启用 hardened runtime，不接受 `--no-sign`、`--skip-stapling`、自定义 config/features/debug，输出隔离到 `src-tauri/target/developer-id/`，防止复用商店或临时包。
+
+不会自动导出私钥、上传 Secrets 或发布 Release。PR CI 只运行不需要凭据的脚本测试；Apple 凭据只供手动 Release workflow 使用。没有材料或验收失败就停止，不回退成 ad-hoc。
+
+## 本机打包
+
+先在「钥匙串访问 → 我的证书」确认 Developer ID Application 证书展开后包含对应私钥，并确保钥匙串已解锁。
+
+本机默认采用以下公开标识（可由同名环境变量覆盖）：
+
+| 环境变量 | 默认值 |
+| --- | --- |
+| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: Cai Zhengxu (H9WK585493)` |
+| `APPLE_API_ISSUER` | `741a74c0-9e25-4bda-9c86-82e72a54d901` |
+| `APPLE_API_KEY` | `N6CR8R98T2` |
+| `APPLE_API_KEY_PATH` | `~/.appstoreconnect/private_keys/AuthKey_<Key ID>.p8` |
+
+这些标识不是私钥。`.p8` 和包含私钥的 `.p12` 必须放在仓库外；不要粘贴到日志、issue 或 PR。
+
+```bash
+# 只检查钥匙串身份、密钥文件和 Apple API 认证，不编译、不提交公证
+pnpm tauri:macos:release --check
+
+# 默认构建当前 Mac 架构
+pnpm tauri:macos:release
+
+# 通用包需先安装两种 Rust target
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+pnpm tauri:macos:release --target universal-apple-darwin
+```
+
+可选目标只有 `aarch64-apple-darwin`、`x86_64-apple-darwin`、`universal-apple-darwin`。产物在 `src-tauri/target/developer-id/<target>/release/bundle/dmg/`。
+
+脚本先做只读认证检查，再清除该目标旧 bundle 并调用 Tauri。Tauri 负责 `.app` 签名、公证和票据装订，以及 DMG 签名；入口继续提交外层 DMG 的公证并装订票据。只有 app 与 DMG 均通过校验才返回成功。Apple 拒绝时按日志中的 submission ID 用 `xcrun notarytool log`（加相同 API 认证参数）取报告；不需要反复重新编译。
+
+## GitHub Actions：一次性配置 Secrets
+
+仓库 **Settings → Secrets and variables → Actions → New repository secret**：
+
+| Secret | 内容 |
+| --- | --- |
+| `APPLE_CERTIFICATE` | 包含 Developer ID Application 证书与私钥的 `.p12` 的 Base64 内容 |
+| `APPLE_CERTIFICATE_PASSWORD` | 导出 `.p12` 时设置的密码 |
+| `APPLE_SIGNING_IDENTITY` | 完整的 Developer ID Application 身份名称 |
+| `APPLE_API_ISSUER` | App Store Connect 团队 API key 的 Issuer ID |
+| `APPLE_API_KEY` | API Key ID |
+| `APPLE_API_PRIVATE_KEY` | 对应 `.p8` 文件的原始完整内容，保留换行 |
+
+`.p12` 不是自动生成的文件。在「钥匙串访问 → 登录 → 我的证书」选择带对应私钥的 Developer ID Application 条目，右键导出为 `.p12`，设置密码并保存在仓库外。若格式不可选，先检查私钥是否存在、是否选中了正确条目。
+
+已登录 `gh` 时可直接通过标准输入上传，不将材料打印到终端：
+
+```bash
+openssl base64 -A -in "$HOME/Downloads/DeveloperID.p12" |
+  gh secret set APPLE_CERTIFICATE --repo Joycai/simple-ai-writer
+gh secret set APPLE_CERTIFICATE_PASSWORD --repo Joycai/simple-ai-writer
+gh secret set APPLE_API_PRIVATE_KEY --repo Joycai/simple-ai-writer \
+  < "$HOME/.appstoreconnect/private_keys/AuthKey_N6CR8R98T2.p8"
+```
+
+密码命令会交互提示输入；其余三项可直接在网页中填写。GitHub Secrets 保存后不能读回原值。只让可信任的发布代码接触 Secrets；这些凭据可以执行签名和公证，不应注入 PR workflow。
+
+Release workflow 的 macOS job 会要求全部六项材料，将 `.p8` 以 `0600` 权限写入 runner 临时目录，在 `always()` 清理步骤删除。Tauri 通过 `APPLE_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD` 导入临时签名钥匙串。上传的构建 artifacts 只包含 bundle，不包含 key 文件。
+
+Windows / Linux 保持现有打包入口；macOS 调用与本地相同的正式入口并输出 Universal DMG。只有手动运行 Release workflow 才会发布，不因配置 Secrets 或合并 PR 自动发布。
+
+## 验收与当前证据
+
+- 无凭据脚本测试覆盖参数限制、商店配置隔离、CI 签名材料配对及最终身份检查；CI 执行 `node --test scripts/__tests__/macos-release.test.mjs`。
+- 2026-11-19 已在本机通过新入口的 `--check`：Developer ID 身份可用，Apple API 认证成功；**不能代替产物验收**。
+- 正式构建必须通过 app 的 `codesign --verify --deep --strict`、预期 identity/team/bundle identifier/hardened runtime 检查、`stapler validate` 和 `spctl --assess --type execute`。
+- 外层 DMG 必须签名完整、公证结果 `Accepted`、`stapler validate` 成功，并通过 `spctl --assess --type open --context context:primary-signature`。
+- 本 PR 尚未完成真实签名 DMG 的构建、公证、下载后双击及跨版本钥匙串授权验收；这些仍为发布前待验证项。
+
+官方参考：[Tauri macOS 签名](https://v2.tauri.app/distribute/sign/macos/)、[Apple Developer ID](https://developer.apple.com/developer-id/)、[GitHub repository secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions)。
+
+---
+
+## 历史记录：ad-hoc / 自签名实验（不再作为正式发布指南）
+
+以下记录保留当时的实验、限制和原因。其中“今天”“尚未”“不要设置”等表述仅适用于当时的自签名实验；Developer ID 的正式流程以上文为准，尤其正式 CI **需要** `APPLE_CERTIFICATE`。
 
 ## 0. 这解决的是什么
 
