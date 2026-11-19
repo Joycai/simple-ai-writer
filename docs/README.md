@@ -61,7 +61,7 @@ reaching for is one of the states above, plus a modifier if it needs one.
 | [tool-presence.md](reference/tool-presence.md) | `living` | 改 preset、往 `routeTools` 加分支、加一种子代理，或写任何工具的 description / 结果文本。一次运行说的话必须和它能做的事一致——四种失败形状、判据取哪个变量、十四条先例 |
 | [agent-instructions.md](reference/agent-instructions.md) | `living` | Maintaining project instructions: `AGENTS.md` is authoritative, `CLAUDE.md` imports it, and no generation step is needed; includes the 2026-10-01 migration rationale |
 | [ci.md](reference/ci.md) | `living` | Changing the build, or wondering what the merge gate runs |
-| [macos-signing.md](reference/macos-signing.md) | `partial` | Cutting a macOS release, or the Keychain starts asking for the login password again. Done: whole-bundle ad-hoc signing + Local Network usage string; not done: the fixed self-signed certificate |
+| [macos-signing.md](reference/macos-signing.md) | `partial` | Cutting a macOS release, or the Keychain starts asking for the login password again. Developer ID signing + API-key notarization entry points; real release artifact acceptance pending; historical ad-hoc / self-signed experiments retained |
 
 ## api/ — the wire-protocol domain
 

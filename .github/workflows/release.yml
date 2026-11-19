@@ -15,11 +15,13 @@ jobs:
       version: ${{ steps.set-version.outputs.version }}
     steps:
       - id: set-version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          if [ -n "$RELEASE_VERSION" ]; then
+            echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
           else
-            echo "version=$(date +'%y.%-m.%-d')" >> $GITHUB_OUTPUT
+            echo "version=$(date +'%y.%-m.%-d')" >> "$GITHUB_OUTPUT"
           fi
 
   build:
@@ -41,7 +43,7 @@ jobs:
           - platform: macos-latest
             rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
             args: '--target universal-apple-darwin'
-            bundle-path: 'src-tauri/target/universal-apple-darwin/release/bundle/'
+            bundle-path: 'src-tauri/target/developer-id/universal-apple-darwin/release/bundle/'
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -85,33 +87,60 @@ jobs:
           rm -rf src-tauri/target/universal-apple-darwin/release/bundle
           rm -rf src-tauri/target/aarch64-apple-darwin/release/bundle
           rm -rf src-tauri/target/x86_64-apple-darwin/release/bundle
+          rm -rf src-tauri/target/developer-id/universal-apple-darwin/release/bundle
 
       - name: Install frontend dependencies
         run: pnpm install
 
       - name: Update version in manifests
-        shell: node {0}
+        shell: bash
         env:
           VERSION: ${{ needs.determine-version.outputs.version }}
         run: |
-          const fs = require('fs');
-          const v = process.env.VERSION;
+          node .claude/skills/bump-version/scripts/bump-version.mjs "$VERSION" --dry-run
+          node .claude/skills/bump-version/scripts/bump-version.mjs "$VERSION"
 
-          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-          pkg.version = v;
-          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+      # Only the manual release job receives Apple credentials; PR CI never does.
+      - name: Prepare macOS notarization key
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_API_ISSUER APPLE_API_KEY APPLE_API_PRIVATE_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing release secret: $name"
+              exit 1
+            fi
+          done
+          umask 077
+          key_path="$RUNNER_TEMP/macos-notarization.p8"
+          printf '%s' "$APPLE_API_PRIVATE_KEY" > "$key_path"
+          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
 
-          const tauriConf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
-          tauriConf.version = v;
-          fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(tauriConf, null, 2) + '\n');
+      - name: Build signed and notarized macOS DMG
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: pnpm tauri:macos:release --target universal-apple-darwin
 
-          let cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
-          cargo = cargo.replace(/^version = "[^"]*"/m, `version = "${v}"`);
-          fs.writeFileSync('src-tauri/Cargo.toml', cargo);
+      - name: Remove macOS notarization key
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/macos-notarization.p8"
 
-          console.log(`Bumped version to ${v}`);
-
-      - name: Build Tauri app
+      - name: Build Tauri app (Windows / Linux)
+        if: runner.os != 'macOS'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -124,6 +153,7 @@ jobs:
           name: build-${{ matrix.platform }}
           path: ${{ matrix.bundle-path }}
           retention-days: 1
+          if-no-files-found: error
 
   create-release:
     needs: [determine-version, build]
@@ -154,7 +184,7 @@ jobs:
           ls -lh release-files/
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           name: 'Simple AI Writer v${{ needs.determine-version.outputs.version }}'
           tag_name: v${{ needs.determine-version.outputs.version }}

@@ -172,7 +172,7 @@ Load the relevant doc **before** working in that area — don't reconstruct it f
 - **[`docs/feature/docx/01-agent-design.md`](docs/feature/docx/01-agent-design.md)** — markdown → .docx: the invariants that shape it (the format is a reference not a parameter, three-source pure-function resolve, Beta off = the tool is absent from the run). Read before touching `src/lib/docx/`, `docFormatStore`, or `src-tauri/src/docx.rs`.
 - **[`docs/feature/pptx-plan.md`](docs/feature/pptx-plan.md)** — .pptx read (Rust) and write (HTML → PPTX). Read before touching `src-tauri/src/pptx.rs`, `read_slides` or `src/lib/pptx/`.
 - **[`docs/feature/knowledge-base/kb-admin-console.md`](docs/feature/knowledge-base/kb-admin-console.md)** — the server's admin console. Read before touching `server/src/config.rs`, `server/src/admin.rs` or `server/admin/*`.
-- **[`docs/reference/macos-signing.md`](docs/reference/macos-signing.md)** (`partial`) — whole-bundle ad-hoc signing is on; the fixed self-signed certificate that stops updates re-asking for the login password is not yet. Read when cutting a macOS release, or when the Keychain starts prompting again.
+- **[`docs/reference/macos-signing.md`](docs/reference/macos-signing.md)** (`partial`) — Developer ID signing and notarization entry points are wired; real release artifact acceptance is pending. Read when cutting a macOS release, or when the Keychain starts prompting again.
 
 ## Testing & Type Safety
 
