@@ -24,7 +24,7 @@
  */
 
 import { bySpecificity, canonicalModelId, eq, prefix, rowSetting, type ModelPattern } from "../modelId";
-import type { ReasoningEffort } from "../../reasoning";
+import type { ReasoningEffort, ThinkingCategory } from "../../reasoning";
 
 interface IntrinsicFacts {
   maxOutput?: number;
@@ -37,7 +37,12 @@ interface IntrinsicFacts {
   /** Documented maximum thinking budget; only refines an existing budget control. */
   maxThinkingBudget?: number;
   /** Official effort ladder; parameter spelling remains the category's job. */
-  effortProfile?: { family: "openai" | "anthropic"; levels: readonly ReasoningEffort[]; category?: "deepseek" | "qwen-effort" | "doubao" };
+  effortProfile?: {
+    family: "openai" | "anthropic" | "gemini";
+    levels: readonly ReasoningEffort[];
+    category?: "deepseek" | "qwen-effort" | "doubao";
+    wire?: ThinkingCategory["effortWire"];
+  };
 }
 
 interface CatalogRow {
@@ -57,6 +62,8 @@ const STRICT = { strictSchemaModel: true } as const;
 const GPT_LEVELS: readonly ReasoningEffort[] = ["off", "low", "medium", "high", "xhigh", "max"];
 const ALWAYS_LEVELS = GPT_LEVELS.filter((e) => e !== "off");
 const CLAUDE_LEVELS = ["low", "medium", "high", "max"] as const;
+// "off" is the existing alias for the lowest level, used by the thinking guard.
+const GEMINI_LEVELS = ["off", "low", "medium", "high"] as const;
 const GPT_LIMITS = { contextSize: 1_050_000, maxOutput: 128_000, ...STRICT };
 const GPT_OPTIONAL_REASONING = {
   ...GPT_LIMITS, effortProfile: { family: "openai", levels: GPT_LEVELS },
@@ -69,9 +76,19 @@ const MODEL_CATALOG: readonly CatalogRow[] = bySpecificity<CatalogRow>([
   // Official model pages, checked 2026-11-18; reasoning-plan.md §0.1.
   ...["gpt-5.6", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-terra"].map((id) => row(id, GPT_OPTIONAL_REASONING)),
   ...["gpt-6-astra", "gpt-6.1-sol", "gpt-6.2-sol", "gpt-6.2-astra"].map((id) => row(id, GPT_REQUIRED_REASONING)),
-  ...["claude-opus-4-6", "claude-opus-4.6"].map((p) => row(p, { effortProfile: { family: "anthropic", levels: CLAUDE_LEVELS } })),
+  ...["claude-opus-4-6", "claude-opus-4.6"]
+    .map((p) => row(p, { effortProfile: { family: "anthropic", levels: CLAUDE_LEVELS } })),
+  ...["claude-sonnet-4-6", "claude-sonnet-4.6"]
+    .map((p) => row(p, { effortProfile: { family: "anthropic", levels: ["off", ...CLAUDE_LEVELS] } })),
   ...["claude-opus-4-7", "claude-opus-4.7", "claude-opus-4-8", "claude-opus-4.8", "claude-opus-5"]
     .map((p) => row(p, { effortProfile: { family: "anthropic", levels: ALWAYS_LEVELS } })),
+  ...["claude-sonnet-5", "claude-fable-5", "claude-haiku-5-5", "claude-haiku-5.5"]
+    .map((p) => row(p, { effortProfile: { family: "anthropic", levels: GPT_LEVELS } })),
+  ...["gemini-4-carbon", "gemini-4-argon"]
+    .map((p) => row(p, { effortProfile: { family: "gemini", levels: GEMINI_LEVELS } })),
+  { match: eq("gemini-3.8-flash"), set: { effortProfile: { family: "gemini", levels: GEMINI_LEVELS } } },
+  ...["gemini-4-neon", "gemini-4-hydrogen"]
+    .map((p) => row(p, { effortProfile: { family: "gemini", levels: [...GEMINI_LEVELS, "xhigh"], wire: { xhigh: "XHIGH", max: "XHIGH" } } })),
   // Native ladders, not compatibility aliases; reasoning-plan.md §0.2.
   ...["deepseek-flash", "deepseek-v4-flash"].map((p) => row(p, {
     effortProfile: { family: "openai", category: "deepseek", levels: ["off", "low", "high", "max"] },
@@ -81,7 +98,8 @@ const MODEL_CATALOG: readonly CatalogRow[] = bySpecificity<CatalogRow>([
   })),
   ...["doubao-seed-2-0-pro", "doubao-seed-2-0-lite", "doubao-seed-2.0-pro", "doubao-seed-2.0-lite"]
     .map((p) => row(p, { effortProfile: { family: "openai", category: "doubao", levels: ["off", "low", "medium", "high"] } })),
-  row("qwen3.7-plus", { maxThinkingBudget: 262_144 }),
+  ...["qwen3.7-plus", "qwen3.7-max"].map((p) => row(p, { maxThinkingBudget: 262_144 })),
+  row("qwen3.7-flash", { maxThinkingBudget: 131_072 }),
   // Ark's native ladder; none/minimal disable, xhigh/max alias high (2026-10-26).
   ...["doubao-seed-2.1-pro", "doubao-seed-2-1-pro"].map((p) => row(p, {
     effortProfile: { family: "openai", category: "doubao", levels: ["off", "low", "medium", "high"] },

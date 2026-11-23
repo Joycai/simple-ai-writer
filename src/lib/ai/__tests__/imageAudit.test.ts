@@ -67,6 +67,36 @@ describe("image audit regression", () => {
     expect(row.costIncomplete).toBe(false);
   });
 
+  it("counts Gemini image thinking at the non-image output price", () => {
+    const media: ImageEvidence = { outcome: "complete", spec: {} };
+    captureImageEvidence(media, { usageMetadata: {
+      promptTokenCount: 100, candidatesTokenCount: 45, thoughtsTokenCount: 10,
+      promptTokensDetails: [{ modality: "TEXT", tokenCount: 100 }],
+      candidatesTokensDetails: [{ modality: "TEXT", tokenCount: 5 }, { modality: "IMAGE", tokenCount: 40 }],
+    } }, { ...conn, standard: "gemini" });
+    const row = buildUsageRow({
+      model: { id: "banana", fee: { ...ZERO_FEE, inputPrice: 1.5, cachePrice: 1.5, outputPrice: 7.5,
+        imageTokenPrices: { input: 1.5, cache: null, output: 30 } } },
+      task: "image",
+      usageEvidence: { outcome: "complete", source: "reported", fields: media.usage!, media },
+    });
+    expect(row.costUsd).toBeCloseTo((100 * 1.5 + 15 * 7.5 + 40 * 30) / 1e6, 10);
+    expect(row.costIncomplete).toBe(false);
+  });
+
+  it("spells image effort on the applicable native route", async () => {
+    const fetch = vi.fn(async (url: string, _init: RequestInit) => url.includes(":generateContent")
+      ? json({ candidates: [{ content: { parts: [{ inlineData: { data: PNG_B64 } }] } }] })
+      : json({ data: [{ b64_json: PNG_B64 }] }));
+    vi.stubGlobal("fetch", fetch);
+    await generateImage({ ...conn, standard: "gemini", modelId: "gemini-nano-banana-2.1", reasoningEffort: "minimal" }, { prompt: "draw" });
+    expect(JSON.parse(fetch.mock.calls[0][1].body as string)).toMatchObject({
+      generationConfig: { thinkingConfig: { thinkingLevel: "MINIMAL" } },
+    });
+    await generateImage({ ...conn, modelId: "gpt-image-2.6-flare", reasoningEffort: "high" }, { prompt: "draw" });
+    expect(JSON.parse(fetch.mock.calls[1][1].body as string)).toMatchObject({ complexity: "high" });
+  });
+
   it("Responses stream keeps final images when the connection closes early", async () => {
     const event = { type: "response.output_item.done", item: { type: "image_generation_call", result: PNG_B64 } };
     vi.stubGlobal("fetch", vi.fn(async () => new Response(`data: ${JSON.stringify(event)}\n\n`, { headers: { "Content-Type": "text/event-stream" } })));

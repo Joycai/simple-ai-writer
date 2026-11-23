@@ -4,7 +4,7 @@ import type { ImageDialect } from "./imageDialects";
 
 export function inferImageFamily(modelId: string): ImageDialect | undefined {
   const id = modelId.toLowerCase();
-  if (/gpt[-_. ]image[-_. ]2[.-]5(?:\b|_)/.test(id)) return "gpt-image-2.5";
+  if (/gpt[-_. ]image[-_. ]2[.-][56](?:\b|_)/.test(id)) return "gpt-image-2.5";
   if (/gpt[-_. ]image[-_. ]2(?:\b|_)/.test(id)) return "gpt-image-2";
   if (/nano[-_ ]?banana[-_ ]?2(?:\b|_)|gemini[-_.]3[.-]1[-_.]flash[-_.]image(?:\b|_)/.test(id)) return "nanobanana-2";
   if (/nano[-_ ]?banana|gemini[-_.](?:2[.-]5[-_.]flash|3[-_.]pro)[-_.]image/.test(id)) return "nanobanana";

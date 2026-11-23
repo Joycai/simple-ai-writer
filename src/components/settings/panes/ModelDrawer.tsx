@@ -37,6 +37,7 @@ import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useAiStore } from "../../../stores/aiStore";
+import { findModelPreset, MODEL_PRESETS, type ModelPreset } from "../../../lib/ai/modelPresets";
 import { feeSummary } from "../../../lib/ai/feeGroupLabel";
 import { feeGroupOptions } from "../../../lib/ai/feeGroupList";
 import { costReportingPlatform, reportsCostFor } from "../../../lib/ai/reportedCost";
@@ -458,51 +459,127 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
   const toggleWhyAll = () => { setWhyAll((v) => !v); setWhy({}); };
   const whyProps = (k: WhyKey, text: string) => ({ why: text, whyOpen: whyOpen(k), onWhy: toggleWhy(k) });
 
-  // The platform's type and PDF declaration for a model id it knows
-  // (`ModelCalibration`), written into a *new* row's form when the author
-  // picks or finishes typing the id — the two declarations with no unset
-  // state; the value facts follow the chain instead (valueNotes.ts). A field is ours to write only while it is
-  // unset or still holds what the previous prefill put there — so correcting
-  // a typo re-prefills, and anything the author chose by hand stays.
-  // Keyed by id and route: blurring the id field without changing either
-  // must not take back a field the author has since set to its unset value.
-  // An edited row starts at its own id, so blurring the field unchanged does nothing.
-  const lastCalibration = useRef<{ id?: string; family?: ProtocolFamily; type?: ModelType; pdf?: boolean }>({ id: existing?.modelId.trim().toLowerCase() });
+  // An automatic match owns only untouched fields. It can replace its own
+  // values when the id changes, including clearing them for an unknown id.
+  const lastCalibration = useRef<{
+    id?: string; family?: ProtocolFamily; type?: ModelType; pdf?: boolean;
+    contextSize?: string; maxOutput?: string; thinkingCategory?: ThinkingCategoryId;
+  }>({ id: existing?.modelId.trim().toLowerCase() });
   const mediaEdited = useRef({ type: false, pdf: false });
-  const applyCalibration = (modelId: string, targetProvider = provider) => {
+  const contextEdited = useRef(false);
+  const routeEdits = useRef<Partial<Record<ProtocolFamily, { maxOutput?: boolean; thinkingCategory?: boolean }>>>({});
+  const markRouteEdit = (field: "maxOutput" | "thinkingCategory") => {
+    if (family) routeEdits.current[family] = { ...routeEdits.current[family], [field]: true };
+  };
+  const presetFor = (id: string) =>
+    findModelPreset(id, onRelay ? { prefixes: channel?.upstreamPrefixes } : undefined);
+  const presetCategory = (preset: ModelPreset | undefined, target: NonNullable<typeof provider>) => {
+    if (!preset) return undefined;
+    const targetFamily = familyOf(target.apiStandard);
+    const resolved = thinkingCategoryOf({ modelId: preset.id }, {
+      standard: target.apiStandard, platform: providerWire(target).platform,
+    });
+    switch (preset.vendor) {
+      case "OpenAI": return preset.type !== "image" && (targetFamily === "openai" || targetFamily === "responses") ? resolved.value.id : undefined;
+      case "Anthropic": return targetFamily === "anthropic" ? "claude-adaptive" : undefined;
+      case "Google": return targetFamily === "gemini" ? resolved.value.id : undefined;
+      case "Alibaba Cloud": return resolved.value.id.startsWith("qwen") ? resolved.value.id : undefined;
+    }
+  };
+  const applyCalibration = (modelId: string, targetProvider = provider, manual = false) => {
     if (!targetProvider || !channel) return;
     const id = modelId.trim().toLowerCase();
     const family = familyOf(targetProvider.apiStandard);
-    if (id === lastCalibration.current.id && (existing || family === lastCalibration.current.family)) return;
-    const idChanged = id !== lastCalibration.current.id;
-    // A category left on 自动 resolves anew for the new id, on every route —
-    // an edited row as much as a new one (valueNotes.ts `effortForNewId`).
+    const prev = lastCalibration.current;
+    if (!manual && id === prev.id && (existing || family === prev.family)) return;
+    const idChanged = id !== prev.id;
+    const routeChanged = prev.family !== undefined && family !== prev.family;
+    const preset = existing || comfySeed ? undefined : presetFor(modelId);
+    const previousPreset = existing || comfySeed ? undefined : presetFor(prev.id ?? "");
     const resolvedOn = (p: typeof targetProvider) =>
-      thinkingCategoryOf({ modelId: modelId.trim() }, { standard: p.apiStandard, platform: providerWire(p).platform }).value;
+      thinkingCategoryOf({ modelId: modelId.trim() }, {
+        standard: p.apiStandard, platform: providerWire(p).platform, canonicalModelId: preset?.id,
+      }).value;
     if (idChanged) {
       setForm((f) => ({ ...f, reasoningEffort: effortForNewId(f.thinkingCategory, f.reasoningEffort, resolvedOn(targetProvider)) }));
+      const edits = { ...routeEdits.current };
       setParked((all) => {
         const next = { ...all };
         for (const [f, prof] of Object.entries(all) as [ProtocolFamily, RouteProfile][]) {
           const p = routeProvider(channel, f);
-          if (!p || !prof.reasoningEffort) continue;
-          next[f] = { ...prof, reasoningEffort: effortForNewId(prof.thinkingCategory, prof.reasoningEffort, resolvedOn(p)) };
+          if (!p) continue;
+          const patch: RouteProfile = {};
+          if (prof.reasoningEffort) {
+            patch.reasoningEffort = effortForNewId(prof.thinkingCategory, prof.reasoningEffort, resolvedOn(p));
+          }
+          if (!existing && !comfySeed) {
+            if (!edits[f]?.maxOutput && prof.maxOutput === previousPreset?.maxOutput) patch.maxOutput = preset?.maxOutput;
+            if (!edits[f]?.thinkingCategory && prof.thinkingCategory === presetCategory(previousPreset, p)) {
+              patch.thinkingCategory = presetCategory(preset, p);
+            }
+          }
+          next[f] = { ...prof, ...patch };
         }
         return next;
       });
     }
-    if (existing) { lastCalibration.current = { id }; return; }
-    // A new row takes only what has no unset state (D1): the category, window
-    // and cap stay empty and follow the platform's rows (the notes say so).
+    if (existing || comfySeed) { lastCalibration.current = { id }; return; }
+
     const platform = providerWire(targetProvider).platform;
     const cal = modelMediaCalibration(platform, modelId, family);
-    const next = { id, family, type: cal.type as ModelType | undefined, pdf: cal.pdfInput };
-    const prev = lastCalibration.current;
-    const ours = <T,>(cur: T, unset: T, prevVal: T | undefined) => cur === unset || (prevVal !== undefined && cur === prevVal);
-    const edit = { ...mediaEdited.current };
-    setForm((f) => ({ ...f, type: !edit.type && ours<ModelType>(f.type, "text", prev.type) ? (next.type ?? "text") : f.type }));
-    setPdfInput((cur) => (!edit.pdf && ours(cur, false, prev.pdf) ? !!next.pdf : cur));
+    const next = {
+      id, family,
+      type: (cal.type ?? preset?.type) as ModelType | undefined,
+      pdf: cal.pdfInput,
+      contextSize: preset?.contextSize ? formatTokenLimit(preset.contextSize) : undefined,
+      maxOutput: preset?.maxOutput ? formatTokenLimit(preset.maxOutput) : undefined,
+      thinkingCategory: presetCategory(preset, targetProvider),
+    };
+    const owns = <T,>(value: T, empty: T, previous: T | undefined, edited?: boolean) =>
+      manual || (!edited && (value === empty || value === previous));
+    const media = { ...mediaEdited.current };
+    const routeEdit = routeEdits.current[family];
+    const contextWasEdited = contextEdited.current;
+    setForm((f) => {
+      const useCategory = !routeChanged && owns(f.thinkingCategory, "auto", prev.thinkingCategory, routeEdit?.thinkingCategory);
+      const thinkingCategory = useCategory ? next.thinkingCategory ?? "auto" : f.thinkingCategory;
+      return {
+        ...f,
+        type: owns<ModelType>(f.type, "text", prev.type, media.type) ? next.type ?? "text" : f.type,
+        contextSize: owns(f.contextSize, "", prev.contextSize, contextWasEdited) ? next.contextSize ?? "" : f.contextSize,
+        maxOutput: !routeChanged && owns(f.maxOutput, "", prev.maxOutput, routeEdit?.maxOutput) ? next.maxOutput ?? "" : f.maxOutput,
+        thinkingCategory,
+        reasoningEffort: manual ? "default" : useCategory && thinkingCategory !== f.thinkingCategory
+          ? effortForCategory(resolvedOn(targetProvider), f.reasoningEffort)
+          : f.reasoningEffort,
+        thinkingBudget: manual ? "" : f.thinkingBudget,
+      };
+    });
+    setPdfInput((cur) => owns(cur, false, prev.pdf, media.pdf) ? !!next.pdf : cur);
+    if (manual) {
+      mediaEdited.current = { type: false, pdf: false };
+      contextEdited.current = false;
+      delete routeEdits.current[family];
+    }
+    if (preset && !routeChanged) {
+      setOpen((prev) => ({
+        ...prev, limits: !!next.contextSize || prev.limits, think: !!next.thinkingCategory || prev.think,
+        image: preset.type === "image" || prev.image,
+      }));
+    }
     lastCalibration.current = next;
+  };
+
+  const applyModelPreset = (id: string) => {
+    const preset = presetFor(id);
+    if (!preset) return;
+    const previous = presetFor(form.modelId);
+    const modelId = previous === preset ? form.modelId : preset.id;
+    setForm((f) => ({
+      ...f, modelId,
+      name: !f.name || f.name === previous?.name ? preset.name ?? "" : f.name,
+    }));
+    applyCalibration(modelId, provider, true);
   };
 
   const handleFetch = async () => {
@@ -666,6 +743,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
     ...form.imageOutput,
   };
   const asyncShown = showsAsyncToggle(provider?.apiStandard, imageDraft);
+  const imageRoute = draftRoute(provider?.apiStandard, imageDraft);
+  const imagePreset = isImageModel ? presetFor(form.modelId) : undefined;
+  const imageThinking = (imageRoute === "gemini" && imagePreset?.vendor === "Google")
+    || (imageRoute === "images-api" && imagePreset?.vendor === "OpenAI")
+    ? imagePreset?.imageThinking : undefined;
 
   /**
    * The current route's fields as they would be saved — what `handleSave`
@@ -703,7 +785,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
     if (!nextProvider) return;
     if (!existing) applyCalibration(form.modelId, nextProvider);
     const now = routeFieldsNow();
-    const prof = parked[next] ?? {};
+    const routePreset = !existing && !parked[next] && !comfySeed ? presetFor(form.modelId) : undefined;
+    const prof = parked[next] ?? {
+      maxOutput: routePreset?.maxOutput,
+      thinkingCategory: presetCategory(routePreset, nextProvider),
+    };
     setParked((p) => {
       const n = { ...p, [route]: now };
       delete n[next];
@@ -1356,22 +1442,33 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                 <button className={styles.fetchBtn} onClick={handleFetch} disabled={fetching}>
                   {fetching ? t("aiConfig.models.fetching") : t("aiConfig.models.fetchBtn")}
                 </button>
-                {fetchedList.length > 0 && (
-                  <Select className={s.fetchSelect}
-                    value={form.modelId}
-                    placeholder={t("aiConfig.models.selectOption")}
-                    options={fetchedList.map((m) => ({ value: m.id, label: m.name }))}
-                    ariaLabel={t("aiConfig.models.selectOption")}
-                    searchable
-                    searchPlaceholder={t("ai.modelPicker.search", { defaultValue: "搜索模型…" })}
-                    noResultsText={t("ai.modelPicker.noMatch", { defaultValue: "没有匹配的模型" })}
-                    onChange={(v) => {
-                      const m = fetchedList.find((x) => x.id === v);
-                      if (!m) return;
-                      setForm((f) => ({ ...f, modelId: m.id, name: m.name }));
-                      applyCalibration(m.id);
-                    }} />
-                )}
+                <Select className={s.fetchSelect}
+                  value=""
+                  placeholder={t("aiConfig.models.prefill")}
+                  ariaLabel={t("aiConfig.models.prefill")}
+                  options={MODEL_PRESETS.map((p) => ({ value: p.id, label: p.name ?? p.id, group: p.vendor }))}
+                  searchable
+                  searchPlaceholder={t("ai.modelPicker.search")}
+                  noResultsText={t("ai.modelPicker.noMatch")}
+                  onChange={applyModelPreset} />
+              </div>
+            )}
+            {!existing && !isComfy && fetchedList.length > 0 && (
+              <div className={s.fetchRow}>
+                <Select className={s.fetchSelect}
+                  value={form.modelId}
+                  placeholder={t("aiConfig.models.selectOption")}
+                  options={fetchedList.map((m) => ({ value: m.id, label: m.name }))}
+                  ariaLabel={t("aiConfig.models.selectOption")}
+                  searchable
+                  searchPlaceholder={t("ai.modelPicker.search", { defaultValue: "搜索模型…" })}
+                  noResultsText={t("ai.modelPicker.noMatch", { defaultValue: "没有匹配的模型" })}
+                  onChange={(v) => {
+                    const m = fetchedList.find((x) => x.id === v);
+                    if (!m) return;
+                    setForm((f) => ({ ...f, modelId: m.id, name: m.name }));
+                    applyCalibration(m.id);
+                  }} />
               </div>
             )}
             <input className={inputCls(false, s.mono)} placeholder="deepseek-flash" value={form.modelId}
@@ -1469,14 +1566,14 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
               {...sourceNote(parsedCtx, probed.ctx, facts && contextNote(t, facts.contextSize, valueSource))}>
               <TokenLimitControl value={form.contextSize} max={MAX_CONTEXT_SIZE} fallback={ctxTable}
                 label={t("aiConfig.models.ctxLabel")}
-                onChange={(contextSize) => setForm({ ...form, contextSize })} />
+                onChange={(contextSize) => { contextEdited.current = true; setForm({ ...form, contextSize }); }} />
             </Field>
             <Field label={t("aiConfig.models.maxOutLabel")} scope={routeScope} sub={t("aiConfig.models.unitTokens")}
               hint={t("aiConfig.models.briefMaxOut")} {...whyProps("maxOut", t("aiConfig.models.maxOutputHint"))}
               {...sourceNote(parsedOut, probed.out, facts && maxOutputNote(t, facts.maxOutput, valueSource))}>
               <TokenLimitControl value={form.maxOutput} max={MAX_OUTPUT_SIZE} fallback={outTable}
                 label={t("aiConfig.models.maxOutLabel")}
-                onChange={(maxOutput) => setForm({ ...form, maxOutput })} />
+                onChange={(maxOutput) => { markRouteEdit("maxOutput"); setForm({ ...form, maxOutput }); }} />
             </Field>
             <Field label={t("aiConfig.models.probeLabel")} scope={routeScope} hint={t("aiConfig.models.briefProbe")}>
               <ModelProbePanel
@@ -1548,12 +1645,15 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
                         label={c === "auto" ? t("aiConfig.models.thinkingCatAuto") : t(THINKING_CATEGORIES[c].labelKey)}
                         active={form.thinkingCategory === c}
                         auto={c === "auto"}
-                        onClick={() => setForm((f) => ({
-                          ...f,
-                          thinkingCategory: c,
-                          // A stale `medium` can't survive onto e.g. a GLM model (low/high/max only).
-                          reasoningEffort: effortForCategory(c === "auto" ? facts?.thinkingCategory.table.value : THINKING_CATEGORIES[c], f.reasoningEffort),
-                        }))}
+                        onClick={() => {
+                          markRouteEdit("thinkingCategory");
+                          setForm((f) => ({
+                            ...f,
+                            thinkingCategory: c,
+                            // A stale `medium` can't survive onto e.g. a GLM model (low/high/max only).
+                            reasoningEffort: effortForCategory(c === "auto" ? facts?.thinkingCategory.table.value : THINKING_CATEGORIES[c], f.reasoningEffort),
+                          }));
+                        }}
                       />
                     </Fragment>
                   ))}
@@ -1968,6 +2068,22 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose, projectPath, 
             summary={imageHas ? imageSum : t("aiConfig.models.secImageUnset")}
             unset={!imageHas}
           >
+            {imagePreset?.contextSize && <Note text={limitsSum || limitsFollow} tone="faint" />}
+            {imageThinking && (
+              <Field label={t(imageRoute === "images-api" ? "aiConfig.models.imageComplexity" : "aiConfig.models.effortLabel")}
+                hint={imageThinking.length ? "" : t("aiConfig.models.imageThinkingAutomatic")}>
+                {imageThinking.length > 0 && <div className={s.chips}>
+                  <DashChip label={t("aiConfig.models.reasoningEffortDefault")} auto
+                    active={form.reasoningEffort === "default"}
+                    onClick={() => setForm({ ...form, reasoningEffort: "default" })} />
+                  {imageThinking.map((level) => (
+                    <DashChip key={level} label={effortLabel(level)}
+                      active={form.reasoningEffort === level}
+                      onClick={() => setForm({ ...form, reasoningEffort: level })} />
+                  ))}
+                </div>}
+              </Field>
+            )}
             {/* Cloud parameter dialects mean nothing to a local workflow — the
                 free-form sizes list is comfyui's whole vocabulary. */}
             <Fold open={!isComfy}>

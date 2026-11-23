@@ -3,6 +3,8 @@ import i18n from "../../i18n";
 import { costReportHeaders, costReportingPlatform } from "./reportedCost";
 import { imageEvents } from "./imageEvents";
 import type { ImageOptions } from "./imageOptions";
+import type { ConnOptions } from "./conn";
+import { geminiImageThinkingLevel, gptImageComplexity } from "./modelPresets";
 import { imageTaskKey, readImageTask, reserveImageTask, saveImageTask, forgetImageTask } from "./imageTasks";
 import { validateGeneratedImage } from "../image/validateGenerated";
 import { captureImageEvidence, type ImageEvidence } from "./imageEvidence";
@@ -40,7 +42,7 @@ import type { ApiStandard, AuthMode, ImageRoute } from "./types";
 import { geminiUrl, openaiUrl, trimBase } from "./urls";
 
 /** The provider coordinates every image call needs. */
-export interface ImageConn {
+export interface ImageConn extends Pick<ConnOptions, "reasoningEffort"> {
   options?: ImageOptions;
   platform?: PlatformId;
   dialect?: ImageDialect;
@@ -70,7 +72,7 @@ export interface ImageConn {
  * half-copied route.
  */
 export function imageConnOf(
-  model: Pick<Model, "modelId" | "caps">,
+  model: Pick<Model, "modelId" | "caps" | "reasoningEffort">,
   provider: Pick<Provider, "baseUrl" | "apiStandard" | "authMode" | "safetySettings" | "platform">,
   apiKey: string,
 ): ImageConn {
@@ -81,6 +83,7 @@ export function imageConnOf(
     standard: provider.apiStandard,
     authMode: provider.authMode,
     modelId: model.modelId,
+    reasoningEffort: model.reasoningEffort,
     safetySettings: provider.safetySettings,
     options: model.caps?.options,
     dialect: resolvedImageCaps(model.modelId, model.caps)?.dialect,
@@ -668,6 +671,7 @@ async function openaiImage(
   askB64 = !("response_format" in (req.extraBody ?? {})),
 ): Promise<ImageResult> {
   const url = openaiUrl(conn.baseUrl, "/images/generations");
+  const complexity = gptImageComplexity(conn.modelId, conn.reasoningEffort);
   const deadline = withDeadline(req.signal, GENERATE_TIMEOUT_MS);
   let res: Response;
   try {
@@ -687,6 +691,7 @@ async function openaiImage(
         ...(req.n && req.n > 1 ? { n: req.n } : {}),
         ...(req.size ? { size: req.size } : {}),
         ...(req.quality ? { quality: req.quality } : {}),
+        ...(complexity ? { complexity } : {}),
         ...req.extraBody,
         ...(conn.options?.stream ? { stream: true, partial_images: 1 } : {}),
       }),
@@ -856,6 +861,8 @@ async function openaiEdit(
   }
   if (req.size) form.append("size", req.size);
   if (req.quality) form.append("quality", req.quality);
+  const complexity = gptImageComplexity(conn.modelId, conn.reasoningEffort);
+  if (complexity && !("complexity" in (req.extraBody ?? {}))) form.append("complexity", complexity);
   if (conn.options?.stream) { form.append("stream", "true"); form.append("partial_images", "1"); }
   if (req.n && req.n > 1) form.append("n", String(req.n));
   // Carried like every other route does — a relay that needs an extra field to
@@ -1234,6 +1241,7 @@ async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
   ]);
 
   const safetySettings = toSafetySettingsArray(conn.safetySettings);
+  const thinkingLevel = geminiImageThinkingLevel(conn.modelId, conn.reasoningEffort);
   // Gemini takes framing as a ratio, not pixel dimensions — `size` is
   // meaningless here. The resolution tier ("1K"/"2K"/"4K") lives in the same
   // config object; both are omitted when unset, which is the one request every
@@ -1254,6 +1262,7 @@ async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
           // TEXT stays in the list: the image models refuse an IMAGE-only
           // modality set on some revisions, and the text part is useful anyway.
           responseModalities: ["TEXT", "IMAGE"],
+          ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
           ...(Object.keys(imageConfig).length ? { imageConfig } : {}),
           ...(req.n && req.n > 1 ? { candidateCount: req.n } : {}),
         },

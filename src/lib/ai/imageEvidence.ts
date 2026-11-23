@@ -51,17 +51,20 @@ export function captureImageEvidence(target: ImageEvidence, raw: unknown, conn: 
       };
     }
     if (route === "gemini") {
-      const bucket = (details: unknown, modality: string) => {
-        if (!Array.isArray(details)) return undefined;
-        const entry = details.find(e => obj(e).modality === modality);
-        return count(obj(entry).tokenCount);
+      const imageTokens = (details: unknown, total?: number) => {
+        if (total === 0) return 0;
+        if (!Array.isArray(details) || !details.length) return undefined;
+        const image = details.find((entry) => obj(entry).modality === "IMAGE");
+        return image ? count(obj(image).tokenCount) : 0;
       };
       if (Array.isArray(usage.promptTokensDetails) || Array.isArray(usage.candidatesTokensDetails)) {
-        target.modalities = Object.fromEntries(["TEXT", "IMAGE"].map(modality => [modality.toLowerCase(), {
-          inputTokens: bucket(usage.promptTokensDetails, modality),
-          cachedTokens: bucket(usage.cacheTokensDetails, modality),
-          outputTokens: bucket(usage.candidatesTokensDetails, modality),
-        }]));
+        // The non-image complement includes thinking tokens and other input
+        // modalities, which these Gemini image models price at the text rate.
+        target.modalities = { image: {
+          inputTokens: imageTokens(usage.promptTokensDetails, target.usage?.inputTokens),
+          cachedTokens: imageTokens(usage.cacheTokensDetails, target.usage?.cachedTokens),
+          outputTokens: imageTokens(usage.candidatesTokensDetails, target.usage?.outputTokens),
+        } };
       }
     }
 

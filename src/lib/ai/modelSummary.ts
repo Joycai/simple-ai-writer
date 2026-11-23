@@ -26,6 +26,7 @@ import { modelValue, thinkingCategoryOf, trusted, type Sourced } from "./capabil
 import { planRequest, type RequestPlan } from "./capability/plan";
 import { mediaDeclarationOf } from "./capability/media";
 import { resolvedImageCaps } from "./imageFamily";
+import { geminiImageThinkingLevel, gptImageComplexity } from "./modelPresets";
 import { effectiveImageRoute } from "./imageRoute";
 import type { StructuredOutputMode } from "./jsonMode";
 import { wireOf, type PlatformId } from "./platforms";
@@ -176,7 +177,12 @@ export function wireSummary(
     // route is the effective one, always listed: what 自动 resolves to on this
     // route is exactly what the author cannot see anywhere else.
     const caps = resolvedImageCaps(m.modelId, m.caps);
-    const out: WireItem[] = [{ key: "route", value: effectiveImageRoute(standard, caps) }];
+    const route = effectiveImageRoute(standard, caps);
+    const out: WireItem[] = [{ key: "route", value: route }];
+    const level = route === "gemini" ? geminiImageThinkingLevel(m.modelId, m.reasoningEffort) : undefined;
+    if (level) out.push({ key: "generationConfig.thinkingConfig.thinkingLevel", value: level });
+    const complexity = route === "images-api" ? gptImageComplexity(m.modelId, m.reasoningEffort) : undefined;
+    if (complexity) out.push({ key: "complexity", value: complexity });
     if (caps?.dialect) out.push({ key: "dialect", value: caps.dialect });
     if (m.caps?.sizes?.length) {
       const [first, ...rest] = m.caps.sizes;
