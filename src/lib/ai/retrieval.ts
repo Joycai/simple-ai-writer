@@ -5,8 +5,8 @@ import type { ConnOptions } from "./conn";
 import { validRetrievalPath } from "./retrievalConfig";
 
 export type RetrievalConnection = Pick<ConnOptions, "baseUrl" | "apiKey" | "modelId" | "retrieval">;
-interface RetrievalUsage { promptTokens: number; outputUnits?: number }
-type UsageListener = (usage: RetrievalUsage) => void;
+interface RetrievalUsage { promptTokens?: number; searchUnits?: number }
+export type RetrievalUsageListener = (usage: RetrievalUsage) => void;
 
 export function retrievalUrl(conn: RetrievalConnection): string {
   if (!conn.retrieval || !validRetrievalPath(conn.retrieval.path)) throw new Error("Invalid retrieval path");
@@ -44,10 +44,10 @@ function object(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Invalid retrieval response");
   return raw as Record<string, unknown>;
 }
-function number(raw: unknown): number {
-  return typeof raw === "number" && Number.isFinite(raw) && raw >= 0 ? raw : 0;
+function count(raw: unknown): number | undefined {
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0 ? raw : undefined;
 }
-async function request(conn: RetrievalConnection, body: object, signal: AbortSignal, onUsage?: UsageListener) {
+async function request(conn: RetrievalConnection, body: object, signal: AbortSignal, onUsage?: RetrievalUsageListener) {
   const url = retrievalUrl(conn);
   const response = await fetch(url, {
     method: "POST", signal, redirect: "error",
@@ -64,8 +64,11 @@ async function request(conn: RetrievalConnection, body: object, signal: AbortSig
   const usage = data.usage as Record<string, unknown> | undefined;
   const meta = data.meta as { billed_units?: { search_units?: unknown } } | undefined;
   // Record successful billed requests even if their vectors/scores are malformed.
-  onUsage?.({ promptTokens: number(usage?.prompt_tokens ?? usage?.input_tokens ?? usage?.total_tokens ?? data.prompt_eval_count),
-    outputUnits: number(meta?.billed_units?.search_units) || undefined });
+  onUsage?.({
+    promptTokens: count(usage?.prompt_tokens) ?? count(usage?.input_tokens) ?? count(usage?.total_tokens)
+      ?? count(data.prompt_eval_count),
+    searchUnits: conn.retrieval?.format === "cohere-rerank" ? count(meta?.billed_units?.search_units) : undefined,
+  });
   return data;
 }
 function vector(raw: unknown): number[] {
@@ -74,7 +77,7 @@ function vector(raw: unknown): number[] {
     || !raw.some((x) => x !== 0)) throw new Error("Invalid embedding vector");
   return raw as number[];
 }
-export async function embed(conn: RetrievalConnection, input: string[], signal: AbortSignal, onUsage?: UsageListener): Promise<number[][]> {
+export async function embed(conn: RetrievalConnection, input: string[], signal: AbortSignal, onUsage?: RetrievalUsageListener): Promise<number[][]> {
   const native = conn.retrieval?.format === "ollama-embedding";
   const dashscope = conn.retrieval?.format === "dashscope-multimodal-embedding";
   // Independent text embeddings: never fuse a catalog batch into one vector.
@@ -109,7 +112,7 @@ export function cosine(a: number[], b: number[]): number {
   if (!Number.isFinite(score)) throw new Error("Invalid embedding similarity");
   return score;
 }
-export async function rerank(conn: RetrievalConnection, query: string, documents: string[], signal: AbortSignal, onUsage?: UsageListener): Promise<{ index: number; score: number }[]> {
+export async function rerank(conn: RetrievalConnection, query: string, documents: string[], signal: AbortSignal, onUsage?: RetrievalUsageListener): Promise<{ index: number; score: number }[]> {
   const native = conn.retrieval?.format === "dashscope-rerank";
   const body = native
     ? { input: { query, documents }, parameters: { top_n: documents.length } }

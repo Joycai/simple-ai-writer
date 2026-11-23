@@ -17,13 +17,25 @@ describe("retrieval protocols", () => {
     const init = vi.mocked(fetch).mock.calls[0][1]!;
     expect(JSON.parse(init.body as string)).toEqual({ model: "anything", input: ["a", "b"], encoding_format: "float" });
     expect(new Headers(init.headers).has("Authorization")).toBe(false);
-    expect(usage).toHaveBeenCalledWith({ promptTokens: 8, outputUnits: undefined });
+    expect(usage).toHaveBeenCalledWith({ promptTokens: 8, searchUnits: undefined });
   });
   it("uses Ollama batch embeddings without silently truncating", async () => {
     response({ embeddings: [[1, 2]], prompt_eval_count: 3 });
     const native = { ...conn, retrieval: { format: "ollama-embedding" as const, path: "/api/embed" } };
-    expect(await embed(native, ["a"], new AbortController().signal)).toEqual([[1, 2]]);
+    const usage = vi.fn();
+    expect(await embed(native, ["a"], new AbortController().signal, usage)).toEqual([[1, 2]]);
+    expect(usage).toHaveBeenCalledWith({ promptTokens: 3, searchUnits: undefined });
     expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string)).toEqual({ model: "anything", input: ["a"], truncate: false });
+  });
+  it.each([
+    [undefined, undefined],
+    [{ prompt_tokens: 0, total_tokens: 9 }, 0],
+    [{ prompt_tokens: -1, total_tokens: 9 }, 9],
+  ])("preserves unknown and explicit zero input counts (%j)", async (reported, expected) => {
+    response({ data: [{ index: 0, embedding: [1, 0] }], usage: reported });
+    const usage = vi.fn();
+    await embed(conn, ["a"], new AbortController().signal, usage);
+    expect(usage).toHaveBeenCalledExactlyOnceWith({ promptTokens: expected, searchUnits: undefined });
   });
   it("sends independent DashScope text contents and reorders indexed vectors with native usage", async () => {
     const native = { ...conn, apiKey: "test-key", baseUrl: "https://maas.qianwenaiapi.com/compatible-mode/v1", modelId: "qwen3-vl-embedding",
@@ -36,7 +48,7 @@ describe("retrieval protocols", () => {
     expect(url).toBe("https://maas.qianwenaiapi.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding");
     expect(JSON.parse(init!.body as string)).toEqual({ model: "qwen3-vl-embedding", input: { contents: [{ text: "query" }, { text: "document" }] } });
     expect(new Headers(init!.headers).get("Authorization")).toBe("Bearer test-key");
-    expect(usage).toHaveBeenCalledWith({ promptTokens: 124, outputUnits: undefined });
+    expect(usage).toHaveBeenCalledWith({ promptTokens: 124, searchUnits: undefined });
     expect(embeddingLimits(native)).toEqual({ batchSize: 20, timeoutMs: 20_000 });
     expect(parseRetrievalConfig(JSON.stringify(native.retrieval))).toEqual(native.retrieval);
   });
@@ -49,7 +61,7 @@ describe("retrieval protocols", () => {
     response({ ...data, usage: { input_tokens: 12 } });
     const usage = vi.fn();
     await expect(embed({ ...conn, retrieval: { format: "dashscope-multimodal-embedding", path: "/native" } }, ["a", "b"], new AbortController().signal, usage)).rejects.toThrow();
-    expect(usage).toHaveBeenCalledWith({ promptTokens: 12, outputUnits: undefined });
+    expect(usage).toHaveBeenCalledWith({ promptTokens: 12, searchUnits: undefined });
   });
   it.each([
     { data: [{ index: 0, embedding: [1] }, { index: 0, embedding: [1] }] },
@@ -62,8 +74,11 @@ describe("retrieval protocols", () => {
     expect(usage).toHaveBeenCalledOnce();
   });
   it("accepts only real rerank indices and sorts by relevance", async () => {
-    response({ results: [{ index: 0, relevance_score: 0.1 }, { index: 1, relevance_score: 0.9 }] });
-    expect(await rerank(conn, "q", ["a", "b"], new AbortController().signal)).toEqual([{ index: 1, score: 0.9 }, { index: 0, score: 0.1 }]);
+    const cohere = { ...conn, retrieval: { format: "cohere-rerank" as const, path: "/v2/rerank" } };
+    response({ results: [{ index: 0, relevance_score: 0.1 }, { index: 1, relevance_score: 0.9 }], meta: { billed_units: { search_units: 2 } } });
+    const usage = vi.fn();
+    expect(await rerank(cohere, "q", ["a", "b"], new AbortController().signal, usage)).toEqual([{ index: 1, score: 0.9 }, { index: 0, score: 0.1 }]);
+    expect(usage).toHaveBeenCalledExactlyOnceWith({ promptTokens: undefined, searchUnits: 2 });
     response({ results: [{ index: 2, relevance_score: 0.9 }] });
     await expect(rerank(conn, "q", ["a"], new AbortController().signal)).rejects.toThrow();
   });
@@ -76,7 +91,7 @@ describe("retrieval protocols", () => {
     const [url, init] = vi.mocked(fetch).mock.calls[0];
     expect(url).toBe("https://maas.qianwenaiapi.com/api/v1/services/rerank/text-rerank/text-rerank");
     expect(JSON.parse(init!.body as string)).toEqual({ model: "qwen3.7-text-rerank", input: { query: "query", documents: ["a", "b"] }, parameters: { top_n: 2 } });
-    expect(usage).toHaveBeenCalledWith({ promptTokens: 37, outputUnits: undefined });
+    expect(usage).toHaveBeenCalledWith({ promptTokens: 37, searchUnits: undefined });
     expect(parseRetrievalConfig(JSON.stringify(native.retrieval))).toEqual(native.retrieval);
   });
   it.each([
@@ -87,7 +102,7 @@ describe("retrieval protocols", () => {
     response({ ...data, usage: { total_tokens: 14 } });
     const usage = vi.fn();
     await expect(rerank({ ...conn, retrieval: { format: "dashscope-rerank", path: "/native" } }, "q", ["a", "b"], new AbortController().signal, usage)).rejects.toThrow();
-    expect(usage).toHaveBeenCalledWith({ promptTokens: 14, outputUnits: undefined });
+    expect(usage).toHaveBeenCalledWith({ promptTokens: 14, searchUnits: undefined });
   });
   it("never forwards a channel key to a model-supplied host", () => {
     for (const path of ["https://evil.test/rerank", "//evil.test/rerank", "/\\evil.test/rerank", "/x?key=a"]) {

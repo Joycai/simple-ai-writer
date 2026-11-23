@@ -2,7 +2,7 @@
 import { isRerankFormat } from "../ai/retrievalConfig";
 import type { Model, Provider } from "../ai/configDb";
 import { providerFor } from "../ai/routes";
-import { embed, embeddingLimits, retrievalUrl, RetrievalError, type RetrievalConnection } from "../ai/retrieval";
+import { embed, embeddingLimits, retrievalUrl, RetrievalError, type RetrievalConnection, type RetrievalUsageListener } from "../ai/retrieval";
 import { recordUsage } from "../ai/usageRow";
 import { loadApiKey } from "../keyStore";
 import { inScope, type LoreEntity, type LoreIndex, type LoreScope } from "../lore";
@@ -25,9 +25,21 @@ export async function resolveIndexConnection(args: IndexConfig, id: string, sign
   const { model, provider, conn } = indexConnection(args, id, ranking);
   conn.apiKey = await loadApiKey(provider.id) ?? "";
   signal.throwIfAborted();
-  return { conn, usage: (usage: { promptTokens: number; outputUnits?: number }) => {
-    void recordUsage(args.projectPath, { model, reportedCost: null, task: `${purpose}-${ranking ? "rerank" : "embedding"}`, ...usage });
-  } };
+  const usage: RetrievalUsageListener = ({ promptTokens, searchUnits }) => {
+    // These text-only requests return vectors or scores, without generated or cache-read tokens.
+    void recordUsage(args.projectPath, {
+      model, task: `${purpose}-${ranking ? "rerank" : "embedding"}`, reportedCost: null,
+      searchUnits, outputUnits: searchUnits,
+      inputImages: 0,
+      usageEvidence: {
+        outcome: "complete",
+        source: promptTokens !== undefined || searchUnits !== undefined ? "reported" : "unreported",
+        fields: { inputTokens: promptTokens, cachedTokens: 0, outputTokens: 0 },
+        modalities: { image: { inputTokens: 0, cachedTokens: 0, outputTokens: 0 } },
+      },
+    });
+  };
+  return { conn, usage };
 }
 const indexEntries = (index: LoreIndex, scope: LoreScope) => Object.values(index).flat()
   .filter((e) => inScope(e, scope)).sort((a, b) => a.dirPath.localeCompare(b.dirPath));
@@ -51,7 +63,7 @@ export async function indexStatus(args: IndexConfig, id: string, index: LoreInde
 // A waiting cancelled operation checks its signal before any billed work.
 const locks = new Map<string, Promise<unknown>>();
 async function embedBatch(conn: RetrievalConnection, texts: string[], signal: AbortSignal,
-  usage: (u: { promptTokens: number; outputUnits?: number }) => void) {
+  usage: RetrievalUsageListener) {
   const controller = new AbortController();
   const abort = () => controller.abort(signal.reason);
   signal.addEventListener("abort", abort, { once: true });
@@ -67,7 +79,7 @@ async function embedBatch(conn: RetrievalConnection, texts: string[], signal: Ab
 }
 export async function indexedVectors(
   args: IndexConfig, conn: RetrievalConnection, entries: LoreEntity[], index: LoreIndex,
-  signal: AbortSignal, usage: (u: { promptTokens: number; outputUnits?: number }) => void,
+  signal: AbortSignal, usage: RetrievalUsageListener,
   onProgress?: (p: IndexProgress) => void, rebuild = false,
 ): Promise<number[][]> {
   const namespace = await indexIdentity(conn);

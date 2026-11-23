@@ -933,6 +933,7 @@
       "incompleteCost": "{{n}} 次请求费用不完整；金额仅包含已知费用或估算。",
       "incompleteAmount": "{{amount}}（不完整）",
       "incompleteUsage": "{{n}} 次请求缺少用量明细；数量仅包含已知部分。",
+      "searchUnits": "已报告的重排搜索单位 {{count, number}}",
       "deliveryPending": "用量待补账（{{n}} 条账目）。汇总可能不完整，系统会自动重试。",
       "deliveryVolatile": "{{n}} 条账目待补账，其中部分尚未保存到磁盘。请保持应用打开并重试。",
       "retryDelivery": "重试补账",

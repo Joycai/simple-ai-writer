@@ -19,7 +19,7 @@ describe.skipIf(!enabled)("LIVE Qwen native embeddings", () => {
     };
     const input = texts;
     const started = Date.now();
-    let promptTokens = 0;
+    let promptTokens: number | undefined;
     const vectors = await embed(conn, input, AbortSignal.timeout(45_000), (usage) => { promptTokens = usage.promptTokens; });
     expect(embeddingLimits(conn).batchSize).toBe(20);
     expect(vectors).toHaveLength(20);
@@ -37,7 +37,7 @@ describe.skipIf(!enabled)("LIVE Qwen native embeddings", () => {
       apiKey: process.env.DASHSCOPE_API_KEY ?? "", modelId: "qwen3.7-text-embedding-flash",
       retrieval: { format: "openai-embedding", path: RETRIEVAL_PATHS["openai-embedding"] },
     };
-    let promptTokens = 0;
+    let promptTokens: number | undefined;
     const vectors = await embed(conn, texts, AbortSignal.timeout(45_000), (usage) => { promptTokens = usage.promptTokens; });
     expect(vectors).toHaveLength(20);
     expect(vectors.every((v) => v.length === 1024)).toBe(true);

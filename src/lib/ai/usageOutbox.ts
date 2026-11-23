@@ -33,8 +33,11 @@ async function directory() {
 }
 function parseReceipt(text: string): Receipt {
   const r = JSON.parse(text) as Receipt;
-  // Receipts written before per-field completeness remain replayable.
-  if (Array.isArray(r.values) && r.values.length === USAGE_INSERT_COLUMNS.length - 1) r.values.push(null);
+  // Older receipts can omit the trailing search units and, before that, the per-field mask.
+  if (Array.isArray(r.values)) {
+    const missing = USAGE_INSERT_COLUMNS.length - r.values.length;
+    if (missing === 1 || missing === 2) r.values.push(...Array<null>(missing).fill(null));
+  }
   if (r.version !== 1 || !["project", "global"].includes(r.scope)
     || !(r.projectPath === null || typeof r.projectPath === "string")
     || (r.scope === "project" && !r.projectPath)
