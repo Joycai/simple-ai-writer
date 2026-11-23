@@ -149,7 +149,10 @@ export function buildUsageRow(input: RecordUsageInput, nowMs: number = Date.now(
   const interrupted = input.usageEvidence && input.usageEvidence.outcome !== "complete";
   const costIncomplete = !hasReportedCost(input.reportedCost) && (
     !input.model.fee || !!interrupted
-    || (fee.billingMode === "token" && !!fee.imageTokenPrices && (!modalities || !known(modalities.image?.inputTokens) || !known(modalities.image?.outputTokens) || !known(modalities.image?.cachedTokens)))
+    || (fee.billingMode === "token" && !!fee.imageTokenPrices && (
+      !modalities || !known(modalities.image?.inputTokens) || !known(modalities.image?.outputTokens)
+      || ((fee.imageTokenPrices.cache ?? fee.imageTokenPrices.input) !== fee.imageTokenPrices.input && !known(modalities.image?.cachedTokens))
+    ))
     || (fee.billingMode === "token"
       ? !known(fields ? fields.inputTokens : input.promptTokens)
         || !known(fields ? fields.outputTokens : input.completionTokens)

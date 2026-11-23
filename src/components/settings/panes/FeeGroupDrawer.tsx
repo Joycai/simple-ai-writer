@@ -13,7 +13,10 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Combobox } from "../../common/Combobox";
+import { Select } from "../../common/Select";
+import { FEE_GROUP_PRESETS } from "../../../lib/ai/feeGroupPresets";
 
 import {
   BILLING_MODES, OUTPUT_UNITS,
@@ -76,7 +79,7 @@ interface Draft {
 const numStr = (n: number | null | undefined): string =>
   n === null || n === undefined || !Number.isFinite(n) ? "" : String(n);
 
-function toDraft(g: FeeGroup | null): Draft {
+function toDraft(g: Omit<FeeGroup, "id" | "createdAt"> | null): Draft {
   return {
     name: g?.name ?? "",
     vendor: g?.vendor ?? "",
@@ -158,6 +161,8 @@ export function FeeGroupDrawer({
   const words = useFeeLabelWords();
   const [d, setD] = useState<Draft>(() => toDraft(group));
   const [saving, setSaving] = useState(false);
+  const [presetId, setPresetId] = useState("");
+  const preset = FEE_GROUP_PRESETS.find((p) => p.id === presetId);
   const patch = (p: Partial<Draft>) => setD((prev) => ({ ...prev, ...p }));
   const setRate = (i: number, p: Partial<Draft["rates"][number]>) =>
     setD((prev) => ({ ...prev, rates: prev.rates.map((r, j) => (j === i ? { ...r, ...p } : r)) }));
@@ -197,6 +202,30 @@ export function FeeGroupDrawer({
       </div>
 
       <div className={hub.drawerBody}>
+        {!group && <div>
+          <Select className={s.presetSelect}
+            value={presetId}
+            placeholder={t("aiConfig.fees.prefill")}
+            ariaLabel={t("aiConfig.fees.prefill")}
+            options={FEE_GROUP_PRESETS.map((p) => ({ value: p.id, label: p.label, group: p.draft.vendor }))}
+            searchable
+            searchPlaceholder={t("aiConfig.fees.pickSearch")}
+            noResultsText={t("aiConfig.fees.pickNoMatch")}
+            onChange={(id) => {
+              const selected = FEE_GROUP_PRESETS.find((p) => p.id === id);
+              if (!selected) return;
+              setPresetId(id);
+              setD(toDraft(selected.draft));
+            }}
+          />
+          <div className={s.hint}>{t("aiConfig.fees.prefillHint")}</div>
+          {preset && <div className={s.hint}>
+            <a href={preset.source} onClick={(event) => {
+              event.preventDefault();
+              void openUrl(preset.source).catch(() => { /* best-effort */ });
+            }}>{t("aiConfig.fees.prefillSource")}</a>
+          </div>}
+        </div>}
         <div>
           <div className={ui.sectionLabel}>{t("aiConfig.fees.nameLabel")}</div>
           <input

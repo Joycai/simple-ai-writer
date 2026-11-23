@@ -95,7 +95,7 @@ const QWEN4_MAX = eq("qwen4-max");
 const QWEN_THINKING: readonly PlatformModelRow[] = [
   { match: QWEN4_MAX, set: { thinkingCategory: "qwen4-chat" } },
   { match: /^qwen3\.8-(?:max|flash|27b)(?:$|-)/, set: { thinkingCategory: "qwen-effort" } },
-  { match: /^qwen3\.7-plus(?:$|-)/, set: { thinkingCategory: "qwen-budget" } },
+  { match: /^qwen3\.7-(?:plus|flash|max)(?:$|-)/, set: { thinkingCategory: "qwen-budget" } },
 ];
 const SEED_THINKING: readonly PlatformModelRow[] = [
   { match: /^doubao-seed-2(?:-1|\.1)-pro(?:$|-)/, set: { thinkingCategory: "doubao" } },

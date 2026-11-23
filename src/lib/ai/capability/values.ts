@@ -128,9 +128,11 @@ function modelEffortCategory(category: ThinkingCategory, modelId: string | undef
     return max ? { ...category, budget: { ...category.budget, max } } : category;
   }
   const profile = modelId ? catalogFact("effortProfile", modelId) : undefined;
-  if (!["openai-generic", "responses-effort", "claude-adaptive"].includes(category.id) && category.id !== profile?.category) return category;
-  const nativeFamily = category.id === "claude-adaptive" ? "anthropic" : "openai";
-  return profile?.family === nativeFamily ? { ...category, menu: [...profile.levels] } : category;
+  if (!["openai-generic", "responses-effort", "claude-adaptive", "gemini3"].includes(category.id) && category.id !== profile?.category) return category;
+  const nativeFamily = category.id === "claude-adaptive" ? "anthropic" : category.id === "gemini3" ? "gemini" : "openai";
+  return profile?.family === nativeFamily
+    ? { ...category, menu: [...profile.levels], effortWire: profile.wire ?? category.effortWire }
+    : category;
 }
 
 /**

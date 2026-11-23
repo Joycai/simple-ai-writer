@@ -2824,6 +2824,9 @@
       "add": "添加",
       "addTitle": "添加模型",
       "typeLabel": "模型类型",
+      "imageComplexity": "出图规划强度",
+      "imageThinkingAutomatic": "此模型自动控制思考深度。",
+      "prefill": "从模型预填",
       "fetchBtn": "从 API 拉取可用模型",
       "fetching": "拉取中…",
       "selectOption": "选择…",
@@ -3391,6 +3394,9 @@
       }
     },
     "fees": {
+      "prefill": "预填官方价格",
+      "prefillHint": "标准 API 费用以美元计。按输入长度、日期和部署地区选择适用的价格。",
+      "prefillSource": "官方价格来源",
       "paneSub": "一组价格，被任意多个模型共用。改一次价，所有绑着它的模型一起改；已经记下的用量一分不动。",
       "listLabel": "{{groups}} 个组 · {{models}} 个模型绑着它们",
       "empty": "还没有计费组。新建一个，再到「渠道与模型」里把模型绑上去。",
@@ -5355,7 +5361,7 @@
       "pixels": "总像素超出指定范围。",
       "ratio": "比例超出指定范围。"
     },
-    "gpt25": "GPT Image 2.5",
+    "gpt25": "GPT Image 2.5 / 2.6",
     "grok": "Grok Imagine 2.0"
   },
   "slash": {

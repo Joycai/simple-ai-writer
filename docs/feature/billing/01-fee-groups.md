@@ -582,3 +582,22 @@ counts (including zero) and Gemini thought tokens without inventing missing fiel
 平台与主机双重白名单约束（0 是报价）；不因图片接口就信任任意 `cost` 字段。
 Ark 的像素折算 token 不参与 token 计费。取消和下载失败通过结算回调写已知证据，
 待完成的异步任务不提前最终结算，恢复沿用 request_id。
+
+
+## 官方价格预填
+
+新建计费组时可从内置目录把官方单价复制到草稿，保存后按普通计费组编辑、绑定和备份。
+这一步让作者确认所用渠道的价格，目录更新也不会改写已保存的计费组。
+模型参数和计费组共用正式模型 ID，输入长度区间和促销有效期写在组名中。计费组使用固定
+单价，记录时沿用所绑定的组。正式标准价、促销截止日期和长输入区间各有可选草稿，
+由作者选用和重新绑定。千问采用百炼新加坡国际部署的 USD 标准价和隐式缓存价。
+
+单价维度为输入、缓存读取和输出，每百万 token 计价。当前计费组没有独立缓存写入、
+缓存存储或工具收费字段。图片模型使用已有的图文分模态单价。Gemini 图片响应里的思考
+token 计入非图片输出，图片 token 按图片单价单独记账。
+
+规格与价格核对日期为 2026-11-23。当前来源为
+[OpenAI API](https://developers.openai.com/api/docs/pricing)、
+[Claude API](https://platform.claude.com/docs/en/about-claude/pricing)、
+[Gemini Developer API](https://ai.google.dev/gemini-api/docs/pricing)、
+[Alibaba Cloud Model Studio](https://www.alibabacloud.com/help/en/model-studio/model-pricing)。

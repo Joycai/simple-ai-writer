@@ -331,3 +331,5 @@
   cursor: pointer;
 }
 .searchClear:hover { color: var(--color-accent); }
+
+.presetSelect { width: 100%; }
