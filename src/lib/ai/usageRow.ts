@@ -45,6 +45,7 @@ export interface RecordUsageInput {
     outcome: "complete" | "failed" | "cancelled";
     source: "reported" | "unreported";
     media?: ImageEvidence;
+    modalities?: ImageEvidence["modalities"];
     tokenPrices?: FeeConfig["imageTokenPrices"];
     fields: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; reportedCost?: number };
   };
@@ -57,6 +58,8 @@ export interface RecordUsageInput {
   completionTokens?: number;
   /** 按规格的组数出来的量：响应真的带回来几张图 / 请求了多少秒。 */
   outputUnits?: number;
+  /** Rerank search units reported by the provider, independent of the selected billing mode. */
+  searchUnits?: number;
   /** 这次请求的规格，未归一化——`priceSpec` 负责归一化与匹配。 */
   spec?: { size?: unknown; quality?: unknown; seconds?: unknown };
   /** **实际发出**的参考图张数。免费额度在 `priceSpec` 里扣。 */
@@ -121,7 +124,7 @@ export function buildUsageRow(input: RecordUsageInput, nowMs: number = Date.now(
     input.reportedCost ?? null,
   );
   const withRequests: Billed = { ...billed, requests: Math.max(0, input.requests ?? 1) };
-  const modalities = input.usageEvidence?.media?.modalities;
+  const modalities = input.usageEvidence?.media?.modalities ?? input.usageEvidence?.modalities;
   if (fee.imageTokenPrices && modalities) {
     const img = modalities.image ?? {};
     const text = modalities.text ?? {};
@@ -203,6 +206,6 @@ export async function recordUsage(
 ): Promise<void> {
   const row = buildUsageRow(input);
   const values = [...insertValues(row), input.requestId ?? crypto.randomUUID(), input.usageEvidence ? JSON.stringify({ ...input.usageEvidence, tokenPrices: feeOf(input.model).imageTokenPrices }) : null,
-    row.usageIncomplete ? 1 : 0, row.costIncomplete ? 1 : 0, row.usageKnown];
+    row.usageIncomplete ? 1 : 0, row.costIncomplete ? 1 : 0, row.usageKnown, input.searchUnits ?? null];
   await enqueueUsage(projectPath, values);
 }

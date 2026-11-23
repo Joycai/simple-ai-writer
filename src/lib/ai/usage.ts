@@ -35,6 +35,9 @@ export interface UsageBucket {
   completionTokens: number;
   /** 按规格计费的量之和：张 / 秒 / 条。混在一个桶里时单位可能不同，只作参考。 */
   outputUnits: number;
+  /** Provider-reported rerank search units and the number of requests that supplied them. */
+  searchUnits: number;
+  searchUnitReports: number;
   /** 按规格计费却没命中任何档位、上游也没报价的请求数——按 0 计的那些。 */
   uncovered: number;
   incompleteUsage: number;
@@ -129,6 +132,8 @@ export function rowToBucket(r: Record<string, unknown>): UsageBucket {
     cachedTokens: num(r.cached_tokens),
     completionTokens: num(r.completion_tokens),
     outputUnits: num(r.output_units),
+    searchUnits: num(r.search_units),
+    searchUnitReports: num(r.search_unit_reports),
     uncovered: num(r.uncovered),
     incompleteUsage: num(r.incomplete_usage),
     incompleteInput: num(r.incomplete_input),
@@ -157,6 +162,8 @@ export function sumBuckets(key: string, buckets: UsageBucket[]): UsageBucket {
       cachedTokens: acc.cachedTokens + b.cachedTokens,
       completionTokens: acc.completionTokens + b.completionTokens,
       outputUnits: acc.outputUnits + b.outputUnits,
+      searchUnits: acc.searchUnits + b.searchUnits,
+      searchUnitReports: acc.searchUnitReports + b.searchUnitReports,
       uncovered: acc.uncovered + b.uncovered,
       incompleteUsage: acc.incompleteUsage + b.incompleteUsage,
       incompleteInput: acc.incompleteInput + b.incompleteInput,
@@ -175,7 +182,7 @@ export function sumBuckets(key: string, buckets: UsageBucket[]): UsageBucket {
       costUnsplit: acc.costUnsplit + b.costUnsplit,
     }),
     {
-      key, calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, outputUnits: 0,
+      key, calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, outputUnits: 0, searchUnits: 0, searchUnitReports: 0,
       incompleteInput: 0, incompleteCache: 0, incompleteOutput: 0, incompleteFresh: 0, freshTokens: 0,
       uncovered: 0, costUsd: 0, incompleteUsage: 0, incompleteCost: 0,
       costInput: 0, costCache: 0, costOutput: 0, costCount: 0, costDuration: 0, costOther: 0,
@@ -298,20 +305,29 @@ export type UsageScope = "project" | "global";
  * `cost_input IS NULL` 就是「这一行没有分项快照」的判据：新行六列必写（哪怕
  * 是 0），老行六列全空。所以拿第一列判一次就够，不必六列都查。
  */
-// Old complete rows have all fields; ambiguous historical rows stay unknown.
-const knownMask = "COALESCE(usage_known, CASE WHEN usage_incomplete = 0 THEN 7 ELSE 0 END)";
+const storedKnownMask = "COALESCE(usage_known, CASE WHEN usage_incomplete = 0 THEN 7 ELSE 0 END)";
+const rerankTask = "task IN ('kb-rerank', 'document-rerank')";
+const retrievalTask = `(${rerankTask} OR task IN ('kb-embedding', 'document-embedding'))`;
+// Older retrieval writers left the cache/output bits unset and wrote zero for a missing input count.
+const knownMask = `(CASE WHEN ${retrievalTask} AND (${storedKnownMask} & 6) = 0
+  THEN CASE WHEN prompt_tokens > 0 THEN 7 ELSE 6 END ELSE ${storedKnownMask} END)`;
+// Legacy spec-priced reranks retain positive counts. A legacy zero may have been missing.
+const searchUnits = `COALESCE(search_units, CASE WHEN ${rerankTask} AND output_units > 0 THEN output_units END)`;
 export const ROLLUP_SELECT = `COUNT(*) AS calls,
          SUM(CASE WHEN (${knownMask} & 1) = 0 THEN 1 ELSE 0 END) AS incomplete_input,
          SUM(CASE WHEN (${knownMask} & 2) = 0 THEN 1 ELSE 0 END) AS incomplete_cache,
          SUM(CASE WHEN (${knownMask} & 4) = 0 THEN 1 ELSE 0 END) AS incomplete_output,
          SUM(CASE WHEN (${knownMask} & 3) != 3 THEN 1 ELSE 0 END) AS incomplete_fresh,
          SUM(CASE WHEN (${knownMask} & 3) = 3 THEN MAX(0, prompt_tokens - cached_tokens) ELSE 0 END) AS fresh_tokens,
-         SUM(CASE WHEN usage_incomplete IS NULL OR usage_incomplete = 1 THEN 1 ELSE 0 END) AS incomplete_usage,
+         SUM(CASE WHEN ${retrievalTask} THEN ${knownMask} != 7
+                  WHEN usage_incomplete IS NULL OR usage_incomplete = 1 THEN 1 ELSE 0 END) AS incomplete_usage,
          SUM(CASE WHEN cost_incomplete = 1 OR (cost_incomplete IS NULL AND reported_cost IS NULL) THEN 1 ELSE 0 END) AS incomplete_cost,
          SUM(prompt_tokens) AS prompt_tokens,
          SUM(cached_tokens) AS cached_tokens,
          SUM(completion_tokens) AS completion_tokens,
          SUM(COALESCE(output_units, 0)) AS output_units,
+         SUM(${searchUnits}) AS search_units,
+         COUNT(${searchUnits}) AS search_unit_reports,
          SUM(CASE WHEN spec_matched = 0 AND reported_cost IS NULL THEN 1 ELSE 0 END) AS uncovered,
          SUM(cost_usd) AS cost_usd,
          SUM(COALESCE(cost_input, 0)) AS cost_input,

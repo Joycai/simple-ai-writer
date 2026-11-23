@@ -548,6 +548,12 @@ not output. Old fully complete rows imply all bits; ambiguous old rows remain un
 Pending receipts from the earlier layout acquire a NULL mask during parsing, preserving
 snapshots without inventing per-field evidence.
 
+Retrieval rows use zero for token buckets the request cannot consume. Historical
+retrieval quantities are recovered at read time when the stored count establishes them.
+Rerank search units have a nullable ledger column and their own rollup because they are
+independent of the model's saved fee mode. See
+[semantic retrieval accounting](../lore/semantic-retrieval-beta.md#transport-persistence-and-usage).
+
 The usage clear action uses the shared `ConfirmDialog`/`ModalShell` and its theme tokens;
 no native browser confirm is used. The redundant native amount tooltip was removed;
 incompleteness stays visible in the amount and row notes. Recovery buttons continue to

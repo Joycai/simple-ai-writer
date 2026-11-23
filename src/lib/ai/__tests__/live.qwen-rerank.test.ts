@@ -13,7 +13,7 @@ describe.skipIf(!enabled)("LIVE Qwen3.7 text rerank", () => {
       baseUrl: "https://maas.qianwenaiapi.com/compatible-mode/v1", apiKey: process.env.DASHSCOPE_API_KEY ?? "",
       modelId: "qwen3.7-text-rerank", retrieval: { format: "dashscope-rerank", path: RETRIEVAL_PATHS["dashscope-rerank"] },
     };
-    let promptTokens = 0;
+    let promptTokens: number | undefined;
     const started = Date.now();
     const result = await rerank(conn, "受伤旅人寻找能治疗蛇毒的医师。", [
       "王城金库记录税收与金银出入。", "雪山关隘由守卫轮班巡逻。", "林中药师擅长辨别毒草和配制解药。",

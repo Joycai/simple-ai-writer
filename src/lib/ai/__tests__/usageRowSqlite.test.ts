@@ -207,20 +207,63 @@ it("retains deletion markers per ledger and rolls them back with a failed clear"
 });
 
 
-it("replays receipts written before the per-field mask was added", async () => {
+it.each([1, 2])("replays receipts that lack %i trailing usage fields", async (missing) => {
   const { global } = await ledgers();
   state.global = { execute: async () => { throw new Error("locked"); } };
   await recordUsage(null, { model: { id: "m" }, task: "legacy-receipt", requestId: "old-layout", reportedCost: 0 });
   const dir = `${state.dir}/usage-outbox`;
   const [file] = await readdir(dir);
   const receipt = JSON.parse(await readFile(`${dir}/${file}`, "utf8"));
-  receipt.values.pop();
+  receipt.values = receipt.values.slice(0, -missing);
   const { writeFile } = await import("node:fs/promises");
   await writeFile(`${dir}/${file}`, JSON.stringify(receipt));
   state.global = global.db;
   vi.resetModules();
   await (await import("../usageOutbox")).retryUsageDelivery();
-  expect(global.raw.prepare("SELECT request_id, usage_known, reported_cost FROM token_usage").get())
-    .toMatchObject({ request_id: "old-layout", usage_known: null, reported_cost: 0 });
+  expect(global.raw.prepare("SELECT request_id, usage_known, search_units, reported_cost FROM token_usage").get())
+    .toMatchObject({ request_id: "old-layout", usage_known: missing === 1 ? 0 : null, search_units: null, reported_cost: 0 });
   expect(await readdir(dir)).toEqual([]);
+});
+
+it("rolls up retrieval token and search-unit usage in both ledgers, including older rows", async () => {
+  const ledgersByScope = await ledgers();
+  const embedding = { id: "embedding", fee: { ...ZERO_FEE, inputPrice: 2, cachePrice: 1,
+    imageTokenPrices: { input: 4, cache: 3, output: 5 } } };
+  const reranker = { id: "reranker", fee: { ...ZERO_FEE, billingMode: "request" as const, requestPrice: 0.1 } };
+  await recordUsage("/p", { model: embedding, task: "kb-embedding", reportedCost: null,
+    usageEvidence: {
+      outcome: "complete", source: "reported", fields: { inputTokens: 300, cachedTokens: 0, outputTokens: 0 },
+      modalities: { image: { inputTokens: 0, cachedTokens: 0, outputTokens: 0 } },
+    },
+  });
+  await recordUsage("/p", { model: embedding, task: "document-embedding", reportedCost: null,
+    promptTokens: 0, cachedTokens: 0, completionTokens: 0 });
+  await recordUsage("/p", { model: reranker, task: "kb-rerank", reportedCost: null,
+    searchUnits: 2, outputUnits: 2, cachedTokens: 0, completionTokens: 0 });
+  await recordUsage("/p", { model: reranker, task: "kb-rerank", reportedCost: null,
+    searchUnits: 0, outputUnits: 0, cachedTokens: 0, completionTokens: 0 });
+  for (const { raw } of Object.values(ledgersByScope)) {
+    raw.exec(`INSERT INTO token_usage (model_id, task, prompt_tokens, usage_known, usage_incomplete, cost_incomplete, cost_usd)
+      VALUES ('legacy', 'document-rerank', 120, 1, 1, 1, 0.01),
+             ('missing', 'kb-embedding', 0, 1, 1, 1, 0),
+             ('chat', 'chat', 120, 1, 1, 1, 0)`);
+    const row = (modelId: string, task: string) => raw.prepare(
+      `SELECT ${ROLLUP_SELECT} FROM token_usage WHERE model_id = ? AND task = ?`,
+    ).get(modelId, task);
+    expect(row("embedding", "kb-embedding")).toMatchObject({
+      prompt_tokens: 300, fresh_tokens: 300, cached_tokens: 0, completion_tokens: 0,
+      incomplete_fresh: 0, incomplete_usage: 0, incomplete_cost: 0, cost_usd: 0.0006,
+    });
+    expect(row("embedding", "document-embedding")).toMatchObject({ prompt_tokens: 0, incomplete_input: 0 });
+    expect(row("legacy", "document-rerank")).toMatchObject({
+      fresh_tokens: 120, incomplete_fresh: 0, incomplete_usage: 0, cost_usd: 0.01, incomplete_cost: 1,
+    });
+    expect(row("missing", "kb-embedding")).toMatchObject({
+      incomplete_input: 1, incomplete_cache: 0, incomplete_output: 0, incomplete_usage: 1,
+    });
+    expect(row("reranker", "kb-rerank")).toMatchObject({
+      search_units: 2, search_unit_reports: 2, incomplete_input: 2, incomplete_cost: 0, cost_usd: 0.2,
+    });
+    expect(row("chat", "chat")).toMatchObject({ fresh_tokens: 0, incomplete_fresh: 1, incomplete_usage: 1 });
+  }
 });

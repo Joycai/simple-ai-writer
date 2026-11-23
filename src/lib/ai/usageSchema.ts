@@ -41,6 +41,7 @@ const USAGE_COLUMNS = `
 /** 计费快照列。老行上它们是 NULL，读作「没有快照」——按当时的样子读。 */
 const SNAPSHOT_COLUMNS: [string, string][] = [
   ["usage_known", "INTEGER"],
+  ["search_units", "INTEGER"],
   ["usage_incomplete", "INTEGER"],
   ["cost_incomplete", "INTEGER"],
   ["request_id", "TEXT"],
@@ -161,7 +162,7 @@ export const USAGE_INSERT_COLUMNS = [
   // 不盖的话每一行新用量都会在下次开项目 / 下次加载配置时被重扫、重算、原样
   // 重写一遍——写的值一模一样，不是数据损坏，但收敛就没了：那个部分索引再也
   // 空不下来，而这一趟挂在 `openProject` 的 await 链上。
-  "cost_split_checked", "request_id", "usage_evidence", "usage_incomplete", "cost_incomplete", "usage_known",
+  "cost_split_checked", "request_id", "usage_evidence", "usage_incomplete", "cost_incomplete", "usage_known", "search_units",
 ];
 
 export function usageInsertSql(scope: "project" | "global"): string {

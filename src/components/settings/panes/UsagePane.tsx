@@ -466,6 +466,9 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
                   <span className={`${ui.usageNum} ${ui.usageNumCost}`}>
                     {b.incompleteCost ? b.costUsd > 0 ? `≈ ${formatUsd(b.costUsd)}` : t("systemSettings.usage.unknownUsage") : formatUsd(b.costUsd)}
                   </span>
+                  {b.searchUnitReports > 0 && (
+                    <div className={ui.usageGap}>{t("systemSettings.usage.searchUnits", { count: b.searchUnits })}</div>
+                  )}
                   {/* 没命中任何档位的请求按 0 计——不是错误，是还没配完，所以
                       写成一行提示而不是警示色，并且给一条直达补表的路。 */}
                   {b.incompleteCost > 0 && (

@@ -111,12 +111,19 @@ it("records document retrieval usage with the selected model in the existing led
   const conn = await resolveIndexConnection(args, "e", new AbortController().signal, false, "document");
   conn.usage({ promptTokens: 123 });
   expect(recordUsage).toHaveBeenCalledWith("/p", expect.objectContaining({
-    model: models[0], task: "document-embedding", promptTokens: 123,
+    model: models[0], task: "document-embedding",
+    usageEvidence: {
+      outcome: "complete", source: "reported", fields: { inputTokens: 123, cachedTokens: 0, outputTokens: 0 },
+      modalities: { image: { inputTokens: 0, cachedTokens: 0, outputTokens: 0 } },
+    },
   }));
   const rank = await resolveIndexConnection(args, "r", new AbortController().signal, true, "document");
-  rank.usage({ promptTokens: 45 });
+  rank.usage({ searchUnits: 2 });
   expect(recordUsage).toHaveBeenCalledWith("/p", expect.objectContaining({
-    model: models[1], task: "document-rerank", promptTokens: 45,
+    model: models[1], task: "document-rerank", searchUnits: 2, outputUnits: 2,
+    usageEvidence: expect.objectContaining({
+      source: "reported", fields: { inputTokens: undefined, cachedTokens: 0, outputTokens: 0 },
+    }),
   }));
 });
 

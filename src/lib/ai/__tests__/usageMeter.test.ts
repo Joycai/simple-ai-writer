@@ -16,7 +16,7 @@ const bucket = (over: Partial<UsageBucket> = {}): UsageBucket => ({
   incompleteInput: 0, incompleteCache: 0, incompleteOutput: 0, incompleteFresh: 0, freshTokens: 0,
   key: "k", calls: 1,
   promptTokens: 0, cachedTokens: 0, completionTokens: 0,
-  outputUnits: 0, uncovered: 0, costUsd: 0, incompleteUsage: 0, incompleteCost: 0,
+  outputUnits: 0, searchUnits: 0, searchUnitReports: 0, uncovered: 0, costUsd: 0, incompleteUsage: 0, incompleteCost: 0,
   costInput: 0, costCache: 0, costOutput: 0,
   costCount: 0, costDuration: 0, costOther: 0, costUnsplit: 0,
   ...over,
