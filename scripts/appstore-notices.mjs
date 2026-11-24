@@ -73,7 +73,8 @@ for (const name of selected) {
     // Preserve mixed resource terms verbatim; collection is not clearance.
     const expected = ['cmaps/LICENSE', 'standard_fonts/LICENSE_FOXIT', 'standard_fonts/LICENSE_LIBERATION',
       'wasm/LICENSE_JBIG2', 'wasm/LICENSE_OPENJPEG', 'wasm/LICENSE_PDFJS_JBIG2',
-      'wasm/LICENSE_PDFJS_OPENJPEG', 'wasm/LICENSE_PDFJS_QCMS', 'wasm/LICENSE_QCMS'].sort();
+      'wasm/LICENSE_PDFJS_OPENJPEG', 'wasm/LICENSE_PDFJS_QCMS', 'wasm/LICENSE_PDFJS_QUICKJS',
+      'wasm/LICENSE_QCMS', 'wasm/LICENSE_QUICKJS'].sort();
     const resourceNames = ['cmaps', 'standard_fonts', 'wasm'].flatMap(dir =>
       readdirSync(join(path, dir), { withFileTypes: true }).map(e => {
         if (!e.isFile()) throw new Error(`Review new PDF resource directory: ${dir}/${e.name}`);
@@ -118,18 +119,7 @@ const rust = JSON.parse(readFileSync(join(root, 'docs/feature/app-store/license-
 const cargoLock = readFileSync(join(root, 'src-tauri/Cargo.lock'), 'utf8');
 for (const entry of rust.entries) {
   const block = cargoLock.split('[[package]]').find(b => b.includes(`name = "${entry.name}"\nversion = "${entry.version}"`));
-  if (entry.vendorPath) {
-    if (entry.vendorPath !== 'src-tauri/vendor/tauri-plugin-http' || !block || /^source = /m.test(block)) throw new Error('Vendor source changed');
-    const manifest = readFileSync(join(root, 'src-tauri/Cargo.toml'), 'utf8');
-    if (!manifest.includes('tauri-plugin-http = { version = "=2.6.0", path = "vendor/tauri-plugin-http"')) throw new Error('Review vendor dependency binding');
-    for (const file of entry.localFiles) {
-      if (file.name.split('/').includes('..') || file.name.startsWith('/')) throw new Error('Invalid vendor evidence path');
-      if (digest(readFileSync(join(root, entry.vendorPath, file.name))) !== file.sha256) throw new Error(`Vendor changed; review notices: ${file.name}`);
-    }
-    const walk = dir => readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]);
-    if (walk(join(root, entry.vendorPath)).length !== entry.localFiles.length) throw new Error('Vendor file set changed');
-    for (const file of entry.files) if (!entry.localFiles.some(f => f.name === file.name && f.sha256 === file.sha256)) throw new Error('Vendor notice differs from source');
-  } else if (!block?.includes(`checksum = "${entry.crateChecksum}"`) || !block.includes(`source = "${entry.registrySource}"`)) throw new Error(`Rust notice no longer matches lock: ${entry.name}`);
+  if (!block?.includes(`checksum = "${entry.crateChecksum}"`) || !block.includes(`source = "${entry.registrySource}"`)) throw new Error(`Rust notice no longer matches lock: ${entry.name}`);
   for (const file of entry.files) if (digest(file.text) !== file.sha256) throw new Error(`Rust text hash mismatch: ${entry.name}/${file.name}`);
   entries.push({ name: entry.name, version: entry.version, license: entry.license, declaredLicense: entry.declaredLicense, source: entry.source, files: entry.files.filter(f => !['README.md', 'PATCH.md'].includes(f.name)) });
 }

@@ -1,7 +1,7 @@
 //! Non-billed GET probe using the app's exact reqwest dependency/features.
 //! cargo run --example http_probe -- http://127.0.0.1:18765/delay
 use std::time::Instant;
-use tauri_plugin_http::{client_builder, Error};
+use tauri_plugin_http::reqwest;
 
 #[tokio::main]
 async fn main() {
@@ -12,7 +12,7 @@ async fn main() {
         .unwrap_or(0);
     assert!(body_bytes <= 65536, "probe payload is capped at 64 KiB");
     for http1 in [false, true] {
-        let mut builder = client_builder().timeout(std::time::Duration::from_secs(180));
+        let mut builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(180));
         if http1 {
             builder = builder.http1_only();
         }
@@ -42,26 +42,12 @@ async fn main() {
                         bytes.len(),
                         start.elapsed().as_millis()
                     ),
-                    Err(error) => println!(
-                        "{}",
-                        serde_json::to_string(&Error::NetworkAt(
-                            error,
-                            "body",
-                            start.elapsed().as_millis() as u64
-                        ))
-                        .unwrap()
-                    ),
+                    Err(error) => {
+                        println!("body_error ({} ms): {error:?}", start.elapsed().as_millis())
+                    }
                 }
             }
-            Err(error) => println!(
-                "{}",
-                serde_json::to_string(&Error::NetworkAt(
-                    error,
-                    "send",
-                    start.elapsed().as_millis() as u64
-                ))
-                .unwrap()
-            ),
+            Err(error) => println!("send_error ({} ms): {error:?}", start.elapsed().as_millis()),
         }
     }
 }

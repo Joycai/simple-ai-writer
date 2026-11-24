@@ -46,7 +46,7 @@ involved: this is the server's independent distribution. See `server/DEPLOY.md` 
 | --- | --- | --- |
 | **Detect changed areas** | `dorny/paths-filter` | Decides whether the Rust and sync-server jobs have anything to do |
 | **Frontend** | `pnpm install --frozen-lockfile` → `tsc --noEmit` → `pnpm test` → `pnpm build` | Lockfile integrity, TypeScript type-check (the project's lint gate — strict mode, no unused locals/params), Vitest suite, production bundle builds |
-| **Backend (Rust)** | `cargo fmt --all -- --check` → 默认特性与 all-features 各跑 clippy / test → `cargo test -p tauri-plugin-http` → `cargo build --locked` | Formatting, lints (warnings fail the build), tests, backend compiles |
+| **Backend (Rust)** | `cargo fmt --all -- --check` → 默认特性与 all-features 各跑 clippy / test → `cargo build --locked` | Formatting, lints (warnings fail the build), tests, backend compiles |
 | **Sync server** | fmt, clippy, test and locked build, in `server/` (no HTTP-plugin test) | The knowledge-base backup server (`server/`) — a plain axum binary, so it needs none of the webview apt packages the Tauri job installs |
 | **CI Success** | aggregates the four jobs | Single status check to require in branch protection |
 
@@ -55,7 +55,6 @@ Notes:
 - macOS release policy guards run separately with `node --test scripts/__tests__/macos-release.test.mjs` without any Apple credentials.
 - `pnpm build` also runs `prototypes:build`: a strict check of the local design studio and a separate Vite bundle into `prototypes/dist/`. The app bundle remains in the root `dist/`, which is the only frontend directory Tauri packages. See [prototyping.md](prototyping.md).
 - Rust unit tests live inline (`#[cfg(test)] mod tests`) in the modules they test, under `src-tauri/src/` and `server/src/` — there is no separate `tests/` directory in either crate. `grep -l "mod tests" src-tauri/src/*.rs server/src/*.rs` lists them.
-  The patched HTTP plugin is also tested with `cargo test -p tauri-plugin-http` in the app's Rust job; this exercises its actual cancellation entry points. Local 65-second header/SSE regressions run explicitly with `cargo test --all-features http_diagnostics -- --include-ignored` (see [network-diagnostics.md](network-diagnostics.md)).
 - `clippy` is enforced with `-D warnings`: any new warning fails CI.
 - Both Rust jobs install `dtolnay/rust-toolchain@stable`, i.e. **whatever stable is on the
   day the job runs** — which is often newer than the toolchain on your machine. Clippy gains
@@ -155,8 +154,7 @@ that area, since the job is skipped rather than run.)
 For pnpm dependency refreshes, keep the Tauri JS API and plugins on the same
 major/minor releases as `src-tauri/Cargo.lock`; `pnpm exec tauri info` checks this
 alignment. Their manifest ranges use `~` so `pnpm update` cannot independently
-advance a minor release. The HTTP plugin is pinned to `2.6.0` to match the local
-patched Rust crate. Upgrade these pairs together when updating the backend;
+advance a minor release. Upgrade these pairs together when updating the backend;
 frontend type-checks and mocks alone cannot verify their IPC compatibility.
 
 Run the same checks before pushing (the Rust blocks only matter if you touched `src-tauri/` or
@@ -174,7 +172,6 @@ cargo clippy --all-targets -- -D warnings
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 cargo test --all-features
-cargo test -p tauri-plugin-http
 cargo build --locked
 cd ..
 

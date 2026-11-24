@@ -2,7 +2,7 @@
   "inventories": [
     {
       "name": "katex",
-      "version": "0.18.10",
+      "version": "0.19.1",
       "resources": [
         {
           "name": "dist/fonts/KaTeX_AMS-Regular.ttf",
@@ -248,7 +248,7 @@
     },
     {
       "name": "pdfjs-dist",
-      "version": "6.4.299",
+      "version": "6.5.438",
       "resources": [
         {
           "name": "cmaps/78-EUC-H.bcmap",
@@ -1011,8 +1011,16 @@
           "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
         },
         {
+          "name": "wasm/LICENSE_PDFJS_QUICKJS",
+          "sha256": "7fdaed3d938f3dfce7189db07e74773c23789143a55db81a95d09dcbfda267b0"
+        },
+        {
           "name": "wasm/LICENSE_QCMS",
           "sha256": "36d847ae882f6574ebc72f56a4f354e4f104fde4a584373496482e97d52d31bc"
+        },
+        {
+          "name": "wasm/LICENSE_QUICKJS",
+          "sha256": "598fd7fc928e4350abce36e337ba5a1346923c5c692f5be92c3d8e29ddd7c18d"
         },
         {
           "name": "wasm/jbig2.wasm",
@@ -1020,15 +1028,15 @@
         },
         {
           "name": "wasm/jbig2_nowasm_fallback.js",
-          "sha256": "68686ced624a48c42f84cdaa482ec44b72b0de4dc84a0df903af1fb7b45b5d9a"
+          "sha256": "70150223396487e1ccfef7eac61fc780074ad7fcc9e843b702a8a3bc23107494"
         },
         {
           "name": "wasm/openjpeg.wasm",
-          "sha256": "95e5002597af0824004aa57b1900fe019715db389e37640b1e58395e42f00cc5"
+          "sha256": "7ea4b2b04613370ad4e9c1162da750cc88b4b176eac0d0c164b3caff23fc0a46"
         },
         {
           "name": "wasm/openjpeg_nowasm_fallback.js",
-          "sha256": "9047b34b6bc142d85e4b0aa1b08b0b9baad4c6f8b7ac87641b9e8f90eb6fd23e"
+          "sha256": "2855f1590e7fd7abbbf204cd13a5c09d30c92fe2c9313fb72b64aa763fe8b4f3"
         },
         {
           "name": "wasm/qcms_bg.wasm",

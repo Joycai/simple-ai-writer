@@ -31,11 +31,14 @@ const katexPlugin =
 // \sum …) failing with "Undefined control sequence" while bare `x^2` still
 // rendered. Injecting the ESM build we already import above fixes the rendering
 // and drops the duplicate KaTeX from the bundle.
+// `@vscode/markdown-it-katex` types its `katex` option against its nested
+// `katex@0.16` copy whose `StrictFunction` union lags behind `katex@0.19`.
+// The runtime contract (`render` / `renderToString` / `ParseError`) is unchanged.
 const md = new MarkdownIt({
   html: false,
   linkify: true,
   typographer: true,
-}).use(katexPlugin, { katex });
+}).use(katexPlugin, { katex } as unknown as Parameters<typeof katexPlugin>[1]);
 
 // ── Lore citations ────────────────────────────────────────────────────────────
 // `[[lore:目标]]` / `[[lore:目标|显示文字]]` → a clickable .lore-cite span.

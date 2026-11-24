@@ -11,6 +11,7 @@
  * Wording: 「渠道」 is the provider row; 「上游」 is what sits behind a relay
  * (docs/reference/terminology.md).
  */
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { Select } from "../../common/Select";
@@ -137,7 +138,7 @@ export function UpstreamPrefixTable({
 }
 
 /** The resolved upstream in words, with where it came from. */
-function sourceLine(t: (k: string, o?: Record<string, string>) => string, r: ResolvedUpstream, modelId: string): string {
+function sourceLine(t: TFunction, r: ResolvedUpstream, modelId: string): string {
   const name = r.upstream ? t(`aiConfig.upstream.name.${r.upstream}`) : "";
   if (r.source === "prefix") return t("aiConfig.upstream.src.prefix", { upstream: name, prefix: r.prefix ?? "" });
   if (r.source === "inferred") return t("aiConfig.upstream.src.inferred", { upstream: name, word: r.word ?? "" });

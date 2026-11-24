@@ -23,6 +23,7 @@
  * history menu on its 已打开 section.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import {
@@ -231,7 +232,7 @@ function SessionTab({ chatKey, active, flashSeq }: {
 }
 
 function describe(
-  t: (k: string, o?: Record<string, unknown>) => string,
+  t: TFunction,
   state: ChatState | null,
   x: { rounds: number; queuePos: number; waiting: string | null; active: boolean },
 ): string {

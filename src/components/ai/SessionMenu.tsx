@@ -21,6 +21,7 @@
  * the icon greys out and says so.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Pencil, Pin, Search, Trash2 } from "lucide-react";
 import {
@@ -394,7 +395,7 @@ function RenameRow({ entry, initial, onCommit, onCancel }: {
 
 /** The right-hand mono column for an open row: what the mark means, in words. */
 function statusText(
-  t: (k: string, o?: Record<string, unknown>) => string,
+  t: TFunction,
   s: ReturnType<typeof useAgentStore.getState>,
   key: string,
   chat: LiveChat | undefined,

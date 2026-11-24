@@ -1,6 +1,6 @@
 {
-  "packageVersion": "6.4.299",
-  "pdfjsCommit": "d0991a0d53f3bb3a7307e3b83f279c1d117aafb3",
+  "packageVersion": "6.5.438",
+  "pdfjsCommit": "0a4153349dc473ba950fc17941c5ca7eda43c1de",
   "quickjsCommit": "3d5e064e9dd67c70f7962836505a7fa067bf0a4e",
   "quickjsWrapperCandidate": "1b37671f1b529f887673f33ba4c5f00981a8065b",
   "qcmsWrapperCommit": "2ae4ee72334782928210ba4050e3e77d9b2d35be",
@@ -61,19 +61,19 @@
     },
     {
       "name": "PDF.js/external/quickjs/README.md",
-      "source": "https://github.com/mozilla/pdf.js/blob/d0991a0d53f3bb3a7307e3b83f279c1d117aafb3/external/quickjs/README.md",
+      "source": "https://github.com/mozilla/pdf.js/blob/0a4153349dc473ba950fc17941c5ca7eda43c1de/external/quickjs/README.md",
       "text": "## Build\n\nIn order to generate the file `quickjs-eval.js`:\n* git clone https://github.com/mozilla/pdf.js.quickjs/\n* the build requires to have a [Docker](https://www.docker.com/) setup and then:\n  * `node build.js -C` to build the Docker image\n  * `node build.js -co /pdf.js/external/quickjs/` to compile the sandbox\n\n## Licensing\n\n[Quickjs](https://bellard.org/quickjs/) and [pdf.js.quickjs](https://github.com/mozilla/pdf.js.quickjs/) are released under [MIT](https://opensource.org/licenses/MIT) license so `quickjs-eval.js` is released under [MIT](https://opensource.org/licenses/MIT) license too.\n",
       "sha256": "cb9cf523e87eec4839071856bb3c173f2f308426613ae0b55f9c9a9920cad002"
     },
     {
       "name": "PDF.js/external/qcms/README.md",
-      "source": "https://github.com/mozilla/pdf.js/blob/d0991a0d53f3bb3a7307e3b83f279c1d117aafb3/external/qcms/README.md",
+      "source": "https://github.com/mozilla/pdf.js/blob/0a4153349dc473ba950fc17941c5ca7eda43c1de/external/qcms/README.md",
       "text": "## Build\n\nIn order to generate the files `qcms.js` and `qcms_bg.wasm`:\n* git clone https://github.com/mozilla/pdf.js.qcms/\n* the build requires to have a [Docker](https://www.docker.com/) setup and then:\n  * `node build.js -C` to build the Docker image\n  * `node build.js -co /pdf.js/external/qcms/` to compile the decoder\n\n## Licensing\n\n[qcms](https://github.com/FirefoxGraphics/qcms) is under [MIT](https://github.com/FirefoxGraphics/qcms/blob/main/COPYING)\nand [pdf.js.qcms](https://github.com/mozilla/pdf.js.qcms/) is released under [MIT](https://github.com/mozilla/pdf.js.qcms/blob/main/LICENSE) license so `qcms.js` and `qcms_bg.wasm` are released under [MIT](https://github.com/mozilla/pdf.js.qcms/blob/main/LICENSE) license too.\n",
       "sha256": "9eed5608da83e2eb2ce6bb1cf70d91e083b01dbbf6c79a39129c81b1cab71e4f"
     },
     {
       "name": "PDF.js/external/standard_fonts/README.md",
-      "source": "https://github.com/mozilla/pdf.js/blob/d0991a0d53f3bb3a7307e3b83f279c1d117aafb3/external/standard_fonts/README.md",
+      "source": "https://github.com/mozilla/pdf.js/blob/0a4153349dc473ba950fc17941c5ca7eda43c1de/external/standard_fonts/README.md",
       "text": "## Foxit fonts\n\nThe pfb files in this directory were extracted from Pdfium\n\nOriginal copyright notice:\n\n```\nCopyright 2014 PDFium Authors. All rights reserved.\n Use of this source code is governed by a BSD-style license that can be\n found in the LICENSE file.\n\nOriginal code copyright 2014 Foxit Software Inc. http://www.foxitsoftware.com\n```\n\nSee `LICENSE_FOXIT`.\n\n## Liberation fonts\n\nThe `LiberationSans-*.ttf` files are the unmodified upstream release of\nLiberation Sans **1.07.4**, which is licensed under the GNU General Public\nLicense v2 with the Liberation font exception (see `LICENSE_LIBERATION`, a copy\nof the `License.txt` and `COPYING` files shipped with that release):\nhttps://fedoraproject.org/wiki/Licensing:LiberationFontLicense\n\nNote that Liberation 2.0 and later are licensed under the SIL Open Font License\n1.1 instead, so `LICENSE_LIBERATION` must be updated as well whenever these font\nfiles are replaced.\n\nThe glyph order of these files is baked into `src/core/liberationsans_widths.js`\nand into the per-glyph scale factors in `src/core/*_factors.js`, so those files\nneed to be regenerated when the fonts are updated.\n",
       "sha256": "f21d2a0f65f7dd53bbe42ca51b40c4331f566fe91a71e689682c1b762889c47e"
     }

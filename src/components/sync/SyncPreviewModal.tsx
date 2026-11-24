@@ -28,6 +28,7 @@ import { SCHEMA_PATH } from "../../lib/sync/schema";
  */
 
 import { useMemo, useRef, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { ModalShell } from "../common/ModalShell";
 import type { EntryPath, SyncDecision, SyncPlan, SyncStep } from "../../lib/sync/model";
@@ -798,7 +799,7 @@ function panelWidth(phase: string, plan: SyncPlan | null): string {
 }
 
 function headTitle(
-  t: (k: string, o?: Record<string, unknown>) => string,
+  t: TFunction,
   phase: string,
   isPush: boolean,
   kbName: string,
@@ -821,7 +822,7 @@ function headTitle(
  * stops being read. When the plan only adds, it says so instead.
  */
 function confirmLabel(
-  t: (k: string, o?: Record<string, unknown>) => string,
+  t: TFunction,
   isPush: boolean,
   create: number,
   overwrite: number,
