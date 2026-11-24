@@ -10,6 +10,7 @@
  */
 
 import { useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { AlertTriangle, FileText, X } from "lucide-react";
@@ -19,7 +20,7 @@ import { baseName } from "../../../lib/paths";
 import styles from "./DocFormat.module.css";
 
 /** 「2.4 MB · 读取 0.4 s」——文件芯片上的两个数（设计稿 05f 屏 1h）。页数读不到，不编。 */
-function fileMeta(r: ReadResult, t: (k: string, o?: Record<string, unknown>) => string): string {
+function fileMeta(r: ReadResult, t: TFunction): string {
   const parts: string[] = [];
   if (r.fileBytes !== undefined) {
     parts.push(r.fileBytes >= 1_048_576

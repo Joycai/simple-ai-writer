@@ -140,10 +140,6 @@ jobs:
           cargo test
           cargo test --all-features
 
-      - name: Test shared HTTP transport
-        working-directory: src-tauri
-        run: cargo test -p tauri-plugin-http
-
       - name: Build (cargo build)
         working-directory: src-tauri
         run: cargo build --locked

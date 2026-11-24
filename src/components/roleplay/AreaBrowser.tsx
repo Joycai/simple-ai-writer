@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Plus, Search, X } from "lucide-react";
 import { useProjectStore } from "../../stores/projectStore";
@@ -309,7 +310,7 @@ export function AreaBrowser({ meta, holderName, onClose }: {
   );
 }
 
-function sceneTagOf(e: LoreEntity, t: (k: string, o?: Record<string, unknown>) => string): string {
+function sceneTagOf(e: LoreEntity, t: TFunction): string {
   // 列表上不读文件，所以场号只能从 summary 之外的地方来——没有就留空，别猜。
   return e.mdFiles.length > 1 ? t("roleplay.areaBrowser.multi", { defaultValue: "多页" }) : "";
 }

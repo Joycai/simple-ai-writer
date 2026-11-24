@@ -5,13 +5,6 @@ description = "Simple AI Writer"
 authors = ["joycai"]
 edition = "2021"
 
-# The app stays the default package; the patched HTTP dependency shares its
-# lockfile so its real cancellation entry points can be regression-tested in CI.
-[workspace]
-members = ["vendor/tauri-plugin-http"]
-default-members = ["."]
-resolver = "2"
-
 [lib]
 name = "simple_ai_writer_lib"
 # Desktop only: main.rs links this as an rlib. The scaffold's "staticlib" and
@@ -42,7 +35,7 @@ tauri-plugin-fs = { version = "2", features = ["watch"] }
 # the caller didn't, so every other request is unaffected. Origin is the sole
 # forbidden header this app sets; keep it that way (Host/Content-Length/Cookie &c.
 # now pass through unchecked).
-tauri-plugin-http = { version = "=2.6.0", path = "vendor/tauri-plugin-http", features = ["unsafe-headers"] }
+tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 # System notifications (需要审批 / 执行完成), gated behind a settings switch —
 # see `src/lib/notify.ts`. Desktop `request_permission` always answers Granted:
@@ -69,7 +62,7 @@ serde_json = "1"
 keyring = "4"
 # Lore bundle export/import. Default features pull in bzip2/zstd/aes backends
 # we never produce or accept — deflate is the only method our bundles use.
-zip = { version = "8", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 # Content hashing for knowledge-base sync (`lorehash.rs`). The digest it
 # produces is a wire format shared with the sync server, so this is a real
 # dependency of the protocol, not an implementation detail.
@@ -81,13 +74,13 @@ gethostname = "1"
 # .xlsx import (see xlsx.rs). `chrono` is what turns a date cell into a real
 # date instead of the raw serial number Excel stores it as — without it every
 # date in an imported sheet reads as "45678".
-calamine = { version = "0.36", features = ["chrono"] }
+calamine = { version = "0.38", features = ["chrono"] }
 # .xlsx export (see xlsx_write.rs). Already in the tree as a dev-dependency —
 # it builds the workbooks the import tests read back — so the write side is a
 # promotion rather than a new name. Generating in Rust is right here and wrong
 # for .docx: nothing markdown crosses the IPC boundary, only a grid whose cell
 # types the frontend has already settled.
-rust_xlsxwriter = "0.99"
+rust_xlsxwriter = "0.104"
 # .pptx import + the agent's paged slide reader (see pptx.rs). Already in the
 # tree under calamine at this version, so declaring it directly adds a name to
 # this file and nothing to the build.

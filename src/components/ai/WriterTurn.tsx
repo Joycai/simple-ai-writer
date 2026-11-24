@@ -21,6 +21,7 @@
  */
 
 import { useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { AgentEvent } from "../../lib/agent/events";
@@ -87,7 +88,7 @@ function summarize(brief: HandoffBrief, degraded: boolean, t: TFn): string {
   return parts.join(" · ");
 }
 
-type TFn = (key: string, opts?: Record<string, unknown>) => string;
+type TFn = TFunction;
 
 /**
  * The work order as plain text, for 复制工单.

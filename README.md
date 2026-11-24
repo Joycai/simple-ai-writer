@@ -300,7 +300,7 @@ cargo test --all-features
 cargo build --locked
 ```
 
-The app Rust job also runs `cargo test -p tauri-plugin-http` for the patched HTTP transport. The pull-request gate runs these checks, with Rust and server jobs conditional on the changed paths. See [`docs/reference/ci.md`](docs/reference/ci.md) for the exact workflow and platform packages.
+The pull-request gate runs these checks, with Rust and server jobs conditional on the changed paths. See [`docs/reference/ci.md`](docs/reference/ci.md) for the exact workflow and platform packages.
 
 ### Documentation for contributors
 

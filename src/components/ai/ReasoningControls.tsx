@@ -17,6 +17,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Slider } from "../common/Slider";
 import { ChevronDown } from "lucide-react";
@@ -57,7 +58,7 @@ interface Props {
  * looks like, and it is the only word that is not a value.
  */
 function footerValueWord(
-  t: (k: string, o?: Record<string, unknown>) => string,
+  t: TFunction,
   cat: ReturnType<typeof resolveThinkingCategory>,
   current: ReasoningEffort,
   budget: number | undefined,

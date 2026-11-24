@@ -63,7 +63,7 @@ test('six JS plugins retain full version-pinned source licenses and package evid
 
 test('KaTeX fonts preserve their embedded OFL copyright and reserved names', () => {
   const data = JSON.parse(readFileSync(new URL('../../src/assets/legal/third-party-notices.json', import.meta.url)));
-  const entry = data.entries.find(e => e.name === 'katex' && e.version === '0.18.10');
+  const entry = data.entries.find(e => e.name === 'katex' && e.version === '0.19.1');
   const indirect = data.entries.find(e => e.name === 'katex' && e.version === '0.16.47');
   assert.equal(indirect, undefined);
   assert.equal(entry.license, 'MIT (code) + OFL-1.1 (fonts)');
