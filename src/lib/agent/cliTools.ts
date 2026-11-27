@@ -73,7 +73,7 @@ export function describeRunCommand(): string {
       : "For bounded reads use sed -n '1,80p' file.md; search with rg 'foo|bar' .; count with wc. ") +
     "Use cwd instead of cd; installed tools vary by machine. " +
     allowedLine +
-    "Every other command is shown verbatim on a card FIRST; the author can approve it once or grant a small counted batch. Commands run with their account's full permissions, stdin closed, in the project folder (or `cwd`), and return the exit code, stdout and stderr (long output is cut, with the full log's path for read_file). " +
+    "Other commands need approval unless covered by the author's counted grant or this chat's code-development permission (scripts, dependencies, builds, tests). Commands run with their account's full permissions, stdin closed, in the project folder (or `cwd`), and return the exit code, stdout and stderr (long output is cut, with the full log's path for read_file). " +
     "Prefer built-in read/edit tools for project text; use this for installed CLIs. Keep calls focused."
   );
 }
@@ -192,5 +192,10 @@ export async function runCommandTool(
   }
   // `backupPath` carries the apply step's report — the exit code, output and
   // shell line from lib/cli/output — the way every other kind's does.
-  return { toolCallId, content: decision.backupPath ?? "The command ran, but its output was not captured." };
+  return {
+    toolCallId,
+    content: (decision.auto ? "Automatically approved under the author's command grant.\n" : "")
+      + (decision.backupPath ?? "The command ran, but its output was not captured."),
+    ...(decision.auto ? { autoApproved: true as const } : {}),
+  };
 }

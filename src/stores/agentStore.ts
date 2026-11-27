@@ -59,6 +59,9 @@ import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import i18n from "../i18n";
 import { terminalAvailable } from "../lib/distribution";
+import { isCliEnabled } from "../lib/cli/flag";
+import { CodeDevelopmentRevokedError } from "../lib/cli/codeDevelopment";
+import { grantsCodeDevelopment } from "../lib/agent/codeDevelopmentGrant";
 import { planFold } from "../lib/agent/compact";
 import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
 import { requestStateUpdate, updateSkillState } from "../lib/agent/skillStateRun";
@@ -148,10 +151,15 @@ async function settleApproval(
   item: PendingApproval,
   set: (fn: (s: AgentState) => Partial<AgentState>) => void,
   auto: boolean,
+  authorization?: { check: (projectPath: string | null) => boolean; revoked: () => void },
 ): Promise<void> {
   try {
+    const deps = await proposalApplyDeps();
+    if (authorization) deps.checkCommandAuthorization = () => {
+      if (!authorization.check(deps.projectPath())) throw new CodeDevelopmentRevokedError();
+    };
     const { report, imagePath, resultPath, exportSummary } = await applyProposal(
-      item.proposal, await proposalApplyDeps(), item.signal, item.onApplyProgress,
+      item.proposal, deps, item.signal, item.onApplyProgress,
     );
     // A picture goes into the transcript as well as onto disk — into the turn
     // the request came from, named at request time. The task panel shares
@@ -202,6 +210,10 @@ async function settleApproval(
     }
     item.resolve({ approved: true, backupPath: report, resultPath, auto: auto || undefined });
   } catch (e) {
+    if (e instanceof CodeDevelopmentRevokedError && authorization) {
+      authorization.revoked();
+      return;
+    }
     // Approval failed to apply — report as a rejection so the model knows
     // the manuscript is untouched.
     item.resolve({ approved: false, reason: `apply failed: ${String(e)}` });
@@ -354,11 +366,38 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   requestApproval: (proposal, runId, binding) =>
     new Promise<ApprovalDecision>((resolve) => {
+      if (binding?.signal?.aborted) {
+        resolve({ approved: false, reason: "Stopped before approval" });
+        return;
+      }
       if (proposal.kind === "command" && !terminalAvailable()) {
         resolve({ approved: false, reason: i18n.t("ai.approval.commandUnavailable") });
         return;
       }
       const item: PendingApproval = { proposal, resolve, runId, at: Date.now(), ...binding };
+      const codeAuthorized = (projectPath: string | null | undefined) => {
+        if (proposal.kind !== "command" || !isCliEnabled() || !isChatAutoApproveKey(item.autoApproveKey)) return false;
+        const key = item.autoApproveKey.slice("chat:".length);
+        const state = get();
+        const controller = state.chatAborts[key];
+        return !!controller && controller === runId && item.signal === controller.signal
+          && !controller.signal.aborted && item.surface === item.autoApproveKey
+          && isSamePath(item.projectPath, projectPath)
+          && grantsCodeDevelopment(state.chats[key]?.codeDevelopment, projectPath, proposal);
+      };
+      if (proposal.kind === "command" && codeAuthorized(item.projectPath)) {
+        // Does not consume the unrelated 1–5 command batch. Re-read the live
+        // grant after async imports, so revocation cannot leave an armed apply.
+        void settleApproval(item, set, true, {
+          check: codeAuthorized,
+          revoked: () => {
+            // A revoked grant must not enter another automatic path (or retry
+            // against the captured old project forever after a project change).
+            void get().requestApproval({ ...proposal, requiresIndividualApproval: true }, runId, binding).then(resolve);
+          },
+        });
+        return;
+      }
       // Covered by a standing grant: apply now and never queue. Queuing first
       // and approving synchronously would flash the card for a frame.
       const covered =
@@ -566,6 +605,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     }));
   },
   setPlanMode: (on, key) => patchChat(set, key ?? get().activeChatKey, { planMode: on }),
+  setCodeDevelopment: (on, projectPath, key) => {
+    if (on && (!projectPath || !isCliEnabled())) return;
+    patchChat(set, key ?? get().activeChatKey, { codeDevelopment: on ? { projectPath } : null });
+  },
   setStateMemory: (on, key) => {
     const k = key ?? get().activeChatKey;
     const chat = get().chats[k];

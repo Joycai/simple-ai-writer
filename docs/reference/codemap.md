@@ -144,6 +144,8 @@ CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, ico
 
 ### `src/components/ai/`
 
+`SessionPermissionsMenu` / `SessionPermissionsBand` 为对话助手的会话权限入口与持续提示，纯 props + i18n；确认启用后由 store 绑定所属会话。主题全部沿用 token，详情见 [coding-session-permissions.md](../feature/agent/coding-session-permissions.md)。
+
 `AiPanel` 的任务选择、固定引用和预算详情使用 `GenerateDialog`；任务要求在 composerStore 按任务 ID 保留，其他参数继续按任务能力声明显示。布局与取舍见 [generate-workspace-design.md](../feature/agent/generate-workspace-design.md)。
 
 `ConsistencyCheck` 与生成页对齐为配置/结果双栏，窄栏折叠配置；范围与预算复用 `GenerateDialog`，生成与核对共用 `ForecastRing`。环形只表示输入预估，累计用量另列；计划与预算继续沿用 Agent 卡片。选择应用仍经 `consistencyStore.applyAll(ids)` 的原子替换与撤销路径。
@@ -709,13 +711,15 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 
 ### `src/lib/cli/`
 
+`codeDevelopment.ts` 识别显式代码开发授权覆盖的命令形状；它不是只读白名单，也不宣称沙箱。`agent/codeDevelopmentGrant.ts` 校验项目/cwd，`agentStore` 绑定会话/run 并在 spawn 前复查；默认只读检查和长期程序清单保持独立。
+
 命令行（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）：让助手在这台电脑上跑一条命令——Windows 走 PowerShell（`pwsh` 优先，退 5.1），macOS / Linux 走 `$SHELL` 或系统 shell。设计：`docs/feature/agent/shell-command-plan.md`。
 
 - **Rust 那一半**在 `src-tauri/src/cmd.rs`（`cmd_shell_info` / `cmd_run` / `cmd_kill` + 受管的句柄表），**不装** `tauri-plugin-shell`：它唯一的安全机制是静态允许清单，对模型现写的一行只能配成 `args: true`，而超时、杀进程组、输出封顶、编码检测、`FsScope` 的 `cwd` 围栏它一样都没有。
 - **前端四个纯模块**各答一个问题：`shell.ts` 识别真实 shell 和它所在的系统（`systemLabel`：系统名 + 版本 + 架构）；`command.ts` 以封闭白名单按 POSIX / PowerShell 判 `read | write`（未知、复合、危险参数默认写入；程序必须是裸名——`./cat` 按 basename 命中会跑项目里的文件；参数不许出项目——免审读取的输出不经作者直接进模型），并给审批卡算 `isCompound` / `looksDangerous`；`output.ts` 截出模型读回的头尾；`run.ts` 编排运行、中止、日志。
 - **免审批清单** `allowlist.ts`（`app:cliAllowlist`，机器本地）：程序名规整成 `programNameOf` 的键；shell / 解释器 / 构建工具 / 提权与 `cd` `export` 这类改后续段环境的内建命令永远拒收，包管理器只放行查看类子命令。`command.ts` 的 `commandCover` 把一行按 `&&` `||` `;` `|` 切段，每段须是只读或被清单覆盖（与只读白名单共用 `plainInvocation` 形状检查，外加按程序的执行钩子表）；`allowlistCandidates` 给卡算「始终允许」该列哪些程序——只在加进去之后这一行本身能免审时给，删除 / 移动类程序从不给（只能在设置页加）。
 - **内置只读执行保护（2026-10-28）**：引号感知的 `shellCode` 与 `wordTokens` 区分字面文本和展开；sed/sort/uniq/cut 与 PowerShell 管道处理器走封闭参数子集。`prepareAutomaticRead` 给纯读取串联生成带路径 / 程序检查信息的请求；Rust `cmd_read.rs` 在 spawn 前验证真实路径与目录链接、限制扫描成本、过滤 PATH、清空环境并关闭 shell profile 与 Git helper。拒绝后回原始卡，`requiresIndividualApproval` 禁止计数连批；用户显式程序信任另走原路径。精确边界与原因见 [shell-command-plan §3.9](../feature/agent/shell-command-plan.md#39-跨平台只读免审收口2026-10-28)。
-- **审批**：`agent/cliTools.ts` 对 `commandCover` 通过的命令直接调用 runner（清单非空时 description 点名这些程序），其余组 `CommandProposal`。`ApprovalCard` 展示写命令原文；「始终允许 <程序>」写清单并批准本张（不要求 `autoApproveKey`——它是设置不是运行授权）；单条普通写命令可按 1–5 条连批，复合或危险命令永远逐条审批（危险表不完整，复合是它的兜底）。`agentStore` 用 `commandLeft` + `commandRun` 扣减并在 run 结束清零。`isAutoApprovable("command")` 为假，正文的布尔授权永不覆盖 shell。
+- **审批**：`agent/cliTools.ts` 对 `commandCover` 通过的命令直接调用 runner（清单非空时 description 点名这些程序），其余组 `CommandProposal`。`ApprovalCard` 展示写命令原文；「始终允许 <程序>」写清单并批准本张（不要求 `autoApproveKey`——它是设置不是运行授权）；单条普通写命令可按 1–5 条连批，计数连批不覆盖复合或危险命令（危险表不完整，复合是它的兜底）；另有作者显式开启的会话代码开发授权，仅覆盖其识别范围。`agentStore` 用 `commandLeft` + `commandRun` 扣减并在 run 结束清零。`isAutoApprovable("command")` 为假，正文的布尔授权永不覆盖 shell。
 - **路由**要求渠道允许终端 + `RouteOptions.commands` + Beta + `IS_TAURI` 四者齐全，description 在交出定义时点名真实系统与 shell（只说 zsh 分不出 BSD 还是 GNU userland）。
 
 ### `src/lib/workflow/`
@@ -924,6 +928,8 @@ document import into the workspace:
 - `webviewCaps.ts` (渲染引擎的能力底线 — probed by **feature**, never by OS or UA version: the floor the build targets, reported once per missing set under the TitleBar and always in Settings → 关于. Fill where the dependency offers a fill — pdfjs loads its `legacy/build` for exactly this — and probe only what nobody polyfills for us; see `docs/reference/architecture.md` → 渲染引擎的能力底线)
 
 ## `src/stores/`
+
+`LiveChat.codeDevelopment` 是绑定项目的临时执行授权，不进偏好或会话快照。`requestApproval` 只信调用时捕获的 chat/run/surface；在异步加载后的执行前再次校验，撤销回到逐条卡或中止，不追溯批准已有卡。
 
 Zustand stores。一个 store 一个关注点，**存的是「现在是什么」，不是「怎么做」**：决策形状的东西住在对应的 `lib/` 子系统里，store 只做时序、订阅和缓存。从 `CLAUDE.md` 搬来（2026-09-16），今天 `AGENTS.md` 只留一份名字索引。
 

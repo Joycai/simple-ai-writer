@@ -393,12 +393,11 @@ function textReadOnly(program: string, args: string[], syntax: CommandSyntax): b
  * The words of a line that is one plain invocation — or null when anything
  * about its shape needs the author's eyes: composition, a dangerous shape,
  * braces / PowerShell expressions, a variable, a malformed quote, an
- * environment prefix, a path-qualified program, or an argument that reaches
- * outside the project. Shared by the two ways a line may skip the card (the
- * built-in read list and the author's always-allowed programs), so neither can
- * be looser about shape than the other.
+ * environment prefix. This only parses literal shell syntax: default reads
+ * and program grants add path/name restrictions in plainInvocation below;
+ * explicit code-development trust has its own executable/subcommand policy.
  */
-function plainInvocation(command: string, syntax: CommandSyntax): string[] | null {
+export function literalInvocationWords(command: string, syntax: CommandSyntax): string[] | null {
   if (!command.trim() || isCompound(command, syntax) || looksDangerous(command)) return null;
   // Braces are brace expansion in POSIX (`{,/}etc/passwd` builds a path the
   // fence never sees) and script blocks in PowerShell, which also evaluates
@@ -414,6 +413,14 @@ function plainInvocation(command: string, syntax: CommandSyntax): string[] | nul
   // Environment prefixes can change a tool's behaviour through config
   // variables (for example RIPGREP_CONFIG_PATH containing `--pre`).
   if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) return null;
+  return words;
+}
+
+/** Default read/program grants additionally require bare names and project
+ * arguments. Explicit code trust reuses only the literal-shell parser above. */
+function plainInvocation(command: string, syntax: CommandSyntax): string[] | null {
+  const words = literalInvocationWords(command, syntax);
+  if (!words) return null;
   if (!isBareProgram(words[0], syntax)) return null;
   if (words.slice(1).some((w) => argumentValues(w, syntax).some((v) => leavesProject(v, syntax)))) {
     return null;

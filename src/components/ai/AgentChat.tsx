@@ -1,3 +1,7 @@
+import { SessionPermissionsBand } from "./SessionPermissionsMenu";
+import { isCliEnabled } from "../../lib/cli/flag";
+import { IS_TAURI } from "../../lib/platform";
+import { isSamePath } from "../../lib/paths";
 import { isSettingsRequest } from "../../lib/agent/slashCommands";
 import { routePlannedTools } from "../../lib/agent/routing";
 import { useSlashCommands } from "./useSlashCommands";
@@ -122,6 +126,8 @@ export function AgentChat() {
   // useActiveChat — the seam that kept these per-field subscriptions when the
   // store went multi-session (docs/feature/agent/chat-sessions-plan.md §4.1).
   const activeKey = useAgentStore((s) => s.activeChatKey);
+  const codeGrant = useAgentStore((s) => s.chats[s.activeChatKey]?.codeDevelopment);
+  const setCodeDevelopment = useAgentStore((s) => s.setCodeDevelopment);
   const turns = useActiveChat((c) => c.turns);
   const chatRunning = useAgentStore((s) => s.runningChats.includes(s.activeChatKey));
   // Waiting for a slot (three conversations already generating): busy like
@@ -796,6 +802,9 @@ export function AgentChat() {
 
   return (
     <div className={styles.chat}>
+      {IS_TAURI && isCliEnabled() && projectPath && codeGrant && isSamePath(codeGrant.projectPath, projectPath) && (
+        <SessionPermissionsBand onDisable={() => setCodeDevelopment(false, projectPath, activeKey)} />
+      )}
       <OutputRecoveryPanel />
       {/* 取材范围的骑缝带（设计稿 03b 屏 26-B）。围栏在**运行发生的地方**必须看得见
           ——知识库墙上写着一遍不够，作者写作时看的是这一栏。同一个控件的窄栏形态：

@@ -155,8 +155,9 @@ const AUTO_APPROVABLE: ReadonlySet<Proposal["kind"]> = new Set([
   "convert",
   // NOT `command`: a shell line can do anything the author's account can, and
   // "keep fixing my prose" must never quietly become "keep running things".
-  // The only grant it gets is the counted, run-bound command batch
-  // (`commandLeft` + `grantsCommand`), never this boolean.
+  // This state only offers the counted, run-bound command batch
+  // (`commandLeft` + `grantsCommand`), never this boolean. Explicit chat code
+  // development trust is separate (codeDevelopmentGrant.ts).
 ]);
 
 /** Whether this kind of proposal may skip its card under an active grant. */

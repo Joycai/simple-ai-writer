@@ -79,6 +79,15 @@ historical references; starting this studio does not rewrite them.
 gate also type-checks and bundles prototypes. Its output stays separate in
 `prototypes/dist/`; Tauri still packages only the app's root `dist/`.
 
+## Session permissions verification
+
+Open `/#session-permissions-live` to exercise the production permission menu,
+confirmation dialog and status band with fictional chats. Select any built-in
+appearance or the validated Morandi Garden dark custom theme; switch Chinese /
+English, enable/cancel/revoke and switch/create chats. This replaces the three
+exploration variants. No command runs and no author data or stores are loaded.
+See [coding-session-permissions.md](../docs/feature/agent/coding-session-permissions.md).
+
 ## Context ring review
 
 Open `/#context-ring` for the composer context ring and Compact popover.
