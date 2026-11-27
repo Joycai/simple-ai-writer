@@ -71,6 +71,9 @@
 /* Right-hand header actions */
 .headerActions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 68%;
   align-items: center;
   gap: var(--space-3);
   flex-shrink: 0;

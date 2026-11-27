@@ -1,4 +1,5 @@
 import type { CompactResult, CompactFeedback } from "./compactResult";
+import type { CodeDevelopmentGrant } from "../../lib/agent/codeDevelopmentGrant";
 import type { RetrievalProgress } from "../../lib/context/semanticLore";
 /**
  * agentStore's types — the state shape, the pending-card kinds, a conversation's
@@ -37,6 +38,8 @@ type RunId = unknown;
  * that owns the run, because the store cannot derive either of these.
  */
 interface ApprovalBinding {
+  /** Run's project, not the project active when an asynchronous apply finishes. */
+  projectPath?: string;
   /**
    * The chat turn a produced picture belongs to. An explicit binding, not
    * "whichever turn is last when the apply finishes": the apply can outlive
@@ -250,6 +253,8 @@ export interface LiveChat {
    * conversation starts back at off.
    */
   planMode: boolean;
+  /** Explicit code execution trust. Memory only; never serialized or restored. */
+  codeDevelopment: CodeDevelopmentGrant | null;
   /**
    * 状态记忆（SKILL.state 模式）for this conversation. Unlike planMode it is a
    * property of the saved session (the history's shape depends on it), so it
@@ -345,6 +350,7 @@ export interface AgentState {
   /** Per-conversation switches. `key` defaults to the active conversation. */
   toggleSubAgent: (kind: SubAgentKind, key?: string) => void;
   setPlanMode: (on: boolean, key?: string) => void;
+  setCodeDevelopment: (on: boolean, projectPath: string, key?: string) => void;
   setStateMemory: (on: boolean, key?: string) => void;
   /**
    * The author ticked or unticked 「新会话默认打开」: every conversation that

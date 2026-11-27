@@ -5,6 +5,11 @@ import { Bot, CheckCircle2, Sparkles, X } from "lucide-react";
 import { useAppStore, type AiDrawerMode } from "../../stores/appStore";
 import { mostUrgentChatState, useAgentStore } from "../../stores/agentStore";
 import { comboLabel, matchesCombo, type Combo } from "../../lib/shortcuts";
+import { useProjectStore } from "../../stores/projectStore";
+import { isCliEnabled } from "../../lib/cli/flag";
+import { IS_TAURI } from "../../lib/platform";
+import { isSamePath } from "../../lib/paths";
+import { SessionPermissionsMenu } from "./SessionPermissionsMenu";
 import { AgentChat } from "./AgentChat";
 import { ChatMark } from "./ChatMark";
 import { SessionMenu } from "./SessionMenu";
@@ -51,6 +56,9 @@ export function AiDrawer() {
   // even while closed. `turns` is deliberately reduced to the one boolean the
   // header reads, so the per-token turn patches don't reach it either.
   const activeChatKey = useAgentStore((s) => s.activeChatKey);
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const codeGrant = useAgentStore((s) => s.chats[s.activeChatKey]?.codeDevelopment);
+  const setCodeDevelopment = useAgentStore((s) => s.setCodeDevelopment);
   const newChat = useAgentStore((s) => s.newChat);
   // The mode tab carries the one most urgent mark for every conversation while
   // the author is on another mode (设计稿 02b 屏 1d): 等作者 over 有结果 over 在跑.
@@ -166,6 +174,10 @@ export function AiDrawer() {
           </div>
 
           <div className={styles.headerActions}>
+            {aiDrawerMode === "chat" && IS_TAURI && isCliEnabled() && projectPath && (
+              <SessionPermissionsMenu key={`${activeChatKey}:${projectPath}`} enabled={!!codeGrant && isSamePath(codeGrant.projectPath, projectPath)}
+                onChange={(on) => setCodeDevelopment(on, projectPath, activeChatKey)} />
+            )}
             {aiDrawerMode === "chat" && (
               <button
                 className={`${styles.headerBtn} ${showTasks ? styles.headerBtnAccent : ""}`}

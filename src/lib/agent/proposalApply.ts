@@ -33,6 +33,8 @@ import type { LoreEntityAddress, LoreIndex } from "../lore";
 
 /** What an apply reads from the app, handed in by the store that approves. */
 export interface ProposalApplyDeps {
+  /** Live session grant recheck, after imports and immediately before spawn. */
+  checkCommandAuthorization?: () => void;
   projectPath: () => string | null;
   /** The file the author has open (projectStore.activeFilePath). */
   activeFilePath: () => string | null;
@@ -288,6 +290,7 @@ export async function applyProposal(
       // tool row gets a once-a-second elapsed label so a long command reads as
       // running rather than hung (docs/feature/agent/shell-command-plan.md §3.7).
       const { runCommand } = await import("../cli/run");
+      deps.checkCommandAuthorization?.();
       const outcome = await runCommand({
         projectPath: deps.projectPath() ?? "",
         command: proposal.command,

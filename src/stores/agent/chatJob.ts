@@ -100,7 +100,7 @@ export function emptyChat(key: string): LiveChat {
   return {
     key, sessionId: null, title: "", turns: [], history: null, meta: null, usage: null,
     contextVersion: 0, taskWorkspace: null, stashId: null, error: null,
-    disabledSubAgents: [], planMode: false, stateMemory: false, unread: false,
+    disabledSubAgents: [], planMode: false, codeDevelopment: null, stateMemory: false, unread: false,
   };
 }
 
@@ -132,7 +132,7 @@ export function chatFromSnapshot(
     sessionId, title,
     turns: snap.turns, history: snap.history, meta: snap.meta, usage: snap.usage,
     contextVersion: 0, taskWorkspace, stashId: snap.stashId ?? null, error: null,
-    disabledSubAgents: [], planMode: false, stateMemory: snap.meta.stateMode, unread: false,
+    disabledSubAgents: [], planMode: false, codeDevelopment: null, stateMemory: snap.meta.stateMode, unread: false,
   };
 }
 
@@ -798,6 +798,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
         },
         requestApproval: (p, onApplyProgress) =>
           get().requestApproval(p, controller, {
+            projectPath,
             turnId: assistantTurnId,
             signal: controller.signal,
             onApplyProgress,

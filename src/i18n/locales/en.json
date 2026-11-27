@@ -1,4 +1,21 @@
 {
+  "sessionPermissions": {
+    "title": "Session permissions",
+    "active": "Permissions · Development",
+    "scope": "This chat only",
+    "code": "Code development",
+    "summary": "Run scripts, dependencies, builds and tests without approval",
+    "other": "Other actions follow existing approval rules.",
+    "confirmTitle": "Enable code development for this chat?",
+    "coverage": "Allow Node, Python, Java and related development commands to run scripts, install dependencies, build and test without individual approval. Database clients follow existing approval rules.",
+    "trust": "Enable only for trusted projects. Scripts and dependency hooks have your account’s full permissions, including file and network access. This is not a sandbox.",
+    "lifetime": "Applies only to this chat and can be turned off anytime. New or restored chats and project switches require enabling it again.",
+    "pending": "Existing approval cards still need a decision. Turning this off restores existing approval rules for subsequent commands. Use Stop to cancel a running command.",
+    "enable": "Enable for this chat",
+    "band": "Code development enabled · Scripts, dependencies, builds and tests auto-approved",
+    "disable": "Turn off code development",
+    "disableHint": "Turn off code development; use Stop to cancel a running command"
+  },
   "pdf": {
     "controls": "PDF reader",
     "previous": "Previous",

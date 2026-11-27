@@ -16,9 +16,11 @@ import { ContextRing } from "./ContextRing";
 import { ConsistencyWorkspace } from "./ConsistencyWorkspace";
 import { GenerateWorkspace } from "./GenerateWorkspace";
 import { Workspace } from "./Workspace";
+import { SessionPermissionsReview } from "./SessionPermissionsReview";
 import { themes } from "./fixtures";
 
 const pages = [
+  { id: "session-permissions-live", label: "会话权限验收", number: "09", icon: LayoutPanelLeft },
   { id: "consistency-workspace", label: "一致性核对工作区", number: "08", icon: LayoutPanelLeft },
   { id: "generate-workspace", label: "生成页重构", number: "07", icon: LayoutPanelLeft },
   { id: "context-ring-live", label: "正式圆环验收", number: "06", icon: Layers },
@@ -64,6 +66,8 @@ export function Studio() {
     applyThemeId(next.value, next.scheme);
     setTheme(next.value);
   };
+
+  if (page === "session-permissions-live") return <SessionPermissionsReview />;
 
   return (
     <div className="studio">

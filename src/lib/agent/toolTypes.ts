@@ -542,7 +542,8 @@ export interface CommandProposal extends ProposalBase {
   shell: ShellInfo;
   /** `isCompound(command)`: separators, pipes, redirections, substitution. */
   compound: boolean;
-  /** Runtime could not verify an automatic read; no counted or persistent grant. */
+  /** Automatic read verification failed, or a code grant was revoked before
+   * spawn; no counted, code-development or persistent grant may cover this. */
   requiresIndividualApproval?: boolean;
   /** `looksDangerous(command)`: changes the card's face, never blocks. */
   danger: DangerKind | null;
