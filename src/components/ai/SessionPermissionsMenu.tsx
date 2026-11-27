@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, Code2, ShieldCheck, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useImeGuard } from "../../lib/ime";
 import { ModalShell, useModalClose } from "../common/ModalShell";
 import styles from "./SessionPermissionsMenu.module.css";
 
@@ -80,13 +81,20 @@ export function SessionPermissionsMenu({ enabled, onChange }: Props) {
 function PermissionConfirmation({ onConfirm }: { onConfirm: () => void }) {
   const { t } = useTranslation();
   const close = useModalClose();
+  const ime = useImeGuard();
   const cancel = useRef<HTMLButtonElement>(null);
   const accept = useRef<HTMLButtonElement>(null);
   const committed = useRef(false);
   const titleId = useId();
   const detailId = useId();
   useEffect(() => { cancel.current?.focus(); }, []);
-  return <div className={styles.confirmation} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={detailId} onKeyDown={event => {
+  return <div className={styles.confirmation} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={detailId} {...ime.imeProps} onKeyDown={event => {
+    if (event.key === "Escape") {
+      // Consume before window shortcuts can close the owning chat drawer.
+      event.stopPropagation();
+      if (!ime.isComposing(event)) { event.preventDefault(); close?.(); }
+      return;
+    }
     if (event.key !== "Tab") return;
     event.preventDefault();
     if (document.activeElement === cancel.current) accept.current?.focus(); else cancel.current?.focus();
